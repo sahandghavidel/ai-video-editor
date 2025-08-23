@@ -30,8 +30,8 @@ export default function SceneCard({
   >(null);
   const [producingTTS, setProducingTTS] = useState<number | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
-  const [autoGenerateVideo, setAutoGenerateVideo] = useState<boolean>(false);
-  const [autoGenerateTTS, setAutoGenerateTTS] = useState<boolean>(false);
+  const [autoGenerateVideo, setAutoGenerateVideo] = useState<boolean>(true);
+  const [autoGenerateTTS, setAutoGenerateTTS] = useState<boolean>(true);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
