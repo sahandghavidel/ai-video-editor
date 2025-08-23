@@ -35,6 +35,28 @@ export default function SceneCard({
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
+  const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
+
+  // Helper function to scroll a scene card to the top of the screen
+  const scrollCardToTop = (sceneId: number) => {
+    const cardElement = sceneCardRefs.current[sceneId];
+    console.log('Attempting to scroll card for scene:', sceneId);
+    console.log('Card element found:', cardElement);
+
+    if (cardElement) {
+      // Scroll with a small delay to ensure the state is updated
+      setTimeout(() => {
+        cardElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+        console.log('Scroll command executed for scene:', sceneId);
+      }, 150);
+    } else {
+      console.warn('Card element not found for scene:', sceneId);
+    }
+  };
 
   const handleEditStart = (sceneId: number, currentText: string) => {
     setEditingId(sceneId);
@@ -230,8 +252,11 @@ export default function SceneCard({
       setPlayingProducedVideoId(sceneId);
       setLoadingProducedVideo(sceneId);
 
-      // Wait a moment for the video element to be rendered
+      // Wait a moment for the video element to be rendered, then scroll
       setTimeout(() => {
+        // Scroll the card to the top of the screen
+        scrollCardToTop(sceneId);
+
         const video = producedVideoRefs.current[sceneId];
         if (video) {
           video.src = videoUrl;
@@ -487,6 +512,9 @@ export default function SceneCard({
         {data.map((scene) => (
           <div
             key={scene.id}
+            ref={(el) => {
+              if (el) sceneCardRefs.current[scene.id] = el;
+            }}
             className='bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200'
           >
             <div className='flex items-center justify-between'>
