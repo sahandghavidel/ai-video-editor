@@ -1,16 +1,45 @@
 # Ultimate Video Editor - Baserow Data Dashboard
 
-A Next.js application that displays and manages data from a Baserow database using server actions.
+A Next.js application for managing and processing video content with integrated TTS (Text-to-Speech) and video synchronization capabilities.
 
 ## Features
 
-- **View Baserow Data**: Display data from your Baserow table in a clean, responsive table format
-- **Add New Records**: Use the built-in form to add new data to your Baserow table
-- **Server Actions**: All API requests are handled server-side for better security and performance
+- **Baserow Integration**: Fetch and manage data from a self-hosted Baserow database
+- **Text Editing**: Inline editing of text content with real-time updates to database
+- **TTS Generation**: Convert text to speech using a local TTS service with MinIO storage
+- **Video Playback**: Play original video clips and synchronized videos in modal windows
+- **Video Synchronization**: Automatically synchronize TTS audio with original video using FFmpeg
+- **File Management**: Store all generated media files in MinIO object storage
 - **Real-time Updates**: Refresh data without page reload
-- **Error Handling**: Comprehensive error handling with user-friendly messages
+- **Server Actions**: All API requests handled server-side for security
 - **TypeScript**: Fully typed for better development experience
-- **Tailwind CSS**: Modern, responsive styling
+- **Tailwind CSS**: Modern, responsive styling with card-based UI
+
+## Tech Stack
+
+- **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
+- **Database**: Baserow (self-hosted at host.docker.internal:714)
+- **Storage**: MinIO object storage (host.docker.internal:9000)
+- **Audio Processing**: Custom TTS service (host.docker.internal:8004)
+- **Video Processing**: NCA Toolkit with FFmpeg (host.docker.internal:8080)
+- **Authentication**: JWT tokens for Baserow API
+
+## Production Workflow
+
+### 5-Button Interface Per Scene:
+
+1. **Generate TTS** (Purple) - Create audio from text and upload to MinIO
+2. **Play Audio** (Blue) - Play the generated TTS audio
+3. **Play Video** (Green) - Play original video clip in modal
+4. **Generate Video** (Teal) - Synchronize audio with video using duration ratios
+5. **Play Produced** (Orange) - Play final synchronized video
+
+### Data Processing Pipeline:
+
+1. Edit scene text → Auto-save to Baserow `field_6890`
+2. Generate TTS → Upload to MinIO → Save URL to `field_6891`
+3. Generate Video → Process with NCA Toolkit → Save URL to `field_6886`
+4. Play media files directly from MinIO storage
 
 ## Setup Instructions
 

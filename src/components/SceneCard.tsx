@@ -41,31 +41,12 @@ export default function SceneCard({
   };
 
   const handleEditSave = async (sceneId: number) => {
-    if (isUpdating || isCanceling) return;
-
-    // Don't save if text is empty
     if (!editingText.trim()) {
-      handleEditCancel();
       return;
     }
 
-    // Check if text actually changed
-    const originalText = String(
-      data.find((scene) => scene.id === sceneId)?.['field_6890'] ||
-        data.find((scene) => scene.id === sceneId)?.field_6890 ||
-        ''
-    );
-
-    console.log('Attempting to save:', {
-      sceneId,
-      editingText,
-      originalText,
-      changed: editingText !== originalText,
-    });
-
-    // If text hasn't changed, just exit edit mode without API call
-    if (editingText === originalText) {
-      console.log('Text unchanged, exiting edit mode');
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (editingText === currentScene?.field_6890) {
       setEditingId(null);
       setEditingText('');
       return;
@@ -88,7 +69,6 @@ export default function SceneCard({
         field_6890: editingText,
       });
 
-      console.log('Update successful:', updatedRow);
       setEditingId(null);
       setEditingText('');
 
@@ -124,37 +104,43 @@ export default function SceneCard({
 
   const handleAudioPlay = async (sceneId: number, audioUrl: string) => {
     try {
-      console.log('Playing audio for scene:', sceneId, 'URL:', audioUrl);
+      // If the same audio is already playing, pause it
+      if (playingId === sceneId) {
+        const audio = audioRefs.current[sceneId];
+        if (audio) {
+          audio.pause();
+          setPlayingId(null);
+        }
+        return;
+      }
 
       // Stop any currently playing audio
       if (playingId && audioRefs.current[playingId]) {
         audioRefs.current[playingId].pause();
-      }
-
-      // If clicking the same audio that's playing, just pause it
-      if (playingId === sceneId) {
         setPlayingId(null);
-        return;
       }
 
+      setLoadingAudio(sceneId);
+
+      // Use the existing audio element from refs
       const audio = audioRefs.current[sceneId];
       if (audio) {
-        setLoadingAudio(sceneId);
-
-        // Use the URL directly since it's already a complete HTTP URL
         audio.src = audioUrl;
+        audio.currentTime = 0;
 
         try {
           await audio.play();
-          setPlayingId(sceneId);
           setLoadingAudio(null);
+          setPlayingId(sceneId);
         } catch (error) {
           console.error('Error playing audio:', error);
           setLoadingAudio(null);
+          setPlayingId(null);
         }
       }
     } catch (error) {
       console.error('Error in handleAudioPlay:', error);
+      setPlayingId(null);
       setLoadingAudio(null);
     }
   };
@@ -169,8 +155,6 @@ export default function SceneCard({
 
   const handleVideoPlay = async (sceneId: number, videoUrl: string) => {
     try {
-      console.log('Playing video for scene:', sceneId, 'URL:', videoUrl);
-
       // Stop any currently playing video
       if (playingVideoId && videoRefs.current[playingVideoId]) {
         videoRefs.current[playingVideoId].pause();
@@ -219,13 +203,6 @@ export default function SceneCard({
 
   const handleProducedVideoPlay = async (sceneId: number, videoUrl: string) => {
     try {
-      console.log(
-        'Playing produced video for scene:',
-        sceneId,
-        'URL:',
-        videoUrl
-      );
-
       // Stop any currently playing produced video
       if (
         playingProducedVideoId &&
@@ -277,7 +254,6 @@ export default function SceneCard({
 
   const handleTTSProduce = async (sceneId: number, text: string) => {
     try {
-      console.log('Producing TTS for scene:', sceneId, 'Text:', text);
       setProducingTTS(sceneId);
 
       // Call our TTS API route that handles generation and MinIO upload
@@ -307,14 +283,10 @@ export default function SceneCard({
       const result = await response.json();
       const audioUrl = result.audioUrl;
 
-      console.log('TTS generated and uploaded successfully:', audioUrl);
-
       // Update the Baserow field with the MinIO URL
       const updatedRow = await updateBaserowRow(sceneId, {
         field_6891: audioUrl,
       });
-
-      console.log('TTS field updated successfully:', updatedRow);
 
       // Update the local data optimistically
       const updatedData = data.map((scene) => {
@@ -335,12 +307,12 @@ export default function SceneCard({
     }
   };
 
-  const handleVideoGenerate = async (sceneId: number, videoUrl: string, audioUrl: string) => {
+  const handleVideoGenerate = async (
+    sceneId: number,
+    videoUrl: string,
+    audioUrl: string
+  ) => {
     try {
-      console.log('Generating synchronized video for scene:', sceneId);
-      console.log('Video URL:', videoUrl);
-      console.log('Audio URL:', audioUrl);
-      
       setGeneratingVideo(sceneId);
 
       // Call our API route instead of directly calling NCA service
@@ -351,7 +323,7 @@ export default function SceneCard({
         },
         body: JSON.stringify({
           videoUrl,
-          audioUrl
+          audioUrl,
         }),
       });
 
@@ -368,20 +340,11 @@ export default function SceneCard({
 
       const result = await response.json();
       const generatedVideoUrl = result.videoUrl;
-      
-      console.log('Synchronized video generated successfully:', generatedVideoUrl);
-      console.log('Generation details:', {
-        videoDuration: result.videoDuration,
-        audioDuration: result.audioDuration,
-        speedRatio: result.speedRatio
-      });
 
       // Update the Baserow field with the generated video URL
       const updatedRow = await updateBaserowRow(sceneId, {
         field_6886: generatedVideoUrl,
       });
-
-      console.log('Video field updated successfully:', updatedRow);
 
       // Update the local data optimistically
       const updatedData = data.map((scene) => {
@@ -394,7 +357,6 @@ export default function SceneCard({
 
       // Refresh data from server to ensure consistency
       refreshData?.();
-      
     } catch (error) {
       console.error('Error generating synchronized video:', error);
       // You could show a user-friendly error message here
@@ -704,14 +666,16 @@ export default function SceneCard({
                       typeof scene['field_6891'] === 'string' &&
                       scene['field_6891'] && (
                         <button
-                          onClick={() => handleVideoGenerate(
-                            scene.id, 
-                            scene['field_6888'] as string,
-                            scene['field_6891'] as string
-                          )}
+                          onClick={() =>
+                            handleVideoGenerate(
+                              scene.id,
+                              scene['field_6888'] as string,
+                              scene['field_6891'] as string
+                            )
+                          }
                           disabled={generatingVideo === scene.id}
                           className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-teal-100 text-teal-700 hover:bg-teal-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title="Generate synchronized video"
+                          title='Generate synchronized video'
                         >
                           {generatingVideo === scene.id ? (
                             <svg
@@ -740,11 +704,17 @@ export default function SceneCard({
                               fill='currentColor'
                               viewBox='0 0 20 20'
                             >
-                              <path fillRule='evenodd' d='M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z' clipRule='evenodd' />
+                              <path
+                                fillRule='evenodd'
+                                d='M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z'
+                                clipRule='evenodd'
+                              />
                             </svg>
                           )}
                           <span>
-                            {generatingVideo === scene.id ? 'Generating...' : 'Generate'}
+                            {generatingVideo === scene.id
+                              ? 'Generating...'
+                              : 'Generate'}
                           </span>
                         </button>
                       )}

@@ -11,8 +11,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('Generating TTS for scene:', sceneId, 'Text:', text);
-
     // Step 1: Generate TTS
     const ttsPayload = {
       text: text,
@@ -62,8 +60,6 @@ export async function POST(request: NextRequest) {
     if (!uploadResponse.ok) {
       throw new Error(`MinIO upload error: ${uploadResponse.status}`);
     }
-
-    console.log('TTS generated and uploaded successfully:', uploadUrl);
 
     return NextResponse.json({
       audioUrl: uploadUrl,

@@ -14,12 +14,6 @@ async function getJWTToken(): Promise<string> {
   const email = process.env.BASEROW_EMAIL;
   const password = process.env.BASEROW_PASSWORD;
 
-  console.log('Baserow config:', {
-    baserowUrl,
-    email: email ? '***' : undefined,
-    password: password ? '***' : undefined,
-  });
-
   if (!baserowUrl || !email || !password) {
     throw new Error(
       'Missing Baserow configuration. Please check your environment variables.'
@@ -28,11 +22,8 @@ async function getJWTToken(): Promise<string> {
 
   // Return cached token if it's still valid (with 5 minute buffer)
   if (cachedToken && Date.now() < tokenExpiry - 300000) {
-    console.log('Using cached token');
     return cachedToken;
   }
-
-  console.log('Fetching new JWT token from:', `${baserowUrl}/user/token-auth/`);
 
   try {
     const response = await fetch(`${baserowUrl}/user/token-auth/`, {
@@ -46,8 +37,6 @@ async function getJWTToken(): Promise<string> {
       }),
     });
 
-    console.log('Auth response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Auth failed with response:', errorText);
@@ -57,7 +46,6 @@ async function getJWTToken(): Promise<string> {
     }
 
     const data = await response.json();
-    console.log('Auth successful, token received');
     cachedToken = data.token;
     // JWT tokens typically expire in 1 hour, cache for 50 minutes to be safe
     tokenExpiry = Date.now() + 50 * 60 * 1000;
@@ -86,7 +74,6 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
   try {
     const token = await getJWTToken();
     const url = `${baserowUrl}/database/rows/table/${tableId}/`;
-    console.log('Fetching data from:', url);
 
     const response = await fetch(url, {
       method: 'GET',
@@ -98,8 +85,6 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
       cache: 'no-store',
     });
 
-    console.log('Data fetch response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Data fetch failed with response:', errorText);
@@ -109,7 +94,6 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
     }
 
     const data = await response.json();
-    console.log('Data fetched successfully, rows:', data.results?.length || 0);
     return data.results || [];
   } catch (error) {
     console.error('Error fetching Baserow data:', error);

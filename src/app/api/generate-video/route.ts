@@ -4,8 +4,6 @@ export async function POST(request: NextRequest) {
   try {
     const { videoUrl, audioUrl } = await request.json();
 
-    console.log('Generate video request:', { videoUrl, audioUrl });
-
     if (!videoUrl || !audioUrl) {
       return NextResponse.json(
         { error: 'Video URL and audio URL are required' },
@@ -18,7 +16,6 @@ export async function POST(request: NextRequest) {
     const NCA_BASE_URL = 'http://host.docker.internal:8080';
 
     // Step 1: Get video duration
-    console.log('Getting video duration...');
     const videoDurationResponse = await fetch(
       `${NCA_BASE_URL}/v1/media/metadata`,
       {
@@ -35,12 +32,11 @@ export async function POST(request: NextRequest) {
 
     if (!videoDurationResponse.ok) {
       const errorText = await videoDurationResponse.text();
-      console.error('Video metadata error details:', {
-        status: videoDurationResponse.status,
-        statusText: videoDurationResponse.statusText,
-        response: errorText,
-        videoUrl,
-      });
+      console.error(
+        'Video metadata error:',
+        videoDurationResponse.status,
+        errorText
+      );
       throw new Error(
         `Video metadata error: ${videoDurationResponse.status} - ${errorText}`
       );
@@ -48,10 +44,8 @@ export async function POST(request: NextRequest) {
 
     const videoMetadata = await videoDurationResponse.json();
     const videoDuration = videoMetadata.response.duration;
-    console.log('Video duration:', videoDuration);
 
     // Step 2: Get audio duration
-    console.log('Getting audio duration...');
     const audioDurationResponse = await fetch(
       `${NCA_BASE_URL}/v1/media/metadata`,
       {
@@ -68,12 +62,11 @@ export async function POST(request: NextRequest) {
 
     if (!audioDurationResponse.ok) {
       const errorText = await audioDurationResponse.text();
-      console.error('Audio metadata error details:', {
-        status: audioDurationResponse.status,
-        statusText: audioDurationResponse.statusText,
-        response: errorText,
-        audioUrl,
-      });
+      console.error(
+        'Audio metadata error:',
+        audioDurationResponse.status,
+        errorText
+      );
       throw new Error(
         `Audio metadata error: ${audioDurationResponse.status} - ${errorText}`
       );
@@ -81,11 +74,9 @@ export async function POST(request: NextRequest) {
 
     const audioMetadata = await audioDurationResponse.json();
     const audioDuration = audioMetadata.response.duration;
-    console.log('Audio duration:', audioDuration);
 
     // Step 3: Calculate speed ratio and create synchronized video
     const speedRatio = audioDuration / videoDuration;
-    console.log('Speed ratio:', speedRatio);
 
     const ffmpegPayload = {
       id: 'audio-video-sync',
@@ -112,7 +103,6 @@ export async function POST(request: NextRequest) {
       ],
     };
 
-    console.log('Creating synchronized video with FFmpeg...');
     const videoGenerationResponse = await fetch(
       `${NCA_BASE_URL}/v1/ffmpeg/compose`,
       {
@@ -127,23 +117,21 @@ export async function POST(request: NextRequest) {
 
     if (!videoGenerationResponse.ok) {
       const errorText = await videoGenerationResponse.text();
-      console.error('Video generation error details:', {
-        status: videoGenerationResponse.status,
-        statusText: videoGenerationResponse.statusText,
-        response: errorText,
-        ffmpegPayload,
-      });
+      console.error(
+        'Video generation error:',
+        videoGenerationResponse.status,
+        errorText
+      );
       throw new Error(
         `Video generation error: ${videoGenerationResponse.status} - ${errorText}`
       );
     }
 
     const generatedVideoResult = await videoGenerationResponse.json();
-    console.log('Full video generation response:', JSON.stringify(generatedVideoResult, null, 2));
-    
+
     const generatedVideoUrl =
       generatedVideoResult.response?.[0]?.file_url ||
-      generatedVideoResult.output_url || 
+      generatedVideoResult.output_url ||
       generatedVideoResult.url ||
       generatedVideoResult.result?.output_url ||
       generatedVideoResult.result?.url ||
@@ -151,14 +139,12 @@ export async function POST(request: NextRequest) {
       generatedVideoResult.data?.url;
 
     if (!generatedVideoUrl) {
-      console.error('Could not find video URL in response:', generatedVideoResult);
-      throw new Error(`No video URL returned from generation service. Response: ${JSON.stringify(generatedVideoResult)}`);
+      console.error(
+        'Could not find video URL in response:',
+        generatedVideoResult
+      );
+      throw new Error(`No video URL returned from generation service`);
     }
-
-    console.log(
-      'Synchronized video generated successfully:',
-      generatedVideoUrl
-    );
 
     return NextResponse.json({
       videoUrl: generatedVideoUrl,
