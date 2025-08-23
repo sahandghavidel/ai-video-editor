@@ -28,6 +28,7 @@ export default function SceneCard({
   const [loadingProducedVideo, setLoadingProducedVideo] = useState<
     number | null
   >(null);
+  const [producingTTS, setProducingTTS] = useState<number | null>(null);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -273,6 +274,76 @@ export default function SceneCard({
     }
   };
 
+  const handleTTSProduce = async (sceneId: number, text: string) => {
+    try {
+      console.log('Producing TTS for scene:', sceneId, 'Text:', text);
+      setProducingTTS(sceneId);
+
+      // Prepare the payload for TTS service
+      const payload = {
+        text: text,
+        temperature: 0.1,
+        exaggeration: 0.5,
+        cfg_weight: 0.2,
+        speed_factor: 1,
+        seed: 1212,
+        language: 'en',
+        voice_mode: 'clone',
+        split_text: true,
+        chunk_size: 50,
+        output_format: 'wav',
+        reference_audio_filename: 'audio3_enhanced.wav',
+      };
+
+      // Call TTS service
+      const response = await fetch('http://host.docker.internal:8004/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`TTS service error: ${response.status}`);
+      }
+
+      // Get the audio file as blob
+      const audioBlob = await response.blob();
+
+      // Create a URL for the blob
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      console.log('TTS generated successfully, updating field_6891');
+
+      // Update the Baserow field with the audio URL
+      // Note: In a real scenario, you might need to upload the blob to a file storage service
+      // and get a permanent URL, but for now we'll use the blob URL
+      const updatedRow = await updateBaserowRow(sceneId, {
+        field_6891: audioUrl,
+      });
+
+      console.log('TTS field updated successfully:', updatedRow);
+
+      // Update the local data optimistically
+      const updatedData = data.map((scene) => {
+        if (scene.id === sceneId) {
+          return { ...scene, field_6891: audioUrl };
+        }
+        return scene;
+      });
+      onDataUpdate?.(updatedData);
+
+      // Refresh data from server to ensure consistency
+      refreshData?.();
+    } catch (error) {
+      console.error('Error producing TTS:', error);
+      // You could show a user-friendly error message here
+    } finally {
+      setProducingTTS(null);
+    }
+  };
+
   if (!data || data.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center min-h-[400px] text-gray-500'>
@@ -366,6 +437,64 @@ export default function SceneCard({
                   </label>
                   {/* Media Controls Group */}
                   <div className='flex items-center space-x-2'>
+                    {/* TTS Produce Button */}
+                    <button
+                      onClick={() =>
+                        handleTTSProduce(
+                          scene.id,
+                          String(scene['field_6890'] || scene.field_6890 || '')
+                        )
+                      }
+                      disabled={
+                        producingTTS === scene.id ||
+                        !String(
+                          scene['field_6890'] || scene.field_6890 || ''
+                        ).trim()
+                      }
+                      className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        producingTTS === scene.id
+                          ? 'bg-gray-100 text-gray-500'
+                          : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title='Generate TTS from sentence'
+                    >
+                      {producingTTS === scene.id ? (
+                        <svg
+                          className='animate-spin h-3 w-3'
+                          xmlns='http://www.w3.org/2000/svg'
+                          fill='none'
+                          viewBox='0 0 24 24'
+                        >
+                          <circle
+                            className='opacity-25'
+                            cx='12'
+                            cy='12'
+                            r='10'
+                            stroke='currentColor'
+                            strokeWidth='4'
+                          ></circle>
+                          <path
+                            className='opacity-75'
+                            fill='currentColor'
+                            d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                          ></path>
+                        </svg>
+                      ) : (
+                        <svg
+                          className='h-3 w-3'
+                          fill='currentColor'
+                          viewBox='0 0 20 20'
+                        >
+                          <path d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
+                        </svg>
+                      )}
+                      <span>
+                        {producingTTS === scene.id
+                          ? 'Producing...'
+                          : 'Generate TTS'}
+                      </span>
+                    </button>
+
                     {/* TTS Audio Button */}
                     {typeof scene['field_6891'] === 'string' &&
                       scene['field_6891'] && (
