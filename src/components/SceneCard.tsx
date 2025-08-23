@@ -20,7 +20,10 @@ export default function SceneCard({
   const [isCanceling, setIsCanceling] = useState<boolean>(false);
   const [playingId, setPlayingId] = useState<number | null>(null);
   const [loadingAudio, setLoadingAudio] = useState<number | null>(null);
+  const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
+  const [loadingVideo, setLoadingVideo] = useState<number | null>(null);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
+  const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
 
   const handleEditStart = (sceneId: number, currentText: string) => {
     setEditingId(sceneId);
@@ -155,6 +158,56 @@ export default function SceneCard({
     }
   };
 
+  const handleVideoPlay = async (sceneId: number, videoUrl: string) => {
+    try {
+      console.log('Playing video for scene:', sceneId, 'URL:', videoUrl);
+
+      // Stop any currently playing video
+      if (playingVideoId && videoRefs.current[playingVideoId]) {
+        videoRefs.current[playingVideoId].pause();
+      }
+
+      // If clicking the same video that's playing, just pause it
+      if (playingVideoId === sceneId) {
+        setPlayingVideoId(null);
+        return;
+      }
+
+      setPlayingVideoId(sceneId);
+      setLoadingVideo(sceneId);
+
+      // Wait a moment for the video element to be rendered
+      setTimeout(() => {
+        const video = videoRefs.current[sceneId];
+        if (video) {
+          video.src = videoUrl;
+          video
+            .play()
+            .then(() => {
+              setLoadingVideo(null);
+            })
+            .catch((error) => {
+              console.error('Error playing video:', error);
+              setLoadingVideo(null);
+              setPlayingVideoId(null);
+            });
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Error in handleVideoPlay:', error);
+      setLoadingVideo(null);
+      setPlayingVideoId(null);
+    }
+  };
+
+  const handleVideoStop = (sceneId: number) => {
+    const video = videoRefs.current[sceneId];
+    if (video) {
+      video.pause();
+      setPlayingVideoId(null);
+    }
+  };
+
   if (!data || data.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center min-h-[400px] text-gray-500'>
@@ -246,75 +299,152 @@ export default function SceneCard({
                     Sentence{' '}
                     {isUpdating && editingId === scene.id && '(Saving...)'}
                   </label>
-                  {/* TTS Audio Button */}
-                  {typeof scene['field_6891'] === 'string' &&
-                    scene['field_6891'] && (
-                      <button
-                        onClick={() =>
-                          handleAudioPlay(
-                            scene.id,
-                            scene['field_6891'] as string
-                          )
-                        }
-                        disabled={loadingAudio === scene.id}
-                        className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          playingId === scene.id
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title={
-                          playingId === scene.id ? 'Pause audio' : 'Play audio'
-                        }
-                      >
-                        {loadingAudio === scene.id ? (
-                          <svg
-                            className='animate-spin h-3 w-3'
-                            xmlns='http://www.w3.org/2000/svg'
-                            fill='none'
-                            viewBox='0 0 24 24'
-                          >
-                            <circle
-                              className='opacity-25'
-                              cx='12'
-                              cy='12'
-                              r='10'
-                              stroke='currentColor'
-                              strokeWidth='4'
-                            ></circle>
-                            <path
-                              className='opacity-75'
+                  {/* Media Controls Group */}
+                  <div className='flex items-center space-x-2'>
+                    {/* TTS Audio Button */}
+                    {typeof scene['field_6891'] === 'string' &&
+                      scene['field_6891'] && (
+                        <button
+                          onClick={() =>
+                            handleAudioPlay(
+                              scene.id,
+                              scene['field_6891'] as string
+                            )
+                          }
+                          disabled={loadingAudio === scene.id}
+                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            playingId === scene.id
+                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={
+                            playingId === scene.id
+                              ? 'Pause audio'
+                              : 'Play audio'
+                          }
+                        >
+                          {loadingAudio === scene.id ? (
+                            <svg
+                              className='animate-spin h-3 w-3'
+                              xmlns='http://www.w3.org/2000/svg'
+                              fill='none'
+                              viewBox='0 0 24 24'
+                            >
+                              <circle
+                                className='opacity-25'
+                                cx='12'
+                                cy='12'
+                                r='10'
+                                stroke='currentColor'
+                                strokeWidth='4'
+                              ></circle>
+                              <path
+                                className='opacity-75'
+                                fill='currentColor'
+                                d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                              ></path>
+                            </svg>
+                          ) : playingId === scene.id ? (
+                            <svg
+                              className='h-3 w-3'
                               fill='currentColor'
-                              d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                            ></path>
-                          </svg>
-                        ) : playingId === scene.id ? (
-                          <svg
-                            className='h-3 w-3'
-                            fill='currentColor'
-                            viewBox='0 0 20 20'
-                          >
-                            <path
-                              fillRule='evenodd'
-                              d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z'
-                              clipRule='evenodd'
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            className='h-3 w-3'
-                            fill='currentColor'
-                            viewBox='0 0 20 20'
-                          >
-                            <path
-                              fillRule='evenodd'
-                              d='M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z'
-                              clipRule='evenodd'
-                            />
-                          </svg>
-                        )}
-                        <span>{playingId === scene.id ? 'Pause' : 'Play'}</span>
-                      </button>
-                    )}
+                              viewBox='0 0 20 20'
+                            >
+                              <path
+                                fillRule='evenodd'
+                                d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z'
+                                clipRule='evenodd'
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              className='h-3 w-3'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path
+                                fillRule='evenodd'
+                                d='M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z'
+                                clipRule='evenodd'
+                              />
+                            </svg>
+                          )}
+                          <span>
+                            {playingId === scene.id ? 'Pause' : 'Play'}
+                          </span>
+                        </button>
+                      )}
+
+                    {/* Video Play Button */}
+                    {typeof scene['field_6888'] === 'string' &&
+                      scene['field_6888'] && (
+                        <button
+                          onClick={() =>
+                            handleVideoPlay(
+                              scene.id,
+                              scene['field_6888'] as string
+                            )
+                          }
+                          disabled={loadingVideo === scene.id}
+                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            playingVideoId === scene.id
+                              ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                              : 'bg-green-100 text-green-700 hover:bg-green-200'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={
+                            playingVideoId === scene.id
+                              ? 'Stop video'
+                              : 'Play video'
+                          }
+                        >
+                          {loadingVideo === scene.id ? (
+                            <svg
+                              className='animate-spin h-3 w-3'
+                              xmlns='http://www.w3.org/2000/svg'
+                              fill='none'
+                              viewBox='0 0 24 24'
+                            >
+                              <circle
+                                className='opacity-25'
+                                cx='12'
+                                cy='12'
+                                r='10'
+                                stroke='currentColor'
+                                strokeWidth='4'
+                              ></circle>
+                              <path
+                                className='opacity-75'
+                                fill='currentColor'
+                                d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                              ></path>
+                            </svg>
+                          ) : playingVideoId === scene.id ? (
+                            <svg
+                              className='h-3 w-3'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path
+                                fillRule='evenodd'
+                                d='M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v6a1 1 0 11-2 0V7zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V7z'
+                                clipRule='evenodd'
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              className='h-3 w-3'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path d='M2 6a2 2 0 012-2h6l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z' />
+                            </svg>
+                          )}
+                          <span>
+                            {playingVideoId === scene.id ? 'Stop' : 'Video'}
+                          </span>
+                        </button>
+                      )}
+                  </div>
                 </div>
                 {editingId === scene.id ? (
                   <div className='mt-1'>
@@ -371,6 +501,40 @@ export default function SceneCard({
                 )}
               </div>
             </div>
+
+            {/* Video Player - Only show when video is playing for this scene */}
+            {playingVideoId === scene.id && (
+              <div className='mt-4 bg-black rounded-lg overflow-hidden'>
+                <video
+                  ref={(el) => {
+                    if (el) videoRefs.current[scene.id] = el;
+                  }}
+                  controls
+                  className='w-full h-auto max-h-96'
+                  onEnded={() => {
+                    // Wait 10 seconds before closing the video player
+                    setTimeout(() => {
+                      handleVideoStop(scene.id);
+                    }, 5000);
+                  }}
+                  onError={(e) => {
+                    console.error('Video error for scene', scene.id, e);
+                    setLoadingVideo(null);
+                    setPlayingVideoId(null);
+                  }}
+                >
+                  Your browser does not support the video tag.
+                </video>
+                <div className='flex justify-end p-2 bg-gray-900'>
+                  <button
+                    onClick={() => handleVideoStop(scene.id)}
+                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
+                  >
+                    Close Video
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
