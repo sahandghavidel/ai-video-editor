@@ -1,23 +1,40 @@
+'use client';
+
 import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
 import SceneCard from '@/components/SceneCard';
 import AddDataForm from '@/components/AddDataForm';
-import { revalidatePath } from 'next/cache';
+import { useEffect, useState } from 'react';
 
-export default async function Home() {
-  let data: BaserowRow[] = [];
-  let error: string | null = null;
+export default function Home() {
+  const [data, setData] = useState<BaserowRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  try {
-    data = await getBaserowData();
-  } catch (err) {
-    error = err instanceof Error ? err.message : 'Failed to load data';
-    console.error('Error loading Baserow data:', err);
-  }
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const fetchedData = await getBaserowData();
+      setData(fetchedData);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+      console.error('Error loading Baserow data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  async function refreshData() {
-    'use server';
-    revalidatePath('/');
-  }
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleDataUpdate = (updatedData: BaserowRow[]) => {
+    setData(updatedData);
+  };
+
+  const refreshData = () => {
+    loadData();
+  };
 
   return (
     <div className='min-h-screen bg-gray-50'>
@@ -73,8 +90,17 @@ export default async function Home() {
           </div>
         ) : (
           <div className='space-y-8'>
+            {loading && (
+              <div className='flex justify-center items-center py-8'>
+                <div className='text-gray-500'>Loading data...</div>
+              </div>
+            )}
             <AddDataForm onDataAdded={refreshData} />
-            <SceneCard data={data} onRefresh={refreshData} />
+            <SceneCard
+              data={data}
+              refreshData={refreshData}
+              onDataUpdate={handleDataUpdate}
+            />
           </div>
         )}
       </div>

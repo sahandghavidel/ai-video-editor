@@ -6,12 +6,18 @@ import { useState, useRef } from 'react';
 interface SceneCardProps {
   data: BaserowRow[];
   refreshData?: () => void;
+  onDataUpdate?: (updatedData: BaserowRow[]) => void;
 }
 
-export default function SceneCard({ data, refreshData }: SceneCardProps) {
+export default function SceneCard({
+  data,
+  refreshData,
+  onDataUpdate,
+}: SceneCardProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [isCanceling, setIsCanceling] = useState<boolean>(false);
   const [playingId, setPlayingId] = useState<number | null>(null);
   const [loadingAudio, setLoadingAudio] = useState<number | null>(null);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
@@ -19,33 +25,80 @@ export default function SceneCard({ data, refreshData }: SceneCardProps) {
   const handleEditStart = (sceneId: number, currentText: string) => {
     setEditingId(sceneId);
     setEditingText(currentText);
+    setIsCanceling(false);
   };
 
   const handleEditSave = async (sceneId: number) => {
-    if (isUpdating) return;
+    if (isUpdating || isCanceling) return;
+
+    // Don't save if text is empty
+    if (!editingText.trim()) {
+      handleEditCancel();
+      return;
+    }
+
+    // Check if text actually changed
+    const originalText = String(
+      data.find((scene) => scene.id === sceneId)?.['field_6890'] ||
+        data.find((scene) => scene.id === sceneId)?.field_6890 ||
+        ''
+    );
+
+    console.log('Attempting to save:', {
+      sceneId,
+      editingText,
+      originalText,
+      changed: editingText !== originalText,
+    });
+
+    // If text hasn't changed, just exit edit mode without API call
+    if (editingText === originalText) {
+      console.log('Text unchanged, exiting edit mode');
+      setEditingId(null);
+      setEditingText('');
+      return;
+    }
 
     setIsUpdating(true);
+
+    // Optimistic update - immediately update the UI
+    const optimisticData = data.map((scene) => {
+      if (scene.id === sceneId) {
+        return { ...scene, field_6890: editingText };
+      }
+      return scene;
+    });
+    onDataUpdate?.(optimisticData);
+
     try {
-      const result = await updateBaserowRow(sceneId, {
+      // updateBaserowRow returns the updated row data directly or throws an error
+      const updatedRow = await updateBaserowRow(sceneId, {
         field_6890: editingText,
       });
-      if (result.success) {
-        setEditingId(null);
-        setEditingText('');
-        refreshData?.(); // Refresh the data after successful update
-      } else {
-        console.error('Failed to update:', result.error);
-      }
+
+      console.log('Update successful:', updatedRow);
+      setEditingId(null);
+      setEditingText('');
+
+      // Refresh data from server to ensure consistency
+      refreshData?.();
     } catch (error) {
-      console.error('Error updating scene:', error);
+      console.error('Failed to update scene:', error);
+
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
+
+      // You could show a user-friendly error message here
     } finally {
       setIsUpdating(false);
     }
   };
 
   const handleEditCancel = () => {
+    setIsCanceling(true);
     setEditingId(null);
     setEditingText('');
+    setTimeout(() => setIsCanceling(false), 100); // Reset after a short delay
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, sceneId: number) => {
@@ -269,7 +322,12 @@ export default function SceneCard({ data, refreshData }: SceneCardProps) {
                       value={editingText}
                       onChange={(e) => setEditingText(e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, scene.id)}
-                      onBlur={() => handleEditSave(scene.id)}
+                      onBlur={() => {
+                        // Only save on blur if we're not canceling
+                        if (!isCanceling) {
+                          handleEditSave(scene.id);
+                        }
+                      }}
                       className='w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none'
                       rows={3}
                       autoFocus
