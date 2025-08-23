@@ -22,8 +22,15 @@ export default function SceneCard({
   const [loadingAudio, setLoadingAudio] = useState<number | null>(null);
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
   const [loadingVideo, setLoadingVideo] = useState<number | null>(null);
+  const [playingProducedVideoId, setPlayingProducedVideoId] = useState<
+    number | null
+  >(null);
+  const [loadingProducedVideo, setLoadingProducedVideo] = useState<
+    number | null
+  >(null);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
+  const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
 
   const handleEditStart = (sceneId: number, currentText: string) => {
     setEditingId(sceneId);
@@ -205,6 +212,64 @@ export default function SceneCard({
     if (video) {
       video.pause();
       setPlayingVideoId(null);
+    }
+  };
+
+  const handleProducedVideoPlay = async (sceneId: number, videoUrl: string) => {
+    try {
+      console.log(
+        'Playing produced video for scene:',
+        sceneId,
+        'URL:',
+        videoUrl
+      );
+
+      // Stop any currently playing produced video
+      if (
+        playingProducedVideoId &&
+        producedVideoRefs.current[playingProducedVideoId]
+      ) {
+        producedVideoRefs.current[playingProducedVideoId].pause();
+      }
+
+      // If clicking the same video that's playing, just pause it
+      if (playingProducedVideoId === sceneId) {
+        setPlayingProducedVideoId(null);
+        return;
+      }
+
+      setPlayingProducedVideoId(sceneId);
+      setLoadingProducedVideo(sceneId);
+
+      // Wait a moment for the video element to be rendered
+      setTimeout(() => {
+        const video = producedVideoRefs.current[sceneId];
+        if (video) {
+          video.src = videoUrl;
+          video
+            .play()
+            .then(() => {
+              setLoadingProducedVideo(null);
+            })
+            .catch((error) => {
+              console.error('Error playing produced video:', error);
+              setLoadingProducedVideo(null);
+              setPlayingProducedVideoId(null);
+            });
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Error in handleProducedVideoPlay:', error);
+      setLoadingProducedVideo(null);
+      setPlayingProducedVideoId(null);
+    }
+  };
+
+  const handleProducedVideoStop = (sceneId: number) => {
+    const video = producedVideoRefs.current[sceneId];
+    if (video) {
+      video.pause();
+      setPlayingProducedVideoId(null);
     }
   };
 
@@ -444,6 +509,78 @@ export default function SceneCard({
                           </span>
                         </button>
                       )}
+
+                    {/* Produced Video Button */}
+                    {typeof scene['field_6886'] === 'string' &&
+                      scene['field_6886'] && (
+                        <button
+                          onClick={() =>
+                            handleProducedVideoPlay(
+                              scene.id,
+                              scene['field_6886'] as string
+                            )
+                          }
+                          disabled={loadingProducedVideo === scene.id}
+                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            playingProducedVideoId === scene.id
+                              ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                              : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={
+                            playingProducedVideoId === scene.id
+                              ? 'Stop produced video'
+                              : 'Play produced video'
+                          }
+                        >
+                          {loadingProducedVideo === scene.id ? (
+                            <svg
+                              className='animate-spin h-3 w-3'
+                              xmlns='http://www.w3.org/2000/svg'
+                              fill='none'
+                              viewBox='0 0 24 24'
+                            >
+                              <circle
+                                className='opacity-25'
+                                cx='12'
+                                cy='12'
+                                r='10'
+                                stroke='currentColor'
+                                strokeWidth='4'
+                              ></circle>
+                              <path
+                                className='opacity-75'
+                                fill='currentColor'
+                                d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                              ></path>
+                            </svg>
+                          ) : playingProducedVideoId === scene.id ? (
+                            <svg
+                              className='h-3 w-3'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path
+                                fillRule='evenodd'
+                                d='M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v6a1 1 0 11-2 0V7zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V7z'
+                                clipRule='evenodd'
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              className='h-3 w-3'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path d='M8 5a1 1 0 011-1h3.5a.5.5 0 01.5.5v2a.5.5 0 01-.5.5H10a1 1 0 01-1-1V5zM5 7a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2V7zm7 4a1 1 0 100-2 1 1 0 000 2z' />
+                            </svg>
+                          )}
+                          <span>
+                            {playingProducedVideoId === scene.id
+                              ? 'Stop'
+                              : 'Produced'}
+                          </span>
+                        </button>
+                      )}
                   </div>
                 </div>
                 {editingId === scene.id ? (
@@ -512,10 +649,7 @@ export default function SceneCard({
                   controls
                   className='w-full h-auto max-h-96'
                   onEnded={() => {
-                    // Wait 10 seconds before closing the video player
-                    setTimeout(() => {
-                      handleVideoStop(scene.id);
-                    }, 5000);
+                    // Video ended - no auto-close
                   }}
                   onError={(e) => {
                     console.error('Video error for scene', scene.id, e);
@@ -528,6 +662,42 @@ export default function SceneCard({
                 <div className='flex justify-end p-2 bg-gray-900'>
                   <button
                     onClick={() => handleVideoStop(scene.id)}
+                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
+                  >
+                    Close Video
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Produced Video Player - Only show when produced video is playing for this scene */}
+            {playingProducedVideoId === scene.id && (
+              <div className='mt-4 bg-black rounded-lg overflow-hidden'>
+                <video
+                  ref={(el) => {
+                    if (el) producedVideoRefs.current[scene.id] = el;
+                  }}
+                  controls
+                  className='w-full h-auto max-h-96'
+                  onEnded={() => {
+                    // Produced video ended - no auto-close
+                  }}
+                  onError={(e) => {
+                    console.error(
+                      'Produced video error for scene',
+                      scene.id,
+                      e
+                    );
+                    setLoadingProducedVideo(null);
+                    setPlayingProducedVideoId(null);
+                  }}
+                >
+                  Your browser does not support the video tag.
+                </video>
+                <div className='flex justify-between items-center p-2 bg-gray-900'>
+                  <span className='text-xs text-gray-300'>Produced Video</span>
+                  <button
+                    onClick={() => handleProducedVideoStop(scene.id)}
                     className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
                   >
                     Close Video
