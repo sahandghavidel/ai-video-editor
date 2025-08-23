@@ -30,6 +30,7 @@ export default function SceneCard({
   >(null);
   const [producingTTS, setProducingTTS] = useState<number | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
+  const [autoGenerateVideo, setAutoGenerateVideo] = useState<boolean>(false);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -299,6 +300,19 @@ export default function SceneCard({
 
       // Refresh data from server to ensure consistency
       refreshData?.();
+
+      // Auto-generate video if option is enabled
+      if (autoGenerateVideo) {
+        const currentScene = data.find((scene) => scene.id === sceneId);
+        const videoUrl = currentScene?.field_6888;
+
+        if (typeof videoUrl === 'string' && videoUrl) {
+          // Wait a moment to ensure the TTS URL is properly updated
+          setTimeout(() => {
+            handleVideoGenerate(sceneId, videoUrl, audioUrl);
+          }, 1000);
+        }
+      }
     } catch (error) {
       console.error('Error producing TTS:', error);
       // You could show a user-friendly error message here
@@ -417,6 +431,26 @@ export default function SceneCard({
             <span>Refresh</span>
           </button>
         )}
+      </div>
+
+      {/* Auto-Generate Video Option */}
+      <div className='mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200'>
+        <label className='flex items-center space-x-3 cursor-pointer'>
+          <input
+            type='checkbox'
+            checked={autoGenerateVideo}
+            onChange={(e) => setAutoGenerateVideo(e.target.checked)}
+            className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
+          />
+          <div className='flex flex-col'>
+            <span className='text-sm font-medium text-gray-900'>
+              Auto-Generate Videos
+            </span>
+            <span className='text-xs text-gray-500'>
+              Automatically generate synchronized videos after TTS creation
+            </span>
+          </div>
+        </label>
       </div>
 
       <div className='grid gap-4'>
