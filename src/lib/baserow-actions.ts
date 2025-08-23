@@ -73,28 +73,52 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
 
   try {
     const token = await getJWTToken();
-    const url = `${baserowUrl}/database/rows/table/${tableId}/`;
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `JWT ${token}`,
-        'Content-Type': 'application/json',
-      },
-      // Disable caching for fresh data
-      cache: 'no-store',
-    });
+    // Set a high page size to get more rows (Baserow allows up to 200 per request)
+    const pageSize = 200;
+    let allRows: BaserowRow[] = [];
+    let page = 1;
+    let hasMore = true;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Data fetch failed with response:', errorText);
-      throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+    while (hasMore) {
+      const url = `${baserowUrl}/database/rows/table/${tableId}/?size=${pageSize}&page=${page}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `JWT ${token}`,
+          'Content-Type': 'application/json',
+        },
+        // Disable caching for fresh data
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Data fetch failed with response:', errorText);
+        throw new Error(
+          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      allRows = allRows.concat(results);
+
+      // Check if there are more pages
+      hasMore = data.next !== null;
+      page++;
+
+      console.log(
+        `Fetched page ${page - 1}: ${results.length} rows, Total so far: ${
+          allRows.length
+        }`
       );
     }
 
-    const data = await response.json();
-    return data.results || [];
+    console.log(`Total rows fetched from Baserow: ${allRows.length}`);
+    return allRows;
   } catch (error) {
     console.error('Error fetching Baserow data:', error);
     throw error;
