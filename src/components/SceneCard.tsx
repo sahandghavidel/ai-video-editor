@@ -31,6 +31,7 @@ export default function SceneCard({
   const [producingTTS, setProducingTTS] = useState<number | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
   const [autoGenerateVideo, setAutoGenerateVideo] = useState<boolean>(false);
+  const [autoGenerateTTS, setAutoGenerateTTS] = useState<boolean>(false);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -75,6 +76,14 @@ export default function SceneCard({
 
       // Refresh data from server to ensure consistency
       refreshData?.();
+
+      // Auto-generate TTS if option is enabled and text was actually changed
+      if (autoGenerateTTS && editingText.trim()) {
+        // Wait a moment to ensure the text is properly updated
+        setTimeout(() => {
+          handleTTSProduce(sceneId, editingText);
+        }, 500);
+      }
     } catch (error) {
       console.error('Failed to update scene:', error);
 
@@ -433,24 +442,45 @@ export default function SceneCard({
         )}
       </div>
 
-      {/* Auto-Generate Video Option */}
+      {/* Auto-Generate Options */}
       <div className='mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200'>
-        <label className='flex items-center space-x-3 cursor-pointer'>
-          <input
-            type='checkbox'
-            checked={autoGenerateVideo}
-            onChange={(e) => setAutoGenerateVideo(e.target.checked)}
-            className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
-          />
-          <div className='flex flex-col'>
-            <span className='text-sm font-medium text-gray-900'>
-              Auto-Generate Videos
-            </span>
-            <span className='text-xs text-gray-500'>
-              Automatically generate synchronized videos after TTS creation
-            </span>
-          </div>
-        </label>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+          {/* Auto-Generate TTS */}
+          <label className='flex items-center space-x-3 cursor-pointer'>
+            <input
+              type='checkbox'
+              checked={autoGenerateTTS}
+              onChange={(e) => setAutoGenerateTTS(e.target.checked)}
+              className='w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2'
+            />
+            <div className='flex flex-col'>
+              <span className='text-sm font-medium text-gray-900'>
+                Auto-Generate TTS
+              </span>
+              <span className='text-xs text-gray-500'>
+                Automatically create TTS audio when sentence is saved
+              </span>
+            </div>
+          </label>
+
+          {/* Auto-Generate Videos */}
+          <label className='flex items-center space-x-3 cursor-pointer'>
+            <input
+              type='checkbox'
+              checked={autoGenerateVideo}
+              onChange={(e) => setAutoGenerateVideo(e.target.checked)}
+              className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
+            />
+            <div className='flex flex-col'>
+              <span className='text-sm font-medium text-gray-900'>
+                Auto-Generate Videos
+              </span>
+              <span className='text-xs text-gray-500'>
+                Automatically generate synchronized videos after TTS creation
+              </span>
+            </div>
+          </label>
+        </div>
       </div>
 
       <div className='grid gap-4'>
