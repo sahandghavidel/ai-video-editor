@@ -30,8 +30,11 @@ export default function SceneCard({
   >(null);
   const [producingTTS, setProducingTTS] = useState<number | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
+  const [improvingSentence, setImprovingSentence] = useState<number | null>(
+    null
+  );
   const [autoGenerateVideo, setAutoGenerateVideo] = useState<boolean>(true);
-  const [autoGenerateTTS, setAutoGenerateTTS] = useState<boolean>(true);
+  const [autoGenerateTTS, setAutoGenerateTTS] = useState<boolean>(false);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -413,6 +416,91 @@ export default function SceneCard({
     }
   };
 
+  const handleSentenceImprovement = async (
+    sceneId: number,
+    currentSentence: string
+  ) => {
+    try {
+      setImprovingSentence(sceneId);
+
+      // Get all sentences for context
+      const allSentences = data
+        .map((scene) => String(scene['field_6890'] || scene.field_6890 || ''))
+        .filter((sentence) => sentence.trim());
+
+      console.log(
+        `Improving sentence for scene ${sceneId}: "${currentSentence}"`
+      );
+
+      // Call our sentence improvement API route
+      const response = await fetch('/api/improve-sentence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentSentence,
+          allSentences,
+          sceneId,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Sentence improvement error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          errorMessage = `Sentence improvement error: ${response.status} - ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      const improvedSentence = result.improvedSentence;
+
+      console.log(`Improved sentence: "${improvedSentence}"`);
+
+      // Update the Baserow field with the improved sentence
+      const updatedRow = await updateBaserowRow(sceneId, {
+        field_6890: improvedSentence,
+      });
+
+      // Update the local data optimistically
+      const updatedData = data.map((scene) => {
+        if (scene.id === sceneId) {
+          return { ...scene, field_6890: improvedSentence };
+        }
+        return scene;
+      });
+      onDataUpdate?.(updatedData);
+
+      // Refresh data from server to ensure consistency
+      refreshData?.();
+
+      // Auto-generate TTS if option is enabled
+      if (autoGenerateTTS && improvedSentence.trim()) {
+        // Wait a moment to ensure the text is properly updated
+        setTimeout(() => {
+          handleTTSProduce(sceneId, improvedSentence);
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Error improving sentence:', error);
+
+      // Show user-friendly error message
+      let errorMessage = 'Failed to improve sentence';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      // You could implement a toast notification or alert here
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setImprovingSentence(null);
+    }
+  };
+
   if (!data || data.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center min-h-[400px] text-gray-500'>
@@ -605,6 +693,68 @@ export default function SceneCard({
                         {producingTTS === scene.id
                           ? 'Producing...'
                           : 'Generate TTS'}
+                      </span>
+                    </button>
+
+                    {/* AI Improvement Button */}
+                    <button
+                      onClick={() =>
+                        handleSentenceImprovement(
+                          scene.id,
+                          String(scene['field_6890'] || scene.field_6890 || '')
+                        )
+                      }
+                      disabled={
+                        improvingSentence === scene.id ||
+                        !String(
+                          scene['field_6890'] || scene.field_6890 || ''
+                        ).trim()
+                      }
+                      className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        improvingSentence === scene.id
+                          ? 'bg-gray-100 text-gray-500'
+                          : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title='Improve sentence with AI'
+                    >
+                      {improvingSentence === scene.id ? (
+                        <svg
+                          className='animate-spin h-3 w-3'
+                          xmlns='http://www.w3.org/2000/svg'
+                          fill='none'
+                          viewBox='0 0 24 24'
+                        >
+                          <circle
+                            className='opacity-25'
+                            cx='12'
+                            cy='12'
+                            r='10'
+                            stroke='currentColor'
+                            strokeWidth='4'
+                          ></circle>
+                          <path
+                            className='opacity-75'
+                            fill='currentColor'
+                            d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                          ></path>
+                        </svg>
+                      ) : (
+                        <svg
+                          className='h-3 w-3'
+                          fill='currentColor'
+                          viewBox='0 0 20 20'
+                        >
+                          <path
+                            fillRule='evenodd'
+                            d='M9.504 1.132a1 1 0 01.992 0l1.75 1a1 1 0 11-.992 1.736L10 3.152l-1.254.716a1 1 0 11-.992-1.736l1.75-1zM5.618 4.504a1 1 0 01-.372 1.364L5.016 6l.23.132a1 1 0 11-.992 1.736L3 7.347V8a1 1 0 01-2 0V6a1 1 0 01.504-.868l3-1.732a1 1 0 011.114.104zM14.382 4.504a1 1 0 011.114-.104l3 1.732A1 1 0 0119 6v2a1 1 0 11-2 0v-.653l-1.254.521a1 1 0 11-.992-1.736l.23-.132-.23-.132a1 1 0 01-.372-1.364zM3 9a1 1 0 012 0v3a1 1 0 11-2 0V9zm14 0a1 1 0 012 0v3a1 1 0 11-2 0V9z'
+                            clipRule='evenodd'
+                          />
+                        </svg>
+                      )}
+                      <span>
+                        {improvingSentence === scene.id
+                          ? 'Improving...'
+                          : 'AI Improve'}
                       </span>
                     </button>
 
