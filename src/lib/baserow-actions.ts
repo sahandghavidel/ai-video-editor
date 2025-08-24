@@ -9,7 +9,7 @@ export interface BaserowRow {
 let cachedToken: string | null = null;
 let tokenExpiry: number = 0;
 
-async function getJWTToken(): Promise<string> {
+async function getJWTToken(forceRefresh = false): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const email = process.env.BASEROW_EMAIL;
   const password = process.env.BASEROW_PASSWORD;
@@ -20,12 +20,17 @@ async function getJWTToken(): Promise<string> {
     );
   }
 
-  // Return cached token if it's still valid (with 5 minute buffer)
-  if (cachedToken && Date.now() < tokenExpiry - 300000) {
+  // Return cached token if it's still valid (with 5 minute buffer) and not forcing refresh
+  if (!forceRefresh && cachedToken && Date.now() < tokenExpiry - 300000) {
     return cachedToken;
   }
 
+  // Clear cached token when refreshing
+  cachedToken = null;
+  tokenExpiry = 0;
+
   try {
+    console.log('Fetching new JWT token from Baserow...');
     const response = await fetch(`${baserowUrl}/user/token-auth/`, {
       method: 'POST',
       headers: {
@@ -54,9 +59,48 @@ async function getJWTToken(): Promise<string> {
       throw new Error('No token received from Baserow');
     }
 
+    console.log('Successfully obtained new JWT token');
     return cachedToken;
   } catch (error) {
     console.error('Error authenticating with Baserow:', error);
+    throw error;
+  }
+}
+
+// Helper function to make API requests with automatic token refresh
+async function makeAuthenticatedRequest(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  async function requestWithToken(token: string): Promise<Response> {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `JWT ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.status === 401) {
+      throw new Error('TOKEN_EXPIRED');
+    }
+
+    return response;
+  }
+
+  try {
+    // First attempt with cached token
+    const token = await getJWTToken();
+    return await requestWithToken(token);
+  } catch (error) {
+    // If token expired, try once more with fresh token
+    if (error instanceof Error && error.message === 'TOKEN_EXPIRED') {
+      console.log('Token expired, refreshing and retrying request...');
+      const freshToken = await getJWTToken(true); // Force refresh
+      return await requestWithToken(freshToken);
+    }
+
     throw error;
   }
 }
@@ -72,8 +116,6 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
   }
 
   try {
-    const token = await getJWTToken();
-
     // Set a high page size to get more rows (Baserow allows up to 200 per request)
     const pageSize = 200;
     let allRows: BaserowRow[] = [];
@@ -83,13 +125,8 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
     while (hasMore) {
       const url = `${baserowUrl}/database/rows/table/${tableId}/?size=${pageSize}&page=${page}`;
 
-      const response = await fetch(url, {
+      const response = await makeAuthenticatedRequest(url, {
         method: 'GET',
-        headers: {
-          Authorization: `JWT ${token}`,
-          'Content-Type': 'application/json',
-        },
-        // Disable caching for fresh data
         cache: 'no-store',
       });
 
@@ -138,23 +175,19 @@ export async function createBaserowRow(
   }
 
   try {
-    const token = await getJWTToken();
-
-    const response = await fetch(
+    const response = await makeAuthenticatedRequest(
       `${baserowUrl}/database/rows/table/${tableId}/`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `JWT ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(rowData),
+        cache: 'no-store',
       }
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
       );
     }
 
@@ -179,23 +212,19 @@ export async function updateBaserowRow(
   }
 
   try {
-    const token = await getJWTToken();
-
-    const response = await fetch(
+    const response = await makeAuthenticatedRequest(
       `${baserowUrl}/database/rows/table/${tableId}/${rowId}/`,
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `JWT ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(rowData),
+        cache: 'no-store',
       }
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
       );
     }
 
@@ -217,22 +246,18 @@ export async function deleteBaserowRow(rowId: number): Promise<void> {
   }
 
   try {
-    const token = await getJWTToken();
-
-    const response = await fetch(
+    const response = await makeAuthenticatedRequest(
       `${baserowUrl}/database/rows/table/${tableId}/${rowId}/`,
       {
         method: 'DELETE',
-        headers: {
-          Authorization: `JWT ${token}`,
-          'Content-Type': 'application/json',
-        },
+        cache: 'no-store',
       }
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
       );
     }
   } catch (error) {
