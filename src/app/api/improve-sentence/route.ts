@@ -53,6 +53,7 @@ Please improve this sentence by:
 5. Keeping the improved sentence simple English and easy to understand
 6. Avoiding unnecessary jargon and complex vocabulary
 7. Ensuring the improved sentence is concise and to the point
+8. Never use code snippets like html or css tags
 
 
 Return only the improved sentence, nothing else.`;
