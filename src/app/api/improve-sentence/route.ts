@@ -54,6 +54,8 @@ Please improve this sentence by:
 6. Avoiding unnecessary jargon and complex vocabulary
 7. Ensuring the improved sentence is concise and to the point
 8. Never use code snippets like html or css tags
+9. The sentences must have at least 5 words
+10. Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", etc.
 
 
 Return only the improved sentence, nothing else.`;
@@ -69,8 +71,6 @@ Return only the improved sentence, nothing else.`;
           content: prompt,
         },
       ],
-      temperature: 0.7,
-      max_tokens: 100,
     });
 
     console.log(
