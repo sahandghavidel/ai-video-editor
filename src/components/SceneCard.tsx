@@ -3,6 +3,8 @@
 import { BaserowRow, updateBaserowRow } from '@/lib/baserow-actions';
 import { useState, useRef } from 'react';
 
+// Helper: get original sentence from field_6901
+
 interface SceneCardProps {
   data: BaserowRow[];
   refreshData?: () => void;
@@ -39,6 +41,34 @@ export default function SceneCard({
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
+
+  // State for revert loading
+  const [revertingId, setRevertingId] = useState<number | null>(null);
+
+  // Revert to original sentence handler
+  const handleRevertToOriginal = async (sceneId: number) => {
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+    const originalSentence = currentScene.field_6901;
+    if (!originalSentence || originalSentence === currentScene.field_6890)
+      return;
+    setRevertingId(sceneId);
+    // Optimistic update
+    const optimisticData = data.map((scene) =>
+      scene.id === sceneId ? { ...scene, field_6890: originalSentence } : scene
+    );
+    onDataUpdate?.(optimisticData);
+    try {
+      await updateBaserowRow(sceneId, { field_6890: originalSentence });
+      refreshData?.();
+    } catch (error) {
+      console.error('Failed to revert sentence:', error);
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
+    } finally {
+      setRevertingId(null);
+    }
+  };
 
   // Helper function to scroll a scene card to the top of the screen
   const scrollCardToTop = (sceneId: number) => {
@@ -638,6 +668,53 @@ export default function SceneCard({
                   </label>
                   {/* Media Controls Group */}
                   <div className='flex items-center space-x-2'>
+                    {/* Revert to Original Button */}
+                    {typeof scene['field_6901'] === 'string' &&
+                      scene['field_6901'] &&
+                      scene['field_6901'] !== scene['field_6890'] && (
+                        <button
+                          onClick={() => handleRevertToOriginal(scene.id)}
+                          disabled={revertingId === scene.id}
+                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title='Revert to original sentence'
+                        >
+                          {revertingId === scene.id ? (
+                            <svg
+                              className='animate-spin h-3 w-3'
+                              xmlns='http://www.w3.org/2000/svg'
+                              fill='none'
+                              viewBox='0 0 24 24'
+                            >
+                              <circle
+                                className='opacity-25'
+                                cx='12'
+                                cy='12'
+                                r='10'
+                                stroke='currentColor'
+                                strokeWidth='4'
+                              ></circle>
+                              <path
+                                className='opacity-75'
+                                fill='currentColor'
+                                d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                              ></path>
+                            </svg>
+                          ) : (
+                            <svg
+                              className='h-3 w-3'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path d='M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z' />
+                            </svg>
+                          )}
+                          <span>
+                            {revertingId === scene.id
+                              ? 'Reverting...'
+                              : 'Revert'}
+                          </span>
+                        </button>
+                      )}
                     {/* TTS Produce Button */}
                     <button
                       onClick={() =>

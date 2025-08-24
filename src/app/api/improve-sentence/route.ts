@@ -2,8 +2,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
-  apiKey:
-    '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',
+  apiKey: process.env.OPENROUTER_API_KEY,
   defaultHeaders: {
     'HTTP-Referer': 'https://ultimate-video-editor.com',
     'X-Title': 'Ultimate Video Editor',
