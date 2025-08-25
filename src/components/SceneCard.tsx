@@ -42,6 +42,31 @@ export default function SceneCard({
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
 
+  // State for improving all sentences
+  const [improvingAll, setImprovingAll] = useState(false);
+
+  // Improve all sentences handler
+  // Helper to wait for a given ms
+  const wait = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  const handleImproveAllSentences = async () => {
+    setImprovingAll(true);
+    for (const scene of data) {
+      const currentSentence = String(
+        scene['field_6890'] || scene.field_6890 || ''
+      );
+      const originalSentence = String(scene['field_6901'] || '');
+      // Only improve if the sentence is the same as the original
+      if (currentSentence === originalSentence && currentSentence.trim()) {
+        await handleSentenceImprovement(scene.id, currentSentence);
+        await wait(10000); // 10 seconds delay
+      }
+      // Otherwise skip
+    }
+    setImprovingAll(false);
+  };
+
   // State for revert loading
   const [revertingId, setRevertingId] = useState<number | null>(null);
 
@@ -555,34 +580,74 @@ export default function SceneCard({
 
   return (
     <div className='w-full max-w-7xl mx-auto'>
-      <div className='flex items-center justify-between mb-6'>
+      <div className='flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4'>
         <div>
           <h2 className='text-2xl font-bold text-gray-800'>Scenes</h2>
           <p className='text-gray-600 mt-1'>
             {data.length} scene{data.length !== 1 ? 's' : ''} found
           </p>
         </div>
-        {refreshData && (
+        <div className='flex flex-col md:flex-row gap-2'>
           <button
-            onClick={refreshData}
-            className='px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center space-x-2'
+            onClick={handleImproveAllSentences}
+            disabled={improvingAll}
+            className='px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
+            title='Improve all sentences with AI'
           >
-            <svg
-              className='w-4 h-4'
-              fill='none'
-              stroke='currentColor'
-              viewBox='0 0 24 24'
-            >
-              <path
-                strokeLinecap='round'
-                strokeLinejoin='round'
-                strokeWidth={2}
-                d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
-              />
-            </svg>
-            <span>Refresh</span>
+            {improvingAll ? (
+              <svg
+                className='animate-spin h-4 w-4'
+                xmlns='http://www.w3.org/2000/svg'
+                fill='none'
+                viewBox='0 0 24 24'
+              >
+                <circle
+                  className='opacity-25'
+                  cx='12'
+                  cy='12'
+                  r='10'
+                  stroke='currentColor'
+                  strokeWidth='4'
+                ></circle>
+                <path
+                  className='opacity-75'
+                  fill='currentColor'
+                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                ></path>
+              </svg>
+            ) : (
+              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
+                <path
+                  fillRule='evenodd'
+                  d='M9.504 1.132a1 1 0 01.992 0l1.75 1a1 1 0 11-.992 1.736L10 3.152l-1.254.716a1 1 0 11-.992-1.736l1.75-1zM5.618 4.504a1 1 0 01-.372 1.364L5.016 6l.23.132a1 1 0 11-.992 1.736L3 7.347V8a1 1 0 01-2 0V6a1 1 0 01.504-.868l3-1.732a1 1 0 011.114.104zM14.382 4.504a1 1 0 011.114-.104l3 1.732A1 1 0 0119 6v2a1 1 0 11-2 0v-.653l-1.254.521a1 1 0 11-.992-1.736l.23-.132-.23-.132a1 1 0 01-.372-1.364zM3 9a1 1 0 012 0v3a1 1 0 11-2 0V9zm14 0a1 1 0 012 0v3a1 1 0 11-2 0V9z'
+                  clipRule='evenodd'
+                />
+              </svg>
+            )}
+            <span>{improvingAll ? 'Improving All...' : 'AI Improve All'}</span>
           </button>
-        )}
+          {refreshData && (
+            <button
+              onClick={refreshData}
+              className='px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center space-x-2'
+            >
+              <svg
+                className='w-4 h-4'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
+                />
+              </svg>
+              <span>Refresh</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Auto-Generate Options */}
