@@ -12,7 +12,7 @@ const openai = new OpenAI({
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { currentSentence, allSentences, sceneId } = body;
+    const { currentSentence, allSentences, sceneId, model } = body;
 
     if (!currentSentence) {
       return Response.json(
@@ -64,7 +64,9 @@ Return only the improved sentence, nothing else.`;
 
     // Use the original DeepSeek model that was working
     const completion = await openai.chat.completions.create({
-      model: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+      model:
+        model ||
+        'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
       messages: [
         {
           role: 'user',

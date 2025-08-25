@@ -1,7 +1,7 @@
 'use client';
 
 import { BaserowRow, updateBaserowRow } from '@/lib/baserow-actions';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 // Helper: get original sentence from field_6901
 
@@ -43,6 +43,45 @@ export default function SceneCard({
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
 
   // State for improving all sentences
+  // OpenRouter model selection
+  const [models, setModels] = useState<any[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(
+    'deepseek/deepseek-r1:free'
+  );
+  const [modelSearch, setModelSearch] = useState('free');
+
+  // Fetch models from API
+  const fetchModels = async () => {
+    setModelsLoading(true);
+    setModelsError(null);
+    try {
+      const res = await fetch('/api/openrouter-models');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Model fetch failed: ${res.status}`);
+      }
+      const json = await res.json();
+      setModels(json.data || []);
+      // Set default model if not set
+      if (!selectedModel && json.data && json.data.length > 0) {
+        setSelectedModel(json.data[0].id);
+      }
+    } catch (err) {
+      setModelsError(err instanceof Error ? err.message : String(err));
+      setModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // State for improving all sentences
   const [improvingAll, setImprovingAll] = useState(false);
 
   // Improve all sentences handler
@@ -59,7 +98,11 @@ export default function SceneCard({
       const originalSentence = String(scene['field_6901'] || '');
       // Only improve if the sentence is the same as the original
       if (currentSentence === originalSentence && currentSentence.trim()) {
-        await handleSentenceImprovement(scene.id, currentSentence);
+        await handleSentenceImprovement(
+          scene.id,
+          currentSentence,
+          selectedModel || undefined
+        );
         await wait(10000); // 10 seconds delay
       }
       // Otherwise skip
@@ -473,7 +516,8 @@ export default function SceneCard({
 
   const handleSentenceImprovement = async (
     sceneId: number,
-    currentSentence: string
+    currentSentence: string,
+    modelOverride?: string
   ) => {
     try {
       setImprovingSentence(sceneId);
@@ -497,6 +541,7 @@ export default function SceneCard({
           currentSentence,
           allSentences,
           sceneId,
+          model: modelOverride || selectedModel,
         }),
       });
 
@@ -580,6 +625,67 @@ export default function SceneCard({
 
   return (
     <div className='w-full max-w-7xl mx-auto'>
+      {/* OpenRouter model selection */}
+      <div className='mb-4 p-3 rounded border border-gray-200 bg-white'>
+        <div className='flex items-center justify-between'>
+          <div>
+            <h3 className='text-sm font-semibold'>OpenRouter Model</h3>
+            {modelsLoading ? (
+              <p className='text-xs text-gray-500'>Loading models...</p>
+            ) : modelsError ? (
+              <p className='text-xs text-red-600'>Error: {modelsError}</p>
+            ) : models.length > 0 ? (
+              <>
+                <input
+                  type='text'
+                  className='mt-1 mb-2 p-2 border rounded text-sm bg-gray-50 w-full'
+                  placeholder='Search models...'
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                />
+                <select
+                  className='p-2 border rounded text-sm bg-gray-50 w-full'
+                  value={selectedModel || ''}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                >
+                  {models
+                    .filter((m) =>
+                      (m.name || m.id)
+                        .toLowerCase()
+                        .includes(modelSearch.toLowerCase())
+                    )
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name || m.id}
+                      </option>
+                    ))}
+                </select>
+              </>
+            ) : (
+              <p className='text-xs text-gray-500'>No models available</p>
+            )}
+          </div>
+          <div className='flex items-center space-x-2'>
+            <button
+              onClick={fetchModels}
+              className='px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600'
+              title='Refresh model list'
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+        {selectedModel && (
+          <div className='mt-2 text-xs text-gray-500'>
+            <span>
+              Selected model:{' '}
+              <span className='font-medium'>{selectedModel}</span>
+            </span>
+          </div>
+        )}
+      </div>
+      // ...existing code... // Use selectedModel in your LLM requests, e.g.
+      pass as a parameter to your API calls
       <div className='flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4'>
         <div>
           <h2 className='text-2xl font-bold text-gray-800'>Scenes</h2>
@@ -649,7 +755,6 @@ export default function SceneCard({
           )}
         </div>
       </div>
-
       {/* Auto-Generate Options */}
       <div className='mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200'>
         <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
@@ -690,7 +795,6 @@ export default function SceneCard({
           </label>
         </div>
       </div>
-
       <div className='grid gap-4'>
         {data.map((scene) => (
           <div
@@ -843,7 +947,8 @@ export default function SceneCard({
                       onClick={() =>
                         handleSentenceImprovement(
                           scene.id,
-                          String(scene['field_6890'] || scene.field_6890 || '')
+                          String(scene['field_6890'] || scene.field_6890 || ''),
+                          selectedModel || undefined
                         )
                       }
                       disabled={
@@ -1301,7 +1406,6 @@ export default function SceneCard({
           </div>
         ))}
       </div>
-
       {/* Hidden audio elements for playback */}
       {data.map((scene) => (
         <audio
