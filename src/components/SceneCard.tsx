@@ -93,6 +93,9 @@ export default function SceneCard({
   // State for improving all sentences
   const [improvingAll, setImprovingAll] = useState(false);
 
+  // State for generating TTS for all scenes
+  const [generatingAllTTS, setGeneratingAllTTS] = useState(false);
+
   // Improve all sentences handler
   // Helper to wait for a given ms
   const wait = (ms: number) =>
@@ -117,6 +120,25 @@ export default function SceneCard({
       // Otherwise skip
     }
     setImprovingAll(false);
+  };
+
+  // Generate TTS for all scenes that have text but no TTS audio
+  const handleGenerateAllTTS = async () => {
+    setGeneratingAllTTS(true);
+    for (const scene of data) {
+      const currentSentence = String(
+        scene['field_6890'] || scene.field_6890 || ''
+      );
+      const hasAudio =
+        scene['field_6891'] && String(scene['field_6891']).trim();
+
+      // Only generate TTS if scene has text but no audio
+      if (currentSentence.trim() && !hasAudio) {
+        await handleTTSProduce(scene.id, currentSentence);
+        await wait(3000); // 3 seconds delay between generations
+      }
+    }
+    setGeneratingAllTTS(false);
   };
 
   // State for revert loading
@@ -842,6 +864,42 @@ export default function SceneCard({
               </svg>
             )}
             <span>{improvingAll ? 'Improving All...' : 'AI Improve All'}</span>
+          </button>
+          <button
+            onClick={handleGenerateAllTTS}
+            disabled={generatingAllTTS}
+            className='px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
+            title='Generate TTS for all scenes that have text but no audio'
+          >
+            {generatingAllTTS ? (
+              <svg
+                className='animate-spin h-4 w-4'
+                xmlns='http://www.w3.org/2000/svg'
+                fill='none'
+                viewBox='0 0 24 24'
+              >
+                <circle
+                  className='opacity-25'
+                  cx='12'
+                  cy='12'
+                  r='10'
+                  stroke='currentColor'
+                  strokeWidth='4'
+                ></circle>
+                <path
+                  className='opacity-75'
+                  fill='currentColor'
+                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                ></path>
+              </svg>
+            ) : (
+              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
+                <path d='M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v6.114a4 4 0 10.894 7.96c.045-.021.09-.043.135-.067l8.056-4.028A1 1 0 0016 14V6.732l2-1.732V3z' />
+              </svg>
+            )}
+            <span>
+              {generatingAllTTS ? 'Generating TTS...' : 'Generate TTS for All'}
+            </span>
           </button>
           {refreshData && (
             <button
