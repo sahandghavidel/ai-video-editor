@@ -52,6 +52,15 @@ export default function SceneCard({
   );
   const [modelSearch, setModelSearch] = useState('free');
 
+  // TTS Settings
+  const [ttsSettings, setTtsSettings] = useState({
+    temperature: 0.8,
+    exaggeration: 0.3,
+    cfg_weight: 0.5,
+    seed: 1212,
+    reference_audio_filename: 'calmS5wave.wav',
+  });
+
   // Fetch models from API
   const fetchModels = async () => {
     setModelsLoading(true);
@@ -401,6 +410,7 @@ export default function SceneCard({
         body: JSON.stringify({
           text,
           sceneId,
+          ttsSettings,
         }),
       });
 
@@ -683,6 +693,107 @@ export default function SceneCard({
             </span>
           </div>
         )}
+      </div>
+      {/* TTS Settings */}
+      <div className='mb-4 p-3 rounded border border-gray-200 bg-white'>
+        <h3 className='text-sm font-semibold mb-3'>TTS Settings</h3>
+        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+          <div>
+            <label className='block text-xs font-medium text-gray-700 mb-1'>
+              Temperature ({ttsSettings.temperature})
+            </label>
+            <input
+              type='range'
+              min='0'
+              max='1'
+              step='0.1'
+              value={ttsSettings.temperature}
+              onChange={(e) =>
+                setTtsSettings((prev) => ({
+                  ...prev,
+                  temperature: parseFloat(e.target.value),
+                }))
+              }
+              className='w-full'
+            />
+          </div>
+
+          <div>
+            <label className='block text-xs font-medium text-gray-700 mb-1'>
+              Exaggeration ({ttsSettings.exaggeration})
+            </label>
+            <input
+              type='range'
+              min='0'
+              max='1'
+              step='0.1'
+              value={ttsSettings.exaggeration}
+              onChange={(e) =>
+                setTtsSettings((prev) => ({
+                  ...prev,
+                  exaggeration: parseFloat(e.target.value),
+                }))
+              }
+              className='w-full'
+            />
+          </div>
+
+          <div>
+            <label className='block text-xs font-medium text-gray-700 mb-1'>
+              CFG Weight ({ttsSettings.cfg_weight})
+            </label>
+            <input
+              type='range'
+              min='0'
+              max='1'
+              step='0.1'
+              value={ttsSettings.cfg_weight}
+              onChange={(e) =>
+                setTtsSettings((prev) => ({
+                  ...prev,
+                  cfg_weight: parseFloat(e.target.value),
+                }))
+              }
+              className='w-full'
+            />
+          </div>
+
+          <div>
+            <label className='block text-xs font-medium text-gray-700 mb-1'>
+              Seed
+            </label>
+            <input
+              type='number'
+              value={ttsSettings.seed}
+              onChange={(e) =>
+                setTtsSettings((prev) => ({
+                  ...prev,
+                  seed: parseInt(e.target.value) || 1212,
+                }))
+              }
+              className='w-full p-2 border rounded text-sm'
+              min='0'
+            />
+          </div>
+
+          <div className='md:col-span-2'>
+            <label className='block text-xs font-medium text-gray-700 mb-1'>
+              Reference Audio Filename
+            </label>
+            <input
+              type='text'
+              value={ttsSettings.reference_audio_filename}
+              onChange={(e) =>
+                setTtsSettings((prev) => ({
+                  ...prev,
+                  reference_audio_filename: e.target.value,
+                }))
+              }
+              className='w-full p-2 border rounded text-sm'
+              placeholder='audio3_enhanced.wav'
+            />
+          </div>
+        </div>
       </div>
       // ...existing code... // Use selectedModel in your LLM requests, e.g.
       pass as a parameter to your API calls

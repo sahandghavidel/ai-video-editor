@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, sceneId } = await request.json();
+    const { text, sceneId, ttsSettings } = await request.json();
 
     if (!text || !sceneId) {
       return NextResponse.json(
@@ -11,20 +11,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 1: Generate TTS
-    const ttsPayload = {
-      text: text,
+    // Use dynamic TTS settings or defaults
+    const settings = ttsSettings || {
       temperature: 0.1,
       exaggeration: 0.5,
       cfg_weight: 0.2,
-      speed_factor: 1,
       seed: 1212,
+      reference_audio_filename: 'audio3_enhanced.wav',
+    };
+
+    // Step 1: Generate TTS
+    const ttsPayload = {
+      text: text,
+      temperature: settings.temperature,
+      exaggeration: settings.exaggeration,
+      cfg_weight: settings.cfg_weight,
+      speed_factor: 1,
+      seed: settings.seed,
       language: 'en',
       voice_mode: 'clone',
       split_text: true,
       chunk_size: 50,
       output_format: 'wav',
-      reference_audio_filename: 'audio3_enhanced.wav',
+      reference_audio_filename: settings.reference_audio_filename,
     };
 
     const ttsResponse = await fetch('http://host.docker.internal:8004/tts', {
