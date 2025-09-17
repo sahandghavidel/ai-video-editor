@@ -100,6 +100,9 @@ export default function SceneCard({
   // State for concatenating all videos
   const [concatenatingVideos, setConcatenatingVideos] = useState(false);
 
+  // State for batch speed-up all empty scenes
+  const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
+
   // Improve all sentences handler
   // Helper to wait for a given ms
   const wait = (ms: number) =>
@@ -217,6 +220,94 @@ export default function SceneCard({
       alert(`Error: ${errorMessage}`);
     } finally {
       setConcatenatingVideos(false);
+    }
+  };
+
+  // Speed up all videos (4x) for scenes with empty sentences handler
+  const handleSpeedUpAllVideos = async () => {
+    setSpeedingUpAllVideos(true);
+    try {
+      // Filter scenes that have videos (field_6888) but empty sentences (field_6890)
+      const scenesToSpeedUp = data.filter((scene) => {
+        const videoUrl = scene['field_6888'];
+        const sentence = String(scene['field_6890'] || '');
+        return (
+          typeof videoUrl === 'string' && videoUrl.trim() && !sentence.trim()
+        );
+      });
+
+      if (scenesToSpeedUp.length === 0) {
+        alert('No videos with empty sentences found to speed up');
+        return;
+      }
+
+      console.log(
+        `Processing ${scenesToSpeedUp.length} videos for 4x speed-up...`
+      );
+
+      // Process each video sequentially to avoid overwhelming the server
+      for (const scene of scenesToSpeedUp) {
+        const videoUrl = scene['field_6888'] as string;
+
+        try {
+          console.log(`Speeding up video for scene ${scene.id}:`, videoUrl);
+
+          const response = await fetch('/api/speed-up-video', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sceneId: scene.id,
+              videoUrl,
+            }),
+          });
+
+          if (!response.ok) {
+            let errorMessage = `Speed-up error for scene ${scene.id}: ${response.status}`;
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } catch (parseError) {
+              errorMessage = `Speed-up error for scene ${scene.id}: ${response.status} - ${response.statusText}`;
+            }
+            console.error(errorMessage);
+            // Continue with next video instead of stopping
+            continue;
+          }
+
+          const result = await response.json();
+          console.log(
+            `Speed-up completed for scene ${scene.id}:`,
+            result.videoUrl
+          );
+
+          // Small delay between requests to be nice to the server
+          await wait(1000);
+        } catch (error) {
+          console.error(
+            `Error speeding up video for scene ${scene.id}:`,
+            error
+          );
+          // Continue with next video
+        }
+      }
+
+      // Refresh data from server to get all updates
+      refreshData?.();
+
+      alert(
+        `Batch speed-up completed! Processed ${scenesToSpeedUp.length} videos.`
+      );
+    } catch (error) {
+      console.error('Error in batch speed-up:', error);
+      let errorMessage = 'Failed to process batch speed-up';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setSpeedingUpAllVideos(false);
     }
   };
 
@@ -1109,6 +1200,48 @@ export default function SceneCard({
               {concatenatingVideos
                 ? 'Concatenating...'
                 : 'Concatenate All Videos'}
+            </span>
+          </button>
+          <button
+            onClick={handleSpeedUpAllVideos}
+            disabled={speedingUpAllVideos}
+            className='px-4 py-2 bg-cyan-500 text-white rounded hover:bg-cyan-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
+            title='Speed up all videos 4x for scenes with empty sentences'
+          >
+            {speedingUpAllVideos ? (
+              <svg
+                className='animate-spin h-4 w-4'
+                xmlns='http://www.w3.org/2000/svg'
+                fill='none'
+                viewBox='0 0 24 24'
+              >
+                <circle
+                  className='opacity-25'
+                  cx='12'
+                  cy='12'
+                  r='10'
+                  stroke='currentColor'
+                  strokeWidth='4'
+                ></circle>
+                <path
+                  className='opacity-75'
+                  fill='currentColor'
+                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                ></path>
+              </svg>
+            ) : (
+              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
+                <path
+                  fillRule='evenodd'
+                  d='M10 2L3 7v6l7 5 7-5V7l-7-5zM8 8.1l3-1.8V13l-3-1.8V8.1zm2 5.8l3-1.8v-3l-3 1.8v3z'
+                  clipRule='evenodd'
+                />
+              </svg>
+            )}
+            <span>
+              {speedingUpAllVideos
+                ? 'Speeding Up All...'
+                : 'Speed Up All Videos (4x)'}
             </span>
           </button>
           {refreshData && (
