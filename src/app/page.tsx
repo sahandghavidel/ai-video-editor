@@ -3,12 +3,11 @@
 import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
 import SceneCard from '@/components/SceneCard';
 import AddDataForm from '@/components/AddDataForm';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useAppStore } from '@/store/useAppStore';
 
 export default function Home() {
-  const [data, setData] = useState<BaserowRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, error, loading, setData, setError, setLoading } = useAppStore();
 
   const loadData = async () => {
     try {

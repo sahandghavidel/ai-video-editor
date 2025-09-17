@@ -2,6 +2,7 @@
 
 import { BaserowRow, updateBaserowRow } from '@/lib/baserow-actions';
 import { useState, useRef, useEffect } from 'react';
+import { useAppStore } from '@/store/useAppStore';
 
 // Helper: get original sentence from field_6901
 
@@ -53,18 +54,16 @@ export default function SceneCard({
   );
   const [modelSearch, setModelSearch] = useState('free');
 
-  // TTS Settings
-  const [ttsSettings, setTtsSettings] = useState({
-    temperature: 0.8,
-    exaggeration: 0.3,
-    cfg_weight: 0.5,
-    seed: 1212,
-    reference_audio_filename: 'calmS5wave.wav',
-  });
-
-  // Speed selection for video processing
-  const [selectedSpeed, setSelectedSpeed] = useState<number>(4);
-  const [muteAudio, setMuteAudio] = useState<boolean>(true);
+  // Global settings from store
+  const {
+    ttsSettings,
+    videoSettings,
+    updateTTSSettings,
+    updateVideoSettings,
+    batchOperations,
+    startBatchOperation,
+    completeBatchOperation,
+  } = useAppStore();
 
   // Fetch models from API
   const fetchModels = async () => {
@@ -95,25 +94,12 @@ export default function SceneCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // State for improving all sentences
-  const [improvingAll, setImprovingAll] = useState(false);
-
-  // State for generating TTS for all scenes
-  const [generatingAllTTS, setGeneratingAllTTS] = useState(false);
-
-  // State for concatenating all videos
-  const [concatenatingVideos, setConcatenatingVideos] = useState(false);
-
-  // State for batch speed-up all empty scenes
-  const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
-
-  // Improve all sentences handler
   // Helper to wait for a given ms
   const wait = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
   const handleImproveAllSentences = async () => {
-    setImprovingAll(true);
+    startBatchOperation('improvingAll');
     for (const scene of data) {
       const currentSentence = String(
         scene['field_6890'] || scene.field_6890 || ''
@@ -130,12 +116,12 @@ export default function SceneCard({
       }
       // Otherwise skip
     }
-    setImprovingAll(false);
+    completeBatchOperation('improvingAll');
   };
 
   // Generate TTS for all scenes that have text but no TTS audio
   const handleGenerateAllTTS = async () => {
-    setGeneratingAllTTS(true);
+    startBatchOperation('generatingAllTTS');
     for (const scene of data) {
       const currentSentence = String(
         scene['field_6890'] || scene.field_6890 || ''
@@ -149,12 +135,12 @@ export default function SceneCard({
         await wait(3000); // 3 seconds delay between generations
       }
     }
-    setGeneratingAllTTS(false);
+    completeBatchOperation('generatingAllTTS');
   };
 
   // Concatenate all videos handler
   const handleConcatenateAllVideos = async () => {
-    setConcatenatingVideos(true);
+    startBatchOperation('concatenatingVideos');
     try {
       // Filter scenes that have videos (field_6886) and sort by order
       const scenesWithVideos = data
@@ -223,13 +209,13 @@ export default function SceneCard({
       }
       alert(`Error: ${errorMessage}`);
     } finally {
-      setConcatenatingVideos(false);
+      completeBatchOperation('concatenatingVideos');
     }
   };
 
   // Speed up all videos for scenes with empty sentences handler
   const handleSpeedUpAllVideos = async () => {
-    setSpeedingUpAllVideos(true);
+    startBatchOperation('speedingUpAllVideos');
     try {
       // Filter scenes that have videos (field_6888) but empty sentences (field_6890)
       const scenesToSpeedUp = data.filter((scene) => {
@@ -264,8 +250,8 @@ export default function SceneCard({
             body: JSON.stringify({
               sceneId: scene.id,
               videoUrl,
-              speed: selectedSpeed,
-              muteAudio,
+              speed: videoSettings.selectedSpeed,
+              muteAudio: videoSettings.muteAudio,
             }),
           });
 
@@ -313,7 +299,7 @@ export default function SceneCard({
       }
       alert(`Error: ${errorMessage}`);
     } finally {
-      setSpeedingUpAllVideos(false);
+      completeBatchOperation('speedingUpAllVideos');
     }
   };
 
@@ -401,8 +387,8 @@ export default function SceneCard({
         body: JSON.stringify({
           sceneId,
           videoUrl,
-          speed: selectedSpeed,
-          muteAudio,
+          speed: videoSettings.selectedSpeed,
+          muteAudio: videoSettings.muteAudio,
         }),
       });
 
@@ -1002,10 +988,7 @@ export default function SceneCard({
               step='0.1'
               value={ttsSettings.temperature}
               onChange={(e) =>
-                setTtsSettings((prev) => ({
-                  ...prev,
-                  temperature: parseFloat(e.target.value),
-                }))
+                updateTTSSettings({ temperature: parseFloat(e.target.value) })
               }
               className='w-full'
             />
@@ -1022,10 +1005,7 @@ export default function SceneCard({
               step='0.1'
               value={ttsSettings.exaggeration}
               onChange={(e) =>
-                setTtsSettings((prev) => ({
-                  ...prev,
-                  exaggeration: parseFloat(e.target.value),
-                }))
+                updateTTSSettings({ exaggeration: parseFloat(e.target.value) })
               }
               className='w-full'
             />
@@ -1042,10 +1022,7 @@ export default function SceneCard({
               step='0.1'
               value={ttsSettings.cfg_weight}
               onChange={(e) =>
-                setTtsSettings((prev) => ({
-                  ...prev,
-                  cfg_weight: parseFloat(e.target.value),
-                }))
+                updateTTSSettings({ cfg_weight: parseFloat(e.target.value) })
               }
               className='w-full'
             />
@@ -1059,10 +1036,7 @@ export default function SceneCard({
               type='number'
               value={ttsSettings.seed}
               onChange={(e) =>
-                setTtsSettings((prev) => ({
-                  ...prev,
-                  seed: parseInt(e.target.value) || 1212,
-                }))
+                updateTTSSettings({ seed: parseInt(e.target.value) || 1212 })
               }
               className='w-full p-2 border rounded text-sm'
               min='0'
@@ -1077,10 +1051,7 @@ export default function SceneCard({
               type='text'
               value={ttsSettings.reference_audio_filename}
               onChange={(e) =>
-                setTtsSettings((prev) => ({
-                  ...prev,
-                  reference_audio_filename: e.target.value,
-                }))
+                updateTTSSettings({ reference_audio_filename: e.target.value })
               }
               className='w-full p-2 border rounded text-sm'
               placeholder='audio3_enhanced.wav'
@@ -1097,8 +1068,10 @@ export default function SceneCard({
               Speed Multiplier
             </label>
             <select
-              value={selectedSpeed}
-              onChange={(e) => setSelectedSpeed(Number(e.target.value))}
+              value={videoSettings.selectedSpeed}
+              onChange={(e) =>
+                updateVideoSettings({ selectedSpeed: Number(e.target.value) })
+              }
               className='w-full p-2 border rounded text-sm bg-white'
             >
               <option value={1}>1x (Normal Speed)</option>
@@ -1111,8 +1084,10 @@ export default function SceneCard({
               Audio Level
             </label>
             <select
-              value={muteAudio ? 'mute' : 'keep'}
-              onChange={(e) => setMuteAudio(e.target.value === 'mute')}
+              value={videoSettings.muteAudio ? 'mute' : 'keep'}
+              onChange={(e) =>
+                updateVideoSettings({ muteAudio: e.target.value === 'mute' })
+              }
               className='w-full p-2 border rounded text-sm bg-white'
             >
               <option value='mute'>Mute Audio (Silent)</option>
@@ -1123,8 +1098,10 @@ export default function SceneCard({
             <div className='text-xs text-gray-500'>
               <p>
                 Selected:{' '}
-                <span className='font-medium'>{selectedSpeed}x speed</span>
-                {muteAudio ? ', muted' : ', with audio'}
+                <span className='font-medium'>
+                  {videoSettings.selectedSpeed}x speed
+                </span>
+                {videoSettings.muteAudio ? ', muted' : ', with audio'}
               </p>
               <p>This affects both individual and batch speed-up operations</p>
             </div>
@@ -1143,11 +1120,11 @@ export default function SceneCard({
         <div className='flex flex-col md:flex-row gap-2'>
           <button
             onClick={handleImproveAllSentences}
-            disabled={improvingAll}
+            disabled={batchOperations.improvingAll}
             className='px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
             title='Improve all sentences with AI'
           >
-            {improvingAll ? (
+            {batchOperations.improvingAll ? (
               <svg
                 className='animate-spin h-4 w-4'
                 xmlns='http://www.w3.org/2000/svg'
@@ -1177,15 +1154,19 @@ export default function SceneCard({
                 />
               </svg>
             )}
-            <span>{improvingAll ? 'Improving All...' : 'AI Improve All'}</span>
+            <span>
+              {batchOperations.improvingAll
+                ? 'Improving All...'
+                : 'AI Improve All'}
+            </span>
           </button>
           <button
             onClick={handleGenerateAllTTS}
-            disabled={generatingAllTTS}
+            disabled={batchOperations.generatingAllTTS}
             className='px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
             title='Generate TTS for all scenes that have text but no audio'
           >
-            {generatingAllTTS ? (
+            {batchOperations.generatingAllTTS ? (
               <svg
                 className='animate-spin h-4 w-4'
                 xmlns='http://www.w3.org/2000/svg'
@@ -1212,16 +1193,18 @@ export default function SceneCard({
               </svg>
             )}
             <span>
-              {generatingAllTTS ? 'Generating TTS...' : 'Generate TTS for All'}
+              {batchOperations.generatingAllTTS
+                ? 'Generating TTS...'
+                : 'Generate TTS for All'}
             </span>
           </button>
           <button
             onClick={handleConcatenateAllVideos}
-            disabled={concatenatingVideos}
+            disabled={batchOperations.concatenatingVideos}
             className='px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
             title='Concatenate all videos into one final video'
           >
-            {concatenatingVideos ? (
+            {batchOperations.concatenatingVideos ? (
               <svg
                 className='animate-spin h-4 w-4'
                 xmlns='http://www.w3.org/2000/svg'
@@ -1248,20 +1231,20 @@ export default function SceneCard({
               </svg>
             )}
             <span>
-              {concatenatingVideos
+              {batchOperations.concatenatingVideos
                 ? 'Concatenating...'
                 : 'Concatenate All Videos'}
             </span>
           </button>
           <button
             onClick={handleSpeedUpAllVideos}
-            disabled={speedingUpAllVideos}
+            disabled={batchOperations.speedingUpAllVideos}
             className='px-4 py-2 bg-cyan-500 text-white rounded hover:bg-cyan-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
-            title={`Speed up all videos ${selectedSpeed}x and ${
-              muteAudio ? 'mute' : 'keep'
+            title={`Speed up all videos ${videoSettings.selectedSpeed}x and ${
+              videoSettings.muteAudio ? 'mute' : 'keep'
             } audio for scenes with empty sentences`}
           >
-            {speedingUpAllVideos ? (
+            {batchOperations.speedingUpAllVideos ? (
               <svg
                 className='animate-spin h-4 w-4'
                 xmlns='http://www.w3.org/2000/svg'
@@ -1292,9 +1275,9 @@ export default function SceneCard({
               </svg>
             )}
             <span>
-              {speedingUpAllVideos
+              {batchOperations.speedingUpAllVideos
                 ? 'Speeding Up All...'
-                : `Speed Up All Videos (${selectedSpeed}x)`}
+                : `Speed Up All Videos (${videoSettings.selectedSpeed}x)`}
             </span>
           </button>
           {refreshData && (
@@ -1772,8 +1755,10 @@ export default function SceneCard({
                           onClick={() => handleSpeedUpVideo(scene.id)}
                           disabled={speedingUpVideo === scene.id}
                           className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-cyan-100 text-cyan-700 hover:bg-cyan-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={`Speed up video ${selectedSpeed}x and ${
-                            muteAudio ? 'mute' : 'keep'
+                          title={`Speed up video ${
+                            videoSettings.selectedSpeed
+                          }x and ${
+                            videoSettings.muteAudio ? 'mute' : 'keep'
                           } audio (saves to field 6886)`}
                         >
                           {speedingUpVideo === scene.id ? (
@@ -1813,7 +1798,7 @@ export default function SceneCard({
                           <span>
                             {speedingUpVideo === scene.id
                               ? 'Speeding Up...'
-                              : `${selectedSpeed}x Speed`}
+                              : `${videoSettings.selectedSpeed}x Speed`}
                           </span>
                         </button>
                       )}
