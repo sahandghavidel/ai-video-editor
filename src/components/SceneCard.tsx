@@ -1974,7 +1974,7 @@ export default function SceneCard({
                   </div>
                 ) : (
                   <div
-                    className='text-gray-700 mt-1 leading-relaxed cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors'
+                    className='text-gray-700 mt-1 leading-relaxed cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors line-clamp-1'
                     onClick={() =>
                       handleEditStart(
                         scene.id,
