@@ -3,7 +3,12 @@ import { updateBaserowRow } from '@/lib/baserow-actions';
 
 export async function POST(request: NextRequest) {
   try {
-    const { sceneId, videoUrl, speed = 4 } = await request.json();
+    const {
+      sceneId,
+      videoUrl,
+      speed = 4,
+      muteAudio = true,
+    } = await request.json();
 
     if (!sceneId) {
       return NextResponse.json(
@@ -32,20 +37,24 @@ export async function POST(request: NextRequest) {
     const NCA_BASE_URL = 'http://host.docker.internal:8080';
 
     // Create FFmpeg command to speed up both video and audio by specified speed (same approach as generate-video)
+    const audioFilter = muteAudio
+      ? `[0:a]atempo=${speed}.0,volume=0[a_processed]` // Mute audio but keep stream
+      : `[0:a]atempo=${speed}.0[a_processed]`; // Keep original volume
+
     const ffmpegPayload = {
       id: `speed-up-video-${sceneId}-${Date.now()}`,
       inputs: [{ file_url: videoUrl }],
       filters: [
         // Speed up video by specified speed
         { filter: `[0:v]setpts=PTS/${speed}[v_fast]` },
-        // Speed up audio by specified speed and set volume to zero (mute but keep stream)
-        { filter: `[0:a]atempo=${speed}.0,volume=0[a_muted]` },
+        // Speed up audio by specified speed and conditionally mute
+        { filter: audioFilter },
       ],
       outputs: [
         {
           options: [
             { option: '-map', argument: '[v_fast]' },
-            { option: '-map', argument: '[a_muted]' },
+            { option: '-map', argument: '[a_processed]' },
             { option: '-c:v', argument: 'libx264' },
             { option: '-c:a', argument: 'aac' },
             { option: '-b:a', argument: '192k' },

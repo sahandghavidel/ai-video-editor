@@ -64,6 +64,7 @@ export default function SceneCard({
 
   // Speed selection for video processing
   const [selectedSpeed, setSelectedSpeed] = useState<number>(4);
+  const [muteAudio, setMuteAudio] = useState<boolean>(true);
 
   // Fetch models from API
   const fetchModels = async () => {
@@ -264,6 +265,7 @@ export default function SceneCard({
               sceneId: scene.id,
               videoUrl,
               speed: selectedSpeed,
+              muteAudio,
             }),
           });
 
@@ -400,6 +402,7 @@ export default function SceneCard({
           sceneId,
           videoUrl,
           speed: selectedSpeed,
+          muteAudio,
         }),
       });
 
@@ -1103,11 +1106,25 @@ export default function SceneCard({
               <option value={4}>4x (Quadruple Speed)</option>
             </select>
           </div>
+          <div>
+            <label className='block text-xs font-medium text-gray-700 mb-1'>
+              Audio Level
+            </label>
+            <select
+              value={muteAudio ? 'mute' : 'keep'}
+              onChange={(e) => setMuteAudio(e.target.value === 'mute')}
+              className='w-full p-2 border rounded text-sm bg-white'
+            >
+              <option value='mute'>Mute Audio (Silent)</option>
+              <option value='keep'>Keep Original Audio</option>
+            </select>
+          </div>
           <div className='flex items-end'>
             <div className='text-xs text-gray-500'>
               <p>
                 Selected:{' '}
                 <span className='font-medium'>{selectedSpeed}x speed</span>
+                {muteAudio ? ', muted' : ', with audio'}
               </p>
               <p>This affects both individual and batch speed-up operations</p>
             </div>
@@ -1240,7 +1257,9 @@ export default function SceneCard({
             onClick={handleSpeedUpAllVideos}
             disabled={speedingUpAllVideos}
             className='px-4 py-2 bg-cyan-500 text-white rounded hover:bg-cyan-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
-            title={`Speed up all videos ${selectedSpeed}x for scenes with empty sentences`}
+            title={`Speed up all videos ${selectedSpeed}x and ${
+              muteAudio ? 'mute' : 'keep'
+            } audio for scenes with empty sentences`}
           >
             {speedingUpAllVideos ? (
               <svg
@@ -1753,7 +1772,9 @@ export default function SceneCard({
                           onClick={() => handleSpeedUpVideo(scene.id)}
                           disabled={speedingUpVideo === scene.id}
                           className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-cyan-100 text-cyan-700 hover:bg-cyan-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={`Speed up video ${selectedSpeed}x and mute audio (saves to field 6886)`}
+                          title={`Speed up video ${selectedSpeed}x and ${
+                            muteAudio ? 'mute' : 'keep'
+                          } audio (saves to field 6886)`}
                         >
                           {speedingUpVideo === scene.id ? (
                             <svg
