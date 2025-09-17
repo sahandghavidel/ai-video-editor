@@ -96,6 +96,9 @@ export default function SceneCard({
   // State for generating TTS for all scenes
   const [generatingAllTTS, setGeneratingAllTTS] = useState(false);
 
+  // State for concatenating all videos
+  const [concatenatingVideos, setConcatenatingVideos] = useState(false);
+
   // Improve all sentences handler
   // Helper to wait for a given ms
   const wait = (ms: number) =>
@@ -139,6 +142,81 @@ export default function SceneCard({
       }
     }
     setGeneratingAllTTS(false);
+  };
+
+  // Concatenate all videos handler
+  const handleConcatenateAllVideos = async () => {
+    setConcatenatingVideos(true);
+    try {
+      // Filter scenes that have videos (field_6886) and sort by order
+      const scenesWithVideos = data
+        .filter((scene) => {
+          const videoUrl = scene['field_6886'];
+          return typeof videoUrl === 'string' && videoUrl.trim();
+        })
+        .sort((a, b) => {
+          const orderA = Number(a.order) || 0;
+          const orderB = Number(b.order) || 0;
+          return orderA - orderB;
+        });
+
+      if (scenesWithVideos.length === 0) {
+        alert('No videos found to concatenate');
+        return;
+      }
+
+      // Prepare video URLs for concatenation
+      const videoUrls = scenesWithVideos.map((scene) => ({
+        video_url: scene['field_6886'] as string,
+      }));
+
+      console.log('Concatenating videos:', videoUrls);
+
+      // Call the video concatenation API
+      const response = await fetch('/api/concatenate-videos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_urls: videoUrls,
+          id: `concatenate_${Date.now()}`,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Video concatenation error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          errorMessage = `Video concatenation error: ${response.status} - ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      const concatenatedVideoUrl = result.videoUrl;
+
+      console.log('Concatenated video URL:', concatenatedVideoUrl);
+
+      // Show success message with the video URL
+      alert(
+        `Videos concatenated successfully!\nVideo URL: ${concatenatedVideoUrl}`
+      );
+
+      // You could optionally save this URL to a specific field or create a new record
+      // For now, just show the URL to the user
+    } catch (error) {
+      console.error('Error concatenating videos:', error);
+      let errorMessage = 'Failed to concatenate videos';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setConcatenatingVideos(false);
+    }
   };
 
   // State for revert loading
@@ -926,6 +1004,44 @@ export default function SceneCard({
             )}
             <span>
               {generatingAllTTS ? 'Generating TTS...' : 'Generate TTS for All'}
+            </span>
+          </button>
+          <button
+            onClick={handleConcatenateAllVideos}
+            disabled={concatenatingVideos}
+            className='px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
+            title='Concatenate all videos into one final video'
+          >
+            {concatenatingVideos ? (
+              <svg
+                className='animate-spin h-4 w-4'
+                xmlns='http://www.w3.org/2000/svg'
+                fill='none'
+                viewBox='0 0 24 24'
+              >
+                <circle
+                  className='opacity-25'
+                  cx='12'
+                  cy='12'
+                  r='10'
+                  stroke='currentColor'
+                  strokeWidth='4'
+                ></circle>
+                <path
+                  className='opacity-75'
+                  fill='currentColor'
+                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                ></path>
+              </svg>
+            ) : (
+              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
+                <path d='M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z' />
+              </svg>
+            )}
+            <span>
+              {concatenatingVideos
+                ? 'Concatenating...'
+                : 'Concatenate All Videos'}
             </span>
           </button>
           {refreshData && (
