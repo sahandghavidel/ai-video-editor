@@ -21,13 +21,8 @@ export default function SceneCard({
   const [editingText, setEditingText] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isCanceling, setIsCanceling] = useState<boolean>(false);
-  const [playingId, setPlayingId] = useState<number | null>(null);
   const [loadingAudio, setLoadingAudio] = useState<number | null>(null);
-  const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
   const [loadingVideo, setLoadingVideo] = useState<number | null>(null);
-  const [playingProducedVideoId, setPlayingProducedVideoId] = useState<
-    number | null
-  >(null);
   const [loadingProducedVideo, setLoadingProducedVideo] = useState<
     number | null
   >(null);
@@ -43,14 +38,7 @@ export default function SceneCard({
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
 
   // State for improving all sentences
-  // OpenRouter model selection
-  const [models, setModels] = useState<any[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string | null>(
-    'deepseek/deepseek-r1:free'
-  );
-  const [modelSearch, setModelSearch] = useState('free');
+  // OpenRouter model selection - now using global state
 
   // Global settings from store
   const {
@@ -61,32 +49,21 @@ export default function SceneCard({
     batchOperations,
     startBatchOperation,
     completeBatchOperation,
+    mediaPlayer,
+    setPlayingAudio,
+    setPlayingVideo,
+    setPlayingProducedVideo,
+    stopAllMedia,
+    modelSelection,
+    setSelectedModel,
+    setModels,
+    setModelsLoading,
+    setModelsError,
+    setModelSearch,
+    fetchModels,
   } = useAppStore();
 
-  // Fetch models from API
-  const fetchModels = async () => {
-    setModelsLoading(true);
-    setModelsError(null);
-    try {
-      const res = await fetch('/api/openrouter-models');
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Model fetch failed: ${res.status}`);
-      }
-      const json = await res.json();
-      setModels(json.data || []);
-      // Set default model if not set
-      if (!selectedModel && json.data && json.data.length > 0) {
-        setSelectedModel(json.data[0].id);
-      }
-    } catch (err) {
-      setModelsError(err instanceof Error ? err.message : String(err));
-      setModels([]);
-    } finally {
-      setModelsLoading(false);
-    }
-  };
-
+  // Fetch models from API - using global action
   useEffect(() => {
     fetchModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,7 +85,7 @@ export default function SceneCard({
         await handleSentenceImprovement(
           scene.id,
           currentSentence,
-          selectedModel || undefined
+          modelSelection.selectedModel || undefined
         );
         await wait(10000); // 10 seconds delay
       }
@@ -336,7 +313,7 @@ export default function SceneCard({
   const handleRemoveTTS = async (sceneId: number) => {
     setRemovingTTSId(sceneId);
     // Stop audio if playing
-    if (playingId === sceneId) {
+    if (mediaPlayer.playingAudioId === sceneId) {
       handleAudioPause(sceneId);
     }
     // Optimistic update
@@ -524,19 +501,22 @@ export default function SceneCard({
   const handleAudioPlay = async (sceneId: number, audioUrl: string) => {
     try {
       // If the same audio is already playing, pause it
-      if (playingId === sceneId) {
+      if (mediaPlayer.playingAudioId === sceneId) {
         const audio = audioRefs.current[sceneId];
         if (audio) {
           audio.pause();
-          setPlayingId(null);
+          setPlayingAudio(null);
         }
         return;
       }
 
       // Stop any currently playing audio
-      if (playingId && audioRefs.current[playingId]) {
-        audioRefs.current[playingId].pause();
-        setPlayingId(null);
+      if (
+        mediaPlayer.playingAudioId &&
+        audioRefs.current[mediaPlayer.playingAudioId]
+      ) {
+        audioRefs.current[mediaPlayer.playingAudioId].pause();
+        setPlayingAudio(null);
       }
 
       setLoadingAudio(sceneId);
@@ -550,16 +530,16 @@ export default function SceneCard({
         try {
           await audio.play();
           setLoadingAudio(null);
-          setPlayingId(sceneId);
+          setPlayingAudio(sceneId);
         } catch (error) {
           console.error('Error playing audio:', error);
           setLoadingAudio(null);
-          setPlayingId(null);
+          setPlayingAudio(null);
         }
       }
     } catch (error) {
       console.error('Error in handleAudioPlay:', error);
-      setPlayingId(null);
+      setPlayingAudio(null);
       setLoadingAudio(null);
     }
   };
@@ -568,24 +548,27 @@ export default function SceneCard({
     const audio = audioRefs.current[sceneId];
     if (audio) {
       audio.pause();
-      setPlayingId(null);
+      setPlayingAudio(null);
     }
   };
 
   const handleVideoPlay = async (sceneId: number, videoUrl: string) => {
     try {
       // Stop any currently playing video
-      if (playingVideoId && videoRefs.current[playingVideoId]) {
-        videoRefs.current[playingVideoId].pause();
+      if (
+        mediaPlayer.playingVideoId &&
+        videoRefs.current[mediaPlayer.playingVideoId]
+      ) {
+        videoRefs.current[mediaPlayer.playingVideoId].pause();
       }
 
       // If clicking the same video that's playing, just pause it
-      if (playingVideoId === sceneId) {
-        setPlayingVideoId(null);
+      if (mediaPlayer.playingVideoId === sceneId) {
+        setPlayingVideo(null);
         return;
       }
 
-      setPlayingVideoId(sceneId);
+      setPlayingVideo(sceneId);
       setLoadingVideo(sceneId);
 
       // Wait a moment for the video element to be rendered
@@ -601,14 +584,14 @@ export default function SceneCard({
             .catch((error) => {
               console.error('Error playing video:', error);
               setLoadingVideo(null);
-              setPlayingVideoId(null);
+              setPlayingVideo(null);
             });
         }
       }, 100);
     } catch (error) {
       console.error('Error in handleVideoPlay:', error);
       setLoadingVideo(null);
-      setPlayingVideoId(null);
+      setPlayingVideo(null);
     }
   };
 
@@ -616,7 +599,7 @@ export default function SceneCard({
     const video = videoRefs.current[sceneId];
     if (video) {
       video.pause();
-      setPlayingVideoId(null);
+      setPlayingVideo(null);
     }
   };
 
@@ -624,19 +607,19 @@ export default function SceneCard({
     try {
       // Stop any currently playing produced video
       if (
-        playingProducedVideoId &&
-        producedVideoRefs.current[playingProducedVideoId]
+        mediaPlayer.playingProducedVideoId &&
+        producedVideoRefs.current[mediaPlayer.playingProducedVideoId]
       ) {
-        producedVideoRefs.current[playingProducedVideoId].pause();
+        producedVideoRefs.current[mediaPlayer.playingProducedVideoId].pause();
       }
 
       // If clicking the same video that's playing, just pause it
-      if (playingProducedVideoId === sceneId) {
-        setPlayingProducedVideoId(null);
+      if (mediaPlayer.playingProducedVideoId === sceneId) {
+        setPlayingProducedVideo(null);
         return;
       }
 
-      setPlayingProducedVideoId(sceneId);
+      setPlayingProducedVideo(sceneId);
       setLoadingProducedVideo(sceneId);
 
       // Wait a moment for the video element to be rendered, then scroll
@@ -655,14 +638,14 @@ export default function SceneCard({
             .catch((error) => {
               console.error('Error playing produced video:', error);
               setLoadingProducedVideo(null);
-              setPlayingProducedVideoId(null);
+              setPlayingProducedVideo(null);
             });
         }
       }, 100);
     } catch (error) {
       console.error('Error in handleProducedVideoPlay:', error);
       setLoadingProducedVideo(null);
-      setPlayingProducedVideoId(null);
+      setPlayingProducedVideo(null);
     }
   };
 
@@ -670,7 +653,7 @@ export default function SceneCard({
     const video = producedVideoRefs.current[sceneId];
     if (video) {
       video.pause();
-      setPlayingProducedVideoId(null);
+      setPlayingProducedVideo(null);
     }
   };
 
@@ -828,7 +811,7 @@ export default function SceneCard({
           currentSentence,
           allSentences,
           sceneId,
-          model: modelOverride || selectedModel,
+          model: modelOverride || modelSelection.selectedModel,
         }),
       });
 
@@ -917,29 +900,31 @@ export default function SceneCard({
         <div className='flex items-center justify-between'>
           <div>
             <h3 className='text-sm font-semibold'>OpenRouter Model</h3>
-            {modelsLoading ? (
+            {modelSelection.modelsLoading ? (
               <p className='text-xs text-gray-500'>Loading models...</p>
-            ) : modelsError ? (
-              <p className='text-xs text-red-600'>Error: {modelsError}</p>
-            ) : models.length > 0 ? (
+            ) : modelSelection.modelsError ? (
+              <p className='text-xs text-red-600'>
+                Error: {modelSelection.modelsError}
+              </p>
+            ) : modelSelection.models.length > 0 ? (
               <>
                 <input
                   type='text'
                   className='mt-1 mb-2 p-2 border rounded text-sm bg-gray-50 w-full'
                   placeholder='Search models...'
-                  value={modelSearch}
+                  value={modelSelection.modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
                 />
                 <select
                   className='p-2 border rounded text-sm bg-gray-50 w-full'
-                  value={selectedModel || ''}
+                  value={modelSelection.selectedModel || ''}
                   onChange={(e) => setSelectedModel(e.target.value)}
                 >
-                  {models
+                  {modelSelection.models
                     .filter((m) =>
                       (m.name || m.id)
                         .toLowerCase()
-                        .includes(modelSearch.toLowerCase())
+                        .includes(modelSelection.modelSearch.toLowerCase())
                     )
                     .map((m) => (
                       <option key={m.id} value={m.id}>
@@ -962,11 +947,13 @@ export default function SceneCard({
             </button>
           </div>
         </div>
-        {selectedModel && (
+        {modelSelection.selectedModel && (
           <div className='mt-2 text-xs text-gray-500'>
             <span>
               Selected model:{' '}
-              <span className='font-medium'>{selectedModel}</span>
+              <span className='font-medium'>
+                {modelSelection.selectedModel}
+              </span>
             </span>
           </div>
         )}
@@ -1498,7 +1485,7 @@ export default function SceneCard({
                         handleSentenceImprovement(
                           scene.id,
                           String(scene['field_6890'] || scene.field_6890 || ''),
-                          selectedModel || undefined
+                          modelSelection.selectedModel || undefined
                         )
                       }
                       disabled={
@@ -1567,12 +1554,12 @@ export default function SceneCard({
                           }
                           disabled={loadingAudio === scene.id}
                           className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                            playingId === scene.id
+                            mediaPlayer.playingAudioId === scene.id
                               ? 'bg-red-100 text-red-700 hover:bg-red-200'
                               : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={
-                            playingId === scene.id
+                            mediaPlayer.playingAudioId === scene.id
                               ? 'Pause audio'
                               : 'Play audio'
                           }
@@ -1598,7 +1585,7 @@ export default function SceneCard({
                                 d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
                               ></path>
                             </svg>
-                          ) : playingId === scene.id ? (
+                          ) : mediaPlayer.playingAudioId === scene.id ? (
                             <svg
                               className='h-3 w-3'
                               fill='currentColor'
@@ -1624,7 +1611,9 @@ export default function SceneCard({
                             </svg>
                           )}
                           <span>
-                            {playingId === scene.id ? 'Pause' : 'Play'}
+                            {mediaPlayer.playingAudioId === scene.id
+                              ? 'Pause'
+                              : 'Play'}
                           </span>
                         </button>
                       )}
@@ -1692,12 +1681,12 @@ export default function SceneCard({
                           }
                           disabled={loadingVideo === scene.id}
                           className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                            playingVideoId === scene.id
+                            mediaPlayer.playingVideoId === scene.id
                               ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                               : 'bg-green-100 text-green-700 hover:bg-green-200'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={
-                            playingVideoId === scene.id
+                            mediaPlayer.playingVideoId === scene.id
                               ? 'Stop video'
                               : 'Play video'
                           }
@@ -1723,7 +1712,7 @@ export default function SceneCard({
                                 d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
                               ></path>
                             </svg>
-                          ) : playingVideoId === scene.id ? (
+                          ) : mediaPlayer.playingVideoId === scene.id ? (
                             <svg
                               className='h-3 w-3'
                               fill='currentColor'
@@ -1745,7 +1734,9 @@ export default function SceneCard({
                             </svg>
                           )}
                           <span>
-                            {playingVideoId === scene.id ? 'Stop' : 'Video'}
+                            {mediaPlayer.playingVideoId === scene.id
+                              ? 'Stop'
+                              : 'Video'}
                           </span>
                         </button>
                       )}
@@ -1876,12 +1867,12 @@ export default function SceneCard({
                           }
                           disabled={loadingProducedVideo === scene.id}
                           className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                            playingProducedVideoId === scene.id
+                            mediaPlayer.playingProducedVideoId === scene.id
                               ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                               : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={
-                            playingProducedVideoId === scene.id
+                            mediaPlayer.playingProducedVideoId === scene.id
                               ? 'Stop produced video'
                               : 'Play produced video'
                           }
@@ -1907,7 +1898,8 @@ export default function SceneCard({
                                 d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
                               ></path>
                             </svg>
-                          ) : playingProducedVideoId === scene.id ? (
+                          ) : mediaPlayer.playingProducedVideoId ===
+                            scene.id ? (
                             <svg
                               className='h-3 w-3'
                               fill='currentColor'
@@ -1929,7 +1921,7 @@ export default function SceneCard({
                             </svg>
                           )}
                           <span>
-                            {playingProducedVideoId === scene.id
+                            {mediaPlayer.playingProducedVideoId === scene.id
                               ? 'Stop'
                               : 'Produced'}
                           </span>
@@ -1994,7 +1986,7 @@ export default function SceneCard({
             </div>
 
             {/* Video Player - Only show when video is playing for this scene */}
-            {playingVideoId === scene.id && (
+            {mediaPlayer.playingVideoId === scene.id && (
               <div className='mt-4 bg-black rounded-lg overflow-hidden'>
                 <video
                   ref={(el) => {
@@ -2008,7 +2000,7 @@ export default function SceneCard({
                   onError={(e) => {
                     console.error('Video error for scene', scene.id, e);
                     setLoadingVideo(null);
-                    setPlayingVideoId(null);
+                    setPlayingVideo(null);
                   }}
                 >
                   Your browser does not support the video tag.
@@ -2025,7 +2017,7 @@ export default function SceneCard({
             )}
 
             {/* Produced Video Player - Only show when produced video is playing for this scene */}
-            {playingProducedVideoId === scene.id && (
+            {mediaPlayer.playingProducedVideoId === scene.id && (
               <div className='mt-4 bg-black rounded-lg overflow-hidden'>
                 <video
                   ref={(el) => {
@@ -2043,7 +2035,7 @@ export default function SceneCard({
                       e
                     );
                     setLoadingProducedVideo(null);
-                    setPlayingProducedVideoId(null);
+                    setPlayingProducedVideo(null);
                   }}
                 >
                   Your browser does not support the video tag.
@@ -2073,7 +2065,7 @@ export default function SceneCard({
           onError={(e) => {
             console.error('Audio error for scene', scene.id, e);
             setLoadingAudio(null);
-            setPlayingId(null);
+            setPlayingAudio(null);
           }}
         />
       ))}

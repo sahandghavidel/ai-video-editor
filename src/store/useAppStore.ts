@@ -26,6 +26,22 @@ export interface BatchOperationsState {
   concatenatingVideos: boolean;
 }
 
+// Media player state interface
+export interface MediaPlayerState {
+  playingAudioId: number | null;
+  playingVideoId: number | null;
+  playingProducedVideoId: number | null;
+}
+
+// Model selection state interface
+export interface ModelSelectionState {
+  selectedModel: string | null;
+  models: any[];
+  modelsLoading: boolean;
+  modelsError: string | null;
+  modelSearch: string;
+}
+
 interface AppState {
   // Core data state
   data: BaserowRow[];
@@ -40,6 +56,12 @@ interface AppState {
 
   // Batch Operations State
   batchOperations: BatchOperationsState;
+
+  // Media Player State
+  mediaPlayer: MediaPlayerState;
+
+  // Model Selection State
+  modelSelection: ModelSelectionState;
 
   // Actions
   setData: (data: BaserowRow[]) => void;
@@ -58,6 +80,20 @@ interface AppState {
   startBatchOperation: (operation: keyof BatchOperationsState) => void;
   completeBatchOperation: (operation: keyof BatchOperationsState) => void;
   resetBatchOperations: () => void;
+
+  // Media Player Actions
+  setPlayingAudio: (sceneId: number | null) => void;
+  setPlayingVideo: (sceneId: number | null) => void;
+  setPlayingProducedVideo: (sceneId: number | null) => void;
+  stopAllMedia: () => void;
+
+  // Model Selection Actions
+  setSelectedModel: (model: string | null) => void;
+  setModels: (models: { id: string; name: string }[]) => void;
+  setModelsLoading: (loading: boolean) => void;
+  setModelsError: (error: string | null) => void;
+  setModelSearch: (search: string) => void;
+  fetchModels: () => Promise<void>;
 
   // Data operations
   updateRow: (id: number, updates: Partial<BaserowRow>) => void;
@@ -89,6 +125,22 @@ const defaultBatchOperations: BatchOperationsState = {
   concatenatingVideos: false,
 };
 
+// Default media player state
+const defaultMediaPlayer: MediaPlayerState = {
+  playingAudioId: null,
+  playingVideoId: null,
+  playingProducedVideoId: null,
+};
+
+// Default model selection state
+const defaultModelSelection: ModelSelectionState = {
+  selectedModel: 'deepseek/deepseek-r1:free',
+  models: [],
+  modelsLoading: false,
+  modelsError: null,
+  modelSearch: 'free',
+};
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   data: [],
@@ -103,6 +155,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Batch Operations State
   batchOperations: defaultBatchOperations,
+
+  // Media Player State
+  mediaPlayer: defaultMediaPlayer,
+
+  // Model Selection State
+  modelSelection: defaultModelSelection,
 
   // Actions
   setData: (data) => set({ data }),
@@ -137,6 +195,85 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   resetBatchOperations: () => set({ batchOperations: defaultBatchOperations }),
+
+  // Media Player Actions
+  setPlayingAudio: (sceneId) =>
+    set((state) => ({
+      mediaPlayer: { ...state.mediaPlayer, playingAudioId: sceneId },
+    })),
+
+  setPlayingVideo: (sceneId) =>
+    set((state) => ({
+      mediaPlayer: { ...state.mediaPlayer, playingVideoId: sceneId },
+    })),
+
+  setPlayingProducedVideo: (sceneId) =>
+    set((state) => ({
+      mediaPlayer: { ...state.mediaPlayer, playingProducedVideoId: sceneId },
+    })),
+
+  stopAllMedia: () =>
+    set((state) => ({
+      mediaPlayer: {
+        playingAudioId: null,
+        playingVideoId: null,
+        playingProducedVideoId: null,
+      },
+    })),
+
+  // Model Selection Actions
+  setSelectedModel: (modelId) =>
+    set((state) => ({
+      modelSelection: { ...state.modelSelection, selectedModel: modelId },
+    })),
+
+  setModels: (models) =>
+    set((state) => ({
+      modelSelection: { ...state.modelSelection, models },
+    })),
+
+  setModelsLoading: (loading) =>
+    set((state) => ({
+      modelSelection: { ...state.modelSelection, modelsLoading: loading },
+    })),
+
+  setModelsError: (error) =>
+    set((state) => ({
+      modelSelection: { ...state.modelSelection, modelsError: error },
+    })),
+
+  setModelSearch: (search) =>
+    set((state) => ({
+      modelSelection: { ...state.modelSelection, modelSearch: search },
+    })),
+
+  fetchModels: async () => {
+    const { setModelsLoading, setModelsError, setModels, setSelectedModel } =
+      get();
+    setModelsLoading(true);
+    setModelsError(null);
+    try {
+      const res = await fetch('/api/openrouter-models');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Model fetch failed: ${res.status}`);
+      }
+      const json = await res.json();
+      const models = json.data || [];
+      setModels(models);
+
+      // Set default model if not set and models exist
+      const currentSelection = get().modelSelection.selectedModel;
+      if (!currentSelection && models.length > 0) {
+        setSelectedModel(models[0].id);
+      }
+    } catch (err) {
+      setModelsError(err instanceof Error ? err.message : String(err));
+      setModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  },
 
   // Data operations
   updateRow: (id, updates) =>
