@@ -6,7 +6,6 @@ import { useAppStore } from '@/store/useAppStore';
 import {
   Loader2,
   Sparkles,
-  Volume2,
   RefreshCw,
   Mic,
   X,
@@ -16,11 +15,8 @@ import {
   Square,
   Film,
   FastForward,
-  Zap,
-  Folder,
   RotateCcw,
   CheckCircle,
-  VolumeX,
   Monitor,
   Settings,
 } from 'lucide-react';
