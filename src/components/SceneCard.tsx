@@ -3,6 +3,27 @@
 import { BaserowRow, updateBaserowRow } from '@/lib/baserow-actions';
 import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import {
+  Loader2,
+  Sparkles,
+  Volume2,
+  RefreshCw,
+  Mic,
+  X,
+  Play,
+  Pause,
+  Video,
+  Square,
+  Film,
+  FastForward,
+  Zap,
+  Folder,
+  RotateCcw,
+  CheckCircle,
+  VolumeX,
+  Monitor,
+  Settings,
+} from 'lucide-react';
 
 // Helper: get original sentence from field_6901
 
@@ -1110,34 +1131,9 @@ export default function SceneCard({
             title='Improve all sentences with AI'
           >
             {batchOperations.improvingAll ? (
-              <svg
-                className='animate-spin h-4 w-4'
-                xmlns='http://www.w3.org/2000/svg'
-                fill='none'
-                viewBox='0 0 24 24'
-              >
-                <circle
-                  className='opacity-25'
-                  cx='12'
-                  cy='12'
-                  r='10'
-                  stroke='currentColor'
-                  strokeWidth='4'
-                ></circle>
-                <path
-                  className='opacity-75'
-                  fill='currentColor'
-                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                ></path>
-              </svg>
+              <Loader2 className='animate-spin h-4 w-4' />
             ) : (
-              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
-                <path
-                  fillRule='evenodd'
-                  d='M9.504 1.132a1 1 0 01.992 0l1.75 1a1 1 0 11-.992 1.736L10 3.152l-1.254.716a1 1 0 11-.992-1.736l1.75-1zM5.618 4.504a1 1 0 01-.372 1.364L5.016 6l.23.132a1 1 0 11-.992 1.736L3 7.347V8a1 1 0 01-2 0V6a1 1 0 01.504-.868l3-1.732a1 1 0 011.114.104zM14.382 4.504a1 1 0 011.114-.104l3 1.732A1 1 0 0119 6v2a1 1 0 11-2 0v-.653l-1.254.521a1 1 0 11-.992-1.736l.23-.132-.23-.132a1 1 0 01-.372-1.364zM3 9a1 1 0 012 0v3a1 1 0 11-2 0V9zm14 0a1 1 0 012 0v3a1 1 0 11-2 0V9z'
-                  clipRule='evenodd'
-                />
-              </svg>
+              <Sparkles className='h-4 w-4' />
             )}
             <span>
               {batchOperations.improvingAll
@@ -1152,30 +1148,9 @@ export default function SceneCard({
             title='Generate TTS for all scenes that have text but no audio'
           >
             {batchOperations.generatingAllTTS ? (
-              <svg
-                className='animate-spin h-4 w-4'
-                xmlns='http://www.w3.org/2000/svg'
-                fill='none'
-                viewBox='0 0 24 24'
-              >
-                <circle
-                  className='opacity-25'
-                  cx='12'
-                  cy='12'
-                  r='10'
-                  stroke='currentColor'
-                  strokeWidth='4'
-                ></circle>
-                <path
-                  className='opacity-75'
-                  fill='currentColor'
-                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                ></path>
-              </svg>
+              <Loader2 className='animate-spin h-4 w-4' />
             ) : (
-              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
-                <path d='M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v6.114a4 4 0 10.894 7.96c.045-.021.09-.043.135-.067l8.056-4.028A1 1 0 0016 14V6.732l2-1.732V3z' />
-              </svg>
+              <Mic className='h-4 w-4' />
             )}
             <span>
               {batchOperations.generatingAllTTS
@@ -1190,30 +1165,9 @@ export default function SceneCard({
             title='Concatenate all videos into one final video'
           >
             {batchOperations.concatenatingVideos ? (
-              <svg
-                className='animate-spin h-4 w-4'
-                xmlns='http://www.w3.org/2000/svg'
-                fill='none'
-                viewBox='0 0 24 24'
-              >
-                <circle
-                  className='opacity-25'
-                  cx='12'
-                  cy='12'
-                  r='10'
-                  stroke='currentColor'
-                  strokeWidth='4'
-                ></circle>
-                <path
-                  className='opacity-75'
-                  fill='currentColor'
-                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                ></path>
-              </svg>
+              <Loader2 className='animate-spin h-4 w-4' />
             ) : (
-              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
-                <path d='M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z' />
-              </svg>
+              <Film className='h-4 w-4' />
             )}
             <span>
               {batchOperations.concatenatingVideos
@@ -1230,34 +1184,9 @@ export default function SceneCard({
             } audio for scenes with empty sentences`}
           >
             {batchOperations.speedingUpAllVideos ? (
-              <svg
-                className='animate-spin h-4 w-4'
-                xmlns='http://www.w3.org/2000/svg'
-                fill='none'
-                viewBox='0 0 24 24'
-              >
-                <circle
-                  className='opacity-25'
-                  cx='12'
-                  cy='12'
-                  r='10'
-                  stroke='currentColor'
-                  strokeWidth='4'
-                ></circle>
-                <path
-                  className='opacity-75'
-                  fill='currentColor'
-                  d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                ></path>
-              </svg>
+              <Loader2 className='animate-spin h-4 w-4' />
             ) : (
-              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
-                <path
-                  fillRule='evenodd'
-                  d='M10 2L3 7v6l7 5 7-5V7l-7-5zM8 8.1l3-1.8V13l-3-1.8V8.1zm2 5.8l3-1.8v-3l-3 1.8v3z'
-                  clipRule='evenodd'
-                />
-              </svg>
+              <FastForward className='h-4 w-4' />
             )}
             <span>
               {batchOperations.speedingUpAllVideos
@@ -1270,19 +1199,7 @@ export default function SceneCard({
               onClick={refreshData}
               className='px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center space-x-2'
             >
-              <svg
-                className='w-4 h-4'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
-                />
-              </svg>
+              <RefreshCw className='w-4 h-4' />
               <span>Refresh</span>
             </button>
           )}
@@ -1385,34 +1302,9 @@ export default function SceneCard({
                           title='Revert to original sentence'
                         >
                           {revertingId === scene.id ? (
-                            <svg
-                              className='animate-spin h-3 w-3'
-                              xmlns='http://www.w3.org/2000/svg'
-                              fill='none'
-                              viewBox='0 0 24 24'
-                            >
-                              <circle
-                                className='opacity-25'
-                                cx='12'
-                                cy='12'
-                                r='10'
-                                stroke='currentColor'
-                                strokeWidth='4'
-                              ></circle>
-                              <path
-                                className='opacity-75'
-                                fill='currentColor'
-                                d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                              ></path>
-                            </svg>
+                            <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path d='M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z' />
-                            </svg>
+                            <RotateCcw className='h-3 w-3' />
                           )}
                           <span>
                             {revertingId === scene.id
@@ -1443,34 +1335,9 @@ export default function SceneCard({
                       title='Generate TTS from sentence'
                     >
                       {producingTTS === scene.id ? (
-                        <svg
-                          className='animate-spin h-3 w-3'
-                          xmlns='http://www.w3.org/2000/svg'
-                          fill='none'
-                          viewBox='0 0 24 24'
-                        >
-                          <circle
-                            className='opacity-25'
-                            cx='12'
-                            cy='12'
-                            r='10'
-                            stroke='currentColor'
-                            strokeWidth='4'
-                          ></circle>
-                          <path
-                            className='opacity-75'
-                            fill='currentColor'
-                            d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                          ></path>
-                        </svg>
+                        <Loader2 className='animate-spin h-3 w-3' />
                       ) : (
-                        <svg
-                          className='h-3 w-3'
-                          fill='currentColor'
-                          viewBox='0 0 20 20'
-                        >
-                          <path d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
-                        </svg>
+                        <CheckCircle className='h-3 w-3' />
                       )}
                       <span>
                         {producingTTS === scene.id
@@ -1502,38 +1369,9 @@ export default function SceneCard({
                       title='Improve sentence with AI'
                     >
                       {improvingSentence === scene.id ? (
-                        <svg
-                          className='animate-spin h-3 w-3'
-                          xmlns='http://www.w3.org/2000/svg'
-                          fill='none'
-                          viewBox='0 0 24 24'
-                        >
-                          <circle
-                            className='opacity-25'
-                            cx='12'
-                            cy='12'
-                            r='10'
-                            stroke='currentColor'
-                            strokeWidth='4'
-                          ></circle>
-                          <path
-                            className='opacity-75'
-                            fill='currentColor'
-                            d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                          ></path>
-                        </svg>
+                        <Loader2 className='animate-spin h-3 w-3' />
                       ) : (
-                        <svg
-                          className='h-3 w-3'
-                          fill='currentColor'
-                          viewBox='0 0 20 20'
-                        >
-                          <path
-                            fillRule='evenodd'
-                            d='M9.504 1.132a1 1 0 01.992 0l1.75 1a1 1 0 11-.992 1.736L10 3.152l-1.254.716a1 1 0 11-.992-1.736l1.75-1zM5.618 4.504a1 1 0 01-.372 1.364L5.016 6l.23.132a1 1 0 11-.992 1.736L3 7.347V8a1 1 0 01-2 0V6a1 1 0 01.504-.868l3-1.732a1 1 0 011.114.104zM14.382 4.504a1 1 0 011.114-.104l3 1.732A1 1 0 0119 6v2a1 1 0 11-2 0v-.653l-1.254.521a1 1 0 11-.992-1.736l.23-.132-.23-.132a1 1 0 01-.372-1.364zM3 9a1 1 0 012 0v3a1 1 0 11-2 0V9zm14 0a1 1 0 012 0v3a1 1 0 11-2 0V9z'
-                            clipRule='evenodd'
-                          />
-                        </svg>
+                        <Sparkles className='h-3 w-3' />
                       )}
                       <span>
                         {improvingSentence === scene.id
@@ -1565,50 +1403,11 @@ export default function SceneCard({
                           }
                         >
                           {loadingAudio === scene.id ? (
-                            <svg
-                              className='animate-spin h-3 w-3'
-                              xmlns='http://www.w3.org/2000/svg'
-                              fill='none'
-                              viewBox='0 0 24 24'
-                            >
-                              <circle
-                                className='opacity-25'
-                                cx='12'
-                                cy='12'
-                                r='10'
-                                stroke='currentColor'
-                                strokeWidth='4'
-                              ></circle>
-                              <path
-                                className='opacity-75'
-                                fill='currentColor'
-                                d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                              ></path>
-                            </svg>
+                            <Loader2 className='animate-spin h-3 w-3' />
                           ) : mediaPlayer.playingAudioId === scene.id ? (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path
-                                fillRule='evenodd'
-                                d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z'
-                                clipRule='evenodd'
-                              />
-                            </svg>
+                            <Pause className='h-3 w-3' />
                           ) : (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path
-                                fillRule='evenodd'
-                                d='M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z'
-                                clipRule='evenodd'
-                              />
-                            </svg>
+                            <Play className='h-3 w-3' />
                           )}
                           <span>
                             {mediaPlayer.playingAudioId === scene.id
@@ -1628,38 +1427,9 @@ export default function SceneCard({
                           title='Remove TTS audio'
                         >
                           {removingTTSId === scene.id ? (
-                            <svg
-                              className='animate-spin h-3 w-3'
-                              xmlns='http://www.w3.org/2000/svg'
-                              fill='none'
-                              viewBox='0 0 24 24'
-                            >
-                              <circle
-                                className='opacity-25'
-                                cx='12'
-                                cy='12'
-                                r='10'
-                                stroke='currentColor'
-                                strokeWidth='4'
-                              ></circle>
-                              <path
-                                className='opacity-75'
-                                fill='currentColor'
-                                d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                              ></path>
-                            </svg>
+                            <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path
-                                fillRule='evenodd'
-                                d='M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z'
-                                clipRule='evenodd'
-                              />
-                            </svg>
+                            <X className='h-3 w-3' />
                           )}
                           <span>
                             {removingTTSId === scene.id
@@ -1692,46 +1462,11 @@ export default function SceneCard({
                           }
                         >
                           {loadingVideo === scene.id ? (
-                            <svg
-                              className='animate-spin h-3 w-3'
-                              xmlns='http://www.w3.org/2000/svg'
-                              fill='none'
-                              viewBox='0 0 24 24'
-                            >
-                              <circle
-                                className='opacity-25'
-                                cx='12'
-                                cy='12'
-                                r='10'
-                                stroke='currentColor'
-                                strokeWidth='4'
-                              ></circle>
-                              <path
-                                className='opacity-75'
-                                fill='currentColor'
-                                d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                              ></path>
-                            </svg>
+                            <Loader2 className='animate-spin h-3 w-3' />
                           ) : mediaPlayer.playingVideoId === scene.id ? (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path
-                                fillRule='evenodd'
-                                d='M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v6a1 1 0 11-2 0V7zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V7z'
-                                clipRule='evenodd'
-                              />
-                            </svg>
+                            <Square className='h-3 w-3' />
                           ) : (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path d='M2 6a2 2 0 012-2h6l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z' />
-                            </svg>
+                            <Video className='h-3 w-3' />
                           )}
                           <span>
                             {mediaPlayer.playingVideoId === scene.id
@@ -1755,38 +1490,9 @@ export default function SceneCard({
                           } audio (saves to field 6886)`}
                         >
                           {speedingUpVideo === scene.id ? (
-                            <svg
-                              className='animate-spin h-3 w-3'
-                              xmlns='http://www.w3.org/2000/svg'
-                              fill='none'
-                              viewBox='0 0 24 24'
-                            >
-                              <circle
-                                className='opacity-25'
-                                cx='12'
-                                cy='12'
-                                r='10'
-                                stroke='currentColor'
-                                strokeWidth='4'
-                              ></circle>
-                              <path
-                                className='opacity-75'
-                                fill='currentColor'
-                                d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                              ></path>
-                            </svg>
+                            <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path
-                                fillRule='evenodd'
-                                d='M10 2L3 7v6l7 5 7-5V7l-7-5zM8 8.1l3-1.8V13l-3-1.8V8.1zm2 5.8l3-1.8v-3l-3 1.8v3z'
-                                clipRule='evenodd'
-                              />
-                            </svg>
+                            <FastForward className='h-3 w-3' />
                           )}
                           <span>
                             {speedingUpVideo === scene.id
@@ -1814,38 +1520,9 @@ export default function SceneCard({
                           title='Generate synchronized video'
                         >
                           {generatingVideo === scene.id ? (
-                            <svg
-                              className='animate-spin h-3 w-3'
-                              xmlns='http://www.w3.org/2000/svg'
-                              fill='none'
-                              viewBox='0 0 24 24'
-                            >
-                              <circle
-                                className='opacity-25'
-                                cx='12'
-                                cy='12'
-                                r='10'
-                                stroke='currentColor'
-                                strokeWidth='4'
-                              ></circle>
-                              <path
-                                className='opacity-75'
-                                fill='currentColor'
-                                d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                              ></path>
-                            </svg>
+                            <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path
-                                fillRule='evenodd'
-                                d='M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z'
-                                clipRule='evenodd'
-                              />
-                            </svg>
+                            <Settings className='h-3 w-3' />
                           )}
                           <span>
                             {generatingVideo === scene.id
@@ -1878,47 +1555,12 @@ export default function SceneCard({
                           }
                         >
                           {loadingProducedVideo === scene.id ? (
-                            <svg
-                              className='animate-spin h-3 w-3'
-                              xmlns='http://www.w3.org/2000/svg'
-                              fill='none'
-                              viewBox='0 0 24 24'
-                            >
-                              <circle
-                                className='opacity-25'
-                                cx='12'
-                                cy='12'
-                                r='10'
-                                stroke='currentColor'
-                                strokeWidth='4'
-                              ></circle>
-                              <path
-                                className='opacity-75'
-                                fill='currentColor'
-                                d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                              ></path>
-                            </svg>
+                            <Loader2 className='animate-spin h-3 w-3' />
                           ) : mediaPlayer.playingProducedVideoId ===
                             scene.id ? (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path
-                                fillRule='evenodd'
-                                d='M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v6a1 1 0 11-2 0V7zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V7z'
-                                clipRule='evenodd'
-                              />
-                            </svg>
+                            <Pause className='h-3 w-3' />
                           ) : (
-                            <svg
-                              className='h-3 w-3'
-                              fill='currentColor'
-                              viewBox='0 0 20 20'
-                            >
-                              <path d='M8 5a1 1 0 011-1h3.5a.5.5 0 01.5.5v2a.5.5 0 01-.5.5H10a1 1 0 01-1-1V5zM5 7a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2V7zm7 4a1 1 0 100-2 1 1 0 000 2z' />
-                            </svg>
+                            <Monitor className='h-3 w-3' />
                           )}
                           <span>
                             {mediaPlayer.playingProducedVideoId === scene.id
