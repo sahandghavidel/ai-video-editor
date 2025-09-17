@@ -3,7 +3,7 @@ import { updateBaserowRow } from '@/lib/baserow-actions';
 
 export async function POST(request: NextRequest) {
   try {
-    const { sceneId, videoUrl } = await request.json();
+    const { sceneId, videoUrl, speed = 4 } = await request.json();
 
     if (!sceneId) {
       return NextResponse.json(
@@ -19,19 +19,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate speed parameter
+    if (![1, 2, 4].includes(speed)) {
+      return NextResponse.json(
+        { error: 'Speed must be 1, 2, or 4' },
+        { status: 400 }
+      );
+    }
+
     // NCA Toolkit credentials from your Docker setup
     const NCA_API_KEY = 'test-key-123';
     const NCA_BASE_URL = 'http://host.docker.internal:8080';
 
-    // Create FFmpeg command to speed up both video and audio by 4x (same approach as generate-video)
+    // Create FFmpeg command to speed up both video and audio by specified speed (same approach as generate-video)
     const ffmpegPayload = {
       id: `speed-up-video-${sceneId}-${Date.now()}`,
       inputs: [{ file_url: videoUrl }],
       filters: [
-        // Speed up video by 4x
-        { filter: '[0:v]setpts=PTS/4[v_fast]' },
-        // Speed up audio by 4x and set volume to zero (mute but keep stream)
-        { filter: '[0:a]atempo=4.0,volume=0[a_muted]' },
+        // Speed up video by specified speed
+        { filter: `[0:v]setpts=PTS/${speed}[v_fast]` },
+        // Speed up audio by specified speed and set volume to zero (mute but keep stream)
+        { filter: `[0:a]atempo=${speed}.0,volume=0[a_muted]` },
       ],
       outputs: [
         {
@@ -108,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       videoUrl: processedVideoUrl,
-      message: 'Video successfully sped up 4x with audio muted',
+      message: `Video successfully sped up ${speed}x with audio muted`,
     });
   } catch (error) {
     console.error('Error processing speed-up video:', error);
