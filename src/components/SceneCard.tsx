@@ -35,6 +35,7 @@ export default function SceneCard({
   const [improvingSentence, setImprovingSentence] = useState<number | null>(
     null
   );
+  const [speedingUpVideo, setSpeedingUpVideo] = useState<number | null>(null);
   const [autoGenerateVideo, setAutoGenerateVideo] = useState<boolean>(true);
   const [autoGenerateTTS, setAutoGenerateTTS] = useState<boolean>(false);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
@@ -271,6 +272,72 @@ export default function SceneCard({
       onDataUpdate?.(data);
     } finally {
       setRemovingTTSId(null);
+    }
+  };
+
+  // Speed up video handler
+  const handleSpeedUpVideo = async (sceneId: number) => {
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    const videoUrl = currentScene.field_6888 as string;
+    if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
+      alert('No video found in field 6888 to speed up');
+      return;
+    }
+
+    setSpeedingUpVideo(sceneId);
+
+    try {
+      console.log(
+        'Starting speed-up for scene:',
+        sceneId,
+        'with video:',
+        videoUrl
+      );
+
+      const response = await fetch('/api/speed-up-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sceneId,
+          videoUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Speed-up error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          errorMessage = `Speed-up error: ${response.status} - ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      console.log('Speed-up result:', result);
+
+      // Optimistic update - update field_6886 with the processed video
+      const optimisticData = data.map((scene) =>
+        scene.id === sceneId ? { ...scene, field_6886: result.videoUrl } : scene
+      );
+      onDataUpdate?.(optimisticData);
+
+      // Refresh data from server to ensure consistency
+      refreshData?.();
+    } catch (error) {
+      console.error('Error speeding up video:', error);
+      let errorMessage = 'Failed to speed up video';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setSpeedingUpVideo(null);
     }
   };
 
@@ -1508,6 +1575,57 @@ export default function SceneCard({
                           )}
                           <span>
                             {playingVideoId === scene.id ? 'Stop' : 'Video'}
+                          </span>
+                        </button>
+                      )}
+
+                    {/* Speed Up Video Button */}
+                    {typeof scene['field_6888'] === 'string' &&
+                      scene['field_6888'] && (
+                        <button
+                          onClick={() => handleSpeedUpVideo(scene.id)}
+                          disabled={speedingUpVideo === scene.id}
+                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-cyan-100 text-cyan-700 hover:bg-cyan-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title='Speed up video 4x and remove audio (saves to field 6886)'
+                        >
+                          {speedingUpVideo === scene.id ? (
+                            <svg
+                              className='animate-spin h-3 w-3'
+                              xmlns='http://www.w3.org/2000/svg'
+                              fill='none'
+                              viewBox='0 0 24 24'
+                            >
+                              <circle
+                                className='opacity-25'
+                                cx='12'
+                                cy='12'
+                                r='10'
+                                stroke='currentColor'
+                                strokeWidth='4'
+                              ></circle>
+                              <path
+                                className='opacity-75'
+                                fill='currentColor'
+                                d='M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                              ></path>
+                            </svg>
+                          ) : (
+                            <svg
+                              className='h-3 w-3'
+                              fill='currentColor'
+                              viewBox='0 0 20 20'
+                            >
+                              <path
+                                fillRule='evenodd'
+                                d='M10 2L3 7v6l7 5 7-5V7l-7-5zM8 8.1l3-1.8V13l-3-1.8V8.1zm2 5.8l3-1.8v-3l-3 1.8v3z'
+                                clipRule='evenodd'
+                              />
+                            </svg>
+                          )}
+                          <span>
+                            {speedingUpVideo === scene.id
+                              ? 'Speeding Up...'
+                              : '4x Speed'}
                           </span>
                         </button>
                       )}
