@@ -37,8 +37,6 @@ export default function SceneCard({
     null
   );
   const [speedingUpVideo, setSpeedingUpVideo] = useState<number | null>(null);
-  const [autoGenerateVideo, setAutoGenerateVideo] = useState<boolean>(true);
-  const [autoGenerateTTS, setAutoGenerateTTS] = useState<boolean>(false);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -489,7 +487,7 @@ export default function SceneCard({
       refreshData?.();
 
       // Auto-generate TTS if option is enabled and text was actually changed
-      if (autoGenerateTTS && editingText.trim()) {
+      if (videoSettings.autoGenerateTTS && editingText.trim()) {
         // Wait a moment to ensure the text is properly updated
         setTimeout(() => {
           handleTTSProduce(sceneId, editingText);
@@ -726,7 +724,7 @@ export default function SceneCard({
       refreshData?.();
 
       // Auto-generate video if option is enabled
-      if (autoGenerateVideo) {
+      if (videoSettings.autoGenerateVideo) {
         const currentScene = data.find((scene) => scene.id === sceneId);
         const videoUrl = currentScene?.field_6888;
 
@@ -868,7 +866,7 @@ export default function SceneCard({
       refreshData?.();
 
       // Auto-generate TTS if option is enabled
-      if (autoGenerateTTS && improvedSentence.trim()) {
+      if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
         // Wait a moment to ensure the text is properly updated
         setTimeout(() => {
           handleTTSProduce(sceneId, improvedSentence);
@@ -1310,8 +1308,10 @@ export default function SceneCard({
           <label className='flex items-center space-x-3 cursor-pointer'>
             <input
               type='checkbox'
-              checked={autoGenerateTTS}
-              onChange={(e) => setAutoGenerateTTS(e.target.checked)}
+              checked={videoSettings.autoGenerateTTS}
+              onChange={(e) =>
+                updateVideoSettings({ autoGenerateTTS: e.target.checked })
+              }
               className='w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2'
             />
             <div className='flex flex-col'>
@@ -1328,8 +1328,10 @@ export default function SceneCard({
           <label className='flex items-center space-x-3 cursor-pointer'>
             <input
               type='checkbox'
-              checked={autoGenerateVideo}
-              onChange={(e) => setAutoGenerateVideo(e.target.checked)}
+              checked={videoSettings.autoGenerateVideo}
+              onChange={(e) =>
+                updateVideoSettings({ autoGenerateVideo: e.target.checked })
+              }
               className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
             />
             <div className='flex flex-col'>
