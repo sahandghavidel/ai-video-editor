@@ -149,9 +149,11 @@ export default function BatchOperations({
           )}
           <span>
             {batchOperations.generatingAllTTS
-              ? 'Generating TTS...'
+              ? sceneLoading.producingTTS !== null
+                ? `Generating TTS (Scene #${sceneLoading.producingTTS})...`
+                : 'Generating TTS...'
               : sceneLoading.producingTTS !== null
-              ? 'TTS Busy'
+              ? `TTS Busy (Scene #${sceneLoading.producingTTS})`
               : 'Generate TTS for All'}
           </span>
         </button>
