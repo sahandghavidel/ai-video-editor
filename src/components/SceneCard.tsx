@@ -354,6 +354,16 @@ export default function SceneCard({
     }
   };
 
+  // Available speed options for cycling
+  const speedOptions = [1, 2, 4];
+
+  // Function to cycle through speeds
+  const cycleSpeed = () => {
+    const currentIndex = speedOptions.indexOf(videoSettings.selectedSpeed);
+    const nextIndex = (currentIndex + 1) % speedOptions.length;
+    updateVideoSettings({ selectedSpeed: speedOptions[nextIndex] });
+  };
+
   // Speed up video handler
   const handleSpeedUpVideo = async (sceneId: number) => {
     const currentScene = data.find((scene) => scene.id === sceneId);
@@ -1045,36 +1055,60 @@ export default function SceneCard({
           <button
             onClick={handleSpeedUpAllVideos}
             disabled={batchOperations.speedingUpAllVideos}
-            className='px-4 py-2 bg-cyan-500 text-white rounded hover:bg-cyan-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
+            className='px-6 py-3 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-xl transition-all duration-300 flex items-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed'
             title={`Speed up all videos ${videoSettings.selectedSpeed}x and ${
               videoSettings.muteAudio ? 'mute' : 'keep'
             } audio for scenes with empty sentences`}
           >
             {batchOperations.speedingUpAllVideos ? (
-              <Loader2 className='animate-spin h-4 w-4' />
+              <Loader2 className='animate-spin h-5 w-5' />
             ) : (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  updateVideoSettings({ muteAudio: !videoSettings.muteAudio });
-                }}
-                className='p-0 bg-transparent border-none hover:scale-110 transition-transform duration-200'
-                title={`Click to ${
-                  videoSettings.muteAudio ? 'enable' : 'mute'
-                } audio`}
-              >
-                {videoSettings.muteAudio ? (
-                  <VolumeX className='h-4 w-4' />
-                ) : (
-                  <Volume2 className='h-4 w-4' />
-                )}
-              </button>
+              <div className='flex items-center space-x-2'>
+                <div className='p-1.5 bg-blue-600/20 rounded-lg backdrop-blur-sm'>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateVideoSettings({
+                        muteAudio: !videoSettings.muteAudio,
+                      });
+                    }}
+                    className='p-0 bg-transparent border-none hover:scale-125 transition-transform duration-200 cursor-pointer'
+                    title={`Click to ${
+                      videoSettings.muteAudio ? 'enable' : 'mute'
+                    } audio`}
+                  >
+                    {videoSettings.muteAudio ? (
+                      <VolumeX className='h-4 w-4 text-blue-700' />
+                    ) : (
+                      <Volume2 className='h-4 w-4 text-blue-700' />
+                    )}
+                  </div>
+                </div>
+                <div className='w-px h-6 bg-blue-700/30'></div>
+              </div>
             )}
-            <span>
-              {batchOperations.speedingUpAllVideos
-                ? 'Speeding Up All...'
-                : `Speed Up All Videos (${videoSettings.selectedSpeed}x)`}
-            </span>
+            <div className='flex flex-col items-start'>
+              <span className='font-semibold text-sm'>
+                {batchOperations.speedingUpAllVideos
+                  ? 'Processing Videos...'
+                  : 'Speed Up All Videos'}
+              </span>
+              {!batchOperations.speedingUpAllVideos && (
+                <div className='flex items-center space-x-1 text-xs text-blue-700/90'>
+                  <span>Speed:</span>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cycleSpeed();
+                    }}
+                    className='px-2 py-0.5 bg-blue-600/20 rounded-md font-bold hover:bg-blue-600/30 transition-colors duration-200 backdrop-blur-sm border border-blue-700/20 cursor-pointer'
+                    title='Click to cycle through speeds (1x → 2x → 4x)'
+                  >
+                    {videoSettings.selectedSpeed}x
+                  </div>
+                </div>
+              )}
+            </div>
           </button>
           {refreshData && (
             <button
@@ -1364,7 +1398,7 @@ export default function SceneCard({
                         <button
                           onClick={() => handleSpeedUpVideo(scene.id)}
                           disabled={speedingUpVideo === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-cyan-100 text-cyan-700 hover:bg-cyan-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-100 text-blue-700 hover:bg-blue-200`}
                           title={`Speed up video ${
                             videoSettings.selectedSpeed
                           }x and ${
@@ -1374,29 +1408,41 @@ export default function SceneCard({
                           {speedingUpVideo === scene.id ? (
                             <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateVideoSettings({
-                                  muteAudio: !videoSettings.muteAudio,
-                                });
-                              }}
-                              className='p-0 bg-transparent border-none hover:scale-110 transition-transform duration-200'
-                              title={`Click to ${
-                                videoSettings.muteAudio ? 'enable' : 'mute'
-                              } audio`}
-                            >
-                              {videoSettings.muteAudio ? (
-                                <VolumeX className='h-3 w-3' />
-                              ) : (
-                                <Volume2 className='h-3 w-3' />
-                              )}
-                            </button>
+                            <div className='flex items-center space-x-1'>
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateVideoSettings({
+                                    muteAudio: !videoSettings.muteAudio,
+                                  });
+                                }}
+                                className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                                title={`Click to ${
+                                  videoSettings.muteAudio ? 'enable' : 'mute'
+                                } audio`}
+                              >
+                                {videoSettings.muteAudio ? (
+                                  <VolumeX className='h-3 w-3 text-blue-700' />
+                                ) : (
+                                  <Volume2 className='h-3 w-3 text-blue-700' />
+                                )}
+                              </div>
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  cycleSpeed();
+                                }}
+                                className='px-1 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-600/20 rounded transition-colors duration-200 cursor-pointer'
+                                title='Click to cycle through speeds (1x → 2x → 4x)'
+                              >
+                                {videoSettings.selectedSpeed}x
+                              </div>
+                            </div>
                           )}
                           <span>
                             {speedingUpVideo === scene.id
-                              ? 'Speeding Up...'
-                              : `${videoSettings.selectedSpeed}x Speed`}
+                              ? 'Processing...'
+                              : 'Speed'}
                           </span>
                         </button>
                       )}
