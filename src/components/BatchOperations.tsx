@@ -44,6 +44,7 @@ export default function BatchOperations({
     startBatchOperation,
     completeBatchOperation,
     setProducingTTS,
+    sceneLoading,
   } = useAppStore();
 
   const onImproveAllSentences = () => {
@@ -121,11 +122,23 @@ export default function BatchOperations({
         </button>
         <button
           onClick={onGenerateAllTTS}
-          disabled={batchOperations.generatingAllTTS}
-          className='px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
-          title='Generate TTS for all scenes that have text but no audio'
+          disabled={batchOperations.generatingAllTTS || sceneLoading.producingTTS !== null}
+          className={`px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+            sceneLoading.producingTTS !== null && !batchOperations.generatingAllTTS
+              ? 'opacity-50'
+              : ''
+          }`}
+          title={
+            batchOperations.generatingAllTTS
+              ? 'Generating TTS for all scenes...'
+              : sceneLoading.producingTTS !== null
+              ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
+              : 'Generate TTS for all scenes that have text but no audio'
+          }
         >
           {batchOperations.generatingAllTTS ? (
+            <Loader2 className='animate-spin h-4 w-4' />
+          ) : sceneLoading.producingTTS !== null ? (
             <Loader2 className='animate-spin h-4 w-4' />
           ) : (
             <Mic className='h-4 w-4' />
@@ -133,6 +146,8 @@ export default function BatchOperations({
           <span>
             {batchOperations.generatingAllTTS
               ? 'Generating TTS...'
+              : sceneLoading.producingTTS !== null
+              ? 'TTS Busy'
               : 'Generate TTS for All'}
           </span>
         </button>

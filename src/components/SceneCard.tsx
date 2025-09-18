@@ -792,7 +792,8 @@ export default function SceneCard({
                         )
                       }
                       disabled={
-                        sceneLoading.producingTTS === scene.id ||
+                        sceneLoading.producingTTS !== null ||
+                        batchOperations.generatingAllTTS ||
                         !String(
                           scene['field_6890'] || scene.field_6890 || ''
                         ).trim()
@@ -800,9 +801,19 @@ export default function SceneCard({
                       className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                         sceneLoading.producingTTS === scene.id
                           ? 'bg-gray-100 text-gray-500'
+                          : sceneLoading.producingTTS !== null || batchOperations.generatingAllTTS
+                          ? 'bg-gray-50 text-gray-400'
                           : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      title='Generate TTS from sentence'
+                      title={
+                        sceneLoading.producingTTS === scene.id
+                          ? 'Generating TTS for this scene...'
+                          : sceneLoading.producingTTS !== null
+                          ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
+                          : batchOperations.generatingAllTTS
+                          ? 'Batch TTS generation is in progress'
+                          : 'Generate TTS from sentence'
+                      }
                     >
                       {sceneLoading.producingTTS === scene.id ? (
                         <Loader2 className='animate-spin h-3 w-3' />
@@ -812,6 +823,8 @@ export default function SceneCard({
                       <span>
                         {sceneLoading.producingTTS === scene.id
                           ? 'Producing...'
+                          : sceneLoading.producingTTS !== null || batchOperations.generatingAllTTS
+                          ? 'TTS Busy'
                           : 'Generate TTS'}
                       </span>
                     </button>
