@@ -22,10 +22,6 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import TTSSettings from './TTSSettings';
-import VideoSpeedSettings from './VideoSpeedSettings';
-import ModelSelection from './ModelSelection';
-import AutoGenerateSettings from './AutoGenerateSettings';
 
 // Helper: get original sentence from field_6901
 
@@ -928,12 +924,6 @@ export default function SceneCard({
 
   return (
     <div className='w-full max-w-7xl mx-auto'>
-      {/* Model Selection */}
-      <ModelSelection />
-      {/* TTS Settings */}
-      <TTSSettings />
-      {/* Video Speed Settings */}
-      <VideoSpeedSettings />
       <div className='flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4'>
         <div>
           <h2 className='text-2xl font-bold text-gray-800'>Scenes</h2>
@@ -1066,8 +1056,6 @@ export default function SceneCard({
           )}
         </div>
       </div>
-      {/* Auto-Generate Settings */}
-      <AutoGenerateSettings />
       <div className='grid gap-4'>
         {data.map((scene) => (
           <div

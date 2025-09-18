@@ -2,16 +2,21 @@
 
 import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
 import SceneCard from '@/components/SceneCard';
-import AddDataForm from '@/components/AddDataForm';
-import { useEffect } from 'react';
+import ModelSelection from '@/components/ModelSelection';
+import TTSSettings from '@/components/TTSSettings';
+import VideoSpeedSettings from '@/components/VideoSpeedSettings';
+import AutoGenerateSettings from '@/components/AutoGenerateSettings';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react';
 
 export default function Home() {
-  const { data, error, loading, setData, setError, setLoading } = useAppStore();
+  const { data, error, setData, setError } = useAppStore();
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const loadData = async () => {
     try {
-      setLoading(true);
+      setInitialLoading(true);
       const fetchedData = await getBaserowData();
       setData(fetchedData);
       setError(null);
@@ -19,7 +24,18 @@ export default function Home() {
       setError(err instanceof Error ? err.message : 'Failed to load data');
       console.error('Error loading Baserow data:', err);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+    }
+  };
+
+  const refreshDataSilently = async () => {
+    try {
+      const fetchedData = await getBaserowData();
+      setData(fetchedData);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh data');
+      console.error('Error refreshing Baserow data:', err);
     }
   };
 
@@ -32,68 +48,128 @@ export default function Home() {
   };
 
   const refreshData = () => {
-    loadData();
+    refreshDataSilently();
   };
 
   return (
-    <div className='min-h-screen bg-gray-50'>
+    <div className='min-h-screen bg-gradient-to-br from-gray-50 to-white'>
       <div className='max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8'>
         <header className='mb-8'>
-          <h1 className='text-3xl font-bold text-gray-900'>
-            Baserow Data Dashboard
-          </h1>
-          <p className='mt-2 text-gray-600'>
-            View and manage your Baserow database data
-          </p>
+          <div className='flex items-center space-x-4 mb-4'>
+            <div className='p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg'>
+              <Video className='w-8 h-8 text-white' />
+            </div>
+            <div>
+              <h1 className='text-3xl font-bold text-gray-900'>
+                Ultimate Video Editor
+              </h1>
+              <p className='mt-2 text-gray-600'>
+                AI-powered video editing with TTS and scene management
+              </p>
+            </div>
+          </div>
         </header>
 
         {error ? (
-          <div className='bg-red-50 border border-red-200 rounded-lg p-6 mb-8'>
-            <div className='flex items-center'>
+          <div className='bg-red-50 border border-red-200 rounded-xl p-6 mb-8 shadow-sm'>
+            <div className='flex items-start space-x-4'>
               <div className='flex-shrink-0'>
-                <svg
-                  className='h-5 w-5 text-red-400'
-                  viewBox='0 0 20 20'
-                  fill='currentColor'
-                >
-                  <path
-                    fillRule='evenodd'
-                    d='M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z'
-                    clipRule='evenodd'
-                  />
-                </svg>
+                <div className='p-2 bg-red-100 rounded-lg'>
+                  <AlertCircle className='h-5 w-5 text-red-600' />
+                </div>
               </div>
-              <div className='ml-3'>
-                <h3 className='text-sm font-medium text-red-800'>
+              <div className='flex-1 min-w-0'>
+                <h3 className='text-lg font-semibold text-red-800 mb-2'>
                   Configuration Error
                 </h3>
-                <div className='mt-2 text-sm text-red-700'>
-                  <p>{error}</p>
-                  <p className='mt-2'>
-                    Please check your{' '}
-                    <code className='bg-red-100 px-1 rounded'>.env.local</code>{' '}
-                    file and ensure:
-                  </p>
-                  <ul className='mt-1 list-disc list-inside space-y-1'>
-                    <li>
-                      BASEROW_API_URL is set (e.g.,
-                      http://host.docker.internal/api)
-                    </li>
-                    <li>BASEROW_EMAIL is set with your Baserow login email</li>
-                    <li>BASEROW_PASSWORD is set with your Baserow password</li>
-                    <li>BASEROW_TABLE_ID is set with your table ID</li>
-                  </ul>
+                <div className='text-sm text-red-700 space-y-3'>
+                  <p className='font-medium'>{error}</p>
+                  <div>
+                    <p className='mb-2'>
+                      Please check your{' '}
+                      <code className='bg-red-100 px-2 py-1 rounded font-mono text-xs'>
+                        .env.local
+                      </code>{' '}
+                      file and ensure:
+                    </p>
+                    <ul className='space-y-2 list-none'>
+                      <li className='flex items-center space-x-2'>
+                        <div className='w-1.5 h-1.5 bg-red-500 rounded-full'></div>
+                        <span>
+                          <code className='bg-red-100 px-1 rounded text-xs'>
+                            BASEROW_API_URL
+                          </code>{' '}
+                          is set (e.g., http://host.docker.internal/api)
+                        </span>
+                      </li>
+                      <li className='flex items-center space-x-2'>
+                        <div className='w-1.5 h-1.5 bg-red-500 rounded-full'></div>
+                        <span>
+                          <code className='bg-red-100 px-1 rounded text-xs'>
+                            BASEROW_EMAIL
+                          </code>{' '}
+                          is set with your Baserow login email
+                        </span>
+                      </li>
+                      <li className='flex items-center space-x-2'>
+                        <div className='w-1.5 h-1.5 bg-red-500 rounded-full'></div>
+                        <span>
+                          <code className='bg-red-100 px-1 rounded text-xs'>
+                            BASEROW_PASSWORD
+                          </code>{' '}
+                          is set with your Baserow password
+                        </span>
+                      </li>
+                      <li className='flex items-center space-x-2'>
+                        <div className='w-1.5 h-1.5 bg-red-500 rounded-full'></div>
+                        <span>
+                          <code className='bg-red-100 px-1 rounded text-xs'>
+                            BASEROW_TABLE_ID
+                          </code>{' '}
+                          is set with your table ID
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                  <button
+                    onClick={refreshData}
+                    className='mt-4 inline-flex items-center px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg transition-colors text-sm font-medium'
+                  >
+                    <RefreshCw className='w-4 h-4 mr-2' />
+                    Retry Connection
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         ) : (
           <div className='space-y-8'>
-            {loading && (
-              <div className='flex justify-center items-center py-8'>
-                <div className='text-gray-500'>Loading data...</div>
+            {initialLoading && (
+              <div className='flex flex-col items-center justify-center py-12 space-y-4'>
+                <div className='p-4 bg-blue-50 rounded-full'>
+                  <Loader2 className='w-8 h-8 text-blue-600 animate-spin' />
+                </div>
+                <div className='text-center'>
+                  <p className='text-lg font-medium text-gray-900'>
+                    Loading scenes...
+                  </p>
+                  <p className='text-sm text-gray-600'>
+                    Connecting to Baserow database
+                  </p>
+                </div>
               </div>
             )}
+
+            {/* Global Settings - Only show when data is loaded */}
+            {!initialLoading && data.length > 0 && (
+              <div className='space-y-6'>
+                <ModelSelection />
+                <TTSSettings />
+                <VideoSpeedSettings />
+                <AutoGenerateSettings />
+              </div>
+            )}
+
             <SceneCard
               data={data}
               refreshData={refreshData}
