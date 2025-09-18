@@ -19,8 +19,11 @@ import {
   CheckCircle,
   Monitor,
   Settings,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import TTSSettings from './TTSSettings';
+import VideoSpeedSettings from './VideoSpeedSettings';
 
 // Helper: get original sentence from field_6901
 
@@ -979,54 +982,7 @@ export default function SceneCard({
       {/* TTS Settings */}
       <TTSSettings />
       {/* Video Speed Settings */}
-      <div className='mb-4 p-3 rounded border border-gray-200 bg-white'>
-        <h3 className='text-sm font-semibold mb-3'>Video Speed Settings</h3>
-        <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-          <div>
-            <label className='block text-xs font-medium text-gray-700 mb-1'>
-              Speed Multiplier
-            </label>
-            <select
-              value={videoSettings.selectedSpeed}
-              onChange={(e) =>
-                updateVideoSettings({ selectedSpeed: Number(e.target.value) })
-              }
-              className='w-full p-2 border rounded text-sm bg-white'
-            >
-              <option value={1}>1x (Normal Speed)</option>
-              <option value={2}>2x (Double Speed)</option>
-              <option value={4}>4x (Quadruple Speed)</option>
-            </select>
-          </div>
-          <div>
-            <label className='block text-xs font-medium text-gray-700 mb-1'>
-              Audio Level
-            </label>
-            <select
-              value={videoSettings.muteAudio ? 'mute' : 'keep'}
-              onChange={(e) =>
-                updateVideoSettings({ muteAudio: e.target.value === 'mute' })
-              }
-              className='w-full p-2 border rounded text-sm bg-white'
-            >
-              <option value='mute'>Mute Audio (Silent)</option>
-              <option value='keep'>Keep Original Audio</option>
-            </select>
-          </div>
-          <div className='flex items-end'>
-            <div className='text-xs text-gray-500'>
-              <p>
-                Selected:{' '}
-                <span className='font-medium'>
-                  {videoSettings.selectedSpeed}x speed
-                </span>
-                {videoSettings.muteAudio ? ', muted' : ', with audio'}
-              </p>
-              <p>This affects both individual and batch speed-up operations</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <VideoSpeedSettings />
       <div className='flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4'>
         <div>
           <h2 className='text-2xl font-bold text-gray-800'>Scenes</h2>
@@ -1097,7 +1053,22 @@ export default function SceneCard({
             {batchOperations.speedingUpAllVideos ? (
               <Loader2 className='animate-spin h-4 w-4' />
             ) : (
-              <FastForward className='h-4 w-4' />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  updateVideoSettings({ muteAudio: !videoSettings.muteAudio });
+                }}
+                className='p-0 bg-transparent border-none hover:scale-110 transition-transform duration-200'
+                title={`Click to ${
+                  videoSettings.muteAudio ? 'enable' : 'mute'
+                } audio`}
+              >
+                {videoSettings.muteAudio ? (
+                  <VolumeX className='h-4 w-4' />
+                ) : (
+                  <Volume2 className='h-4 w-4' />
+                )}
+              </button>
             )}
             <span>
               {batchOperations.speedingUpAllVideos
@@ -1403,7 +1374,24 @@ export default function SceneCard({
                           {speedingUpVideo === scene.id ? (
                             <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
-                            <FastForward className='h-3 w-3' />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateVideoSettings({
+                                  muteAudio: !videoSettings.muteAudio,
+                                });
+                              }}
+                              className='p-0 bg-transparent border-none hover:scale-110 transition-transform duration-200'
+                              title={`Click to ${
+                                videoSettings.muteAudio ? 'enable' : 'mute'
+                              } audio`}
+                            >
+                              {videoSettings.muteAudio ? (
+                                <VolumeX className='h-3 w-3' />
+                              ) : (
+                                <Volume2 className='h-3 w-3' />
+                              )}
+                            </button>
                           )}
                           <span>
                             {speedingUpVideo === scene.id
