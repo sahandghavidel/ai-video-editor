@@ -801,7 +801,8 @@ export default function SceneCard({
                       className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                         sceneLoading.producingTTS === scene.id
                           ? 'bg-gray-100 text-gray-500'
-                          : sceneLoading.producingTTS !== null || batchOperations.generatingAllTTS
+                          : sceneLoading.producingTTS !== null ||
+                            batchOperations.generatingAllTTS
                           ? 'bg-gray-50 text-gray-400'
                           : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -823,7 +824,8 @@ export default function SceneCard({
                       <span>
                         {sceneLoading.producingTTS === scene.id
                           ? 'Producing...'
-                          : sceneLoading.producingTTS !== null || batchOperations.generatingAllTTS
+                          : sceneLoading.producingTTS !== null ||
+                            batchOperations.generatingAllTTS
                           ? 'TTS Busy'
                           : 'Generate TTS'}
                       </span>
