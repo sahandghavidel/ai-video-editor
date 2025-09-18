@@ -46,6 +46,7 @@ export interface ModelSelectionState {
 export interface SceneLoadingState {
   producingTTS: number | null;
   improvingSentence: number | null;
+  speedingUpVideo: number | null;
 }
 
 interface AppState {
@@ -107,6 +108,7 @@ interface AppState {
   // Scene Loading Actions
   setProducingTTS: (sceneId: number | null) => void;
   setImprovingSentence: (sceneId: number | null) => void;
+  setSpeedingUpVideo: (sceneId: number | null) => void;
 
   // Data operations
   updateRow: (id: number, updates: Partial<BaserowRow>) => void;
@@ -158,6 +160,7 @@ const defaultModelSelection: ModelSelectionState = {
 const defaultSceneLoading: SceneLoadingState = {
   producingTTS: null,
   improvingSentence: null,
+  speedingUpVideo: null,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -306,6 +309,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   setImprovingSentence: (sceneId) =>
     set((state) => ({
       sceneLoading: { ...state.sceneLoading, improvingSentence: sceneId },
+    })),
+
+  setSpeedingUpVideo: (sceneId) =>
+    set((state) => ({
+      sceneLoading: { ...state.sceneLoading, speedingUpVideo: sceneId },
     })),
 
   // Data operations

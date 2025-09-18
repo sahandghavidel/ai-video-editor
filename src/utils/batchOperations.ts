@@ -152,7 +152,8 @@ export const handleSpeedUpAllVideos = async (
   muteAudio: boolean,
   onRefresh: (() => void) | undefined,
   startBatchOperation: (operation: 'speedingUpAllVideos') => void,
-  completeBatchOperation: (operation: 'speedingUpAllVideos') => void
+  completeBatchOperation: (operation: 'speedingUpAllVideos') => void,
+  setSpeedingUpVideo: (sceneId: number | null) => void
 ) => {
   startBatchOperation('speedingUpAllVideos');
   try {
@@ -178,6 +179,7 @@ export const handleSpeedUpAllVideos = async (
     for (const scene of scenesToSpeedUp) {
       const videoUrl = scene['field_6888'] as string;
 
+      setSpeedingUpVideo(scene.id);
       try {
         console.log(`Speeding up video for scene ${scene.id}:`, videoUrl);
 
@@ -218,15 +220,13 @@ export const handleSpeedUpAllVideos = async (
       } catch (error) {
         console.error(`Error speeding up video for scene ${scene.id}:`, error);
         // Continue with next video
+      } finally {
+        setSpeedingUpVideo(null);
       }
     }
 
     // Refresh data from server to get all updates
     onRefresh?.();
-
-    alert(
-      `Batch speed-up completed! Processed ${scenesToSpeedUp.length} videos.`
-    );
   } catch (error) {
     console.error('Error in batch speed-up:', error);
     let errorMessage = 'Failed to process batch speed-up';

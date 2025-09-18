@@ -46,6 +46,7 @@ export default function BatchOperations({
     setProducingTTS,
     sceneLoading,
     setImprovingSentence,
+    setSpeedingUpVideo,
   } = useAppStore();
 
   const onImproveAllSentences = () => {
@@ -84,7 +85,8 @@ export default function BatchOperations({
       videoSettings.muteAudio,
       onRefresh,
       startBatchOperation,
-      completeBatchOperation
+      completeBatchOperation,
+      setSpeedingUpVideo
     );
   };
 
@@ -107,7 +109,7 @@ export default function BatchOperations({
             batchOperations.improvingAll ||
             sceneLoading.improvingSentence !== null
           }
-          className={`px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`px-4 py-2 h-10 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
             sceneLoading.improvingSentence !== null &&
             !batchOperations.improvingAll
               ? 'opacity-50'
@@ -146,7 +148,7 @@ export default function BatchOperations({
             batchOperations.generatingAllTTS ||
             sceneLoading.producingTTS !== null
           }
-          className={`px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`px-4 py-2 h-10 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
             sceneLoading.producingTTS !== null &&
             !batchOperations.generatingAllTTS
               ? 'opacity-50'
@@ -180,7 +182,7 @@ export default function BatchOperations({
         <button
           onClick={onConcatenateAllVideos}
           disabled={batchOperations.concatenatingVideos}
-          className='px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
+          className='px-4 py-2 h-10 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
           title='Concatenate all videos into one final video'
         >
           {batchOperations.concatenatingVideos ? (
@@ -196,66 +198,84 @@ export default function BatchOperations({
         </button>
         <button
           onClick={onSpeedUpAllVideos}
-          disabled={batchOperations.speedingUpAllVideos}
-          className='px-6 py-3 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-xl transition-all duration-300 flex items-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed'
-          title={`Speed up all videos ${videoSettings.selectedSpeed}x and ${
-            videoSettings.muteAudio ? 'mute' : 'keep'
-          } audio for scenes with empty sentences`}
+          disabled={
+            batchOperations.speedingUpAllVideos ||
+            sceneLoading.speedingUpVideo !== null
+          }
+          className={`px-4 py-2 h-10 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+            sceneLoading.speedingUpVideo !== null &&
+            !batchOperations.speedingUpAllVideos
+              ? 'opacity-50'
+              : ''
+          }`}
+          title={
+            batchOperations.speedingUpAllVideos
+              ? sceneLoading.speedingUpVideo !== null
+                ? `Speed up all videos ${videoSettings.selectedSpeed}x and ${
+                    videoSettings.muteAudio ? 'mute' : 'keep'
+                  } audio for scenes with empty sentences... (Scene #${
+                    sceneLoading.speedingUpVideo
+                  })`
+                : `Speed up all videos ${videoSettings.selectedSpeed}x and ${
+                    videoSettings.muteAudio ? 'mute' : 'keep'
+                  } audio for scenes with empty sentences...`
+              : sceneLoading.speedingUpVideo !== null
+              ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
+              : `Speed up all videos ${videoSettings.selectedSpeed}x and ${
+                  videoSettings.muteAudio ? 'mute' : 'keep'
+                } audio for scenes with empty sentences`
+          }
         >
           {batchOperations.speedingUpAllVideos ? (
-            <Loader2 className='animate-spin h-5 w-5' />
+            <Loader2 className='animate-spin h-4 w-4' />
+          ) : sceneLoading.speedingUpVideo !== null ? (
+            <Loader2 className='animate-spin h-4 w-4' />
           ) : (
-            <div className='flex items-center space-x-2'>
-              <div className='p-1.5 bg-blue-600/20 rounded-lg backdrop-blur-sm'>
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    updateVideoSettings({
-                      muteAudio: !videoSettings.muteAudio,
-                    });
-                  }}
-                  className='p-0 bg-transparent border-none hover:scale-125 transition-transform duration-200 cursor-pointer'
-                  title={`Click to ${
-                    videoSettings.muteAudio ? 'enable' : 'mute'
-                  } audio`}
-                >
-                  {videoSettings.muteAudio ? (
-                    <VolumeX className='h-4 w-4 text-blue-700' />
-                  ) : (
-                    <Volume2 className='h-4 w-4 text-blue-700' />
-                  )}
-                </div>
+            <div className='flex items-center space-x-1'>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  updateVideoSettings({
+                    muteAudio: !videoSettings.muteAudio,
+                  });
+                }}
+                className='hover:scale-110 transition-transform duration-200 cursor-pointer'
+                title={`Click to ${
+                  videoSettings.muteAudio ? 'enable' : 'mute'
+                } audio`}
+              >
+                {videoSettings.muteAudio ? (
+                  <VolumeX className='h-4 w-4' />
+                ) : (
+                  <Volume2 className='h-4 w-4' />
+                )}
               </div>
-              <div className='w-px h-6 bg-blue-700/30'></div>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cycleSpeed();
+                }}
+                className='px-1 py-0.5 text-xs font-bold hover:bg-white/20 rounded transition-colors duration-200 cursor-pointer'
+                title='Click to cycle through speeds (1x → 2x → 4x)'
+              >
+                {videoSettings.selectedSpeed}x
+              </div>
             </div>
           )}
-          <div className='flex flex-col items-start'>
-            <span className='font-semibold text-sm'>
-              {batchOperations.speedingUpAllVideos
-                ? 'Processing Videos...'
-                : 'Speed Up All Videos'}
-            </span>
-            {!batchOperations.speedingUpAllVideos && (
-              <div className='flex items-center space-x-1 text-xs text-blue-700/90'>
-                <span>Speed:</span>
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    cycleSpeed();
-                  }}
-                  className='px-2 py-0.5 bg-blue-600/20 rounded-md font-bold hover:bg-blue-600/30 transition-colors duration-200 backdrop-blur-sm border border-blue-700/20 cursor-pointer'
-                  title='Click to cycle through speeds (1x → 2x → 4x)'
-                >
-                  {videoSettings.selectedSpeed}x
-                </div>
-              </div>
-            )}
-          </div>
+          <span>
+            {batchOperations.speedingUpAllVideos
+              ? sceneLoading.speedingUpVideo !== null
+                ? `Processing (Scene #${sceneLoading.speedingUpVideo})...`
+                : 'Processing All...'
+              : sceneLoading.speedingUpVideo !== null
+              ? `Busy (Scene #${sceneLoading.speedingUpVideo})`
+              : 'Up All Videos'}
+          </span>
         </button>
         {onRefresh && (
           <button
             onClick={onRefresh}
-            className='px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center space-x-2'
+            className='px-4 py-2 h-10 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center justify-center space-x-2'
           >
             <RefreshCw className='w-4 h-4' />
             <span>Refresh</span>

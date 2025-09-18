@@ -48,7 +48,6 @@ export default function SceneCard({
     number | null
   >(null);
   const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
-  const [speedingUpVideo, setSpeedingUpVideo] = useState<number | null>(null);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -81,6 +80,7 @@ export default function SceneCard({
     sceneLoading,
     setProducingTTS,
     setImprovingSentence,
+    setSpeedingUpVideo,
   } = useAppStore();
 
   // Fetch models from API - using global action
@@ -766,7 +766,7 @@ export default function SceneCard({
                         <button
                           onClick={() => handleRevertToOriginal(scene.id)}
                           disabled={revertingId === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
                           title='Revert to original sentence'
                         >
                           {revertingId === scene.id ? (
@@ -796,7 +796,7 @@ export default function SceneCard({
                           scene['field_6890'] || scene.field_6890 || ''
                         ).trim()
                       }
-                      className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[100px] rounded-full text-xs font-medium transition-colors ${
                         sceneLoading.producingTTS === scene.id
                           ? 'bg-gray-100 text-gray-500'
                           : sceneLoading.producingTTS !== null ||
@@ -845,7 +845,7 @@ export default function SceneCard({
                           scene['field_6890'] || scene.field_6890 || ''
                         ).trim()
                       }
-                      className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
                         sceneLoading.improvingSentence === scene.id
                           ? 'bg-gray-100 text-gray-500'
                           : sceneLoading.improvingSentence !== null ||
@@ -891,7 +891,7 @@ export default function SceneCard({
                             )
                           }
                           disabled={loadingAudio === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                             mediaPlayer.playingAudioId === scene.id
                               ? 'bg-red-100 text-red-700 hover:bg-red-200'
                               : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
@@ -923,7 +923,7 @@ export default function SceneCard({
                         <button
                           onClick={() => handleRemoveTTS(scene.id)}
                           disabled={removingTTSId === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed`}
                           title='Remove TTS audio'
                         >
                           {removingTTSId === scene.id ? (
@@ -950,7 +950,7 @@ export default function SceneCard({
                             )
                           }
                           disabled={loadingVideo === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                             mediaPlayer.playingVideoId === scene.id
                               ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                               : 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -981,15 +981,33 @@ export default function SceneCard({
                       scene['field_6888'] && (
                         <button
                           onClick={() => handleSpeedUpVideo(scene.id)}
-                          disabled={speedingUpVideo === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-100 text-blue-700 hover:bg-blue-200`}
-                          title={`Speed up video ${
-                            videoSettings.selectedSpeed
-                          }x and ${
-                            videoSettings.muteAudio ? 'mute' : 'keep'
-                          } audio (saves to field 6886)`}
+                          disabled={
+                            sceneLoading.speedingUpVideo !== null ||
+                            batchOperations.speedingUpAllVideos
+                          }
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                            sceneLoading.speedingUpVideo === scene.id
+                              ? 'bg-gray-100 text-gray-500'
+                              : sceneLoading.speedingUpVideo !== null ||
+                                batchOperations.speedingUpAllVideos
+                              ? 'bg-gray-50 text-gray-400'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          }`}
+                          title={
+                            sceneLoading.speedingUpVideo === scene.id
+                              ? 'Speed up video processing for this scene...'
+                              : sceneLoading.speedingUpVideo !== null
+                              ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
+                              : batchOperations.speedingUpAllVideos
+                              ? 'Batch video speed-up is in progress'
+                              : `Speed up video ${
+                                  videoSettings.selectedSpeed
+                                }x and ${
+                                  videoSettings.muteAudio ? 'mute' : 'keep'
+                                } audio (saves to field 6886)`
+                          }
                         >
-                          {speedingUpVideo === scene.id ? (
+                          {sceneLoading.speedingUpVideo === scene.id ? (
                             <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
                             <div className='flex items-center space-x-1'>
@@ -1024,8 +1042,11 @@ export default function SceneCard({
                             </div>
                           )}
                           <span>
-                            {speedingUpVideo === scene.id
+                            {sceneLoading.speedingUpVideo === scene.id
                               ? 'Processing...'
+                              : sceneLoading.speedingUpVideo !== null ||
+                                batchOperations.speedingUpAllVideos
+                              ? 'Speed Busy'
                               : 'Speed'}
                           </span>
                         </button>
@@ -1045,7 +1066,7 @@ export default function SceneCard({
                             )
                           }
                           disabled={generatingVideo === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-teal-100 text-teal-700 hover:bg-teal-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors bg-teal-100 text-teal-700 hover:bg-teal-200 disabled:opacity-50 disabled:cursor-not-allowed`}
                           title='Generate synchronized video'
                         >
                           {generatingVideo === scene.id ? (
@@ -1072,7 +1093,7 @@ export default function SceneCard({
                             )
                           }
                           disabled={loadingProducedVideo === scene.id}
-                          className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[85px] rounded-full text-xs font-medium transition-colors ${
                             mediaPlayer.playingProducedVideoId === scene.id
                               ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                               : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
