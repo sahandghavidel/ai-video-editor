@@ -1110,8 +1110,6 @@ export default function SceneCard({
           </div>
         </div>
       </div>
-      // ...existing code... // Use selectedModel in your LLM requests, e.g.
-      pass as a parameter to your API calls
       <div className='flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4'>
         <div>
           <h2 className='text-2xl font-bold text-gray-800'>Scenes</h2>
