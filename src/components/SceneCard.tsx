@@ -839,7 +839,8 @@ export default function SceneCard({
                         )
                       }
                       disabled={
-                        sceneLoading.improvingSentence === scene.id ||
+                        sceneLoading.improvingSentence !== null ||
+                        batchOperations.improvingAll ||
                         !String(
                           scene['field_6890'] || scene.field_6890 || ''
                         ).trim()
@@ -847,10 +848,19 @@ export default function SceneCard({
                       className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                         sceneLoading.improvingSentence === scene.id
                           ? 'bg-gray-100 text-gray-500'
+                          : sceneLoading.improvingSentence !== null ||
+                            batchOperations.improvingAll
+                          ? 'bg-gray-50 text-gray-400'
                           : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
                       title={
-                        modelSelection.selectedModel
+                        sceneLoading.improvingSentence === scene.id
+                          ? 'Improving this sentence...'
+                          : sceneLoading.improvingSentence !== null
+                          ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
+                          : batchOperations.improvingAll
+                          ? 'Batch AI improvement is in progress'
+                          : modelSelection.selectedModel
                           ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
                           : 'Improve sentence with AI (no model selected)'
                       }
@@ -863,6 +873,9 @@ export default function SceneCard({
                       <span>
                         {sceneLoading.improvingSentence === scene.id
                           ? 'Improving...'
+                          : sceneLoading.improvingSentence !== null ||
+                            batchOperations.improvingAll
+                          ? 'AI Busy'
                           : 'AI Improve'}
                       </span>
                     </button>

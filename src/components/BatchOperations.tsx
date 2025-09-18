@@ -103,22 +103,40 @@ export default function BatchOperations({
       <div className='flex flex-col md:flex-row gap-2'>
         <button
           onClick={onImproveAllSentences}
-          disabled={batchOperations.improvingAll}
-          className='px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
+          disabled={
+            batchOperations.improvingAll ||
+            sceneLoading.improvingSentence !== null
+          }
+          className={`px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+            sceneLoading.improvingSentence !== null &&
+            !batchOperations.improvingAll
+              ? 'opacity-50'
+              : ''
+          }`}
           title={
-            modelSelection.selectedModel
+            batchOperations.improvingAll
+              ? 'Improving all sentences with AI...'
+              : sceneLoading.improvingSentence !== null
+              ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
+              : modelSelection.selectedModel
               ? `Improve all sentences with AI using: ${modelSelection.selectedModel}`
               : 'Improve all sentences with AI (no model selected)'
           }
         >
           {batchOperations.improvingAll ? (
             <Loader2 className='animate-spin h-4 w-4' />
+          ) : sceneLoading.improvingSentence !== null ? (
+            <Loader2 className='animate-spin h-4 w-4' />
           ) : (
             <Sparkles className='h-4 w-4' />
           )}
           <span>
             {batchOperations.improvingAll
-              ? 'Improving All...'
+              ? sceneLoading.improvingSentence !== null
+                ? `Improving All (Scene #${sceneLoading.improvingSentence})...`
+                : 'Improving All...'
+              : sceneLoading.improvingSentence !== null
+              ? `AI Busy (Scene #${sceneLoading.improvingSentence})`
               : 'AI Improve All'}
           </span>
         </button>
