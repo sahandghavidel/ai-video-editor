@@ -3,6 +3,8 @@
 import { BaserowRow, updateBaserowRow } from '@/lib/baserow-actions';
 import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import BatchOperations from './BatchOperations';
+import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import {
   Loader2,
   Sparkles,
@@ -88,213 +90,9 @@ export default function SceneCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Helper to wait for a given ms
-  const wait = (ms: number) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
-
-  const handleImproveAllSentences = async () => {
-    startBatchOperation('improvingAll');
-    for (const scene of data) {
-      const currentSentence = String(
-        scene['field_6890'] || scene.field_6890 || ''
-      );
-      const originalSentence = String(scene['field_6901'] || '');
-      // Only improve if the sentence is the same as the original
-      if (currentSentence === originalSentence && currentSentence.trim()) {
-        await handleSentenceImprovement(
-          scene.id,
-          currentSentence,
-          modelSelection.selectedModel || undefined
-        );
-        await wait(10000); // 10 seconds delay
-      }
-      // Otherwise skip
-    }
-    completeBatchOperation('improvingAll');
-  };
-
-  // Generate TTS for all scenes that have text but no TTS audio
-  const handleGenerateAllTTS = async () => {
-    startBatchOperation('generatingAllTTS');
-    for (const scene of data) {
-      const currentSentence = String(
-        scene['field_6890'] || scene.field_6890 || ''
-      );
-      const hasAudio =
-        scene['field_6891'] && String(scene['field_6891']).trim();
-
-      // Only generate TTS if scene has text but no audio
-      if (currentSentence.trim() && !hasAudio) {
-        await handleTTSProduce(scene.id, currentSentence);
-        await wait(3000); // 3 seconds delay between generations
-      }
-    }
-    completeBatchOperation('generatingAllTTS');
-  };
-
-  // Concatenate all videos handler
-  const handleConcatenateAllVideos = async () => {
-    startBatchOperation('concatenatingVideos');
-    try {
-      // Filter scenes that have videos (field_6886) and sort by order
-      const scenesWithVideos = data
-        .filter((scene) => {
-          const videoUrl = scene['field_6886'];
-          return typeof videoUrl === 'string' && videoUrl.trim();
-        })
-        .sort((a, b) => {
-          const orderA = Number(a.order) || 0;
-          const orderB = Number(b.order) || 0;
-          return orderA - orderB;
-        });
-
-      if (scenesWithVideos.length === 0) {
-        alert('No videos found to concatenate');
-        return;
-      }
-
-      // Prepare video URLs for concatenation
-      const videoUrls = scenesWithVideos.map((scene) => ({
-        video_url: scene['field_6886'] as string,
-      }));
-
-      console.log('Concatenating videos:', videoUrls);
-
-      // Call the video concatenation API
-      const response = await fetch('/api/concatenate-videos', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          video_urls: videoUrls,
-          id: `concatenate_${Date.now()}`,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = `Video concatenation error: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          errorMessage = `Video concatenation error: ${response.status} - ${response.statusText}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      const concatenatedVideoUrl = result.videoUrl;
-
-      console.log('Concatenated video URL:', concatenatedVideoUrl);
-
-      // Show success message with the video URL
-      alert(
-        `Videos concatenated successfully!\nVideo URL: ${concatenatedVideoUrl}`
-      );
-
-      // You could optionally save this URL to a specific field or create a new record
-      // For now, just show the URL to the user
-    } catch (error) {
-      console.error('Error concatenating videos:', error);
-      let errorMessage = 'Failed to concatenate videos';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      alert(`Error: ${errorMessage}`);
-    } finally {
-      completeBatchOperation('concatenatingVideos');
-    }
-  };
-
-  // Speed up all videos for scenes with empty sentences handler
-  const handleSpeedUpAllVideos = async () => {
-    startBatchOperation('speedingUpAllVideos');
-    try {
-      // Filter scenes that have videos (field_6888) but empty sentences (field_6890)
-      const scenesToSpeedUp = data.filter((scene) => {
-        const videoUrl = scene['field_6888'];
-        const sentence = String(scene['field_6890'] || '');
-        return (
-          typeof videoUrl === 'string' && videoUrl.trim() && !sentence.trim()
-        );
-      });
-
-      if (scenesToSpeedUp.length === 0) {
-        alert('No videos with empty sentences found to speed up');
-        return;
-      }
-
-      console.log(
-        `Processing ${scenesToSpeedUp.length} videos for 4x speed-up...`
-      );
-
-      // Process each video sequentially to avoid overwhelming the server
-      for (const scene of scenesToSpeedUp) {
-        const videoUrl = scene['field_6888'] as string;
-
-        try {
-          console.log(`Speeding up video for scene ${scene.id}:`, videoUrl);
-
-          const response = await fetch('/api/speed-up-video', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              sceneId: scene.id,
-              videoUrl,
-              speed: videoSettings.selectedSpeed,
-              muteAudio: videoSettings.muteAudio,
-            }),
-          });
-
-          if (!response.ok) {
-            let errorMessage = `Speed-up error for scene ${scene.id}: ${response.status}`;
-            try {
-              const errorData = await response.json();
-              errorMessage = errorData.error || errorMessage;
-            } catch (parseError) {
-              errorMessage = `Speed-up error for scene ${scene.id}: ${response.status} - ${response.statusText}`;
-            }
-            console.error(errorMessage);
-            // Continue with next video instead of stopping
-            continue;
-          }
-
-          const result = await response.json();
-          console.log(
-            `Speed-up completed for scene ${scene.id}:`,
-            result.videoUrl
-          );
-
-          // Small delay between requests to be nice to the server
-          await wait(1000);
-        } catch (error) {
-          console.error(
-            `Error speeding up video for scene ${scene.id}:`,
-            error
-          );
-          // Continue with next video
-        }
-      }
-
-      // Refresh data from server to get all updates
-      refreshData?.();
-
-      alert(
-        `Batch speed-up completed! Processed ${scenesToSpeedUp.length} videos.`
-      );
-    } catch (error) {
-      console.error('Error in batch speed-up:', error);
-      let errorMessage = 'Failed to process batch speed-up';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      alert(`Error: ${errorMessage}`);
-    } finally {
-      completeBatchOperation('speedingUpAllVideos');
-    }
+  // Local wrapper for cycling through speeds
+  const cycleSpeed = () => {
+    cycleThroughSpeeds(videoSettings.selectedSpeed, updateVideoSettings);
   };
 
   // State for revert loading
@@ -350,16 +148,6 @@ export default function SceneCard({
     } finally {
       setRemovingTTSId(null);
     }
-  };
-
-  // Available speed options for cycling
-  const speedOptions = [1, 2, 4];
-
-  // Function to cycle through speeds
-  const cycleSpeed = () => {
-    const currentIndex = speedOptions.indexOf(videoSettings.selectedSpeed);
-    const nextIndex = (currentIndex + 1) % speedOptions.length;
-    updateVideoSettings({ selectedSpeed: speedOptions[nextIndex] });
   };
 
   // Speed up video handler
@@ -924,138 +712,12 @@ export default function SceneCard({
 
   return (
     <div className='w-full max-w-7xl mx-auto'>
-      <div className='flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4'>
-        <div>
-          <h2 className='text-2xl font-bold text-gray-800'>Scenes</h2>
-          <p className='text-gray-600 mt-1'>
-            {data.length} scene{data.length !== 1 ? 's' : ''} found
-          </p>
-        </div>
-        <div className='flex flex-col md:flex-row gap-2'>
-          <button
-            onClick={handleImproveAllSentences}
-            disabled={batchOperations.improvingAll}
-            className='px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
-            title={
-              modelSelection.selectedModel
-                ? `Improve all sentences with AI using: ${modelSelection.selectedModel}`
-                : 'Improve all sentences with AI (no model selected)'
-            }
-          >
-            {batchOperations.improvingAll ? (
-              <Loader2 className='animate-spin h-4 w-4' />
-            ) : (
-              <Sparkles className='h-4 w-4' />
-            )}
-            <span>
-              {batchOperations.improvingAll
-                ? 'Improving All...'
-                : 'AI Improve All'}
-            </span>
-          </button>
-          <button
-            onClick={handleGenerateAllTTS}
-            disabled={batchOperations.generatingAllTTS}
-            className='px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
-            title='Generate TTS for all scenes that have text but no audio'
-          >
-            {batchOperations.generatingAllTTS ? (
-              <Loader2 className='animate-spin h-4 w-4' />
-            ) : (
-              <Mic className='h-4 w-4' />
-            )}
-            <span>
-              {batchOperations.generatingAllTTS
-                ? 'Generating TTS...'
-                : 'Generate TTS for All'}
-            </span>
-          </button>
-          <button
-            onClick={handleConcatenateAllVideos}
-            disabled={batchOperations.concatenatingVideos}
-            className='px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
-            title='Concatenate all videos into one final video'
-          >
-            {batchOperations.concatenatingVideos ? (
-              <Loader2 className='animate-spin h-4 w-4' />
-            ) : (
-              <Film className='h-4 w-4' />
-            )}
-            <span>
-              {batchOperations.concatenatingVideos
-                ? 'Concatenating...'
-                : 'Concatenate All Videos'}
-            </span>
-          </button>
-          <button
-            onClick={handleSpeedUpAllVideos}
-            disabled={batchOperations.speedingUpAllVideos}
-            className='px-6 py-3 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-xl transition-all duration-300 flex items-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed'
-            title={`Speed up all videos ${videoSettings.selectedSpeed}x and ${
-              videoSettings.muteAudio ? 'mute' : 'keep'
-            } audio for scenes with empty sentences`}
-          >
-            {batchOperations.speedingUpAllVideos ? (
-              <Loader2 className='animate-spin h-5 w-5' />
-            ) : (
-              <div className='flex items-center space-x-2'>
-                <div className='p-1.5 bg-blue-600/20 rounded-lg backdrop-blur-sm'>
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateVideoSettings({
-                        muteAudio: !videoSettings.muteAudio,
-                      });
-                    }}
-                    className='p-0 bg-transparent border-none hover:scale-125 transition-transform duration-200 cursor-pointer'
-                    title={`Click to ${
-                      videoSettings.muteAudio ? 'enable' : 'mute'
-                    } audio`}
-                  >
-                    {videoSettings.muteAudio ? (
-                      <VolumeX className='h-4 w-4 text-blue-700' />
-                    ) : (
-                      <Volume2 className='h-4 w-4 text-blue-700' />
-                    )}
-                  </div>
-                </div>
-                <div className='w-px h-6 bg-blue-700/30'></div>
-              </div>
-            )}
-            <div className='flex flex-col items-start'>
-              <span className='font-semibold text-sm'>
-                {batchOperations.speedingUpAllVideos
-                  ? 'Processing Videos...'
-                  : 'Speed Up All Videos'}
-              </span>
-              {!batchOperations.speedingUpAllVideos && (
-                <div className='flex items-center space-x-1 text-xs text-blue-700/90'>
-                  <span>Speed:</span>
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cycleSpeed();
-                    }}
-                    className='px-2 py-0.5 bg-blue-600/20 rounded-md font-bold hover:bg-blue-600/30 transition-colors duration-200 backdrop-blur-sm border border-blue-700/20 cursor-pointer'
-                    title='Click to cycle through speeds (1x → 2x → 4x)'
-                  >
-                    {videoSettings.selectedSpeed}x
-                  </div>
-                </div>
-              )}
-            </div>
-          </button>
-          {refreshData && (
-            <button
-              onClick={refreshData}
-              className='px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center space-x-2'
-            >
-              <RefreshCw className='w-4 h-4' />
-              <span>Refresh</span>
-            </button>
-          )}
-        </div>
-      </div>
+      <BatchOperations
+        data={data}
+        onRefresh={refreshData}
+        handleSentenceImprovement={handleSentenceImprovement}
+        handleTTSProduce={handleTTSProduce}
+      />
       <div className='grid gap-4'>
         {data.map((scene) => (
           <div
