@@ -94,7 +94,6 @@ export default function Home() {
                 <div className='text-gray-500'>Loading data...</div>
               </div>
             )}
-            <AddDataForm onDataAdded={refreshData} />
             <SceneCard
               data={data}
               refreshData={refreshData}
