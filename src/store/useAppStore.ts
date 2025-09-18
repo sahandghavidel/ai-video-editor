@@ -47,6 +47,7 @@ export interface SceneLoadingState {
   producingTTS: number | null;
   improvingSentence: number | null;
   speedingUpVideo: number | null;
+  generatingVideo: number | null;
 }
 
 interface AppState {
@@ -109,6 +110,7 @@ interface AppState {
   setProducingTTS: (sceneId: number | null) => void;
   setImprovingSentence: (sceneId: number | null) => void;
   setSpeedingUpVideo: (sceneId: number | null) => void;
+  setGeneratingVideo: (sceneId: number | null) => void;
 
   // Data operations
   updateRow: (id: number, updates: Partial<BaserowRow>) => void;
@@ -161,6 +163,7 @@ const defaultSceneLoading: SceneLoadingState = {
   producingTTS: null,
   improvingSentence: null,
   speedingUpVideo: null,
+  generatingVideo: null,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -314,6 +317,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSpeedingUpVideo: (sceneId) =>
     set((state) => ({
       sceneLoading: { ...state.sceneLoading, speedingUpVideo: sceneId },
+    })),
+
+  setGeneratingVideo: (sceneId) =>
+    set((state) => ({
+      sceneLoading: { ...state.sceneLoading, generatingVideo: sceneId },
     })),
 
   // Data operations

@@ -47,7 +47,6 @@ export default function SceneCard({
   const [loadingProducedVideo, setLoadingProducedVideo] = useState<
     number | null
   >(null);
-  const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -81,6 +80,7 @@ export default function SceneCard({
     setProducingTTS,
     setImprovingSentence,
     setSpeedingUpVideo,
+    setGeneratingVideo,
   } = useAppStore();
 
   // Fetch models from API - using global action
@@ -1065,18 +1065,32 @@ export default function SceneCard({
                               scene['field_6891'] as string
                             )
                           }
-                          disabled={generatingVideo === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors bg-teal-100 text-teal-700 hover:bg-teal-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title='Generate synchronized video'
+                          disabled={sceneLoading.generatingVideo !== null}
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
+                            sceneLoading.generatingVideo === scene.id
+                              ? 'bg-gray-100 text-gray-500'
+                              : sceneLoading.generatingVideo !== null
+                              ? 'bg-gray-50 text-gray-400'
+                              : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={
+                            sceneLoading.generatingVideo === scene.id
+                              ? 'Generating synchronized video for this scene...'
+                              : sceneLoading.generatingVideo !== null
+                              ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
+                              : 'Generate synchronized video'
+                          }
                         >
-                          {generatingVideo === scene.id ? (
+                          {sceneLoading.generatingVideo === scene.id ? (
                             <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
                             <Settings className='h-3 w-3' />
                           )}
                           <span>
-                            {generatingVideo === scene.id
+                            {sceneLoading.generatingVideo === scene.id
                               ? 'Generating...'
+                              : sceneLoading.generatingVideo !== null
+                              ? 'Video Busy'
                               : 'Generate'}
                           </span>
                         </button>
