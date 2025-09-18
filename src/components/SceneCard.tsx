@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import TTSSettings from './TTSSettings';
 import VideoSpeedSettings from './VideoSpeedSettings';
+import ModelSelection from './ModelSelection';
 
 // Helper: get original sentence from field_6901
 
@@ -926,69 +927,8 @@ export default function SceneCard({
 
   return (
     <div className='w-full max-w-7xl mx-auto'>
-      {/* OpenRouter model selection */}
-      <div className='mb-4 p-3 rounded border border-gray-200 bg-white'>
-        <div className='flex items-center justify-between'>
-          <div>
-            <h3 className='text-sm font-semibold'>OpenRouter Model</h3>
-            {modelSelection.modelsLoading ? (
-              <p className='text-xs text-gray-500'>Loading models...</p>
-            ) : modelSelection.modelsError ? (
-              <p className='text-xs text-red-600'>
-                Error: {modelSelection.modelsError}
-              </p>
-            ) : modelSelection.models.length > 0 ? (
-              <>
-                <input
-                  type='text'
-                  className='mt-1 mb-2 p-2 border rounded text-sm bg-gray-50 w-full'
-                  placeholder='Search models...'
-                  value={modelSelection.modelSearch}
-                  onChange={(e) => setModelSearch(e.target.value)}
-                />
-                <select
-                  className='p-2 border rounded text-sm bg-gray-50 w-full'
-                  value={modelSelection.selectedModel || ''}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                >
-                  {modelSelection.models
-                    .filter((m) =>
-                      (m.name || m.id)
-                        .toLowerCase()
-                        .includes(modelSelection.modelSearch.toLowerCase())
-                    )
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name || m.id}
-                      </option>
-                    ))}
-                </select>
-              </>
-            ) : (
-              <p className='text-xs text-gray-500'>No models available</p>
-            )}
-          </div>
-          <div className='flex items-center space-x-2'>
-            <button
-              onClick={fetchModels}
-              className='px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600'
-              title='Refresh model list'
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-        {modelSelection.selectedModel && (
-          <div className='mt-2 text-xs text-gray-500'>
-            <span>
-              Selected model:{' '}
-              <span className='font-medium'>
-                {modelSelection.selectedModel}
-              </span>
-            </span>
-          </div>
-        )}
-      </div>
+      {/* Model Selection */}
+      <ModelSelection />
       {/* TTS Settings */}
       <TTSSettings />
       {/* Video Speed Settings */}
@@ -1005,7 +945,11 @@ export default function SceneCard({
             onClick={handleImproveAllSentences}
             disabled={batchOperations.improvingAll}
             className='px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
-            title='Improve all sentences with AI'
+            title={
+              modelSelection.selectedModel
+                ? `Improve all sentences with AI using: ${modelSelection.selectedModel}`
+                : 'Improve all sentences with AI (no model selected)'
+            }
           >
             {batchOperations.improvingAll ? (
               <Loader2 className='animate-spin h-4 w-4' />
@@ -1282,7 +1226,11 @@ export default function SceneCard({
                           ? 'bg-gray-100 text-gray-500'
                           : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      title='Improve sentence with AI'
+                      title={
+                        modelSelection.selectedModel
+                          ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
+                          : 'Improve sentence with AI (no model selected)'
+                      }
                     >
                       {improvingSentence === scene.id ? (
                         <Loader2 className='animate-spin h-3 w-3' />
