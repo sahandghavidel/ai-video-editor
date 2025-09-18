@@ -14,7 +14,8 @@ export const handleImproveAllSentences = async (
   ) => Promise<void>,
   selectedModel: string | null,
   startBatchOperation: (operation: 'improvingAll') => void,
-  completeBatchOperation: (operation: 'improvingAll') => void
+  completeBatchOperation: (operation: 'improvingAll') => void,
+  setImprovingSentence: (sceneId: number | null) => void
 ) => {
   startBatchOperation('improvingAll');
   for (const scene of data) {

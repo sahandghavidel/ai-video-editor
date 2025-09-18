@@ -48,9 +48,6 @@ export default function SceneCard({
     number | null
   >(null);
   const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
-  const [improvingSentence, setImprovingSentence] = useState<number | null>(
-    null
-  );
   const [speedingUpVideo, setSpeedingUpVideo] = useState<number | null>(null);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -83,6 +80,7 @@ export default function SceneCard({
     fetchModels,
     sceneLoading,
     setProducingTTS,
+    setImprovingSentence,
   } = useAppStore();
 
   // Fetch models from API - using global action
@@ -841,13 +839,13 @@ export default function SceneCard({
                         )
                       }
                       disabled={
-                        improvingSentence === scene.id ||
+                        sceneLoading.improvingSentence === scene.id ||
                         !String(
                           scene['field_6890'] || scene.field_6890 || ''
                         ).trim()
                       }
                       className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        improvingSentence === scene.id
+                        sceneLoading.improvingSentence === scene.id
                           ? 'bg-gray-100 text-gray-500'
                           : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -857,13 +855,13 @@ export default function SceneCard({
                           : 'Improve sentence with AI (no model selected)'
                       }
                     >
-                      {improvingSentence === scene.id ? (
+                      {sceneLoading.improvingSentence === scene.id ? (
                         <Loader2 className='animate-spin h-3 w-3' />
                       ) : (
                         <Sparkles className='h-3 w-3' />
                       )}
                       <span>
-                        {improvingSentence === scene.id
+                        {sceneLoading.improvingSentence === scene.id
                           ? 'Improving...'
                           : 'AI Improve'}
                       </span>

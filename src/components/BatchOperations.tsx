@@ -45,6 +45,7 @@ export default function BatchOperations({
     completeBatchOperation,
     setProducingTTS,
     sceneLoading,
+    setImprovingSentence,
   } = useAppStore();
 
   const onImproveAllSentences = () => {
@@ -53,7 +54,8 @@ export default function BatchOperations({
       handleSentenceImprovement,
       modelSelection.selectedModel,
       startBatchOperation,
-      completeBatchOperation
+      completeBatchOperation,
+      setImprovingSentence
     );
   };
 
