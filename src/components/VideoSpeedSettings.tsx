@@ -7,12 +7,10 @@ interface VideoSpeedSettingsProps {
   className?: string;
 }
 
-// Default video speed settings
-const defaultVideoSettings = {
+// Default video speed settings (only for speed and audio, not auto-generation)
+const defaultVideoSpeedSettings = {
   selectedSpeed: 4,
   muteAudio: true,
-  autoGenerateTTS: false,
-  autoGenerateVideo: false,
 };
 
 export default function VideoSpeedSettings({
@@ -21,7 +19,8 @@ export default function VideoSpeedSettings({
   const { videoSettings, updateVideoSettings } = useAppStore();
 
   const handleReset = () => {
-    updateVideoSettings(defaultVideoSettings);
+    // Only reset speed and audio settings, preserve auto-generation settings
+    updateVideoSettings(defaultVideoSpeedSettings);
   };
 
   const speedOptions = [
