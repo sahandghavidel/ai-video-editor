@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import {
   handleImproveAllSentences,
   handleGenerateAllTTS,
+  handleGenerateAllVideos,
   handleConcatenateAllVideos,
   handleSpeedUpAllVideos,
   cycleSpeed as cycleThroughSpeeds,
@@ -28,6 +29,11 @@ interface BatchOperationsProps {
     model?: string
   ) => Promise<void>;
   handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+  handleVideoGenerate: (
+    sceneId: number,
+    videoUrl: string,
+    audioUrl: string
+  ) => Promise<void>;
 }
 
 export default function BatchOperations({
@@ -35,6 +41,7 @@ export default function BatchOperations({
   onRefresh,
   handleSentenceImprovement,
   handleTTSProduce,
+  handleVideoGenerate,
 }: BatchOperationsProps) {
   const {
     batchOperations,
@@ -47,6 +54,7 @@ export default function BatchOperations({
     sceneLoading,
     setImprovingSentence,
     setSpeedingUpVideo,
+    setGeneratingVideo,
   } = useAppStore();
 
   const onImproveAllSentences = () => {
@@ -67,6 +75,17 @@ export default function BatchOperations({
       startBatchOperation,
       completeBatchOperation,
       setProducingTTS
+    );
+  };
+
+  const onGenerateAllVideos = () => {
+    handleGenerateAllVideos(
+      data,
+      handleVideoGenerate,
+      startBatchOperation,
+      completeBatchOperation,
+      setGeneratingVideo,
+      onRefresh
     );
   };
 
@@ -177,6 +196,45 @@ export default function BatchOperations({
               : sceneLoading.producingTTS !== null
               ? `TTS Busy (Scene #${sceneLoading.producingTTS})`
               : 'Generate TTS for All'}
+          </span>
+        </button>
+        <button
+          onClick={onGenerateAllVideos}
+          disabled={
+            batchOperations.generatingAllVideos ||
+            sceneLoading.generatingVideo !== null
+          }
+          className={`px-4 py-2 h-10 bg-teal-500 text-white rounded hover:bg-teal-600 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+            sceneLoading.generatingVideo !== null &&
+            !batchOperations.generatingAllVideos
+              ? 'opacity-50'
+              : ''
+          }`}
+          title={
+            batchOperations.generatingAllVideos
+              ? sceneLoading.generatingVideo !== null
+                ? `Generate videos for all scenes with TTS audio... (Scene #${sceneLoading.generatingVideo})`
+                : 'Generate videos for all scenes with TTS audio...'
+              : sceneLoading.generatingVideo !== null
+              ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
+              : 'Generate synchronized videos for all scenes that have both video and TTS audio'
+          }
+        >
+          {batchOperations.generatingAllVideos ? (
+            <Loader2 className='animate-spin h-4 w-4' />
+          ) : sceneLoading.generatingVideo !== null ? (
+            <Loader2 className='animate-spin h-4 w-4' />
+          ) : (
+            <Film className='h-4 w-4' />
+          )}
+          <span>
+            {batchOperations.generatingAllVideos
+              ? sceneLoading.generatingVideo !== null
+                ? `Processing (Scene #${sceneLoading.generatingVideo})...`
+                : 'Processing All...'
+              : sceneLoading.generatingVideo !== null
+              ? `Busy (Scene #${sceneLoading.generatingVideo})`
+              : 'Generate All Videos'}
           </span>
         </button>
         <button

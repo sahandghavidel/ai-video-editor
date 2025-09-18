@@ -22,6 +22,7 @@ export interface VideoSettings {
 export interface BatchOperationsState {
   improvingAll: boolean;
   generatingAllTTS: boolean;
+  generatingAllVideos: boolean;
   speedingUpAllVideos: boolean;
   concatenatingVideos: boolean;
 }
@@ -138,6 +139,7 @@ const defaultVideoSettings: VideoSettings = {
 const defaultBatchOperations: BatchOperationsState = {
   improvingAll: false,
   generatingAllTTS: false,
+  generatingAllVideos: false,
   speedingUpAllVideos: false,
   concatenatingVideos: false,
 };

@@ -716,6 +716,7 @@ export default function SceneCard({
         onRefresh={refreshData}
         handleSentenceImprovement={handleSentenceImprovement}
         handleTTSProduce={handleTTSProduce}
+        handleVideoGenerate={handleVideoGenerate}
       />
       <div className='grid gap-4'>
         {data.map((scene) => (
@@ -1065,11 +1066,15 @@ export default function SceneCard({
                               scene['field_6891'] as string
                             )
                           }
-                          disabled={sceneLoading.generatingVideo !== null}
+                          disabled={
+                            sceneLoading.generatingVideo !== null ||
+                            batchOperations.generatingAllVideos
+                          }
                           className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
                             sceneLoading.generatingVideo === scene.id
                               ? 'bg-gray-100 text-gray-500'
-                              : sceneLoading.generatingVideo !== null
+                              : sceneLoading.generatingVideo !== null ||
+                                batchOperations.generatingAllVideos
                               ? 'bg-gray-50 text-gray-400'
                               : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -1078,6 +1083,8 @@ export default function SceneCard({
                               ? 'Generating synchronized video for this scene...'
                               : sceneLoading.generatingVideo !== null
                               ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
+                              : batchOperations.generatingAllVideos
+                              ? 'Batch video generation is in progress'
                               : 'Generate synchronized video'
                           }
                         >
@@ -1090,6 +1097,8 @@ export default function SceneCard({
                             {sceneLoading.generatingVideo === scene.id
                               ? 'Generating...'
                               : sceneLoading.generatingVideo !== null
+                              ? 'Video Busy'
+                              : batchOperations.generatingAllVideos
                               ? 'Video Busy'
                               : 'Generate'}
                           </span>

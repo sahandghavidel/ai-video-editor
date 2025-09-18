@@ -66,6 +66,70 @@ export const handleGenerateAllTTS = async (
   completeBatchOperation('generatingAllTTS');
 };
 
+// Batch operation: Generate videos for all scenes that have both video and TTS audio
+export const handleGenerateAllVideos = async (
+  data: BaserowRow[],
+  handleVideoGenerate: (
+    sceneId: number,
+    videoUrl: string,
+    audioUrl: string
+  ) => Promise<void>,
+  startBatchOperation: (operation: 'generatingAllVideos') => void,
+  completeBatchOperation: (operation: 'generatingAllVideos') => void,
+  setGeneratingVideo: (sceneId: number | null) => void,
+  onRefresh?: () => void
+) => {
+  startBatchOperation('generatingAllVideos');
+
+  try {
+    // Filter scenes that have both video (field_6888) and TTS audio (field_6891)
+    const scenesToGenerate = data.filter((scene) => {
+      const videoUrl = scene['field_6888'];
+      const audioUrl = scene['field_6891'];
+      return (
+        typeof videoUrl === 'string' &&
+        videoUrl.trim() &&
+        typeof audioUrl === 'string' &&
+        audioUrl.trim()
+      );
+    });
+
+    if (scenesToGenerate.length === 0) {
+      alert('No scenes found with both video and TTS audio to generate videos');
+      return;
+    }
+
+    for (const scene of scenesToGenerate) {
+      setGeneratingVideo(scene.id);
+      try {
+        await handleVideoGenerate(
+          scene.id,
+          scene['field_6888'] as string,
+          scene['field_6891'] as string
+        );
+        await wait(2000); // 2 seconds delay between generations
+      } catch (error) {
+        console.error(`Error generating video for scene ${scene.id}:`, error);
+        // Continue with next video
+      } finally {
+        setGeneratingVideo(null);
+      }
+    }
+
+    // Refresh data from server to get all updates
+    onRefresh?.();
+  } catch (error) {
+    console.error('Error in batch video generation:', error);
+    let errorMessage = 'Failed to process batch video generation';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    alert(`Error: ${errorMessage}`);
+  } finally {
+    completeBatchOperation('generatingAllVideos');
+  }
+};
+
 // Batch operation: Concatenate all videos into one final video
 export const handleConcatenateAllVideos = async (
   data: BaserowRow[],
