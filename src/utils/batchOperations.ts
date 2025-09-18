@@ -41,7 +41,8 @@ export const handleGenerateAllTTS = async (
   data: BaserowRow[],
   handleTTSProduce: (sceneId: number, text: string) => Promise<void>,
   startBatchOperation: (operation: 'generatingAllTTS') => void,
-  completeBatchOperation: (operation: 'generatingAllTTS') => void
+  completeBatchOperation: (operation: 'generatingAllTTS') => void,
+  setProducingTTS: (sceneId: number | null) => void
 ) => {
   startBatchOperation('generatingAllTTS');
   for (const scene of data) {
@@ -52,8 +53,13 @@ export const handleGenerateAllTTS = async (
 
     // Only generate TTS if scene has text but no audio
     if (currentSentence.trim() && !hasAudio) {
-      await handleTTSProduce(scene.id, currentSentence);
-      await wait(3000); // 3 seconds delay between generations
+      setProducingTTS(scene.id);
+      try {
+        await handleTTSProduce(scene.id, currentSentence);
+        await wait(3000); // 3 seconds delay between generations
+      } finally {
+        setProducingTTS(null);
+      }
     }
   }
   completeBatchOperation('generatingAllTTS');

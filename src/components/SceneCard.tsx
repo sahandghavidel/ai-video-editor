@@ -47,7 +47,6 @@ export default function SceneCard({
   const [loadingProducedVideo, setLoadingProducedVideo] = useState<
     number | null
   >(null);
-  const [producingTTS, setProducingTTS] = useState<number | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<number | null>(null);
   const [improvingSentence, setImprovingSentence] = useState<number | null>(
     null
@@ -82,6 +81,8 @@ export default function SceneCard({
     setModelsError,
     setModelSearch,
     fetchModels,
+    sceneLoading,
+    setProducingTTS,
   } = useAppStore();
 
   // Fetch models from API - using global action
@@ -791,25 +792,25 @@ export default function SceneCard({
                         )
                       }
                       disabled={
-                        producingTTS === scene.id ||
+                        sceneLoading.producingTTS === scene.id ||
                         !String(
                           scene['field_6890'] || scene.field_6890 || ''
                         ).trim()
                       }
                       className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        producingTTS === scene.id
+                        sceneLoading.producingTTS === scene.id
                           ? 'bg-gray-100 text-gray-500'
                           : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
                       title='Generate TTS from sentence'
                     >
-                      {producingTTS === scene.id ? (
+                      {sceneLoading.producingTTS === scene.id ? (
                         <Loader2 className='animate-spin h-3 w-3' />
                       ) : (
                         <CheckCircle className='h-3 w-3' />
                       )}
                       <span>
-                        {producingTTS === scene.id
+                        {sceneLoading.producingTTS === scene.id
                           ? 'Producing...'
                           : 'Generate TTS'}
                       </span>

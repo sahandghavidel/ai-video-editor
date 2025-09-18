@@ -43,6 +43,7 @@ export default function BatchOperations({
     updateVideoSettings,
     startBatchOperation,
     completeBatchOperation,
+    setProducingTTS,
   } = useAppStore();
 
   const onImproveAllSentences = () => {
@@ -60,7 +61,8 @@ export default function BatchOperations({
       data,
       handleTTSProduce,
       startBatchOperation,
-      completeBatchOperation
+      completeBatchOperation,
+      setProducingTTS
     );
   };
 

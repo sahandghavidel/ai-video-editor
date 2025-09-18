@@ -42,6 +42,11 @@ export interface ModelSelectionState {
   modelSearch: string;
 }
 
+// Scene loading state interface
+export interface SceneLoadingState {
+  producingTTS: number | null;
+}
+
 interface AppState {
   // Core data state
   data: BaserowRow[];
@@ -62,6 +67,9 @@ interface AppState {
 
   // Model Selection State
   modelSelection: ModelSelectionState;
+
+  // Scene Loading State
+  sceneLoading: SceneLoadingState;
 
   // Actions
   setData: (data: BaserowRow[]) => void;
@@ -94,6 +102,9 @@ interface AppState {
   setModelsError: (error: string | null) => void;
   setModelSearch: (search: string) => void;
   fetchModels: () => Promise<void>;
+
+  // Scene Loading Actions
+  setProducingTTS: (sceneId: number | null) => void;
 
   // Data operations
   updateRow: (id: number, updates: Partial<BaserowRow>) => void;
@@ -141,6 +152,11 @@ const defaultModelSelection: ModelSelectionState = {
   modelSearch: 'free',
 };
 
+// Default scene loading state
+const defaultSceneLoading: SceneLoadingState = {
+  producingTTS: null,
+};
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   data: [],
@@ -161,6 +177,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Model Selection State
   modelSelection: defaultModelSelection,
+
+  // Scene Loading State
+  sceneLoading: defaultSceneLoading,
 
   // Actions
   setData: (data) => set({ data }),
@@ -274,6 +293,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       setModelsLoading(false);
     }
   },
+
+  // Scene Loading Actions
+  setProducingTTS: (sceneId) =>
+    set((state) => ({
+      sceneLoading: { ...state.sceneLoading, producingTTS: sceneId },
+    })),
 
   // Data operations
   updateRow: (id, updates) =>
