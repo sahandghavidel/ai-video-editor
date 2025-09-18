@@ -1,23 +1,17 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import Image from 'next/image';
-import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { updateBaserowRow, BaserowRow } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import {
   Loader2,
   Sparkles,
-  RefreshCw,
-  Mic,
   X,
   Play,
   Pause,
   Video,
   Square,
-  Film,
-  FastForward,
   RotateCcw,
   CheckCircle,
   Monitor,
