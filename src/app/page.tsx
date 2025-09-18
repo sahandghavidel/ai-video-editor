@@ -2,11 +2,12 @@
 
 import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
 import SceneCard from '@/components/SceneCard';
+import BatchOperations from '@/components/BatchOperations';
 import ModelSelection from '@/components/ModelSelection';
 import TTSSettings from '@/components/TTSSettings';
 import VideoSpeedSettings from '@/components/VideoSpeedSettings';
 import AutoGenerateSettings from '@/components/AutoGenerateSettings';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react';
 
@@ -14,6 +15,19 @@ export default function Home() {
   const { data, error, setData, setError } = useAppStore();
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [sceneHandlers, setSceneHandlers] = useState<{
+    handleSentenceImprovement: (
+      sceneId: number,
+      sentence: string,
+      model?: string
+    ) => Promise<void>;
+    handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+    handleVideoGenerate: (
+      sceneId: number,
+      videoUrl: string,
+      audioUrl: string
+    ) => Promise<void>;
+  } | null>(null);
 
   const loadData = async () => {
     try {
@@ -50,6 +64,25 @@ export default function Home() {
   const handleDataUpdate = (updatedData: BaserowRow[]) => {
     setData(updatedData);
   };
+
+  const handleSceneHandlersReady = useCallback(
+    (handlers: {
+      handleSentenceImprovement: (
+        sceneId: number,
+        sentence: string,
+        model?: string
+      ) => Promise<void>;
+      handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+      handleVideoGenerate: (
+        sceneId: number,
+        videoUrl: string,
+        audioUrl: string
+      ) => Promise<void>;
+    }) => {
+      setSceneHandlers(handlers);
+    },
+    []
+  );
 
   const refreshData = () => {
     refreshDataSilently();
@@ -174,11 +207,26 @@ export default function Home() {
               </div>
             )}
 
+            {/* Batch Operations - Only show when data is loaded and handlers are ready */}
+            {!initialLoading && data.length > 0 && sceneHandlers && (
+              <BatchOperations
+                data={data}
+                onRefresh={refreshData}
+                refreshing={refreshing}
+                handleSentenceImprovement={
+                  sceneHandlers.handleSentenceImprovement
+                }
+                handleTTSProduce={sceneHandlers.handleTTSProduce}
+                handleVideoGenerate={sceneHandlers.handleVideoGenerate}
+              />
+            )}
+
             <SceneCard
               data={data}
               refreshData={refreshData}
               refreshing={refreshing}
               onDataUpdate={handleDataUpdate}
+              onHandlersReady={handleSceneHandlersReady}
             />
           </div>
         )}

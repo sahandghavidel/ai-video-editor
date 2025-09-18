@@ -1,9 +1,10 @@
 'use client';
 
-import { BaserowRow, updateBaserowRow } from '@/lib/baserow-actions';
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import Image from 'next/image';
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { updateBaserowRow, BaserowRow } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
-import BatchOperations from './BatchOperations';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import {
   Loader2,
@@ -32,6 +33,19 @@ interface SceneCardProps {
   refreshData?: () => void;
   refreshing?: boolean;
   onDataUpdate?: (updatedData: BaserowRow[]) => void;
+  onHandlersReady?: (handlers: {
+    handleSentenceImprovement: (
+      sceneId: number,
+      sentence: string,
+      model?: string
+    ) => Promise<void>;
+    handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+    handleVideoGenerate: (
+      sceneId: number,
+      videoUrl: string,
+      audioUrl: string
+    ) => Promise<void>;
+  }) => void;
 }
 
 export default function SceneCard({
@@ -39,6 +53,7 @@ export default function SceneCard({
   refreshData,
   refreshing = false,
   onDataUpdate,
+  onHandlersReady,
 }: SceneCardProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState<string>('');
@@ -52,6 +67,18 @@ export default function SceneCard({
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
+
+  // Use refs to store stable references to props
+  const dataRef = useRef(data);
+  const onDataUpdateRef = useRef(onDataUpdate);
+  const refreshDataRef = useRef(refreshData);
+
+  // Update refs when props change
+  useEffect(() => {
+    dataRef.current = data;
+    onDataUpdateRef.current = onDataUpdate;
+    refreshDataRef.current = refreshData;
+  }, [data, onDataUpdate, refreshData]);
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
 
   // State for improving all sentences
@@ -475,219 +502,246 @@ export default function SceneCard({
     }
   };
 
-  const handleTTSProduce = async (sceneId: number, text: string) => {
-    try {
-      setProducingTTS(sceneId);
+  const handleTTSProduce = useCallback(
+    async (sceneId: number, text: string) => {
+      try {
+        setProducingTTS(sceneId);
 
-      // Call our TTS API route that handles generation and MinIO upload
-      const response = await fetch('/api/generate-tts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text,
-          sceneId,
-          ttsSettings,
-        }),
-      });
+        // Call our TTS API route that handles generation and MinIO upload
+        const response = await fetch('/api/generate-tts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text,
+            sceneId,
+            ttsSettings,
+          }),
+        });
 
-      if (!response.ok) {
-        let errorMessage = `TTS service error: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          // If response is not JSON, use the status text
-          errorMessage = `TTS service error: ${response.status} - ${response.statusText}`;
+        if (!response.ok) {
+          let errorMessage = `TTS service error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            // If response is not JSON, use the status text
+            errorMessage = `TTS service error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
+
+        const result = await response.json();
+        const audioUrl = result.audioUrl;
+
+        // Update the Baserow field with the MinIO URL
+        const updatedRow = await updateBaserowRow(sceneId, {
+          field_6891: audioUrl,
+        });
+
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6891: audioUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server to ensure consistency
+        refreshDataRef.current?.();
+
+        // Auto-generate video if option is enabled
+        if (videoSettings.autoGenerateVideo) {
+          const currentScene = dataRef.current.find(
+            (scene) => scene.id === sceneId
+          );
+          const videoUrl = currentScene?.field_6888;
+
+          if (typeof videoUrl === 'string' && videoUrl) {
+            // Wait a moment to ensure the TTS URL is properly updated
+            setTimeout(() => {
+              handleVideoGenerate(sceneId, videoUrl, audioUrl);
+            }, 1000);
+          }
+        }
+      } catch (error) {
+        console.error('Error producing TTS:', error);
+        // You could show a user-friendly error message here
+      } finally {
+        setProducingTTS(null);
       }
+    },
+    [setProducingTTS, ttsSettings, videoSettings.autoGenerateVideo]
+  );
 
-      const result = await response.json();
-      const audioUrl = result.audioUrl;
+  const handleVideoGenerate = useCallback(
+    async (sceneId: number, videoUrl: string, audioUrl: string) => {
+      try {
+        setGeneratingVideo(sceneId);
 
-      // Update the Baserow field with the MinIO URL
-      const updatedRow = await updateBaserowRow(sceneId, {
-        field_6891: audioUrl,
-      });
+        // Call our API route instead of directly calling NCA service
+        const response = await fetch('/api/generate-video', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            videoUrl,
+            audioUrl,
+          }),
+        });
 
-      // Update the local data optimistically
-      const updatedData = data.map((scene) => {
-        if (scene.id === sceneId) {
-          return { ...scene, field_6891: audioUrl };
+        if (!response.ok) {
+          let errorMessage = `Video generation error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = `Video generation error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
         }
-        return scene;
-      });
-      onDataUpdate?.(updatedData);
 
-      // Refresh data from server to ensure consistency
-      refreshData?.();
+        const result = await response.json();
+        const generatedVideoUrl = result.videoUrl;
 
-      // Auto-generate video if option is enabled
-      if (videoSettings.autoGenerateVideo) {
-        const currentScene = data.find((scene) => scene.id === sceneId);
-        const videoUrl = currentScene?.field_6888;
+        // Update the Baserow field with the generated video URL
+        const updatedRow = await updateBaserowRow(sceneId, {
+          field_6886: generatedVideoUrl,
+        });
 
-        if (typeof videoUrl === 'string' && videoUrl) {
-          // Wait a moment to ensure the TTS URL is properly updated
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6886: generatedVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server to ensure consistency
+        refreshDataRef.current?.();
+      } catch (error) {
+        console.error('Error generating synchronized video:', error);
+        // You could show a user-friendly error message here
+      } finally {
+        setGeneratingVideo(null);
+      }
+    },
+    [setGeneratingVideo]
+  );
+
+  const handleSentenceImprovement = useCallback(
+    async (
+      sceneId: number,
+      currentSentence: string,
+      modelOverride?: string
+    ) => {
+      try {
+        setImprovingSentence(sceneId);
+
+        // Get all sentences for context
+        const allSentences = dataRef.current
+          .map((scene) => String(scene['field_6890'] || scene.field_6890 || ''))
+          .filter((sentence) => sentence.trim());
+
+        console.log(
+          `Improving sentence for scene ${sceneId}: "${currentSentence}"`
+        );
+
+        // Call our sentence improvement API route
+        const response = await fetch('/api/improve-sentence', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            currentSentence,
+            allSentences,
+            sceneId,
+            model: modelOverride || modelSelection.selectedModel,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Sentence improvement error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = `Sentence improvement error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        const improvedSentence = result.improvedSentence;
+
+        console.log(`Improved sentence: "${improvedSentence}"`);
+
+        // Update the Baserow field with the improved sentence
+        const updatedRow = await updateBaserowRow(sceneId, {
+          field_6890: improvedSentence,
+        });
+
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6890: improvedSentence };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server to ensure consistency
+        refreshDataRef.current?.();
+
+        // Auto-generate TTS if option is enabled
+        if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
+          // Wait a moment to ensure the text is properly updated
           setTimeout(() => {
-            handleVideoGenerate(sceneId, videoUrl, audioUrl);
+            handleTTSProduce(sceneId, improvedSentence);
           }, 1000);
         }
+      } catch (error) {
+        console.error('Error improving sentence:', error);
+
+        // Show user-friendly error message
+        let errorMessage = 'Failed to improve sentence';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+
+        // You could implement a toast notification or alert here
+        alert(`Error: ${errorMessage}`);
+      } finally {
+        setImprovingSentence(null);
       }
-    } catch (error) {
-      console.error('Error producing TTS:', error);
-      // You could show a user-friendly error message here
-    } finally {
-      setProducingTTS(null);
+    },
+    [
+      setImprovingSentence,
+      modelSelection.selectedModel,
+      videoSettings.autoGenerateTTS,
+    ]
+  );
+
+  // Expose handler functions to parent component
+  useEffect(() => {
+    if (onHandlersReady) {
+      onHandlersReady({
+        handleSentenceImprovement,
+        handleTTSProduce,
+        handleVideoGenerate,
+      });
     }
-  };
-
-  const handleVideoGenerate = async (
-    sceneId: number,
-    videoUrl: string,
-    audioUrl: string
-  ) => {
-    try {
-      setGeneratingVideo(sceneId);
-
-      // Call our API route instead of directly calling NCA service
-      const response = await fetch('/api/generate-video', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          videoUrl,
-          audioUrl,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = `Video generation error: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          errorMessage = `Video generation error: ${response.status} - ${response.statusText}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      const generatedVideoUrl = result.videoUrl;
-
-      // Update the Baserow field with the generated video URL
-      const updatedRow = await updateBaserowRow(sceneId, {
-        field_6886: generatedVideoUrl,
-      });
-
-      // Update the local data optimistically
-      const updatedData = data.map((scene) => {
-        if (scene.id === sceneId) {
-          return { ...scene, field_6886: generatedVideoUrl };
-        }
-        return scene;
-      });
-      onDataUpdate?.(updatedData);
-
-      // Refresh data from server to ensure consistency
-      refreshData?.();
-    } catch (error) {
-      console.error('Error generating synchronized video:', error);
-      // You could show a user-friendly error message here
-    } finally {
-      setGeneratingVideo(null);
-    }
-  };
-
-  const handleSentenceImprovement = async (
-    sceneId: number,
-    currentSentence: string,
-    modelOverride?: string
-  ) => {
-    try {
-      setImprovingSentence(sceneId);
-
-      // Get all sentences for context
-      const allSentences = data
-        .map((scene) => String(scene['field_6890'] || scene.field_6890 || ''))
-        .filter((sentence) => sentence.trim());
-
-      console.log(
-        `Improving sentence for scene ${sceneId}: "${currentSentence}"`
-      );
-
-      // Call our sentence improvement API route
-      const response = await fetch('/api/improve-sentence', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentSentence,
-          allSentences,
-          sceneId,
-          model: modelOverride || modelSelection.selectedModel,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = `Sentence improvement error: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          errorMessage = `Sentence improvement error: ${response.status} - ${response.statusText}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      const improvedSentence = result.improvedSentence;
-
-      console.log(`Improved sentence: "${improvedSentence}"`);
-
-      // Update the Baserow field with the improved sentence
-      const updatedRow = await updateBaserowRow(sceneId, {
-        field_6890: improvedSentence,
-      });
-
-      // Update the local data optimistically
-      const updatedData = data.map((scene) => {
-        if (scene.id === sceneId) {
-          return { ...scene, field_6890: improvedSentence };
-        }
-        return scene;
-      });
-      onDataUpdate?.(updatedData);
-
-      // Refresh data from server to ensure consistency
-      refreshData?.();
-
-      // Auto-generate TTS if option is enabled
-      if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
-        // Wait a moment to ensure the text is properly updated
-        setTimeout(() => {
-          handleTTSProduce(sceneId, improvedSentence);
-        }, 1000);
-      }
-    } catch (error) {
-      console.error('Error improving sentence:', error);
-
-      // Show user-friendly error message
-      let errorMessage = 'Failed to improve sentence';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-
-      // You could implement a toast notification or alert here
-      alert(`Error: ${errorMessage}`);
-    } finally {
-      setImprovingSentence(null);
-    }
-  };
+  }, [
+    onHandlersReady,
+    handleSentenceImprovement,
+    handleTTSProduce,
+    handleVideoGenerate,
+  ]);
 
   if (!data || data.length === 0) {
     return (
@@ -713,14 +767,6 @@ export default function SceneCard({
 
   return (
     <div className='w-full max-w-7xl mx-auto'>
-      <BatchOperations
-        data={data}
-        onRefresh={refreshData}
-        refreshing={refreshing}
-        handleSentenceImprovement={handleSentenceImprovement}
-        handleTTSProduce={handleTTSProduce}
-        handleVideoGenerate={handleVideoGenerate}
-      />
       <div className='grid gap-4'>
         {data.map((scene) => (
           <div
