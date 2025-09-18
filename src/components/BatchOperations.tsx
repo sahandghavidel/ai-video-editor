@@ -23,6 +23,7 @@ import {
 interface BatchOperationsProps {
   data: BaserowRow[];
   onRefresh?: () => void;
+  refreshing?: boolean;
   handleSentenceImprovement: (
     sceneId: number,
     sentence: string,
@@ -39,6 +40,7 @@ interface BatchOperationsProps {
 export default function BatchOperations({
   data,
   onRefresh,
+  refreshing = false,
   handleSentenceImprovement,
   handleTTSProduce,
   handleVideoGenerate,
@@ -333,10 +335,15 @@ export default function BatchOperations({
         {onRefresh && (
           <button
             onClick={onRefresh}
-            className='px-4 py-2 h-10 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center justify-center space-x-2'
+            disabled={refreshing}
+            className='px-4 py-2 h-10 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed'
           >
-            <RefreshCw className='w-4 h-4' />
-            <span>Refresh</span>
+            {refreshing ? (
+              <Loader2 className='animate-spin w-4 h-4' />
+            ) : (
+              <RefreshCw className='w-4 h-4' />
+            )}
+            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
           </button>
         )}
       </div>

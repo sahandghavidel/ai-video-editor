@@ -13,6 +13,7 @@ import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react';
 export default function Home() {
   const { data, error, setData, setError } = useAppStore();
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadData = async () => {
     try {
@@ -29,6 +30,7 @@ export default function Home() {
   };
 
   const refreshDataSilently = async () => {
+    setRefreshing(true);
     try {
       const fetchedData = await getBaserowData();
       setData(fetchedData);
@@ -36,6 +38,8 @@ export default function Home() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh data');
       console.error('Error refreshing Baserow data:', err);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -173,6 +177,7 @@ export default function Home() {
             <SceneCard
               data={data}
               refreshData={refreshData}
+              refreshing={refreshing}
               onDataUpdate={handleDataUpdate}
             />
           </div>

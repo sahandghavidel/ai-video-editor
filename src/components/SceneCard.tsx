@@ -30,12 +30,14 @@ import {
 interface SceneCardProps {
   data: BaserowRow[];
   refreshData?: () => void;
+  refreshing?: boolean;
   onDataUpdate?: (updatedData: BaserowRow[]) => void;
 }
 
 export default function SceneCard({
   data,
   refreshData,
+  refreshing = false,
   onDataUpdate,
 }: SceneCardProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -714,6 +716,7 @@ export default function SceneCard({
       <BatchOperations
         data={data}
         onRefresh={refreshData}
+        refreshing={refreshing}
         handleSentenceImprovement={handleSentenceImprovement}
         handleTTSProduce={handleTTSProduce}
         handleVideoGenerate={handleVideoGenerate}
