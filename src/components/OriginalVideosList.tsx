@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BaserowRow, getOriginalVideosData } from '@/lib/baserow-actions';
 import {
   Loader2,
@@ -10,6 +10,8 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
+  Upload,
+  X,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -17,6 +19,10 @@ export default function OriginalVideosList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Helper function to extract value from Baserow field
   const extractFieldValue = (field: any): string => {
@@ -141,6 +147,84 @@ export default function OriginalVideosList() {
     return null;
   };
 
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith('video/')) {
+      setError('Please select a video file');
+      return;
+    }
+
+    const maxSize = 100 * 1024 * 1024; // 100MB
+    if (file.size > maxSize) {
+      setError('File size must be less than 100MB');
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload-video', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      const result = await response.json();
+      
+      // Refresh the videos list to show the new upload
+      await fetchOriginalVideos(true);
+      
+      setUploadProgress(100);
+      setTimeout(() => {
+        setUploading(false);
+        setUploadProgress(0);
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragOver(false);
+    
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragOver(false);
+  };
+
+  const openFileDialog = () => {
+    fileInputRef.current?.click();
+  };
+
   const fetchOriginalVideos = async (isRefresh = false) => {
     try {
       if (isRefresh) {
@@ -242,27 +326,82 @@ export default function OriginalVideosList() {
           </p>
         </div>
 
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className='inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-        >
-          <RefreshCw
-            className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
-          />
-          <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-        </button>
+        <div className='flex items-center gap-3'>
+          {/* Upload Button */}
+          <div className='relative'>
+            <button
+              onClick={openFileDialog}
+              disabled={uploading}
+              className={`inline-flex items-center gap-2 px-4 py-2 ${
+                uploading 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-green-500 hover:bg-green-600'
+              } text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed`}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                  <span>Uploading... {uploadProgress}%</span>
+                </>
+              ) : (
+                <>
+                  <Upload className='w-4 h-4' />
+                  <span>Upload Video</span>
+                </>
+              )}
+            </button>
+            
+            <input
+              ref={fileInputRef}
+              type='file'
+              accept='video/*'
+              onChange={handleFileSelect}
+              className='hidden'
+            />
+          </div>
+
+          {/* Refresh Button */}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || uploading}
+            className='inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
+            />
+            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Videos Table */}
-      {originalVideos.length === 0 ? (
-        <div className='text-center py-8'>
-          <Video className='w-12 h-12 text-gray-300 mx-auto mb-4' />
-          <p className='text-gray-500 text-lg'>No original videos found</p>
-        </div>
-      ) : (
-        <div className='overflow-x-auto'>
-          <table className='w-full'>
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={`transition-all duration-200 rounded-lg ${
+          dragOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : ''
+        }`}
+      >
+        {dragOver && (
+          <div className='absolute inset-0 bg-blue-50 bg-opacity-90 flex items-center justify-center z-10 rounded-lg'>
+            <div className='text-center'>
+              <Upload className='w-12 h-12 text-blue-500 mx-auto mb-4' />
+              <p className='text-lg font-medium text-blue-800'>Drop video here to upload</p>
+              <p className='text-sm text-blue-600'>Supports video files up to 100MB</p>
+            </div>
+          </div>
+        )}
+        
+        {originalVideos.length === 0 ? (
+          <div className='text-center py-8'>
+            <Video className='w-12 h-12 text-gray-300 mx-auto mb-4' />
+            <p className='text-gray-500 text-lg'>No original videos found</p>
+            <p className='text-gray-400 text-sm mt-2'>Upload a video to get started</p>
+          </div>
+        ) : (
+          <div className='overflow-x-auto'>
+            <table className='w-full'>
             <thead>
               <tr className='border-b border-gray-200'>
                 <th className='text-left py-3 px-4 font-semibold text-gray-700'>
@@ -392,7 +531,8 @@ export default function OriginalVideosList() {
             </tbody>
           </table>
         </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
