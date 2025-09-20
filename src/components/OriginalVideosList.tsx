@@ -23,6 +23,7 @@ import {
   GripVertical,
   Plus,
   Trash2,
+  Subtitles,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -41,6 +42,7 @@ export default function OriginalVideosList() {
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [transcribing, setTranscribing] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global state
@@ -493,6 +495,95 @@ export default function OriginalVideosList() {
     }
   };
 
+  // Transcribe video function
+  const handleTranscribeVideo = async (videoId: number, videoUrl: string) => {
+    try {
+      setTranscribing(videoId);
+
+      // Step 1: Transcribe the video using NCA toolkit
+      const transcribeResponse = await fetch('/api/transcribe-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          media_url: videoUrl,
+          task: 'transcribe',
+          include_text: false,
+          include_srt: false,
+          include_segments: true,
+          word_timestamps: true,
+          response_type: 'direct',
+          language: 'en',
+        }),
+      });
+
+      if (!transcribeResponse.ok) {
+        throw new Error('Failed to transcribe video');
+      }
+
+      const transcriptionData = await transcribeResponse.json();
+
+      // Step 2: Process the response to extract word timestamps
+      const wordTimestamps = [];
+      const segments = transcriptionData.response?.segments;
+
+      if (segments && segments.length > 0) {
+        for (const segment of segments) {
+          if (segment.words) {
+            for (const wordObj of segment.words) {
+              wordTimestamps.push({
+                word: wordObj.word.trim(),
+                start: wordObj.start,
+                end: wordObj.end,
+              });
+            }
+          }
+        }
+      }
+
+      // Step 3: Upload the captions file to Baserow
+      const captionsData = JSON.stringify(wordTimestamps);
+      const filename = `captions_${videoId}.json`;
+
+      const formData = new FormData();
+      const blob = new Blob([captionsData], { type: 'application/json' });
+      formData.append('file', blob, filename);
+
+      const uploadResponse = await fetch('/api/upload-captions', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload captions');
+      }
+
+      const uploadResult = await uploadResponse.json();
+      console.log('Captions uploaded successfully:', uploadResult);
+
+      // Step 4: Update the original video record with the captions URL
+      const captionsUrl = uploadResult.url || uploadResult.file_url;
+      if (captionsUrl) {
+        await updateOriginalVideoRow(videoId, {
+          field_6861: captionsUrl, // Captions URL field
+        });
+      }
+
+      // Refresh the table to show any updates
+      await handleRefresh();
+    } catch (error) {
+      console.error('Error transcribing video:', error);
+      setError(
+        `Failed to transcribe video: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setTranscribing(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
@@ -692,6 +783,12 @@ export default function OriginalVideosList() {
                   </th>
                   <th className='text-left py-3 px-4 font-semibold text-gray-700'>
                     Final Merged Video
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Captions
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -911,6 +1008,68 @@ export default function OriginalVideosList() {
                             <span className='text-gray-400'>Not ready</span>
                           );
                         })()}
+                      </td>
+
+                      {/* Captions URL (6861) */}
+                      <td className='py-3 px-4'>
+                        {(() => {
+                          const captionsUrl = extractUrl(video.field_6861);
+                          return captionsUrl ? (
+                            <a
+                              href={captionsUrl}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 hover:underline'
+                            >
+                              <Subtitles className='w-4 h-4' />
+                              <span className='truncate max-w-32'>
+                                Captions
+                              </span>
+                              <ExternalLink className='w-3 h-3' />
+                            </a>
+                          ) : (
+                            <span className='text-gray-400'>Not available</span>
+                          );
+                        })()}
+                      </td>
+
+                      {/* Actions */}
+                      <td className='py-3 px-4'>
+                        <div className='flex items-center gap-2'>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const videoUrl = extractUrl(video.field_6881);
+                              if (videoUrl) {
+                                handleTranscribeVideo(video.id, videoUrl);
+                              } else {
+                                setError(
+                                  'No video URL found for transcription'
+                                );
+                              }
+                            }}
+                            disabled={
+                              transcribing !== null ||
+                              !extractUrl(video.field_6881)
+                            }
+                            className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                            title={
+                              transcribing !== null
+                                ? transcribing === video.id
+                                  ? 'Transcribing...'
+                                  : 'Another transcription in progress'
+                                : !extractUrl(video.field_6881)
+                                ? 'No video URL available'
+                                : 'Transcribe video'
+                            }
+                          >
+                            {transcribing === video.id ? (
+                              <Loader2 className='w-4 h-4 animate-spin' />
+                            ) : (
+                              <Subtitles className='w-4 h-4' />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
