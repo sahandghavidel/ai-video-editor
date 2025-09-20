@@ -15,11 +15,12 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Upload,
   X,
   Check,
   Edit3,
   Save,
+  GripVertical,
+  Plus,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -29,12 +30,14 @@ export default function OriginalVideosList() {
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [dragOver, setDragOver] = useState(false);
   const [editingTitle, setEditingTitle] = useState<{
     videoId: number;
     value: string;
     saving: boolean;
   } | null>(null);
+  const [draggedRow, setDraggedRow] = useState<number | null>(null);
+  const [dragOverRow, setDragOverRow] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global state
@@ -241,26 +244,6 @@ export default function OriginalVideosList() {
     }
   };
 
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setDragOver(false);
-
-    const file = event.dataTransfer.files[0];
-    if (file) {
-      handleFileUpload(file);
-    }
-  };
-
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setDragOver(false);
-  };
-
   const openFileDialog = () => {
     fileInputRef.current?.click();
   };
@@ -298,7 +281,15 @@ export default function OriginalVideosList() {
       setError(null);
 
       const data = await getOriginalVideosData();
-      setOriginalVideos(data);
+
+      // Sort by order field (if exists), otherwise by ID
+      const sortedData = data.sort((a, b) => {
+        const orderA = Number(a.field_6902) || a.id;
+        const orderB = Number(b.field_6902) || b.id;
+        return orderA - orderB;
+      });
+
+      setOriginalVideos(sortedData);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Failed to fetch original videos'
@@ -341,6 +332,86 @@ export default function OriginalVideosList() {
         return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  // Drag and drop handlers for reordering
+  const handleRowDragStart = (e: React.DragEvent, videoId: number) => {
+    setDraggedRow(videoId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', videoId.toString());
+  };
+
+  const handleRowDragOver = (e: React.DragEvent, videoId: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverRow(videoId);
+  };
+
+  const handleRowDragLeave = () => {
+    setDragOverRow(null);
+  };
+
+  const handleRowDragEnd = () => {
+    setDraggedRow(null);
+    setDragOverRow(null);
+  };
+
+  const handleRowDrop = async (e: React.DragEvent, targetVideoId: number) => {
+    e.preventDefault();
+
+    if (!draggedRow || draggedRow === targetVideoId) {
+      setDraggedRow(null);
+      setDragOverRow(null);
+      return;
+    }
+
+    setReordering(true);
+
+    try {
+      // Create a new array with updated order
+      const currentVideos = [...originalVideos];
+      const draggedIndex = currentVideos.findIndex((v) => v.id === draggedRow);
+      const targetIndex = currentVideos.findIndex(
+        (v) => v.id === targetVideoId
+      );
+
+      if (draggedIndex === -1 || targetIndex === -1) return;
+
+      // Remove the dragged item and insert it at the target position
+      const [draggedVideo] = currentVideos.splice(draggedIndex, 1);
+      currentVideos.splice(targetIndex, 0, draggedVideo);
+
+      // Update order values (1-based indexing)
+      const updates: Promise<any>[] = [];
+      currentVideos.forEach((video, index) => {
+        const newOrder = index + 1;
+        // Update both local state and database
+        video.field_6902 = newOrder;
+        updates.push(
+          updateOriginalVideoRow(video.id, { field_6902: newOrder })
+        );
+      });
+
+      // Update local state optimistically
+      setOriginalVideos(currentVideos);
+
+      // Save all order changes to database
+      await Promise.all(updates);
+
+      console.log(
+        `Reordered videos: moved video ${draggedRow} to position ${
+          targetIndex + 1
+        }`
+      );
+    } catch (error) {
+      console.error('Failed to reorder videos:', error);
+      // Refresh data to revert optimistic update
+      fetchOriginalVideos(true);
+    } finally {
+      setReordering(false);
+      setDraggedRow(null);
+      setDragOverRow(null);
     }
   };
 
@@ -457,7 +528,7 @@ export default function OriginalVideosList() {
                 </>
               ) : (
                 <>
-                  <Upload className='w-4 h-4' />
+                  <Plus className='w-4 h-4' />
                   <span>Upload Video</span>
                 </>
               )}
@@ -475,13 +546,21 @@ export default function OriginalVideosList() {
           {/* Refresh Button */}
           <button
             onClick={handleRefresh}
-            disabled={refreshing || uploading}
+            disabled={refreshing || uploading || reordering}
             className='inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
           >
             <RefreshCw
-              className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
+              className={`w-4 h-4 ${
+                refreshing || reordering ? 'animate-spin' : ''
+              }`}
             />
-            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            <span>
+              {reordering
+                ? 'Reordering...'
+                : refreshing
+                ? 'Refreshing...'
+                : 'Refresh'}
+            </span>
           </button>
         </div>
       </div>
@@ -526,28 +605,7 @@ export default function OriginalVideosList() {
       )}
 
       {/* Videos Table */}
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className={`transition-all duration-200 rounded-lg ${
-          dragOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : ''
-        }`}
-      >
-        {dragOver && (
-          <div className='absolute inset-0 bg-blue-50 bg-opacity-90 flex items-center justify-center z-10 rounded-lg'>
-            <div className='text-center'>
-              <Upload className='w-12 h-12 text-blue-500 mx-auto mb-4' />
-              <p className='text-lg font-medium text-blue-800'>
-                Drop video here to upload
-              </p>
-              <p className='text-sm text-blue-600'>
-                Supports video files up to 100MB
-              </p>
-            </div>
-          </div>
-        )}
-
+      <div className='transition-all duration-200 rounded-lg'>
         {originalVideos.length === 0 ? (
           <div className='text-center py-8'>
             <Video className='w-12 h-12 text-gray-300 mx-auto mb-4' />
@@ -561,6 +619,9 @@ export default function OriginalVideosList() {
             <table className='w-full'>
               <thead>
                 <tr className='border-b border-gray-200'>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700 w-8'>
+                    {/* Drag handle column */}
+                  </th>
                   <th className='text-left py-3 px-4 font-semibold text-gray-700 w-12'>
                     Select
                   </th>
@@ -590,8 +651,20 @@ export default function OriginalVideosList() {
                   return (
                     <tr
                       key={video.id}
-                      onClick={() => handleRowClick(video)}
-                      className={`border-b border-gray-100 transition-all duration-200 cursor-pointer ${
+                      draggable={!editingTitle}
+                      onDragStart={(e) => handleRowDragStart(e, video.id)}
+                      onDragOver={(e) => handleRowDragOver(e, video.id)}
+                      onDragLeave={handleRowDragLeave}
+                      onDragEnd={handleRowDragEnd}
+                      onDrop={(e) => handleRowDrop(e, video.id)}
+                      onClick={() => !draggedRow && handleRowClick(video)}
+                      className={`border-b border-gray-100 transition-all duration-200 ${
+                        draggedRow === video.id
+                          ? 'opacity-50 cursor-grabbing'
+                          : dragOverRow === video.id
+                          ? 'border-t-4 border-t-blue-500 cursor-pointer'
+                          : 'cursor-pointer'
+                      } ${
                         isSelected
                           ? 'bg-blue-50 hover:bg-blue-100 border-blue-200'
                           : index % 2 === 0
@@ -599,6 +672,16 @@ export default function OriginalVideosList() {
                           : 'bg-gray-50/50 hover:bg-gray-100'
                       }`}
                     >
+                      {/* Drag Handle */}
+                      <td className='py-3 px-2'>
+                        <div
+                          className='cursor-grab hover:cursor-grabbing p-1 rounded hover:bg-gray-200 transition-colors'
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <GripVertical className='w-4 h-4 text-gray-400' />
+                        </div>
+                      </td>
+
                       {/* Selection */}
                       <td className='py-3 px-4'>
                         <div

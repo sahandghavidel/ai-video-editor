@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createOriginalVideoRow } from '@/lib/baserow-actions';
+import {
+  createOriginalVideoRow,
+  getOriginalVideosData,
+} from '@/lib/baserow-actions';
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,10 +56,19 @@ export async function POST(request: NextRequest) {
       throw new Error(`MinIO upload error: ${uploadResponse.status}`);
     }
 
+    // Get existing videos to determine next order number
+    const existingVideos = await getOriginalVideosData();
+    const maxOrder = existingVideos.reduce((max, video) => {
+      const order = Number(video.field_6902) || 0;
+      return Math.max(max, order);
+    }, 0);
+    const nextOrder = maxOrder + 1;
+
     // Create new row in Baserow table 713
     const newRowData = {
       field_6881: uploadUrl, // Video Uploaded URL
       field_6864: 'Pending', // Status
+      field_6902: nextOrder, // Order - automatically set to next number
       // field_6866: scenes will be empty initially
       // field_6858: final merged video will be empty initially
     };
