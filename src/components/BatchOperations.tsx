@@ -540,11 +540,14 @@ export default function BatchOperations({
 
                 {/* Save to Database Message */}
                 {saveToDbMessage && (
-                  <div className={`mt-2 text-sm font-medium ${
-                    saveToDbMessage.includes('successfully') || saveToDbMessage.includes('saved')
-                      ? 'text-green-600'
-                      : 'text-red-600'
-                  }`}>
+                  <div
+                    className={`mt-2 text-sm font-medium ${
+                      saveToDbMessage.includes('successfully') ||
+                      saveToDbMessage.includes('saved')
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                    }`}
+                  >
                     {saveToDbMessage}
                   </div>
                 )}

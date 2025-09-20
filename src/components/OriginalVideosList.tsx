@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { BaserowRow, getOriginalVideosData } from '@/lib/baserow-actions';
+import {
+  BaserowRow,
+  getOriginalVideosData,
+  updateOriginalVideoRow,
+} from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import {
   Loader2,
@@ -14,6 +18,8 @@ import {
   Upload,
   X,
   Check,
+  Edit3,
+  Save,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -24,6 +30,11 @@ export default function OriginalVideosList() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [editingTitle, setEditingTitle] = useState<{
+    videoId: number;
+    value: string;
+    saving: boolean;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global state
@@ -48,7 +59,7 @@ export default function OriginalVideosList() {
       const timer = setTimeout(() => {
         fetchOriginalVideos(true);
       }, 1000);
-      
+
       return () => clearTimeout(timer);
     }
   }, [mergedVideo.url, selectedOriginalVideo.id]);
@@ -333,6 +344,55 @@ export default function OriginalVideosList() {
     }
   };
 
+  // Title editing functions
+  const startTitleEdit = (videoId: number, currentTitle: string) => {
+    setEditingTitle({
+      videoId,
+      value: currentTitle,
+      saving: false,
+    });
+  };
+
+  const cancelTitleEdit = () => {
+    setEditingTitle(null);
+  };
+
+  const saveTitleEdit = async (videoId: number, newTitle: string) => {
+    if (!editingTitle || editingTitle.videoId !== videoId) return;
+
+    setEditingTitle((prev) => (prev ? { ...prev, saving: true } : null));
+
+    try {
+      await updateOriginalVideoRow(videoId, {
+        field_6852: newTitle,
+      });
+
+      // Update local state
+      setOriginalVideos((prevVideos) =>
+        prevVideos.map((video) =>
+          video.id === videoId ? { ...video, field_6852: newTitle } : video
+        )
+      );
+
+      setEditingTitle(null);
+    } catch (error) {
+      console.error('Failed to update title:', error);
+      // Could add toast notification here
+    }
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent, videoId: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (editingTitle) {
+        saveTitleEdit(videoId, editingTitle.value);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelTitleEdit();
+    }
+  };
+
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
@@ -508,6 +568,9 @@ export default function OriginalVideosList() {
                     ID
                   </th>
                   <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Title
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
                     Video URL
                   </th>
                   <th className='text-left py-3 px-4 font-semibold text-gray-700'>
@@ -560,6 +623,66 @@ export default function OriginalVideosList() {
                         >
                           #{video.id}
                         </span>
+                      </td>
+
+                      {/* Title (6852) - Editable */}
+                      <td className='py-3 px-4'>
+                        {editingTitle?.videoId === video.id ? (
+                          <div className='flex items-center gap-2'>
+                            <input
+                              type='text'
+                              value={editingTitle.value}
+                              onChange={(e) =>
+                                setEditingTitle((prev) =>
+                                  prev
+                                    ? { ...prev, value: e.target.value }
+                                    : null
+                                )
+                              }
+                              onKeyDown={(e) => handleTitleKeyDown(e, video.id)}
+                              onBlur={() =>
+                                saveTitleEdit(video.id, editingTitle.value)
+                              }
+                              className='flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                              autoFocus
+                              disabled={editingTitle.saving}
+                            />
+                            {editingTitle.saving ? (
+                              <Loader2 className='w-4 h-4 animate-spin text-blue-500' />
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  saveTitleEdit(video.id, editingTitle.value)
+                                }
+                                className='p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors'
+                                title='Save title'
+                              >
+                                <Save className='w-4 h-4' />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div
+                            className='group flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1 -mx-2 -my-1'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const currentTitle = extractFieldValue(
+                                video.field_6852
+                              );
+                              startTitleEdit(video.id, currentTitle);
+                            }}
+                          >
+                            <span
+                              className={`${
+                                isSelected ? 'text-blue-900' : 'text-gray-900'
+                              }`}
+                            >
+                              {extractFieldValue(video.field_6852) ||
+                                'Click to add title'}
+                            </span>
+                            <Edit3 className='w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity' />
+                          </div>
+                        )}
                       </td>
 
                       {/* Video Uploaded URL (6881) */}
