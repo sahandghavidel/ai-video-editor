@@ -13,9 +13,20 @@ import { useAppStore } from '@/store/useAppStore';
 import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react';
 
 export default function Home() {
-  const { data, error, setData, setError } = useAppStore();
+  const {
+    data,
+    error,
+    setData,
+    setError,
+    getFilteredData,
+    selectedOriginalVideo,
+  } = useAppStore();
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Get filtered data based on selected original video
+  const filteredData = getFilteredData();
+
   const [sceneHandlers, setSceneHandlers] = useState<{
     handleSentenceImprovement: (
       sceneId: number,
@@ -211,10 +222,26 @@ export default function Home() {
               </div>
             )}
 
-            {/* Batch Operations - Only show when data is loaded and handlers are ready */}
-            {!initialLoading && data.length > 0 && sceneHandlers && (
+            {/* No Video Selected Message */}
+            {!initialLoading &&
+              data.length > 0 &&
+              !selectedOriginalVideo.id && (
+                <div className='bg-amber-50 border border-amber-200 rounded-xl p-6 text-center'>
+                  <Video className='w-12 h-12 text-amber-500 mx-auto mb-4' />
+                  <h3 className='text-lg font-semibold text-amber-900 mb-2'>
+                    No Original Video Selected
+                  </h3>
+                  <p className='text-amber-700'>
+                    Please select an original video from the table above to view
+                    and edit its scenes.
+                  </p>
+                </div>
+              )}
+
+            {/* Batch Operations - Only show when filtered data is available and handlers are ready */}
+            {!initialLoading && filteredData.length > 0 && sceneHandlers && (
               <BatchOperations
-                data={data}
+                data={filteredData}
                 onRefresh={refreshData}
                 refreshing={refreshing}
                 handleSentenceImprovement={
@@ -225,13 +252,32 @@ export default function Home() {
               />
             )}
 
-            <SceneCard
-              data={data}
-              refreshData={refreshData}
-              refreshing={refreshing}
-              onDataUpdate={handleDataUpdate}
-              onHandlersReady={handleSceneHandlersReady}
-            />
+            {/* Scene Cards - Only show when a video is selected */}
+            {selectedOriginalVideo.id ? (
+              <SceneCard
+                data={filteredData}
+                refreshData={refreshData}
+                refreshing={refreshing}
+                onDataUpdate={handleDataUpdate}
+                onHandlersReady={handleSceneHandlersReady}
+              />
+            ) : (
+              !initialLoading &&
+              data.length > 0 && (
+                <div className='bg-gray-50 border border-gray-200 rounded-xl p-8 text-center'>
+                  <div className='text-gray-400 mb-4'>
+                    <Video className='w-16 h-16 mx-auto' />
+                  </div>
+                  <h3 className='text-xl font-semibold text-gray-700 mb-2'>
+                    Ready to Edit Scenes
+                  </h3>
+                  <p className='text-gray-600'>
+                    Select an original video from the table above to start
+                    editing its scenes.
+                  </p>
+                </div>
+              )
+            )}
           </div>
         )}
       </div>

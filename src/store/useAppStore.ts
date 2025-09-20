@@ -96,6 +96,9 @@ interface AppState {
   // Selected Original Video State
   selectedOriginalVideo: SelectedOriginalVideoState;
 
+  // Computed properties
+  getFilteredData: () => BaserowRow[];
+
   // Actions
   setData: (data: BaserowRow[]) => void;
   setLoading: (loading: boolean) => void;
@@ -251,6 +254,39 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Selected Original Video State
   selectedOriginalVideo: defaultSelectedOriginalVideo,
+
+  // Computed properties
+  getFilteredData: () => {
+    const state = get();
+    const { data, selectedOriginalVideo } = state;
+
+    // If no video is selected, return all data
+    if (!selectedOriginalVideo.id) {
+      return data;
+    }
+
+    // Filter scenes that belong to the selected original video
+    // field_6889 is the "Videos ID" column that references Table 713 (Original Videos)
+    return data.filter((scene) => {
+      const videoId = scene.field_6889;
+      // Handle different data types that might come from Baserow
+      if (typeof videoId === 'number') {
+        return videoId === selectedOriginalVideo.id;
+      }
+      if (typeof videoId === 'string') {
+        return parseInt(videoId, 10) === selectedOriginalVideo.id;
+      }
+      if (Array.isArray(videoId) && videoId.length > 0) {
+        // If it's an array, check if the first item matches
+        const firstId =
+          typeof videoId[0] === 'object'
+            ? videoId[0].id || videoId[0].value
+            : videoId[0];
+        return parseInt(String(firstId), 10) === selectedOriginalVideo.id;
+      }
+      return false;
+    });
+  },
 
   // Actions
   setData: (data) => set({ data }),

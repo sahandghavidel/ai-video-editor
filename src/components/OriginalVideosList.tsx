@@ -32,6 +32,7 @@ export default function OriginalVideosList() {
     setSelectedOriginalVideo,
     saveSettingsToLocalStorage,
     loadSettingsFromLocalStorage,
+    getFilteredData,
   } = useAppStore();
 
   useEffect(() => {
@@ -426,11 +427,14 @@ export default function OriginalVideosList() {
                 </h3>
                 <p className='text-blue-700 text-sm'>
                   Status: {selectedOriginalVideo.status} |
-                  {selectedOriginalVideo.sceneIds.length > 0
-                    ? ` ${selectedOriginalVideo.sceneIds.length} scene${
-                        selectedOriginalVideo.sceneIds.length !== 1 ? 's' : ''
-                      } linked`
-                    : ' No scenes linked'}
+                  {(() => {
+                    const filteredScenes = getFilteredData();
+                    return filteredScenes.length > 0
+                      ? ` ${filteredScenes.length} scene${
+                          filteredScenes.length !== 1 ? 's' : ''
+                        } available for editing`
+                      : ' No scenes found for this video';
+                  })()}
                 </p>
               </div>
             </div>
