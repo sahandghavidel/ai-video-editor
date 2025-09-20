@@ -359,7 +359,9 @@ export async function deleteOriginalVideoRow(rowId: number): Promise<void> {
   }
 }
 
-export async function deleteRelatedScenes(originalVideoId: number): Promise<void> {
+export async function deleteRelatedScenes(
+  originalVideoId: number
+): Promise<void> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const scenesTableId = process.env.BASEROW_TABLE_ID; // Table 714 for scenes
 
@@ -395,22 +397,28 @@ export async function deleteRelatedScenes(originalVideoId: number): Promise<void
     );
 
     await Promise.all(deletePromises);
-    console.log(`Deleted ${relatedScenes.length} related scenes for video ${originalVideoId}`);
+    console.log(
+      `Deleted ${relatedScenes.length} related scenes for video ${originalVideoId}`
+    );
   } catch (error) {
     console.error('Error deleting related scenes:', error);
     throw error;
   }
 }
 
-export async function deleteOriginalVideoWithScenes(originalVideoId: number): Promise<void> {
+export async function deleteOriginalVideoWithScenes(
+  originalVideoId: number
+): Promise<void> {
   try {
     // First delete all related scenes
     await deleteRelatedScenes(originalVideoId);
-    
+
     // Then delete the original video
     await deleteOriginalVideoRow(originalVideoId);
-    
-    console.log(`Successfully deleted original video ${originalVideoId} and all related scenes`);
+
+    console.log(
+      `Successfully deleted original video ${originalVideoId} and all related scenes`
+    );
   } catch (error) {
     console.error('Error deleting original video with scenes:', error);
     throw error;

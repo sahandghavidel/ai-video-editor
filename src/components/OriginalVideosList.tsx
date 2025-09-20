@@ -476,7 +476,7 @@ export default function OriginalVideosList() {
       await deleteOriginalVideoWithScenes(videoId);
 
       // Remove from local state
-      setOriginalVideos(prev => prev.filter(v => v.id !== videoId));
+      setOriginalVideos((prev) => prev.filter((v) => v.id !== videoId));
 
       // Clear selection if this video was selected
       if (selectedOriginalVideo.id === videoId) {
@@ -621,12 +621,19 @@ export default function OriginalVideosList() {
             </div>
             <div className='flex items-center gap-2'>
               <button
-                onClick={() => selectedOriginalVideo.id && handleDeleteVideo(selectedOriginalVideo.id)}
-                disabled={deleting === selectedOriginalVideo.id || !selectedOriginalVideo.id}
+                onClick={() =>
+                  selectedOriginalVideo.id &&
+                  handleDeleteVideo(selectedOriginalVideo.id)
+                }
+                disabled={
+                  deleting === selectedOriginalVideo.id ||
+                  !selectedOriginalVideo.id
+                }
                 className='text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                 title='Delete video and all related scenes'
               >
-                {selectedOriginalVideo.id && deleting === selectedOriginalVideo.id ? (
+                {selectedOriginalVideo.id &&
+                deleting === selectedOriginalVideo.id ? (
                   <Loader2 className='w-5 h-5 animate-spin' />
                 ) : (
                   <Trash2 className='w-5 h-5' />
