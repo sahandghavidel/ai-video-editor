@@ -127,6 +127,11 @@ interface AppState {
   setMergedVideo: (url: string, fileName?: string) => void;
   clearMergedVideo: () => void;
 
+  // Settings Persistence Actions
+  saveSettingsToLocalStorage: () => void;
+  loadSettingsFromLocalStorage: () => void;
+  clearLocalStorageSettings: () => void;
+
   // Data operations
   updateRow: (id: number, updates: Partial<BaserowRow>) => void;
   addRow: (row: BaserowRow) => void;
@@ -134,9 +139,9 @@ interface AppState {
 
 // Default TTS settings
 const defaultTTSSettings: TTSSettings = {
-  temperature: 0.8,
-  exaggeration: 0.3,
-  cfg_weight: 0.5,
+  temperature: 0.2,
+  exaggeration: 0.8,
+  cfg_weight: 0.2,
   seed: 1212,
   reference_audio_filename: 'calmS5wave.wav',
 };
@@ -377,4 +382,72 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       data: [...state.data, row],
     })),
+
+  // Settings Persistence Actions
+  saveSettingsToLocalStorage: () => {
+    const state = get();
+    const settingsToSave = {
+      ttsSettings: state.ttsSettings,
+      videoSettings: state.videoSettings,
+      modelSelection: {
+        selectedModel: state.modelSelection.selectedModel,
+        modelSearch: state.modelSelection.modelSearch,
+      },
+    };
+
+    try {
+      localStorage.setItem(
+        'video-editor-settings',
+        JSON.stringify(settingsToSave)
+      );
+      console.log('Settings saved to localStorage');
+    } catch (error) {
+      console.error('Failed to save settings to localStorage:', error);
+    }
+  },
+
+  loadSettingsFromLocalStorage: () => {
+    try {
+      const savedSettings = localStorage.getItem('video-editor-settings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+
+        set((state) => ({
+          ttsSettings: { ...defaultTTSSettings, ...settings.ttsSettings },
+          videoSettings: { ...defaultVideoSettings, ...settings.videoSettings },
+          modelSelection: {
+            ...state.modelSelection,
+            selectedModel:
+              settings.modelSelection?.selectedModel ||
+              state.modelSelection.selectedModel,
+            modelSearch:
+              settings.modelSelection?.modelSearch ||
+              state.modelSelection.modelSearch,
+          },
+        }));
+
+        console.log('Settings loaded from localStorage');
+      }
+    } catch (error) {
+      console.error('Failed to load settings from localStorage:', error);
+    }
+  },
+
+  clearLocalStorageSettings: () => {
+    try {
+      localStorage.removeItem('video-editor-settings');
+      set({
+        ttsSettings: defaultTTSSettings,
+        videoSettings: defaultVideoSettings,
+        modelSelection: {
+          ...get().modelSelection,
+          selectedModel: defaultModelSelection.selectedModel,
+          modelSearch: defaultModelSelection.modelSearch,
+        },
+      });
+      console.log('Settings cleared from localStorage');
+    } catch (error) {
+      console.error('Failed to clear settings from localStorage:', error);
+    }
+  },
 }));

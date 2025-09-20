@@ -13,11 +13,11 @@ export async function POST(request: NextRequest) {
 
     // Use dynamic TTS settings or defaults
     const settings = ttsSettings || {
-      temperature: 0.1,
-      exaggeration: 0.5,
+      temperature: 0.2,
+      exaggeration: 0.8,
       cfg_weight: 0.2,
       seed: 1212,
-      reference_audio_filename: 'audio3_enhanced.wav',
+      reference_audio_filename: 'calmS5wave.wav',
     };
 
     // Step 1: Generate TTS

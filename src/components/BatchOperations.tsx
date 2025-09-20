@@ -1,8 +1,8 @@
 'use client';
 
+import React, { useState, useRef, useEffect } from 'react';
 import { BaserowRow } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
-import { useState, useRef } from 'react';
 import {
   handleImproveAllSentences,
   handleGenerateAllTTS,
@@ -25,6 +25,9 @@ import {
   Play,
   Pause,
   Square,
+  Save,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 
 interface BatchOperationsProps {
@@ -67,6 +70,9 @@ export default function BatchOperations({
     mergedVideo,
     setMergedVideo,
     clearMergedVideo,
+    saveSettingsToLocalStorage,
+    loadSettingsFromLocalStorage,
+    clearLocalStorageSettings,
   } = useAppStore();
 
   // Video player state
@@ -76,6 +82,27 @@ export default function BatchOperations({
   const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Settings save/load state
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // Load settings on component mount
+  useEffect(() => {
+    loadSettingsFromLocalStorage();
+  }, [loadSettingsFromLocalStorage]);
+
+  // Close settings menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showSettingsMenu) {
+        setShowSettingsMenu(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showSettingsMenu]);
 
   // Video player controls
   const handlePlayPause = () => {
@@ -142,6 +169,31 @@ export default function BatchOperations({
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
+
+  // Settings management functions
+  const handleSaveSettings = () => {
+    saveSettingsToLocalStorage();
+    setSaveMessage('Settings saved successfully!');
+    setTimeout(() => setSaveMessage(null), 3000);
+  };
+
+  const handleLoadSettings = () => {
+    loadSettingsFromLocalStorage();
+    setSaveMessage('Settings loaded successfully!');
+    setTimeout(() => setSaveMessage(null), 3000);
+  };
+
+  const handleClearSettings = () => {
+    if (
+      confirm(
+        'Are you sure you want to clear all saved settings? This will reset everything to defaults.'
+      )
+    ) {
+      clearLocalStorageSettings();
+      setSaveMessage('Settings cleared and reset to defaults!');
+      setTimeout(() => setSaveMessage(null), 3000);
+    }
+  };
   const onImproveAllSentences = () => {
     handleImproveAllSentences(
       data,
@@ -200,7 +252,7 @@ export default function BatchOperations({
   };
 
   return (
-    <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
+    <div className='relative bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
       {/* Header Section */}
       <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6'>
         <div className='mb-4 lg:mb-0'>
@@ -215,9 +267,50 @@ export default function BatchOperations({
           </p>
         </div>
 
-        {/* Refresh Button */}
-        {onRefresh && (
-          <div className='flex-shrink-0'>
+        {/* Action Buttons */}
+        <div className='flex items-center gap-3 flex-shrink-0'>
+          {/* Settings Dropdown */}
+          <div className='relative'>
+            <button
+              onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+              className='inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
+            >
+              <Save className='w-4 h-4' />
+              <span>Settings</span>
+            </button>
+
+            {/* Settings Dropdown Menu */}
+            {showSettingsMenu && (
+              <div className='absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-10'>
+                <div className='p-2'>
+                  <button
+                    onClick={handleSaveSettings}
+                    className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
+                  >
+                    <Save className='w-4 h-4 text-green-600' />
+                    <span>Save Settings</span>
+                  </button>
+                  <button
+                    onClick={handleLoadSettings}
+                    className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
+                  >
+                    <Upload className='w-4 h-4 text-blue-600' />
+                    <span>Load Settings</span>
+                  </button>
+                  <button
+                    onClick={handleClearSettings}
+                    className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
+                  >
+                    <Trash2 className='w-4 h-4 text-red-600' />
+                    <span>Clear Settings</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Refresh Button */}
+          {onRefresh && (
             <button
               onClick={onRefresh}
               disabled={refreshing}
@@ -228,6 +321,13 @@ export default function BatchOperations({
               />
               <span>{refreshing ? 'Refreshing...' : 'Refresh Data'}</span>
             </button>
+          )}
+        </div>
+
+        {/* Save Message */}
+        {saveMessage && (
+          <div className='absolute top-0 right-0 mt-16 mr-4 bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded-lg shadow-md z-20'>
+            {saveMessage}
           </div>
         )}
       </div>
