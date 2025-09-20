@@ -199,6 +199,29 @@ export default function OriginalVideosList() {
     return null;
   };
 
+  // Helper function to check if video has scenes
+  const hasScenes = (video: BaserowRow): boolean => {
+    const scenesField = video.field_6866; // Scenes field
+    if (!scenesField) return false;
+
+    // If it's an array and has items
+    if (Array.isArray(scenesField) && scenesField.length > 0) {
+      return true;
+    }
+
+    // If it's a number (single scene ID)
+    if (typeof scenesField === 'number') {
+      return true;
+    }
+
+    // If it's a string with content
+    if (typeof scenesField === 'string' && scenesField.trim() !== '') {
+      return true;
+    }
+
+    return false;
+  };
+
   const handleFileUpload = async (file: File) => {
     if (!file.type.startsWith('video/')) {
       setError('Please select a video file');
@@ -755,7 +778,11 @@ export default function OriginalVideosList() {
       await handleRefresh();
     } catch (error) {
       console.error('Error generating scenes:', error);
-      setError(`Failed to generate scenes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(
+        `Failed to generate scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
     } finally {
       setGeneratingScenes(null);
     }
@@ -766,18 +793,20 @@ export default function OriginalVideosList() {
     try {
       setGeneratingScenesAll(true);
 
-      // Filter videos that have captions URLs but potentially no scenes
+      // Filter videos that have captions URLs but no scenes
       const videosToProcess = originalVideos.filter((video) => {
         const captionsUrl = extractUrl(video.field_6861);
-        return captionsUrl; // Has captions - we'll let the API handle scene checking
+        return captionsUrl && !hasScenes(video); // Has captions but no scenes
       });
 
       if (videosToProcess.length === 0) {
-        alert('No videos found with captions to generate scenes from');
+        alert('No videos found with captions that need scene generation');
         return;
       }
 
-      console.log(`Starting scene generation for ${videosToProcess.length} videos...`);
+      console.log(
+        `Starting scene generation for ${videosToProcess.length} videos...`
+      );
 
       // Process videos one by one
       for (const video of videosToProcess) {
@@ -785,12 +814,15 @@ export default function OriginalVideosList() {
         if (captionsUrl) {
           console.log(`Generating scenes for video ${video.id}...`);
           setGeneratingScenes(video.id);
-          
+
           try {
             await handleGenerateScenesInternal(video.id, captionsUrl);
             console.log(`Successfully generated scenes for video ${video.id}`);
           } catch (error) {
-            console.error(`Failed to generate scenes for video ${video.id}:`, error);
+            console.error(
+              `Failed to generate scenes for video ${video.id}:`,
+              error
+            );
             // Continue with next video even if one fails
           }
         }
@@ -800,7 +832,11 @@ export default function OriginalVideosList() {
       await handleRefresh();
     } catch (error) {
       console.error('Error in batch scene generation:', error);
-      setError(`Failed to generate scenes for all videos: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(
+        `Failed to generate scenes for all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
     } finally {
       setGeneratingScenes(null);
       setGeneratingScenesAll(false);
@@ -961,7 +997,12 @@ export default function OriginalVideosList() {
           {/* Generate All Scenes Button */}
           <button
             onClick={handleGenerateScenesAll}
-            disabled={generatingScenes !== null || generatingScenesAll || uploading || reordering}
+            disabled={
+              generatingScenes !== null ||
+              generatingScenesAll ||
+              uploading ||
+              reordering
+            }
             className='inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
             title={
               generatingScenes !== null || generatingScenesAll
@@ -1386,7 +1427,8 @@ export default function OriginalVideosList() {
                             disabled={
                               generatingScenes !== null ||
                               generatingScenesAll ||
-                              !extractUrl(video.field_6861)
+                              !extractUrl(video.field_6861) ||
+                              hasScenes(video)
                             }
                             className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                             title={
@@ -1396,6 +1438,8 @@ export default function OriginalVideosList() {
                                   : 'Another scene generation in progress'
                                 : !extractUrl(video.field_6861)
                                 ? 'No captions URL available'
+                                : hasScenes(video)
+                                ? 'Scenes already generated for this video'
                                 : 'Generate scenes from captions'
                             }
                           >

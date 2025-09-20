@@ -17,11 +17,16 @@ export async function POST(request: NextRequest) {
     // Step 1: Fetch the captions/transcription JSON
     const captionsResponse = await fetch(captionsUrl);
     if (!captionsResponse.ok) {
-      throw new Error(`Failed to fetch captions: ${captionsResponse.statusText}`);
+      throw new Error(
+        `Failed to fetch captions: ${captionsResponse.statusText}`
+      );
     }
 
     const captionsData = await captionsResponse.json();
-    console.log('Fetched captions data - length:', Array.isArray(captionsData) ? captionsData.length : 'not array');
+    console.log(
+      'Fetched captions data - length:',
+      Array.isArray(captionsData) ? captionsData.length : 'not array'
+    );
 
     // Step 2: Split into sentences and gaps
     const scenes = generateScenesFromTranscription(captionsData, videoId);
@@ -29,30 +34,47 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Create scene records in Baserow
     const createdScenes = [];
+    const sceneIds = [];
     for (const scene of scenes) {
       const sceneRecord = await createSceneRecord(scene);
       createdScenes.push(sceneRecord);
+      sceneIds.push(sceneRecord.id);
     }
+
+    // Step 4: Update the original video record with scene IDs
+    console.log(
+      `Updating original video ${videoId} with ${sceneIds.length} scene IDs:`,
+      sceneIds
+    );
+    await updateOriginalVideoWithScenes(videoId, sceneIds);
 
     return NextResponse.json({
       success: true,
-      message: `Successfully generated ${createdScenes.length} scenes`,
+      message: `Successfully generated ${createdScenes.length} scenes and linked them to video ${videoId}`,
       scenes: createdScenes,
+      sceneIds: sceneIds,
     });
   } catch (error) {
     console.error('Error generating scenes:', error);
     return NextResponse.json(
-      { error: `Failed to generate scenes: ${error instanceof Error ? error.message : 'Unknown error'}` },
+      {
+        error: `Failed to generate scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      },
       { status: 500 }
     );
   }
 }
 
 // Function to split transcription into sentences and gaps
-function generateScenesFromTranscription(transcriptionData: any, videoId: string) {
+function generateScenesFromTranscription(
+  transcriptionData: any,
+  videoId: string
+) {
   // Handle different data structures
   let segments: any[] = [];
-  
+
   if (Array.isArray(transcriptionData)) {
     // Direct array of word objects
     segments = transcriptionData;
@@ -63,11 +85,19 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
   } else if (transcriptionData.words) {
     segments = transcriptionData.words;
   }
-  
-  console.log('Processing', segments.length, 'word segments into sentences and gaps');
-  
+
+  console.log(
+    'Processing',
+    segments.length,
+    'word segments into sentences and gaps'
+  );
+
   if (!Array.isArray(segments) || segments.length === 0) {
-    throw new Error(`No segments found in transcription data. Available keys: ${Object.keys(transcriptionData || {}).join(', ')}`);
+    throw new Error(
+      `No segments found in transcription data. Available keys: ${Object.keys(
+        transcriptionData || {}
+      ).join(', ')}`
+    );
   }
 
   const sentenceSegments = [];
@@ -80,34 +110,57 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
 
   // Function to detect sentence endings
   function isSentenceEnd(word: string): boolean {
-    const abbreviations = ['mr', 'mrs', 'dr', 'prof', 'sr', 'jr', 'vs', 'etc', 'inc', 'ltd', 'co', 'st', 'ave', 'blvd'];
+    const abbreviations = [
+      'mr',
+      'mrs',
+      'dr',
+      'prof',
+      'sr',
+      'jr',
+      'vs',
+      'etc',
+      'inc',
+      'ltd',
+      'co',
+      'st',
+      'ave',
+      'blvd',
+    ];
     const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
-    
+
     if (abbreviations.includes(cleanWord)) {
       return false;
     }
-    
+
     return /[.!?]$/.test(word.trim());
   }
 
   // Process words to create sentence segments
   for (let i = 0; i < segments.length; i++) {
     const wordObj = segments[i];
-    
+
     // Handle different word object structures
     let word: string, start: number, end: number;
-    
+
     if (typeof wordObj === 'string') {
       // If it's just a string, we can't process timing
       throw new Error('Word objects must include timing information');
-    } else if (wordObj.word && typeof wordObj.start === 'number' && typeof wordObj.end === 'number') {
+    } else if (
+      wordObj.word &&
+      typeof wordObj.start === 'number' &&
+      typeof wordObj.end === 'number'
+    ) {
       // Standard structure: { word, start, end }
       word = wordObj.word;
       start = wordObj.start;
       end = wordObj.end;
     } else {
       console.error('Unexpected word object structure:', wordObj);
-      throw new Error(`Invalid word object structure at index ${i}: ${JSON.stringify(wordObj)}`);
+      throw new Error(
+        `Invalid word object structure at index ${i}: ${JSON.stringify(
+          wordObj
+        )}`
+      );
     }
 
     if (currentSegment.startTime === null) {
@@ -118,9 +171,12 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
     currentSegment.endTime = end;
 
     if (isSentenceEnd(word)) {
-      if (currentSegment.startTime !== null && currentSegment.endTime !== null) {
+      if (
+        currentSegment.startTime !== null &&
+        currentSegment.endTime !== null
+      ) {
         const exactDuration = currentSegment.endTime - currentSegment.startTime;
-        
+
         sentenceSegments.push({
           id: currentSegment.id,
           words: currentSegment.words.trim(),
@@ -141,9 +197,13 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
   }
 
   // Handle leftover words
-  if (currentSegment.words && currentSegment.startTime !== null && currentSegment.endTime !== null) {
+  if (
+    currentSegment.words &&
+    currentSegment.startTime !== null &&
+    currentSegment.endTime !== null
+  ) {
     const exactDuration = currentSegment.endTime - currentSegment.startTime;
-    
+
     sentenceSegments.push({
       id: currentSegment.id,
       words: currentSegment.words.trim(),
@@ -159,14 +219,18 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
   let segmentId = 0;
 
   // Check if there's silence at the beginning
-  if (sentenceSegments.length > 0 && sentenceSegments[0].startTime !== null && sentenceSegments[0].startTime > 0) {
+  if (
+    sentenceSegments.length > 0 &&
+    sentenceSegments[0].startTime !== null &&
+    sentenceSegments[0].startTime > 0
+  ) {
     allSegments.push({
       id: segmentId++,
       words: '',
       duration: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
       startTime: 0,
       endTime: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
-      preEndTime: 0.00,
+      preEndTime: 0.0,
       type: 'gap',
       videoId,
     });
@@ -174,13 +238,13 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
 
   for (let i = 0; i < sentenceSegments.length; i++) {
     const sentence = sentenceSegments[i];
-    
+
     // Calculate previous end time
     let preEndTime = 0;
     if (allSegments.length > 0) {
       preEndTime = allSegments[allSegments.length - 1].endTime;
     }
-    
+
     // Add the sentence segment
     if (sentence.startTime !== null && sentence.endTime !== null) {
       allSegments.push({
@@ -194,7 +258,7 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
         videoId,
       });
     }
-    
+
     // Add gap segment if there's a next sentence
     if (i < sentenceSegments.length - 1) {
       const nextSentence = sentenceSegments[i + 1];
@@ -202,7 +266,7 @@ function generateScenesFromTranscription(transcriptionData: any, videoId: string
         const gapStartTime = sentence.endTime;
         const gapEndTime = nextSentence.startTime;
         const gapDuration = gapEndTime - gapStartTime;
-        
+
         // Record all gaps (no threshold check as requested)
         if (gapDuration > 0) {
           allSegments.push({
@@ -228,9 +292,11 @@ async function createSceneRecord(scene: any) {
   const baserowUrl = process.env.BASEROW_API_URL;
   const email = process.env.BASEROW_EMAIL;
   const password = process.env.BASEROW_PASSWORD;
-  
+
   if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration. Please check your environment variables.');
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
   }
 
   // Get JWT token
@@ -247,7 +313,9 @@ async function createSceneRecord(scene: any) {
 
   if (!authResponse.ok) {
     const errorText = await authResponse.text();
-    throw new Error(`Authentication failed: ${authResponse.status} ${errorText}`);
+    throw new Error(
+      `Authentication failed: ${authResponse.status} ${errorText}`
+    );
   }
 
   const authData = await authResponse.json();
@@ -257,7 +325,7 @@ async function createSceneRecord(scene: any) {
   const response = await fetch(`${baserowUrl}/database/rows/table/714/`, {
     method: 'POST',
     headers: {
-      'Authorization': `JWT ${token}`,
+      Authorization: `JWT ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -273,7 +341,71 @@ async function createSceneRecord(scene: any) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to create scene record: ${response.status} ${errorText}`);
+    throw new Error(
+      `Failed to create scene record: ${response.status} ${errorText}`
+    );
+  }
+
+  return response.json();
+}
+
+// Function to update original video record with scene IDs
+async function updateOriginalVideoWithScenes(
+  videoId: string,
+  sceneIds: number[]
+) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const email = process.env.BASEROW_EMAIL;
+  const password = process.env.BASEROW_PASSWORD;
+
+  if (!baserowUrl || !email || !password) {
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
+  }
+
+  // Get JWT token
+  const authResponse = await fetch(`${baserowUrl}/user/token-auth/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  });
+
+  if (!authResponse.ok) {
+    const errorText = await authResponse.text();
+    throw new Error(
+      `Authentication failed: ${authResponse.status} ${errorText}`
+    );
+  }
+
+  const authData = await authResponse.json();
+  const token = authData.token;
+
+  // Update original video record with scene IDs
+  const response = await fetch(
+    `${baserowUrl}/database/rows/table/713/${videoId}/`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `JWT ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        field_6866: sceneIds, // Scenes field - linked to table
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to update original video record: ${response.status} ${errorText}`
+    );
   }
 
   return response.json();
