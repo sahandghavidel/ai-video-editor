@@ -134,7 +134,8 @@ export const handleGenerateAllVideos = async (
 export const handleConcatenateAllVideos = async (
   data: BaserowRow[],
   startBatchOperation: (operation: 'concatenatingVideos') => void,
-  completeBatchOperation: (operation: 'concatenatingVideos') => void
+  completeBatchOperation: (operation: 'concatenatingVideos') => void,
+  setMergedVideo: (url: string, fileName?: string) => void
 ) => {
   startBatchOperation('concatenatingVideos');
   try {
@@ -190,10 +191,13 @@ export const handleConcatenateAllVideos = async (
 
     console.log('Concatenated video URL:', concatenatedVideoUrl);
 
-    // Show success message with the video URL
-    alert(
-      `Videos concatenated successfully!\nVideo URL: ${concatenatedVideoUrl}`
-    );
+    // Save the merged video URL to global state
+    const fileName = `merged-video-${
+      new Date().toISOString().split('T')[0]
+    }.mp4`;
+    setMergedVideo(concatenatedVideoUrl, fileName);
+
+    console.log('Videos concatenated successfully! URL saved to global state.');
 
     // You could optionally save this URL to a specific field or create a new record
     // For now, just show the URL to the user

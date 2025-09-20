@@ -2,6 +2,7 @@
 
 import { BaserowRow } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
+import { useState, useRef } from 'react';
 import {
   handleImproveAllSentences,
   handleGenerateAllTTS,
@@ -18,6 +19,12 @@ import {
   RefreshCw,
   Volume2,
   VolumeX,
+  Download,
+  ExternalLink,
+  X,
+  Play,
+  Pause,
+  Square,
 } from 'lucide-react';
 
 interface BatchOperationsProps {
@@ -57,8 +64,84 @@ export default function BatchOperations({
     setImprovingSentence,
     setSpeedingUpVideo,
     setGeneratingVideo,
+    mergedVideo,
+    setMergedVideo,
+    clearMergedVideo,
   } = useAppStore();
 
+  // Video player state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Video player controls
+  const handlePlayPause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isPlaying) {
+      video.pause();
+      setIsPlaying(false);
+    } else {
+      video.play();
+      setIsPlaying(true);
+    }
+  };
+
+  const handleStop = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.pause();
+    video.currentTime = 0;
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleVideoEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleTimeUpdate = () => {
+    const video = videoRef.current;
+    if (!video || isDragging) return;
+
+    setCurrentTime(video.currentTime);
+  };
+
+  const handleLoadedMetadata = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    setDuration(video.duration);
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const newTime = parseFloat(e.target.value);
+    video.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const handleSeekStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleSeekEnd = () => {
+    setIsDragging(false);
+  };
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
   const onImproveAllSentences = () => {
     handleImproveAllSentences(
       data,
@@ -95,7 +178,8 @@ export default function BatchOperations({
     handleConcatenateAllVideos(
       data,
       startBatchOperation,
-      completeBatchOperation
+      completeBatchOperation,
+      setMergedVideo
     );
   };
 
@@ -147,6 +231,170 @@ export default function BatchOperations({
           </div>
         )}
       </div>
+
+      {/* Merged Video Display */}
+      {mergedVideo.url && (
+        <div className='bg-gradient-to-br from-green-50 to-emerald-100 rounded-lg p-6 border border-green-200 mb-6'>
+          <div className='flex items-start justify-between'>
+            <div className='flex-1'>
+              <div className='flex items-center gap-3 mb-4'>
+                <div className='p-2 bg-emerald-500 rounded-lg'>
+                  <Film className='w-5 h-5 text-white' />
+                </div>
+                <div>
+                  <h3 className='font-semibold text-emerald-900 text-lg'>
+                    Merged Video Ready
+                  </h3>
+                  <p className='text-sm text-emerald-700'>
+                    Created{' '}
+                    {mergedVideo.createdAt
+                      ? new Date(mergedVideo.createdAt).toLocaleString()
+                      : 'now'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Video Player Section */}
+              <div className='bg-white rounded-lg p-4 border border-emerald-200 mb-4'>
+                <div className='flex items-center justify-between mb-3'>
+                  <p className='text-sm text-gray-600 font-medium'>
+                    {mergedVideo.fileName}
+                  </p>
+                  <button
+                    onClick={() => setShowPlayer(!showPlayer)}
+                    className='text-emerald-600 hover:text-emerald-800 text-sm font-medium'
+                  >
+                    {showPlayer ? 'Hide Player' : 'Show Player'}
+                  </button>
+                </div>
+
+                {/* Video Player */}
+                {showPlayer && (
+                  <div className='mb-4'>
+                    <div className='bg-black rounded-lg overflow-hidden'>
+                      <video
+                        ref={videoRef}
+                        src={mergedVideo.url}
+                        className='w-full h-auto max-h-96'
+                        onEnded={handleVideoEnded}
+                        onTimeUpdate={handleTimeUpdate}
+                        onLoadedMetadata={handleLoadedMetadata}
+                        controls={false}
+                        preload='metadata'
+                      />
+                    </div>
+                    {/* Video Controls */}
+                    <div className='mt-3 p-3 bg-gray-100 rounded-lg'>
+                      {/* Progress Bar */}
+                      <div className='mb-3'>
+                        <div className='flex items-center gap-2 text-sm text-gray-600 mb-2'>
+                          <span>{formatTime(currentTime)}</span>
+                          <span>/</span>
+                          <span>{formatTime(duration)}</span>
+                        </div>
+                        <div className='relative'>
+                          <input
+                            type='range'
+                            min='0'
+                            max={duration || 0}
+                            value={currentTime}
+                            onChange={handleSeek}
+                            onMouseDown={handleSeekStart}
+                            onMouseUp={handleSeekEnd}
+                            onTouchStart={handleSeekStart}
+                            onTouchEnd={handleSeekEnd}
+                            className='w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-opacity-50'
+                            style={{
+                              background: `linear-gradient(to right, #10b981 0%, #10b981 ${
+                                duration ? (currentTime / duration) * 100 : 0
+                              }%, #d1d5db ${
+                                duration ? (currentTime / duration) * 100 : 0
+                              }%, #d1d5db 100%)`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Control Buttons */}
+                      <div className='flex items-center gap-2'>
+                        <button
+                          onClick={handlePlayPause}
+                          className='flex items-center justify-center w-10 h-10 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full transition-colors'
+                          title={isPlaying ? 'Pause' : 'Play'}
+                        >
+                          {isPlaying ? (
+                            <Pause className='w-5 h-5 ml-0.5' />
+                          ) : (
+                            <Play className='w-5 h-5 ml-0.5' />
+                          )}
+                        </button>
+                        <button
+                          onClick={handleStop}
+                          className='flex items-center justify-center w-10 h-10 bg-gray-500 hover:bg-gray-600 text-white rounded-full transition-colors'
+                          title='Stop'
+                        >
+                          <Square className='w-4 h-4' />
+                        </button>
+                        <div className='flex-1 text-center'>
+                          <span className='text-sm text-gray-600'>
+                            {isPlaying ? 'Playing' : 'Paused'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className='flex flex-col sm:flex-row gap-3'>
+                  <button
+                    onClick={() => setShowPlayer(!showPlayer)}
+                    className='inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
+                  >
+                    <Play className='w-4 h-4' />
+                    {showPlayer ? 'Hide Player' : 'Play Video'}
+                  </button>
+                  <a
+                    href={mergedVideo.url}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
+                  >
+                    <ExternalLink className='w-4 h-4' />
+                    Open in New Tab
+                  </a>
+                  <a
+                    href={mergedVideo.url}
+                    download={mergedVideo.fileName}
+                    className='inline-flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
+                  >
+                    <Download className='w-4 h-4' />
+                    Download
+                  </a>
+                  <button
+                    onClick={() =>
+                      mergedVideo.url &&
+                      navigator.clipboard.writeText(mergedVideo.url)
+                    }
+                    className='inline-flex items-center gap-2 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
+                  >
+                    <Film className='w-4 h-4' />
+                    Copy URL
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={clearMergedVideo}
+              className='ml-4 p-2 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-200 rounded-lg transition-colors'
+              title='Dismiss'
+            >
+              <X className='w-5 h-5' />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Operation Cards Grid */}
       <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4'>

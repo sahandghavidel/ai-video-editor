@@ -51,6 +51,13 @@ export interface SceneLoadingState {
   generatingVideo: number | null;
 }
 
+// Merged video state interface
+export interface MergedVideoState {
+  url: string | null;
+  createdAt: Date | null;
+  fileName: string | null;
+}
+
 interface AppState {
   // Core data state
   data: BaserowRow[];
@@ -74,6 +81,9 @@ interface AppState {
 
   // Scene Loading State
   sceneLoading: SceneLoadingState;
+
+  // Merged Video State
+  mergedVideo: MergedVideoState;
 
   // Actions
   setData: (data: BaserowRow[]) => void;
@@ -112,6 +122,10 @@ interface AppState {
   setImprovingSentence: (sceneId: number | null) => void;
   setSpeedingUpVideo: (sceneId: number | null) => void;
   setGeneratingVideo: (sceneId: number | null) => void;
+
+  // Merged Video Actions
+  setMergedVideo: (url: string, fileName?: string) => void;
+  clearMergedVideo: () => void;
 
   // Data operations
   updateRow: (id: number, updates: Partial<BaserowRow>) => void;
@@ -168,6 +182,13 @@ const defaultSceneLoading: SceneLoadingState = {
   generatingVideo: null,
 };
 
+// Default merged video state
+const defaultMergedVideo: MergedVideoState = {
+  url: null,
+  createdAt: null,
+  fileName: null,
+};
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   data: [],
@@ -191,6 +212,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Scene Loading State
   sceneLoading: defaultSceneLoading,
+
+  // Merged Video State
+  mergedVideo: defaultMergedVideo,
 
   // Actions
   setData: (data) => set({ data }),
@@ -325,6 +349,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       sceneLoading: { ...state.sceneLoading, generatingVideo: sceneId },
     })),
+
+  // Merged Video Actions
+  setMergedVideo: (url, fileName) =>
+    set({
+      mergedVideo: {
+        url,
+        createdAt: new Date(),
+        fileName: fileName || 'merged-video.mp4',
+      },
+    }),
+
+  clearMergedVideo: () =>
+    set({
+      mergedVideo: defaultMergedVideo,
+    }),
 
   // Data operations
   updateRow: (id, updates) =>
