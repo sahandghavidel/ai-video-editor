@@ -70,6 +70,16 @@ export interface SelectedOriginalVideoState {
   sceneIds: number[];
 }
 
+// Clip generation state interface
+export interface ClipGenerationState {
+  generatingClips: number | null;
+  clipsProgress: {
+    current: number;
+    total: number;
+    percentage: number;
+  } | null;
+}
+
 interface AppState {
   // Core data state
   data: BaserowRow[];
@@ -99,6 +109,9 @@ interface AppState {
 
   // Selected Original Video State
   selectedOriginalVideo: SelectedOriginalVideoState;
+
+  // Clip Generation State
+  clipGeneration: ClipGenerationState;
 
   // Computed properties
   getFilteredData: () => BaserowRow[];
@@ -154,6 +167,17 @@ interface AppState {
     sceneIds?: number[]
   ) => void;
   clearSelectedOriginalVideo: () => void;
+
+  // Clip Generation Actions
+  setGeneratingClips: (videoId: number | null) => void;
+  setClipsProgress: (
+    progress: {
+      current: number;
+      total: number;
+      percentage: number;
+    } | null
+  ) => void;
+  clearClipGeneration: () => void;
 
   // Settings Persistence Actions
   saveSettingsToLocalStorage: () => void;
@@ -231,6 +255,11 @@ const defaultSelectedOriginalVideo: SelectedOriginalVideoState = {
   sceneIds: [],
 };
 
+const defaultClipGeneration: ClipGenerationState = {
+  generatingClips: null,
+  clipsProgress: null,
+};
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   data: [],
@@ -260,6 +289,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Selected Original Video State
   selectedOriginalVideo: defaultSelectedOriginalVideo,
+
+  // Clip Generation State
+  clipGeneration: defaultClipGeneration,
 
   // Computed properties
   getFilteredData: () => {
@@ -500,6 +532,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearSelectedOriginalVideo: () =>
     set({
       selectedOriginalVideo: defaultSelectedOriginalVideo,
+    }),
+
+  // Clip Generation Actions
+  setGeneratingClips: (videoId) =>
+    set((state) => ({
+      clipGeneration: {
+        ...state.clipGeneration,
+        generatingClips: videoId,
+      },
+    })),
+
+  setClipsProgress: (progress) =>
+    set((state) => ({
+      clipGeneration: {
+        ...state.clipGeneration,
+        clipsProgress: progress,
+      },
+    })),
+
+  clearClipGeneration: () =>
+    set({
+      clipGeneration: defaultClipGeneration,
     }),
 
   // Data operations

@@ -288,9 +288,11 @@ async function getJWTToken() {
   const baserowUrl = process.env.BASEROW_API_URL;
   const email = process.env.BASEROW_EMAIL;
   const password = process.env.BASEROW_PASSWORD;
-  
+
   if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration. Please check your environment variables.');
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
   }
 
   const authResponse = await fetch(`${baserowUrl}/user/token-auth/`, {
@@ -306,7 +308,9 @@ async function getJWTToken() {
 
   if (!authResponse.ok) {
     const errorText = await authResponse.text();
-    throw new Error(`Authentication failed: ${authResponse.status} ${errorText}`);
+    throw new Error(
+      `Authentication failed: ${authResponse.status} ${errorText}`
+    );
   }
 
   const authData = await authResponse.json();
@@ -320,7 +324,7 @@ async function createSceneRecordsBatch(scenes: any[]) {
 
   // Prepare batch data
   const batchData = {
-    items: scenes.map(scene => ({
+    items: scenes.map((scene) => ({
       field_6884: scene.duration, // Duration
       field_6889: scene.videoId, // Video ID
       field_6890: scene.words, // Sentence
@@ -328,14 +332,14 @@ async function createSceneRecordsBatch(scenes: any[]) {
       field_6897: scene.endTime, // End Time
       field_6898: scene.preEndTime, // Pre End Time
       field_6901: scene.words, // Original Sentence (same as sentence)
-    }))
+    })),
   };
 
   // Create scene records in batch
   const response = await fetch(`${baserowUrl}/database/rows/table/714/batch/`, {
     method: 'POST',
     headers: {
-      'Authorization': `JWT ${token}`,
+      Authorization: `JWT ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(batchData),
@@ -343,7 +347,9 @@ async function createSceneRecordsBatch(scenes: any[]) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to create scene records in batch: ${response.status} ${errorText}`);
+    throw new Error(
+      `Failed to create scene records in batch: ${response.status} ${errorText}`
+    );
   }
 
   const result = await response.json();

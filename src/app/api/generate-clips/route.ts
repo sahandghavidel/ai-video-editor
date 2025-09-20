@@ -1,0 +1,416 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(request: NextRequest) {
+  try {
+    const { videoId } = await request.json();
+
+    if (!videoId) {
+      return NextResponse.json(
+        { error: 'Video ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Create a readable stream for Server-Sent Events
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          console.log('Generating clips for video:', videoId);
+
+          // Step 1: Get the original video data to get the video URL
+          const originalVideo = await getOriginalVideoData(videoId);
+          const videoUrl = extractVideoUrl(originalVideo.field_6881); // Video Uploaded URL
+
+          if (!videoUrl) {
+            throw new Error('No video URL found for this video');
+          }
+
+          // Step 2: Get all scenes for this video
+          const scenes = await getScenesForVideo(videoId);
+
+          if (scenes.length === 0) {
+            throw new Error('No scenes found for this video');
+          }
+
+          // Send initial progress
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'progress',
+                current: 0,
+                total: scenes.length,
+                percentage: 0,
+                message: `Starting to process ${scenes.length} scenes...`,
+              })}\n\n`
+            )
+          );
+
+          console.log(`Found ${scenes.length} scenes to process`);
+
+          // Step 3: Process each scene to create video clips (one by one)
+          const processedClips = [];
+          for (let i = 0; i < scenes.length; i++) {
+            const scene = scenes[i];
+            const sceneNumber = i + 1;
+            const progressPercentage = Math.round(
+              (sceneNumber / scenes.length) * 100
+            );
+
+            // Send progress update
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: 'progress',
+                  current: sceneNumber,
+                  total: scenes.length,
+                  percentage: progressPercentage,
+                  message: `Processing scene ${sceneNumber}/${scenes.length}...`,
+                })}\n\n`
+              )
+            );
+
+            try {
+              const clipUrl = await createVideoClip(videoUrl, scene);
+
+              await updateSceneWithClipUrl(scene.id, clipUrl);
+
+              processedClips.push({
+                sceneId: scene.id,
+                clipUrl,
+                sceneNumber,
+                progress: progressPercentage,
+              });
+
+              // Send scene completion update
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: 'scene_complete',
+                    sceneId: scene.id,
+                    sceneNumber,
+                    clipUrl,
+                    current: sceneNumber,
+                    total: scenes.length,
+                    percentage: progressPercentage,
+                  })}\n\n`
+                )
+              );
+            } catch (error) {
+              console.error(
+                `Failed to create clip for scene ${scene.id}:`,
+                error
+              );
+
+              // Send error update
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: 'scene_error',
+                    sceneId: scene.id,
+                    sceneNumber,
+                    error:
+                      error instanceof Error ? error.message : 'Unknown error',
+                    current: sceneNumber,
+                    total: scenes.length,
+                    percentage: progressPercentage,
+                  })}\n\n`
+                )
+              );
+              // Continue with next scene even if one fails
+            }
+          }
+
+          // Send completion
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'complete',
+                totalScenes: scenes.length,
+                processedScenes: processedClips.length,
+                failedScenes: scenes.length - processedClips.length,
+                clips: processedClips,
+              })}\n\n`
+            )
+          );
+
+          controller.close();
+        } catch (error) {
+          console.error('Error generating clips:', error);
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+              })}\n\n`
+            )
+          );
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
+  } catch (error) {
+    console.error('Error in generate-clips API:', error);
+    return NextResponse.json(
+      {
+        error: `Failed to generate clips: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Helper function to extract video URL
+function extractVideoUrl(field: any): string | null {
+  if (!field) return null;
+
+  if (typeof field === 'string' && field.startsWith('http')) {
+    return field;
+  }
+
+  if (typeof field === 'object' && field !== null) {
+    if (field.url) return field.url;
+    if (field.file && field.file.url) return field.file.url;
+  }
+
+  if (Array.isArray(field) && field.length > 0) {
+    const firstItem = field[0];
+    if (typeof firstItem === 'string' && firstItem.startsWith('http')) {
+      return firstItem;
+    }
+    if (typeof firstItem === 'object' && firstItem !== null) {
+      if (firstItem.url) return firstItem.url;
+      if (firstItem.file && firstItem.file.url) return firstItem.file.url;
+    }
+  }
+
+  return null;
+}
+
+// Import the working authentication from baserow-actions
+async function getJWTToken(): Promise<string> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const email = process.env.BASEROW_EMAIL;
+  const password = process.env.BASEROW_PASSWORD;
+
+  if (!baserowUrl || !email || !password) {
+    throw new Error('Missing Baserow configuration');
+  }
+
+  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.token;
+}
+
+// Function to get original video data
+async function getOriginalVideoData(videoId: string) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const token = await getJWTToken();
+
+  const response = await fetch(
+    `${baserowUrl}/database/rows/table/713/${videoId}/`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `JWT ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to get original video data: ${response.status} ${errorText}`
+    );
+  }
+
+  return response.json();
+}
+
+// Function to get scenes for a video (with pagination support)
+async function getScenesForVideo(videoId: string) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const token = await getJWTToken();
+
+  let allScenes = [];
+  let page = 1;
+  let hasMorePages = true;
+  const pageSize = 200; // Fetch 200 scenes per page
+
+  while (hasMorePages) {
+    // Get scenes where Video ID (field_6889) matches the videoId
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/714/?filter__field_6889__equal=${videoId}&size=${pageSize}&page=${page}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `JWT ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to get scenes: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    const scenes = data.results || [];
+
+    allScenes.push(...scenes);
+
+    // Check if there are more pages
+    hasMorePages = data.next !== null && scenes.length === pageSize;
+    page++;
+
+    console.log(
+      `Fetched scenes page ${page - 1}: ${
+        scenes.length
+      } scenes, Total so far: ${allScenes.length}`
+    );
+  }
+
+  console.log(`Total scenes fetched for video ${videoId}: ${allScenes.length}`);
+  return allScenes;
+}
+
+// Function to create video clip using NCA toolkit
+async function createVideoClip(videoUrl: string, scene: any) {
+  const ncaUrl = 'http://host.docker.internal:8080/v1/video/trim';
+
+  const requestBody = {
+    video_url: videoUrl,
+    start: scene.field_6898.toString(), // Pre End Time as string
+    end: scene.field_6897.toString(), // End Time as string
+    id: scene.id.toString(), // Scene ID as string
+  };
+
+  console.log('NCA trim request:', requestBody);
+
+  const response = await fetch(ncaUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'test-key-123', // Using the same API key as other NCA endpoints
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`NCA toolkit trim failed: ${response.status} ${errorText}`);
+  }
+
+  const result = await response.json();
+  console.log('NCA trim response:', result);
+
+  // Extract the clip URL from the response
+  const clipUrl =
+    result.response || result.clip_url || result.url || result.file_url;
+  console.log('Extracted clip URL:', clipUrl);
+
+  if (!clipUrl) {
+    throw new Error('No clip URL returned from NCA toolkit');
+  }
+
+  return clipUrl;
+}
+
+// Function to get a single scene by ID for verification
+async function getSceneById(sceneId: number) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const token = await getJWTToken();
+
+  const response = await fetch(
+    `${baserowUrl}/database/rows/table/714/${sceneId}/`,
+    {
+      headers: {
+        Authorization: `JWT ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to fetch scene ${sceneId}: ${response.status} ${errorText}`
+    );
+  }
+
+  return response.json();
+}
+
+// Function to update scene with clip URL
+async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+
+  try {
+    console.log(`Updating scene ${sceneId} with clip URL: ${clipUrl}`);
+    const token = await getJWTToken();
+    console.log(`Got JWT token for scene ${sceneId} update`);
+
+    const updateData = {
+      field_6886: clipUrl, // Videos field
+      field_6888: clipUrl, // Video Clip URL field
+    };
+    console.log(`Update data for scene ${sceneId}:`, updateData);
+
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/714/${sceneId}/`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `JWT ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      }
+    );
+
+    console.log(
+      `Update response status for scene ${sceneId}: ${response.status}`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Failed to update scene ${sceneId}:`, errorText);
+      throw new Error(
+        `Failed to update scene with clip URL: ${response.status} ${errorText}`
+      );
+    }
+
+    const result = await response.json();
+    console.log(`Successfully updated scene ${sceneId} in database:`, result);
+    return result;
+  } catch (error) {
+    console.error(`Error updating scene ${sceneId}:`, error);
+    throw error;
+  }
+}

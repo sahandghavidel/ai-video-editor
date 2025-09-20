@@ -6,6 +6,7 @@ import {
   getOriginalVideosData,
   updateOriginalVideoRow,
   deleteOriginalVideoWithScenes,
+  getBaserowData,
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -47,6 +48,14 @@ export default function OriginalVideosList() {
   const [transcribingAll, setTranscribingAll] = useState(false);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
+
+  // Get clip generation state from global store
+  const {
+    clipGeneration,
+    setGeneratingClips: setGeneratingClipsGlobal,
+    setClipsProgress: setClipsProgressGlobal,
+    clearClipGeneration,
+  } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global state
@@ -867,6 +876,125 @@ export default function OriginalVideosList() {
     return response.json();
   };
 
+  // Generate Clips for video
+  const handleGenerateClips = async (videoId: number) => {
+    try {
+      setGeneratingClipsGlobal(videoId);
+      setClipsProgressGlobal({ current: 0, total: 1, percentage: 0 });
+      setError(null);
+
+      console.log('Generating clips for video:', videoId);
+
+      // Use EventSource for Server-Sent Events
+      const eventSource = new EventSource('/api/generate-clips', {
+        // Note: EventSource doesn't support POST directly, so we need to use a different approach
+      });
+
+      // Alternative: Use fetch with streaming
+      const response = await fetch('/api/generate-clips', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start clip generation');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No response body available');
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete lines
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              switch (data.type) {
+                case 'progress':
+                  setClipsProgressGlobal({
+                    current: data.current,
+                    total: data.total,
+                    percentage: data.percentage,
+                  });
+                  break;
+
+                case 'scene_complete':
+                  setClipsProgressGlobal({
+                    current: data.current,
+                    total: data.total,
+                    percentage: data.percentage,
+                  });
+                  break;
+
+                case 'scene_error':
+                  console.error(
+                    `Scene ${data.sceneNumber} failed:`,
+                    data.error
+                  );
+                  setClipsProgressGlobal({
+                    current: data.current,
+                    total: data.total,
+                    percentage: data.percentage,
+                  });
+                  break;
+
+                case 'complete':
+                  console.log('Clips generation completed:', data);
+                  setClipsProgressGlobal({
+                    current: data.processedScenes,
+                    total: data.totalScenes,
+                    percentage: 100,
+                  });
+
+                  // Refresh the data to show any changes
+                  await handleRefresh();
+                  break;
+
+                case 'error':
+                  throw new Error(data.error);
+              }
+            } catch (parseError) {
+              console.error('Error parsing SSE data:', parseError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error generating clips:', error);
+      setError(
+        `Failed to generate clips: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      // Small delay to show completion before clearing
+      setTimeout(() => {
+        clearClipGeneration();
+      }, 2000);
+    }
+  };
+
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
@@ -1447,6 +1575,45 @@ export default function OriginalVideosList() {
                               <Loader2 className='w-4 h-4 animate-spin' />
                             ) : (
                               <Grid3x3 className='w-4 h-4' />
+                            )}
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGenerateClips(video.id);
+                            }}
+                            disabled={
+                              clipGeneration.generatingClips !== null ||
+                              !hasScenes(video)
+                            }
+                            className='p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                            title={
+                              clipGeneration.generatingClips !== null
+                                ? clipGeneration.generatingClips === video.id
+                                  ? clipGeneration.clipsProgress
+                                    ? `Generating clips... Scene ${clipGeneration.clipsProgress.current}/${clipGeneration.clipsProgress.total} (${clipGeneration.clipsProgress.percentage}%)`
+                                    : 'Generating clips...'
+                                  : 'Another clip generation in progress'
+                                : !hasScenes(video)
+                                ? 'No scenes available - generate scenes first'
+                                : 'Generate video clips for all scenes'
+                            }
+                          >
+                            {clipGeneration.generatingClips === video.id ? (
+                              clipGeneration.clipsProgress ? (
+                                <div className='flex items-center space-x-1'>
+                                  <Loader2 className='w-4 h-4 animate-spin' />
+                                  <span className='text-xs font-medium'>
+                                    {clipGeneration.clipsProgress.current}/
+                                    {clipGeneration.clipsProgress.total}
+                                  </span>
+                                </div>
+                              ) : (
+                                <Loader2 className='w-4 h-4 animate-spin' />
+                              )
+                            ) : (
+                              <Video className='w-4 h-4' />
                             )}
                           </button>
                         </div>
