@@ -289,15 +289,8 @@ async function getScenesForVideo(videoId: string) {
     // Check if there are more pages
     hasMorePages = data.next !== null && scenes.length === pageSize;
     page++;
-
-    console.log(
-      `Fetched scenes page ${page - 1}: ${
-        scenes.length
-      } scenes, Total so far: ${allScenes.length}`
-    );
   }
 
-  console.log(`Total scenes fetched for video ${videoId}: ${allScenes.length}`);
   return allScenes;
 }
 
@@ -311,8 +304,6 @@ async function createVideoClip(videoUrl: string, scene: any) {
     end: scene.field_6897.toString(), // End Time as string
     id: scene.id.toString(), // Scene ID as string
   };
-
-  console.log('NCA trim request:', requestBody);
 
   const response = await fetch(ncaUrl, {
     method: 'POST',
@@ -329,12 +320,10 @@ async function createVideoClip(videoUrl: string, scene: any) {
   }
 
   const result = await response.json();
-  console.log('NCA trim response:', result);
 
   // Extract the clip URL from the response
   const clipUrl =
     result.response || result.clip_url || result.url || result.file_url;
-  console.log('Extracted clip URL:', clipUrl);
 
   if (!clipUrl) {
     throw new Error('No clip URL returned from NCA toolkit');
@@ -372,15 +361,12 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
 
   try {
-    console.log(`Updating scene ${sceneId} with clip URL: ${clipUrl}`);
     const token = await getJWTToken();
-    console.log(`Got JWT token for scene ${sceneId} update`);
 
     const updateData = {
       field_6886: clipUrl, // Videos field
       field_6888: clipUrl, // Video Clip URL field
     };
-    console.log(`Update data for scene ${sceneId}:`, updateData);
 
     const response = await fetch(
       `${baserowUrl}/database/rows/table/714/${sceneId}/`,
@@ -394,20 +380,14 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
       }
     );
 
-    console.log(
-      `Update response status for scene ${sceneId}: ${response.status}`
-    );
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Failed to update scene ${sceneId}:`, errorText);
       throw new Error(
         `Failed to update scene with clip URL: ${response.status} ${errorText}`
       );
     }
 
     const result = await response.json();
-    console.log(`Successfully updated scene ${sceneId} in database:`, result);
     return result;
   } catch (error) {
     console.error(`Error updating scene ${sceneId}:`, error);
