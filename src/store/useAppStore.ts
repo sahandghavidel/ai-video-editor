@@ -58,6 +58,14 @@ export interface MergedVideoState {
   fileName: string | null;
 }
 
+// Selected original video state interface
+export interface SelectedOriginalVideoState {
+  id: number | null;
+  videoUrl: string | null;
+  status: string | null;
+  sceneIds: number[];
+}
+
 interface AppState {
   // Core data state
   data: BaserowRow[];
@@ -84,6 +92,9 @@ interface AppState {
 
   // Merged Video State
   mergedVideo: MergedVideoState;
+
+  // Selected Original Video State
+  selectedOriginalVideo: SelectedOriginalVideoState;
 
   // Actions
   setData: (data: BaserowRow[]) => void;
@@ -126,6 +137,15 @@ interface AppState {
   // Merged Video Actions
   setMergedVideo: (url: string, fileName?: string) => void;
   clearMergedVideo: () => void;
+
+  // Selected Original Video Actions
+  setSelectedOriginalVideo: (
+    id: number | null,
+    videoUrl?: string | null,
+    status?: string | null,
+    sceneIds?: number[]
+  ) => void;
+  clearSelectedOriginalVideo: () => void;
 
   // Settings Persistence Actions
   saveSettingsToLocalStorage: () => void;
@@ -194,6 +214,14 @@ const defaultMergedVideo: MergedVideoState = {
   fileName: null,
 };
 
+// Default selected original video state
+const defaultSelectedOriginalVideo: SelectedOriginalVideoState = {
+  id: null,
+  videoUrl: null,
+  status: null,
+  sceneIds: [],
+};
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   data: [],
@@ -220,6 +248,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Merged Video State
   mergedVideo: defaultMergedVideo,
+
+  // Selected Original Video State
+  selectedOriginalVideo: defaultSelectedOriginalVideo,
 
   // Actions
   setData: (data) => set({ data }),
@@ -370,6 +401,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       mergedVideo: defaultMergedVideo,
     }),
 
+  // Selected Original Video Actions
+  setSelectedOriginalVideo: (id, videoUrl, status, sceneIds) =>
+    set({
+      selectedOriginalVideo: {
+        id,
+        videoUrl: videoUrl || null,
+        status: status || null,
+        sceneIds: sceneIds || [],
+      },
+    }),
+
+  clearSelectedOriginalVideo: () =>
+    set({
+      selectedOriginalVideo: defaultSelectedOriginalVideo,
+    }),
+
   // Data operations
   updateRow: (id, updates) =>
     set((state) => ({
@@ -393,6 +440,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedModel: state.modelSelection.selectedModel,
         modelSearch: state.modelSelection.modelSearch,
       },
+      selectedOriginalVideo: state.selectedOriginalVideo,
     };
 
     try {
@@ -424,6 +472,12 @@ export const useAppStore = create<AppState>((set, get) => ({
               settings.modelSelection?.modelSearch ||
               state.modelSelection.modelSearch,
           },
+          selectedOriginalVideo: settings.selectedOriginalVideo
+            ? {
+                ...defaultSelectedOriginalVideo,
+                ...settings.selectedOriginalVideo,
+              }
+            : defaultSelectedOriginalVideo,
         }));
 
         console.log('Settings loaded from localStorage');
@@ -444,6 +498,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           selectedModel: defaultModelSelection.selectedModel,
           modelSearch: defaultModelSelection.modelSearch,
         },
+        selectedOriginalVideo: defaultSelectedOriginalVideo,
       });
       console.log('Settings cleared from localStorage');
     } catch (error) {

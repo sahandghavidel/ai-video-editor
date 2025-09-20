@@ -7,10 +7,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
 
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
     // Validate file type
@@ -59,7 +56,7 @@ export async function POST(request: NextRequest) {
     // Create new row in Baserow table 713
     const newRowData = {
       field_6881: uploadUrl, // Video Uploaded URL
-      field_6864: 'Pending',  // Status
+      field_6864: 'Pending', // Status
       // field_6866: scenes will be empty initially
       // field_6858: final merged video will be empty initially
     };

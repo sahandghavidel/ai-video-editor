@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { BaserowRow, getOriginalVideosData } from '@/lib/baserow-actions';
+import { useAppStore } from '@/store/useAppStore';
 import {
   Loader2,
   Video,
@@ -12,6 +13,7 @@ import {
   AlertCircle,
   Upload,
   X,
+  Check,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -23,6 +25,19 @@ export default function OriginalVideosList() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Global state
+  const {
+    selectedOriginalVideo,
+    setSelectedOriginalVideo,
+    saveSettingsToLocalStorage,
+    loadSettingsFromLocalStorage,
+  } = useAppStore();
+
+  useEffect(() => {
+    // Load settings from localStorage on mount
+    loadSettingsFromLocalStorage();
+  }, [loadSettingsFromLocalStorage]);
 
   // Helper function to extract value from Baserow field
   const extractFieldValue = (field: any): string => {
@@ -178,10 +193,10 @@ export default function OriginalVideosList() {
       }
 
       const result = await response.json();
-      
+
       // Refresh the videos list to show the new upload
       await fetchOriginalVideos(true);
-      
+
       setUploadProgress(100);
       setTimeout(() => {
         setUploading(false);
@@ -204,7 +219,7 @@ export default function OriginalVideosList() {
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragOver(false);
-    
+
     const file = event.dataTransfer.files[0];
     if (file) {
       handleFileUpload(file);
@@ -223,6 +238,29 @@ export default function OriginalVideosList() {
 
   const openFileDialog = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleRowClick = (video: BaserowRow) => {
+    const videoUrl = extractUrl(video.field_6881);
+    const status = extractFieldValue(video.field_6864);
+    const sceneData = extractScenes(video.field_6866);
+
+    // Convert scene IDs to numbers if they exist
+    const sceneIds = sceneData.scenes
+      .map((id) => {
+        const numId = parseInt(id, 10);
+        return isNaN(numId) ? 0 : numId;
+      })
+      .filter((id) => id > 0);
+
+    setSelectedOriginalVideo(video.id, videoUrl, status, sceneIds);
+
+    // Save to localStorage
+    saveSettingsToLocalStorage();
+  };
+
+  const isRowSelected = (videoId: number) => {
+    return selectedOriginalVideo.id === videoId;
   };
 
   const fetchOriginalVideos = async (isRefresh = false) => {
@@ -333,8 +371,8 @@ export default function OriginalVideosList() {
               onClick={openFileDialog}
               disabled={uploading}
               className={`inline-flex items-center gap-2 px-4 py-2 ${
-                uploading 
-                  ? 'bg-gray-400 cursor-not-allowed' 
+                uploading
+                  ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-green-500 hover:bg-green-600'
               } text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed`}
             >
@@ -350,7 +388,7 @@ export default function OriginalVideosList() {
                 </>
               )}
             </button>
-            
+
             <input
               ref={fileInputRef}
               type='file'
@@ -374,6 +412,42 @@ export default function OriginalVideosList() {
         </div>
       </div>
 
+      {/* Selected Video Info */}
+      {selectedOriginalVideo.id && (
+        <div className='bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6'>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center gap-3'>
+              <div className='w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center'>
+                <Check className='w-6 h-6 text-white' />
+              </div>
+              <div>
+                <h3 className='font-semibold text-blue-900'>
+                  Selected Video: #{selectedOriginalVideo.id}
+                </h3>
+                <p className='text-blue-700 text-sm'>
+                  Status: {selectedOriginalVideo.status} |
+                  {selectedOriginalVideo.sceneIds.length > 0
+                    ? ` ${selectedOriginalVideo.sceneIds.length} scene${
+                        selectedOriginalVideo.sceneIds.length !== 1 ? 's' : ''
+                      } linked`
+                    : ' No scenes linked'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedOriginalVideo(null);
+                saveSettingsToLocalStorage();
+              }}
+              className='text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-100 rounded-full transition-colors'
+              title='Clear selection'
+            >
+              <X className='w-5 h-5' />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Videos Table */}
       <div
         onDrop={handleDrop}
@@ -387,150 +461,190 @@ export default function OriginalVideosList() {
           <div className='absolute inset-0 bg-blue-50 bg-opacity-90 flex items-center justify-center z-10 rounded-lg'>
             <div className='text-center'>
               <Upload className='w-12 h-12 text-blue-500 mx-auto mb-4' />
-              <p className='text-lg font-medium text-blue-800'>Drop video here to upload</p>
-              <p className='text-sm text-blue-600'>Supports video files up to 100MB</p>
+              <p className='text-lg font-medium text-blue-800'>
+                Drop video here to upload
+              </p>
+              <p className='text-sm text-blue-600'>
+                Supports video files up to 100MB
+              </p>
             </div>
           </div>
         )}
-        
+
         {originalVideos.length === 0 ? (
           <div className='text-center py-8'>
             <Video className='w-12 h-12 text-gray-300 mx-auto mb-4' />
             <p className='text-gray-500 text-lg'>No original videos found</p>
-            <p className='text-gray-400 text-sm mt-2'>Upload a video to get started</p>
+            <p className='text-gray-400 text-sm mt-2'>
+              Upload a video to get started
+            </p>
           </div>
         ) : (
           <div className='overflow-x-auto'>
             <table className='w-full'>
-            <thead>
-              <tr className='border-b border-gray-200'>
-                <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                  ID
-                </th>
-                <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                  Video URL
-                </th>
-                <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                  Status
-                </th>
-                <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                  Scenes
-                </th>
-                <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                  Final Merged Video
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {originalVideos.map((video, index) => (
-                <tr
-                  key={video.id}
-                  className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                  }`}
-                >
-                  {/* ID */}
-                  <td className='py-3 px-4'>
-                    <span className='font-medium text-gray-900'>
-                      #{video.id}
-                    </span>
-                  </td>
-
-                  {/* Video Uploaded URL (6881) */}
-                  <td className='py-3 px-4'>
-                    {(() => {
-                      const videoUrl = extractUrl(video.field_6881);
-                      return videoUrl ? (
-                        <a
-                          href={videoUrl}
-                          target='_blank'
-                          rel='noopener noreferrer'
-                          className='inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline'
+              <thead>
+                <tr className='border-b border-gray-200'>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700 w-12'>
+                    Select
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    ID
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Video URL
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Status
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Scenes
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Final Merged Video
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {originalVideos.map((video, index) => {
+                  const isSelected = isRowSelected(video.id);
+                  return (
+                    <tr
+                      key={video.id}
+                      onClick={() => handleRowClick(video)}
+                      className={`border-b border-gray-100 transition-all duration-200 cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-50 hover:bg-blue-100 border-blue-200'
+                          : index % 2 === 0
+                          ? 'bg-white hover:bg-gray-50'
+                          : 'bg-gray-50/50 hover:bg-gray-100'
+                      }`}
+                    >
+                      {/* Selection */}
+                      <td className='py-3 px-4'>
+                        <div
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                            isSelected
+                              ? 'bg-blue-500 border-blue-500'
+                              : 'border-gray-300 hover:border-blue-400'
+                          }`}
                         >
-                          <Video className='w-4 h-4' />
-                          <span className='truncate max-w-32'>View Video</span>
-                          <ExternalLink className='w-3 h-3' />
-                        </a>
-                      ) : (
-                        <span className='text-gray-400'>No video</span>
-                      );
-                    })()}
-                  </td>
-
-                  {/* Status (6864) */}
-                  <td className='py-3 px-4'>
-                    {(() => {
-                      const status = extractFieldValue(video.field_6864);
-                      return (
-                        <div className='flex items-center gap-2'>
-                          {getStatusIcon(status)}
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              status
-                            )}`}
-                          >
-                            {status || 'Unknown'}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </td>
-
-                  {/* Scenes (6866) */}
-                  <td className='py-3 px-4'>
-                    {(() => {
-                      const sceneData = extractScenes(video.field_6866);
-                      if (sceneData.count === 0) {
-                        return <span className='text-gray-400'>N/A</span>;
-                      }
-
-                      return (
-                        <div className='flex items-center gap-2'>
-                          <span className='text-gray-700 font-medium'>
-                            {sceneData.count} scene
-                            {sceneData.count !== 1 ? 's' : ''}
-                          </span>
-                          {sceneData.scenes.length > 0 && (
-                            <div
-                              className='text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded cursor-help'
-                              title={`Scene IDs: ${sceneData.scenes.join(
-                                ', '
-                              )}`}
-                            >
-                              IDs: {sceneData.scenes.slice(0, 3).join(', ')}
-                              {sceneData.scenes.length > 3 ? '...' : ''}
-                            </div>
+                          {isSelected && (
+                            <Check className='w-4 h-4 text-white' />
                           )}
                         </div>
-                      );
-                    })()}
-                  </td>
+                      </td>
 
-                  {/* Final Merged Video URL (6858) */}
-                  <td className='py-3 px-4'>
-                    {(() => {
-                      const finalVideoUrl = extractUrl(video.field_6858);
-                      return finalVideoUrl ? (
-                        <a
-                          href={finalVideoUrl}
-                          target='_blank'
-                          rel='noopener noreferrer'
-                          className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
+                      {/* ID */}
+                      <td className='py-3 px-4'>
+                        <span
+                          className={`font-medium ${
+                            isSelected ? 'text-blue-900' : 'text-gray-900'
+                          }`}
                         >
-                          <Video className='w-4 h-4' />
-                          <span className='truncate max-w-32'>Final Video</span>
-                          <ExternalLink className='w-3 h-3' />
-                        </a>
-                      ) : (
-                        <span className='text-gray-400'>Not ready</span>
-                      );
-                    })()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                          #{video.id}
+                        </span>
+                      </td>
+
+                      {/* Video Uploaded URL (6881) */}
+                      <td className='py-3 px-4'>
+                        {(() => {
+                          const videoUrl = extractUrl(video.field_6881);
+                          return videoUrl ? (
+                            <a
+                              href={videoUrl}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline'
+                            >
+                              <Video className='w-4 h-4' />
+                              <span className='truncate max-w-32'>
+                                View Video
+                              </span>
+                              <ExternalLink className='w-3 h-3' />
+                            </a>
+                          ) : (
+                            <span className='text-gray-400'>No video</span>
+                          );
+                        })()}
+                      </td>
+
+                      {/* Status (6864) */}
+                      <td className='py-3 px-4'>
+                        {(() => {
+                          const status = extractFieldValue(video.field_6864);
+                          return (
+                            <div className='flex items-center gap-2'>
+                              {getStatusIcon(status)}
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                  status
+                                )}`}
+                              >
+                                {status || 'Unknown'}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </td>
+
+                      {/* Scenes (6866) */}
+                      <td className='py-3 px-4'>
+                        {(() => {
+                          const sceneData = extractScenes(video.field_6866);
+                          if (sceneData.count === 0) {
+                            return <span className='text-gray-400'>N/A</span>;
+                          }
+
+                          return (
+                            <div className='flex items-center gap-2'>
+                              <span className='text-gray-700 font-medium'>
+                                {sceneData.count} scene
+                                {sceneData.count !== 1 ? 's' : ''}
+                              </span>
+                              {sceneData.scenes.length > 0 && (
+                                <div
+                                  className='text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded cursor-help'
+                                  title={`Scene IDs: ${sceneData.scenes.join(
+                                    ', '
+                                  )}`}
+                                >
+                                  IDs: {sceneData.scenes.slice(0, 3).join(', ')}
+                                  {sceneData.scenes.length > 3 ? '...' : ''}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </td>
+
+                      {/* Final Merged Video URL (6858) */}
+                      <td className='py-3 px-4'>
+                        {(() => {
+                          const finalVideoUrl = extractUrl(video.field_6858);
+                          return finalVideoUrl ? (
+                            <a
+                              href={finalVideoUrl}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
+                            >
+                              <Video className='w-4 h-4' />
+                              <span className='truncate max-w-32'>
+                                Final Video
+                              </span>
+                              <ExternalLink className='w-3 h-3' />
+                            </a>
+                          ) : (
+                            <span className='text-gray-400'>Not ready</span>
+                          );
+                        })()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
