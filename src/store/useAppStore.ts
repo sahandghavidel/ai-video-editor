@@ -10,12 +10,16 @@ export interface TTSSettings {
   reference_audio_filename: string;
 }
 
+// Speed up filtering modes
+export type SpeedUpMode = 'all' | 'emptyOnly' | 'withTextOnly';
+
 // Video processing settings interface
 export interface VideoSettings {
   selectedSpeed: number;
   muteAudio: boolean;
   autoGenerateVideo: boolean;
   autoGenerateTTS: boolean;
+  speedUpMode: SpeedUpMode;
 }
 
 // Batch operations state interface
@@ -176,6 +180,7 @@ const defaultVideoSettings: VideoSettings = {
   muteAudio: true,
   autoGenerateVideo: true,
   autoGenerateTTS: false,
+  speedUpMode: 'emptyOnly',
 };
 
 // Default batch operations settings
@@ -432,7 +437,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         fileName: fileName || 'merged-video.mp4',
       },
     });
-    
+
     // Automatically save to original table if a video is selected
     const state = get();
     if (state.selectedOriginalVideo.id) {
@@ -451,25 +456,32 @@ export const useAppStore = create<AppState>((set, get) => ({
   saveMergedVideoToOriginalTable: async () => {
     const state = get();
     const { mergedVideo, selectedOriginalVideo } = state;
-    
+
     // Only save if we have both a merged video and a selected original video
     if (!mergedVideo.url || !selectedOriginalVideo.id) {
-      console.warn('Cannot save merged video: missing video URL or selected original video');
+      console.warn(
+        'Cannot save merged video: missing video URL or selected original video'
+      );
       return;
     }
 
     try {
       // Import the update function (this will be available at runtime)
       const { updateOriginalVideoRow } = await import('@/lib/baserow-actions');
-      
+
       // Update the original video with the merged video URL
       await updateOriginalVideoRow(selectedOriginalVideo.id, {
         field_6858: mergedVideo.url, // Final Merged Video URL field
       });
-      
-      console.log(`Merged video URL saved to original video #${selectedOriginalVideo.id}`);
+
+      console.log(
+        `Merged video URL saved to original video #${selectedOriginalVideo.id}`
+      );
     } catch (error) {
-      console.error('Failed to save merged video URL to original table:', error);
+      console.error(
+        'Failed to save merged video URL to original table:',
+        error
+      );
       throw error;
     }
   },

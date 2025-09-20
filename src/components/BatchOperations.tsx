@@ -274,6 +274,7 @@ export default function BatchOperations({
       data,
       videoSettings.selectedSpeed,
       videoSettings.muteAudio,
+      videoSettings.speedUpMode,
       onRefresh,
       startBatchOperation,
       completeBatchOperation,
@@ -283,6 +284,50 @@ export default function BatchOperations({
 
   const cycleSpeed = () => {
     cycleThroughSpeeds(videoSettings.selectedSpeed, updateVideoSettings);
+  };
+
+  const cycleSpeedUpMode = () => {
+    const modes: Array<'all' | 'emptyOnly' | 'withTextOnly'> = [
+      'all',
+      'emptyOnly',
+      'withTextOnly',
+    ];
+    const currentIndex = modes.indexOf(videoSettings.speedUpMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    updateVideoSettings({ speedUpMode: modes[nextIndex] });
+  };
+
+  const getSpeedUpModeDisplay = () => {
+    switch (videoSettings.speedUpMode) {
+      case 'all':
+        return 'All Videos';
+      case 'emptyOnly':
+        return 'Empty Only';
+      case 'withTextOnly':
+        return 'Text Only';
+    }
+  };
+
+  const getSpeedUpButtonText = () => {
+    switch (videoSettings.speedUpMode) {
+      case 'all':
+        return 'Speed Up All';
+      case 'emptyOnly':
+        return 'Speed Up Empty';
+      case 'withTextOnly':
+        return 'Speed Up Text';
+    }
+  };
+
+  const getSpeedUpModeTooltip = () => {
+    switch (videoSettings.speedUpMode) {
+      case 'all':
+        return 'Speed up all videos';
+      case 'emptyOnly':
+        return 'Only speed up videos without text';
+      case 'withTextOnly':
+        return 'Only speed up videos with text';
+    }
   };
 
   return (
@@ -733,6 +778,17 @@ export default function BatchOperations({
             >
               {videoSettings.selectedSpeed}x
             </button>
+            <button
+              onClick={cycleSpeedUpMode}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                videoSettings.speedUpMode === 'all'
+                  ? 'bg-blue-200 hover:bg-blue-300 text-blue-800'
+                  : 'bg-blue-500 text-white'
+              }`}
+              title={`Currently: ${getSpeedUpModeTooltip()}. Click to cycle through modes.`}
+            >
+              {getSpeedUpModeDisplay()}
+            </button>
           </div>
           <button
             onClick={onSpeedUpAllVideos}
@@ -741,9 +797,9 @@ export default function BatchOperations({
               sceneLoading.speedingUpVideo !== null
             }
             className='w-full h-12 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-            title={`Speed up all videos ${videoSettings.selectedSpeed}x and ${
-              videoSettings.muteAudio ? 'mute' : 'keep'
-            } audio`}
+            title={`Speed up ${getSpeedUpModeTooltip().toLowerCase()} ${
+              videoSettings.selectedSpeed
+            }x and ${videoSettings.muteAudio ? 'mute' : 'keep'} audio`}
           >
             {(batchOperations.speedingUpAllVideos ||
               sceneLoading.speedingUpVideo !== null) && (
@@ -756,7 +812,7 @@ export default function BatchOperations({
                   : 'Processing...'
                 : sceneLoading.speedingUpVideo !== null
                 ? `Busy (#${sceneLoading.speedingUpVideo})`
-                : 'Speed Up All'}
+                : getSpeedUpButtonText()}
             </span>
           </button>
         </div>

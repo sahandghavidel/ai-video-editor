@@ -218,6 +218,7 @@ export const handleSpeedUpAllVideos = async (
   data: BaserowRow[],
   selectedSpeed: number,
   muteAudio: boolean,
+  speedUpMode: 'all' | 'emptyOnly' | 'withTextOnly',
   onRefresh: (() => void) | undefined,
   startBatchOperation: (operation: 'speedingUpAllVideos') => void,
   completeBatchOperation: (operation: 'speedingUpAllVideos') => void,
@@ -225,22 +226,48 @@ export const handleSpeedUpAllVideos = async (
 ) => {
   startBatchOperation('speedingUpAllVideos');
   try {
-    // Filter scenes that have videos (field_6888) but empty sentences (field_6890)
+    // Filter scenes based on the speedUpMode setting
     const scenesToSpeedUp = data.filter((scene) => {
       const videoUrl = scene['field_6888'];
       const sentence = String(scene['field_6890'] || '');
-      return (
-        typeof videoUrl === 'string' && videoUrl.trim() && !sentence.trim()
-      );
+
+      // Always require a video to be present
+      if (!(typeof videoUrl === 'string' && videoUrl.trim())) {
+        return false;
+      }
+
+      // Filter based on speed up mode
+      switch (speedUpMode) {
+        case 'emptyOnly':
+          // Only include scenes with empty sentences
+          return !sentence.trim();
+        case 'withTextOnly':
+          // Only include scenes with text content
+          return sentence.trim() !== '';
+        case 'all':
+        default:
+          // Include all scenes with videos
+          return true;
+      }
     });
 
     if (scenesToSpeedUp.length === 0) {
-      alert('No videos with empty sentences found to speed up');
+      const messages = {
+        emptyOnly: 'No videos with empty sentences found to speed up',
+        withTextOnly: 'No videos with text content found to speed up',
+        all: 'No videos found to speed up',
+      };
+      alert(messages[speedUpMode]);
       return;
     }
 
+    const filterDescriptions = {
+      emptyOnly: 'videos with empty sentences',
+      withTextOnly: 'videos with text content',
+      all: 'videos',
+    };
     console.log(
-      `Processing ${scenesToSpeedUp.length} videos for ${selectedSpeed}x speed-up...`
+      `Processing ${scenesToSpeedUp.length} ${filterDescriptions[speedUpMode]} for ${selectedSpeed}x speed-up...`
     );
 
     // Process each video sequentially to avoid overwhelming the server
