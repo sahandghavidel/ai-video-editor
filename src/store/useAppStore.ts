@@ -72,12 +72,13 @@ export interface SelectedOriginalVideoState {
 
 // Clip generation state interface
 export interface ClipGenerationState {
-  generatingClips: number | null;
+  generatingClips: number | null; // For bulk generation (video ID)
   clipsProgress: {
     current: number;
     total: number;
     percentage: number;
   } | null;
+  generatingSingleClip: number | null; // For single scene generation (scene ID)
 }
 
 interface AppState {
@@ -178,6 +179,7 @@ interface AppState {
     } | null
   ) => void;
   clearClipGeneration: () => void;
+  setGeneratingSingleClip: (sceneId: number | null) => void;
 
   // Settings Persistence Actions
   saveSettingsToLocalStorage: () => void;
@@ -258,6 +260,7 @@ const defaultSelectedOriginalVideo: SelectedOriginalVideoState = {
 const defaultClipGeneration: ClipGenerationState = {
   generatingClips: null,
   clipsProgress: null,
+  generatingSingleClip: null,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -555,6 +558,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       clipGeneration: defaultClipGeneration,
     }),
+
+  setGeneratingSingleClip: (sceneId) =>
+    set((state) => ({
+      clipGeneration: {
+        ...state.clipGeneration,
+        generatingSingleClip: sceneId,
+      },
+    })),
 
   // Data operations
   updateRow: (id, updates) =>

@@ -18,6 +18,7 @@ import {
   Settings,
   Volume2,
   VolumeX,
+  Scissors,
 } from 'lucide-react';
 
 // Helper: get original sentence from field_6901
@@ -104,6 +105,8 @@ export default function SceneCard({
     setImprovingSentence,
     setSpeedingUpVideo,
     setGeneratingVideo,
+    clipGeneration,
+    setGeneratingSingleClip,
   } = useAppStore();
 
   // Fetch models from API - using global action
@@ -237,6 +240,65 @@ export default function SceneCard({
       alert(`Error: ${errorMessage}`);
     } finally {
       setSpeedingUpVideo(null);
+    }
+  };
+
+  // Generate single clip handler
+  const handleGenerateSingleClip = async (sceneId: number) => {
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    const { generatingSingleClip } = clipGeneration;
+
+    // Check if any scene is already generating (only one at a time)
+    if (generatingSingleClip !== null) {
+      return;
+    }
+
+    setGeneratingSingleClip(sceneId);
+
+    try {
+      const response = await fetch('/api/generate-single-clip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sceneId,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Clip generation error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          errorMessage = `Clip generation error: ${response.status} - ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      console.log('Single clip generation result:', result);
+
+      // Optimistic update - update the scene with the new clip URL
+      const optimisticData = data.map((scene) =>
+        scene.id === sceneId ? { ...scene, field_6897: result.clipUrl } : scene
+      );
+      onDataUpdate?.(optimisticData);
+
+      // Refresh data from server to ensure consistency
+      refreshData?.();
+    } catch (error) {
+      console.error('Error generating single clip:', error);
+      let errorMessage = 'Failed to generate clip';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setGeneratingSingleClip(null);
     }
   };
 
@@ -1092,6 +1154,49 @@ export default function SceneCard({
                                 batchOperations.speedingUpAllVideos
                               ? 'Speed Busy'
                               : 'Speed'}
+                          </span>
+                        </button>
+                      )}
+
+                    {/* Generate Clip Button */}
+                    {typeof scene['field_6889'] === 'string' &&
+                      scene['field_6889'] && (
+                        <button
+                          onClick={() => handleGenerateSingleClip(scene.id)}
+                          disabled={
+                            clipGeneration.generatingSingleClip !== null ||
+                            clipGeneration.generatingClips !== null
+                          }
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                            clipGeneration.generatingSingleClip === scene.id
+                              ? 'bg-purple-100 text-purple-500'
+                              : clipGeneration.generatingSingleClip !== null ||
+                                clipGeneration.generatingClips !== null
+                              ? 'bg-gray-50 text-gray-400'
+                              : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                          }`}
+                          title={
+                            clipGeneration.generatingSingleClip === scene.id
+                              ? 'Generating clip for this scene...'
+                              : clipGeneration.generatingSingleClip !== null
+                              ? `Clip is being generated for scene ${clipGeneration.generatingSingleClip}`
+                              : clipGeneration.generatingClips !== null
+                              ? 'Bulk clip generation is in progress'
+                              : 'Generate video clip for this scene'
+                          }
+                        >
+                          {clipGeneration.generatingSingleClip === scene.id ? (
+                            <Loader2 className='animate-spin h-3 w-3' />
+                          ) : (
+                            <Scissors className='h-3 w-3' />
+                          )}
+                          <span>
+                            {clipGeneration.generatingSingleClip === scene.id
+                              ? 'Generating...'
+                              : clipGeneration.generatingSingleClip !== null ||
+                                clipGeneration.generatingClips !== null
+                              ? 'Clip Busy'
+                              : 'Generate Clip'}
                           </span>
                         </button>
                       )}
