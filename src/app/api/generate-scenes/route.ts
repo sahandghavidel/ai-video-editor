@@ -322,38 +322,63 @@ async function createSceneRecordsBatch(scenes: any[]) {
   const baserowUrl = process.env.BASEROW_API_URL;
   const token = await getJWTToken();
 
-  // Prepare batch data
-  const batchData = {
-    items: scenes.map((scene) => ({
-      field_6884: scene.duration, // Duration
-      field_6889: scene.videoId, // Video ID
-      field_6890: scene.words, // Sentence
-      field_6896: scene.startTime, // Start Time
-      field_6897: scene.endTime, // End Time
-      field_6898: scene.preEndTime, // Pre End Time
-      field_6901: scene.words, // Original Sentence (same as sentence)
-    })),
-  };
+  const BATCH_SIZE = 200; // Baserow's maximum batch size
+  const allCreatedScenes = [];
 
-  // Create scene records in batch
-  const response = await fetch(`${baserowUrl}/database/rows/table/714/batch/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `JWT ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(batchData),
-  });
+  // Process scenes in chunks of 200
+  for (let i = 0; i < scenes.length; i += BATCH_SIZE) {
+    const chunk = scenes.slice(i, i + BATCH_SIZE);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to create scene records in batch: ${response.status} ${errorText}`
+    console.log(
+      `Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(
+        scenes.length / BATCH_SIZE
+      )} (${chunk.length} items)`
+    );
+
+    // Prepare batch data for this chunk
+    const batchData = {
+      items: chunk.map((scene) => ({
+        field_6884: scene.duration, // Duration
+        field_6889: scene.videoId, // Video ID
+        field_6890: scene.words, // Sentence
+        field_6896: scene.startTime, // Start Time
+        field_6897: scene.endTime, // End Time
+        field_6898: scene.preEndTime, // Pre End Time
+        field_6901: scene.words, // Original Sentence (same as sentence)
+      })),
+    };
+
+    // Create scene records in batch
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/714/batch/`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `JWT ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(batchData),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to create scene records in batch: ${response.status} ${errorText}`
+      );
+    }
+
+    const result = await response.json();
+    const batchItems = result.items || result;
+    allCreatedScenes.push(...batchItems);
+
+    console.log(
+      `Successfully created ${batchItems.length} scenes in this batch`
     );
   }
 
-  const result = await response.json();
-  return result.items || result; // Baserow batch response format
+  console.log(`Total scenes created: ${allCreatedScenes.length}`);
+  return allCreatedScenes;
 }
 
 // Function to update original video record with scene IDs
