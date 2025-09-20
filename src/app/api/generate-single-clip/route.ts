@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createVideoClipWithUpload } from '@/utils/ffmpeg-direct';
 
 // Import the working authentication from baserow-actions
 async function getJWTToken(): Promise<string> {
@@ -99,63 +100,46 @@ function extractVideoUrl(field: any): string | null {
   return null;
 }
 
-// Function to create video clip using NCA toolkit
+// Function to create video clip using direct FFmpeg + MinIO upload
 async function createVideoClip(videoUrl: string, scene: any) {
-  const ncaUrl = 'http://host.docker.internal:8080/v1/video/trim';
-
   const startTime = parseFloat(scene.field_6898);
   const endTime = parseFloat(scene.field_6897);
   const duration = endTime - startTime;
 
-  // Generate unique request ID for tracking
-  const requestId = `${scene.id}_${Date.now()}`;
-
   console.log(
-    `Scene ${scene.id}: start=${startTime}s, end=${endTime}s, duration=${duration}s [${requestId}]`
+    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s`
   );
-  const trimStartTime = Date.now();
-
-  const requestBody = {
-    video_url: videoUrl,
-    start: scene.field_6898.toString(),
-    end: scene.field_6897.toString(),
-    id: requestId,
-    video_preset: 'medium',
-    video_crf: 23,
-  };
-
-  const response = await fetch(ncaUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': 'test-key-123',
-    },
-    body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(120000), // Increased timeout to 2 minutes
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`NCA toolkit trim failed: ${response.status} ${errorText}`);
-  }
-
-  const result = await response.json();
-
-  const trimEndTime = Date.now();
-  const processingTime = trimEndTime - trimStartTime;
   console.log(
-    `Scene ${scene.id} trim completed in ${processingTime}ms (start=${startTime}s)`
+    `[TIMING] Scene ${
+      scene.id
+    }: Starting FFmpeg processing at ${new Date().toISOString()}`
   );
+  const ffmpegStartTime = Date.now();
 
-  // Extract the clip URL from the response
-  const clipUrl =
-    result.response || result.clip_url || result.url || result.file_url;
+  try {
+    // Use direct FFmpeg with hardware acceleration + MinIO upload
+    const result = await createVideoClipWithUpload({
+      inputUrl: videoUrl,
+      startTime: scene.field_6898.toString(),
+      endTime: scene.field_6897.toString(),
+      useHardwareAcceleration: true,
+      videoBitrate: '6000k', // High quality for good results
+      sceneId: scene.id.toString(),
+      cleanup: true, // Clean up local files after upload
+    });
 
-  if (!clipUrl) {
-    throw new Error('No clip URL returned from NCA toolkit');
+    const ffmpegEndTime = Date.now();
+    const processingTime = ffmpegEndTime - ffmpegStartTime;
+    console.log(
+      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s) - Hardware accelerated + MinIO uploaded!`
+    );
+    console.log(`[UPLOAD] Scene ${scene.id} uploaded to: ${result.uploadUrl}`);
+
+    return result.uploadUrl;
+  } catch (error) {
+    console.error(`[FFMPEG] Failed to process scene ${scene.id}:`, error);
+    throw error;
   }
-
-  return clipUrl;
 }
 
 // Function to update scene with clip URL

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createVideoClipWithUpload } from '@/utils/ffmpeg-direct';
+import path from 'path';
+import fs from 'fs/promises';
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,7 +60,7 @@ export async function POST(request: NextRequest) {
             `Found ${scenes.length} scenes to process, sorted by start time`
           );
 
-          // Step 3: Process each scene to create video clips (one by one)
+          // Step 3: Process each scene using direct FFmpeg (much faster!)
           const processedClips = [];
           for (let i = 0; i < scenes.length; i++) {
             const scene = scenes[i];
@@ -74,13 +77,13 @@ export async function POST(request: NextRequest) {
                   current: sceneNumber,
                   total: scenes.length,
                   percentage: progressPercentage,
-                  message: `Processing scene ${sceneNumber}/${scenes.length}...`,
+                  message: `Processing scene ${sceneNumber}/${scenes.length} with FFmpeg...`,
                 })}\n\n`
               )
             );
 
             try {
-              const clipUrl = await createVideoClip(videoUrl, scene);
+              const clipUrl = await createVideoClipDirect(videoUrl, scene);
 
               await updateSceneWithClipUrl(scene.id, clipUrl);
 
@@ -90,14 +93,6 @@ export async function POST(request: NextRequest) {
                 sceneNumber,
                 progress: progressPercentage,
               });
-
-              // Force garbage collection every 10 clips to prevent memory buildup
-              if (sceneNumber % 10 === 0 && global.gc) {
-                global.gc();
-                console.log(
-                  `Garbage collection triggered after scene ${sceneNumber}`
-                );
-              }
 
               // Send scene completion update
               controller.enqueue(
@@ -311,9 +306,126 @@ async function getScenesForVideo(videoId: string) {
   return allScenes;
 }
 
+// Function to create video clip using direct FFmpeg (much faster!)
+async function createVideoClipDirect(
+  videoUrl: string,
+  scene: any
+): Promise<string> {
+  const startTime = parseFloat(scene.field_6898);
+  const endTime = parseFloat(scene.field_6897);
+  const duration = endTime - startTime;
+
+  console.log(
+    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s`
+  );
+  console.log(
+    `[TIMING] Scene ${
+      scene.id
+    }: Starting FFmpeg processing at ${new Date().toISOString()}`
+  );
+  const ffmpegStartTime = Date.now();
+
+  try {
+    // Use direct FFmpeg with hardware acceleration + MinIO upload
+    const result = await createVideoClipWithUpload({
+      inputUrl: videoUrl,
+      startTime: scene.field_6898.toString(),
+      endTime: scene.field_6897.toString(),
+      useHardwareAcceleration: true,
+      videoBitrate: '6000k', // High quality for good results
+      sceneId: scene.id.toString(),
+      cleanup: true, // Clean up local files after upload
+    });
+
+    const ffmpegEndTime = Date.now();
+    const processingTime = ffmpegEndTime - ffmpegStartTime;
+    console.log(
+      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s) - Hardware accelerated + MinIO uploaded!`
+    );
+    console.log(`[UPLOAD] Scene ${scene.id} uploaded to: ${result.uploadUrl}`);
+
+    return result.uploadUrl;
+  } catch (error) {
+    console.error(`[FFMPEG] Failed to process scene ${scene.id}:`, error);
+    throw error;
+  }
+}
+
+// Function to create video clips using NCA toolkit split endpoint (batch processing)
+async function createVideoClipsBatch(videoUrl: string, scenes: any[]) {
+  const ncaUrl = 'http://host.docker.internal:8080/v1/video/split';
+
+  // Generate unique request ID for tracking
+  const requestId = `batch_${Date.now()}`;
+
+  console.log(
+    `[BATCH] Processing ${scenes.length} scenes in batch [${requestId}]`
+  );
+  console.log(
+    `[TIMING] Batch: Starting request at ${new Date().toISOString()}`
+  );
+  const batchStartTime = Date.now();
+
+  const requestBody = {
+    video_url: videoUrl,
+    splits: scenes.map((scene) => ({
+      start: scene.field_6898.toString(),
+      end: scene.field_6897.toString(),
+    })),
+    id: requestId,
+    video_preset: 'medium',
+    video_crf: 23,
+  };
+
+  console.log(
+    `[TIMING] Batch: Sending request to NCA at ${new Date().toISOString()}`
+  );
+  const response = await fetch(ncaUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'test-key-123',
+    },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(300000), // Increased timeout to 5 minutes for batch
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `NCA toolkit split failed: ${response.status} ${errorText}`
+    );
+  }
+
+  const result = await response.json();
+
+  const batchEndTime = Date.now();
+  const processingTime = batchEndTime - batchStartTime;
+  console.log(
+    `[BATCH] Batch completed in ${processingTime}ms for ${scenes.length} scenes`
+  );
+
+  // Extract clip URLs from the response
+  if (!result.response || !Array.isArray(result.response)) {
+    throw new Error('Invalid response format from NCA toolkit split endpoint');
+  }
+
+  const clipUrls = result.response.map(
+    (item: any) => item.file_url || item.url || item.response
+  );
+
+  if (clipUrls.length !== scenes.length) {
+    throw new Error(
+      `Expected ${scenes.length} clips but got ${clipUrls.length}`
+    );
+  }
+
+  return clipUrls;
+}
+
 // Function to create video clip using NCA toolkit
 async function createVideoClip(videoUrl: string, scene: any) {
-  const ncaUrl = 'http://host.docker.internal:8080/v1/video/trim';
+  const ncaUrl = 'http://host.docker.internal:8080/v1/video/cut';
 
   const startTime = parseFloat(scene.field_6898);
   const endTime = parseFloat(scene.field_6897);
@@ -325,17 +437,31 @@ async function createVideoClip(videoUrl: string, scene: any) {
   console.log(
     `Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s [${requestId}]`
   );
+  console.log(
+    `[TIMING] Scene ${
+      scene.id
+    }: Starting request at ${new Date().toISOString()}`
+  );
   const trimStartTime = Date.now();
 
   const requestBody = {
     video_url: videoUrl,
-    start: scene.field_6898.toString(),
-    end: scene.field_6897.toString(),
+    cuts: [
+      {
+        start: scene.field_6898.toString(),
+        end: scene.field_6897.toString(),
+      },
+    ],
     id: requestId,
     video_preset: 'medium',
     video_crf: 23,
   };
 
+  console.log(
+    `[TIMING] Scene ${
+      scene.id
+    }: Sending request to NCA at ${new Date().toISOString()}`
+  );
   const response = await fetch(ncaUrl, {
     method: 'POST',
     headers: {
