@@ -24,6 +24,7 @@ import {
   Plus,
   Trash2,
   Subtitles,
+  Grid3x3,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -44,6 +45,8 @@ export default function OriginalVideosList() {
   const [deleting, setDeleting] = useState<number | null>(null);
   const [transcribing, setTranscribing] = useState<number | null>(null);
   const [transcribingAll, setTranscribingAll] = useState(false);
+  const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
+  const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global state
@@ -713,6 +716,121 @@ export default function OriginalVideosList() {
     }
   };
 
+  // Generate Scenes for individual video
+  const handleGenerateScenes = async (videoId: number) => {
+    try {
+      setGeneratingScenes(videoId);
+      setError(null);
+
+      // Find the video to get captions URL
+      const video = originalVideos.find((v) => v.id === videoId);
+      const captionsUrl = extractUrl(video?.field_6861);
+
+      if (!captionsUrl) {
+        throw new Error('No captions URL found for this video');
+      }
+
+      console.log('Generating scenes for video:', videoId);
+
+      const response = await fetch('/api/generate-scenes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId,
+          captionsUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate scenes');
+      }
+
+      const result = await response.json();
+      console.log('Scenes generated successfully:', result);
+
+      // Refresh the data to show any changes
+      await handleRefresh();
+    } catch (error) {
+      console.error('Error generating scenes:', error);
+      setError(`Failed to generate scenes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setGeneratingScenes(null);
+    }
+  };
+
+  // Generate Scenes for all videos
+  const handleGenerateScenesAll = async () => {
+    try {
+      setGeneratingScenesAll(true);
+
+      // Filter videos that have captions URLs but potentially no scenes
+      const videosToProcess = originalVideos.filter((video) => {
+        const captionsUrl = extractUrl(video.field_6861);
+        return captionsUrl; // Has captions - we'll let the API handle scene checking
+      });
+
+      if (videosToProcess.length === 0) {
+        alert('No videos found with captions to generate scenes from');
+        return;
+      }
+
+      console.log(`Starting scene generation for ${videosToProcess.length} videos...`);
+
+      // Process videos one by one
+      for (const video of videosToProcess) {
+        const captionsUrl = extractUrl(video.field_6861);
+        if (captionsUrl) {
+          console.log(`Generating scenes for video ${video.id}...`);
+          setGeneratingScenes(video.id);
+          
+          try {
+            await handleGenerateScenesInternal(video.id, captionsUrl);
+            console.log(`Successfully generated scenes for video ${video.id}`);
+          } catch (error) {
+            console.error(`Failed to generate scenes for video ${video.id}:`, error);
+            // Continue with next video even if one fails
+          }
+        }
+      }
+
+      console.log('Batch scene generation completed');
+      await handleRefresh();
+    } catch (error) {
+      console.error('Error in batch scene generation:', error);
+      setError(`Failed to generate scenes for all videos: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setGeneratingScenes(null);
+      setGeneratingScenesAll(false);
+    }
+  };
+
+  // Internal scene generation function (without UI state management)
+  const handleGenerateScenesInternal = async (
+    videoId: number,
+    captionsUrl: string
+  ) => {
+    const response = await fetch('/api/generate-scenes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        videoId,
+        captionsUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to generate scenes');
+    }
+
+    return response.json();
+  };
+
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
@@ -837,6 +955,31 @@ export default function OriginalVideosList() {
                   ? `Transcribing #${transcribing}...`
                   : 'Processing...'
                 : 'Transcribe All'}
+            </span>
+          </button>
+
+          {/* Generate All Scenes Button */}
+          <button
+            onClick={handleGenerateScenesAll}
+            disabled={generatingScenes !== null || generatingScenesAll || uploading || reordering}
+            className='inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+            title={
+              generatingScenes !== null || generatingScenesAll
+                ? 'Scene generation in progress...'
+                : 'Generate scenes for all videos with captions'
+            }
+          >
+            <Grid3x3
+              className={`w-4 h-4 ${
+                generatingScenesAll ? 'animate-pulse' : ''
+              }`}
+            />
+            <span>
+              {generatingScenesAll
+                ? generatingScenes !== null
+                  ? `Generating #${generatingScenes}...`
+                  : 'Processing...'
+                : 'Generate All Scenes'}
             </span>
           </button>
         </div>
@@ -1225,6 +1368,41 @@ export default function OriginalVideosList() {
                               <Loader2 className='w-4 h-4 animate-spin' />
                             ) : (
                               <Subtitles className='w-4 h-4' />
+                            )}
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const captionsUrl = extractUrl(video.field_6861);
+                              if (captionsUrl) {
+                                handleGenerateScenes(video.id);
+                              } else {
+                                setError(
+                                  'No captions URL found for scene generation'
+                                );
+                              }
+                            }}
+                            disabled={
+                              generatingScenes !== null ||
+                              generatingScenesAll ||
+                              !extractUrl(video.field_6861)
+                            }
+                            className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                            title={
+                              generatingScenes !== null
+                                ? generatingScenes === video.id
+                                  ? 'Generating scenes...'
+                                  : 'Another scene generation in progress'
+                                : !extractUrl(video.field_6861)
+                                ? 'No captions URL available'
+                                : 'Generate scenes from captions'
+                            }
+                          >
+                            {generatingScenes === video.id ? (
+                              <Loader2 className='w-4 h-4 animate-spin' />
+                            ) : (
+                              <Grid3x3 className='w-4 h-4' />
                             )}
                           </button>
                         </div>
