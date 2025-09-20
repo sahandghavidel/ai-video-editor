@@ -32,14 +32,10 @@ export async function POST(request: NextRequest) {
     const scenes = generateScenesFromTranscription(captionsData, videoId);
     console.log(`Generated ${scenes.length} scenes`);
 
-    // Step 3: Create scene records in Baserow
-    const createdScenes = [];
-    const sceneIds = [];
-    for (const scene of scenes) {
-      const sceneRecord = await createSceneRecord(scene);
-      createdScenes.push(sceneRecord);
-      sceneIds.push(sceneRecord.id);
-    }
+    // Step 3: Create all scene records in Baserow using batch operation
+    console.log(`Creating ${scenes.length} scenes in batch...`);
+    const createdScenes = await createSceneRecordsBatch(scenes);
+    const sceneIds = createdScenes.map((scene: any) => scene.id);
 
     // Step 4: Update the original video record with scene IDs
     console.log(
@@ -287,19 +283,16 @@ function generateScenesFromTranscription(
   return allSegments;
 }
 
-// Function to create a scene record in Baserow
-async function createSceneRecord(scene: any) {
+// Helper function to get JWT token
+async function getJWTToken() {
   const baserowUrl = process.env.BASEROW_API_URL;
   const email = process.env.BASEROW_EMAIL;
   const password = process.env.BASEROW_PASSWORD;
-
+  
   if (!baserowUrl || !email || !password) {
-    throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
-    );
+    throw new Error('Missing Baserow configuration. Please check your environment variables.');
   }
 
-  // Get JWT token
   const authResponse = await fetch(`${baserowUrl}/user/token-auth/`, {
     method: 'POST',
     headers: {
@@ -313,22 +306,21 @@ async function createSceneRecord(scene: any) {
 
   if (!authResponse.ok) {
     const errorText = await authResponse.text();
-    throw new Error(
-      `Authentication failed: ${authResponse.status} ${errorText}`
-    );
+    throw new Error(`Authentication failed: ${authResponse.status} ${errorText}`);
   }
 
   const authData = await authResponse.json();
-  const token = authData.token;
+  return authData.token;
+}
 
-  // Create scene record
-  const response = await fetch(`${baserowUrl}/database/rows/table/714/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `JWT ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+// Function to create multiple scene records in Baserow using batch operation
+async function createSceneRecordsBatch(scenes: any[]) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const token = await getJWTToken();
+
+  // Prepare batch data
+  const batchData = {
+    items: scenes.map(scene => ({
       field_6884: scene.duration, // Duration
       field_6889: scene.videoId, // Video ID
       field_6890: scene.words, // Sentence
@@ -336,17 +328,26 @@ async function createSceneRecord(scene: any) {
       field_6897: scene.endTime, // End Time
       field_6898: scene.preEndTime, // Pre End Time
       field_6901: scene.words, // Original Sentence (same as sentence)
-    }),
+    }))
+  };
+
+  // Create scene records in batch
+  const response = await fetch(`${baserowUrl}/database/rows/table/714/batch/`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `JWT ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(batchData),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `Failed to create scene record: ${response.status} ${errorText}`
-    );
+    throw new Error(`Failed to create scene records in batch: ${response.status} ${errorText}`);
   }
 
-  return response.json();
+  const result = await response.json();
+  return result.items || result; // Baserow batch response format
 }
 
 // Function to update original video record with scene IDs
@@ -355,36 +356,7 @@ async function updateOriginalVideoWithScenes(
   sceneIds: number[]
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
-    );
-  }
-
-  // Get JWT token
-  const authResponse = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  });
-
-  if (!authResponse.ok) {
-    const errorText = await authResponse.text();
-    throw new Error(
-      `Authentication failed: ${authResponse.status} ${errorText}`
-    );
-  }
-
-  const authData = await authResponse.json();
-  const token = authData.token;
+  const token = await getJWTToken();
 
   // Update original video record with scene IDs
   const response = await fetch(
