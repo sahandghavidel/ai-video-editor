@@ -119,9 +119,6 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Original Videos List */}
-        <OriginalVideosList />
-
         {error ? (
           <div className='bg-red-50 border border-red-200 rounded-xl p-6 mb-8 shadow-sm'>
             <div className='flex items-start space-x-4'>
@@ -221,6 +218,9 @@ export default function Home() {
                 <AutoGenerateSettings />
               </div>
             )}
+
+            {/* Original Videos List */}
+            <OriginalVideosList />
 
             {/* No Video Selected Message */}
             {!initialLoading &&
