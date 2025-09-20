@@ -43,6 +43,7 @@ export default function OriginalVideosList() {
   const [reordering, setReordering] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [transcribing, setTranscribing] = useState<number | null>(null);
+  const [transcribingAll, setTranscribingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global state
@@ -584,6 +585,134 @@ export default function OriginalVideosList() {
     }
   };
 
+  // Transcribe all videos that don't have captions
+  const handleTranscribeAll = async () => {
+    try {
+      setTranscribingAll(true);
+
+      // Filter videos that have video URLs but no captions URLs
+      const videosToTranscribe = originalVideos.filter((video) => {
+        const videoUrl = extractUrl(video.field_6881);
+        const captionsUrl = extractUrl(video.field_6861);
+        return videoUrl && !captionsUrl; // Has video but no captions
+      });
+
+      if (videosToTranscribe.length === 0) {
+        alert('No videos found that need transcription');
+        return;
+      }
+
+      console.log(
+        `Starting transcription for ${videosToTranscribe.length} videos...`
+      );
+
+      // Process videos one by one to avoid overwhelming the API
+      for (const video of videosToTranscribe) {
+        const videoUrl = extractUrl(video.field_6881);
+        if (videoUrl) {
+          console.log(`Transcribing video ${video.id}...`);
+          setTranscribing(video.id);
+
+          try {
+            await handleTranscribeVideoInternal(video.id, videoUrl);
+            console.log(`Successfully transcribed video ${video.id}`);
+          } catch (error) {
+            console.error(`Failed to transcribe video ${video.id}:`, error);
+            // Continue with next video even if one fails
+          }
+        }
+      }
+
+      console.log('Batch transcription completed');
+      await handleRefresh();
+    } catch (error) {
+      console.error('Error in batch transcription:', error);
+      setError(
+        `Failed to transcribe all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setTranscribing(null);
+      setTranscribingAll(false);
+    }
+  };
+
+  // Internal transcription function (without UI state management)
+  const handleTranscribeVideoInternal = async (
+    videoId: number,
+    videoUrl: string
+  ) => {
+    // Step 1: Transcribe the video using NCA toolkit
+    const transcribeResponse = await fetch('/api/transcribe-video', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        media_url: videoUrl,
+        task: 'transcribe',
+        include_text: false,
+        include_srt: false,
+        include_segments: true,
+        word_timestamps: true,
+        response_type: 'direct',
+        language: 'en',
+      }),
+    });
+
+    if (!transcribeResponse.ok) {
+      throw new Error('Failed to transcribe video');
+    }
+
+    const transcriptionData = await transcribeResponse.json();
+
+    // Step 2: Process the response to extract word timestamps
+    const wordTimestamps = [];
+    const segments = transcriptionData.response?.segments;
+
+    if (segments && segments.length > 0) {
+      for (const segment of segments) {
+        if (segment.words) {
+          for (const wordObj of segment.words) {
+            wordTimestamps.push({
+              word: wordObj.word.trim(),
+              start: wordObj.start,
+              end: wordObj.end,
+            });
+          }
+        }
+      }
+    }
+
+    // Step 3: Upload the captions file to MinIO
+    const captionsData = JSON.stringify(wordTimestamps);
+    const filename = `captions_${videoId}.json`;
+
+    const formData = new FormData();
+    const blob = new Blob([captionsData], { type: 'application/json' });
+    formData.append('file', blob, filename);
+
+    const uploadResponse = await fetch('/api/upload-captions', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error('Failed to upload captions');
+    }
+
+    const uploadResult = await uploadResponse.json();
+
+    // Step 4: Update the original video record with the captions URL
+    const captionsUrl = uploadResult.url || uploadResult.file_url;
+    if (captionsUrl) {
+      await updateOriginalVideoRow(videoId, {
+        field_6861: captionsUrl, // Captions URL field
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
@@ -680,6 +809,34 @@ export default function OriginalVideosList() {
                 : refreshing
                 ? 'Refreshing...'
                 : 'Refresh'}
+            </span>
+          </button>
+
+          {/* Transcribe All Button */}
+          <button
+            onClick={handleTranscribeAll}
+            disabled={
+              transcribing !== null ||
+              transcribingAll ||
+              uploading ||
+              reordering
+            }
+            className='inline-flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+            title={
+              transcribing !== null || transcribingAll
+                ? 'Transcription in progress...'
+                : 'Transcribe all videos without captions'
+            }
+          >
+            <Subtitles
+              className={`w-4 h-4 ${transcribingAll ? 'animate-pulse' : ''}`}
+            />
+            <span>
+              {transcribingAll
+                ? transcribing !== null
+                  ? `Transcribing #${transcribing}...`
+                  : 'Processing...'
+                : 'Transcribe All'}
             </span>
           </button>
         </div>
@@ -1050,6 +1207,7 @@ export default function OriginalVideosList() {
                             }}
                             disabled={
                               transcribing !== null ||
+                              transcribingAll ||
                               !extractUrl(video.field_6881)
                             }
                             className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
