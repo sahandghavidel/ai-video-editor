@@ -5,6 +5,7 @@ import {
   BaserowRow,
   getOriginalVideosData,
   updateOriginalVideoRow,
+  deleteOriginalVideoWithScenes,
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -21,6 +22,7 @@ import {
   Save,
   GripVertical,
   Plus,
+  Trash2,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -38,6 +40,7 @@ export default function OriginalVideosList() {
   const [draggedRow, setDraggedRow] = useState<number | null>(null);
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global state
@@ -464,6 +467,32 @@ export default function OriginalVideosList() {
     }
   };
 
+  // Delete video function
+  const handleDeleteVideo = async (videoId: number) => {
+    setDeleting(videoId);
+
+    try {
+      // Delete the video and all related scenes
+      await deleteOriginalVideoWithScenes(videoId);
+
+      // Remove from local state
+      setOriginalVideos(prev => prev.filter(v => v.id !== videoId));
+
+      // Clear selection if this video was selected
+      if (selectedOriginalVideo.id === videoId) {
+        setSelectedOriginalVideo(null);
+        saveSettingsToLocalStorage();
+      }
+
+      console.log(`Successfully deleted video ${videoId} and related scenes`);
+    } catch (error) {
+      console.error('Failed to delete video:', error);
+      alert('Failed to delete video. Please try again.');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
@@ -590,16 +619,30 @@ export default function OriginalVideosList() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setSelectedOriginalVideo(null);
-                saveSettingsToLocalStorage();
-              }}
-              className='text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-100 rounded-full transition-colors'
-              title='Clear selection'
-            >
-              <X className='w-5 h-5' />
-            </button>
+            <div className='flex items-center gap-2'>
+              <button
+                onClick={() => selectedOriginalVideo.id && handleDeleteVideo(selectedOriginalVideo.id)}
+                disabled={deleting === selectedOriginalVideo.id || !selectedOriginalVideo.id}
+                className='text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Delete video and all related scenes'
+              >
+                {selectedOriginalVideo.id && deleting === selectedOriginalVideo.id ? (
+                  <Loader2 className='w-5 h-5 animate-spin' />
+                ) : (
+                  <Trash2 className='w-5 h-5' />
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedOriginalVideo(null);
+                  saveSettingsToLocalStorage();
+                }}
+                className='text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-100 rounded-full transition-colors'
+                title='Clear selection'
+              >
+                <X className='w-5 h-5' />
+              </button>
+            </div>
           </div>
         </div>
       )}

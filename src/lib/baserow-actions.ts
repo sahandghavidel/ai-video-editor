@@ -328,6 +328,95 @@ export async function deleteBaserowRow(rowId: number): Promise<void> {
   }
 }
 
+export async function deleteOriginalVideoRow(rowId: number): Promise<void> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const originalVideosTableId = '713'; // Table 713 for original videos
+
+  if (!baserowUrl) {
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
+  }
+
+  try {
+    const response = await makeAuthenticatedRequest(
+      `${baserowUrl}/database/rows/table/${originalVideosTableId}/${rowId}/`,
+      {
+        method: 'DELETE',
+        cache: 'no-store',
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+      );
+    }
+  } catch (error) {
+    console.error('Error deleting original video row:', error);
+    throw error;
+  }
+}
+
+export async function deleteRelatedScenes(originalVideoId: number): Promise<void> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const scenesTableId = process.env.BASEROW_TABLE_ID; // Table 714 for scenes
+
+  if (!baserowUrl || !scenesTableId) {
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
+  }
+
+  try {
+    // First, get all scenes that belong to this original video
+    const scenesData = await getBaserowData();
+    const relatedScenes = scenesData.filter((scene) => {
+      const videoId = scene.field_6889;
+      if (typeof videoId === 'number') {
+        return videoId === originalVideoId;
+      }
+      if (typeof videoId === 'string') {
+        return parseInt(videoId, 10) === originalVideoId;
+      }
+      return false;
+    });
+
+    // Delete each related scene
+    const deletePromises = relatedScenes.map((scene) =>
+      makeAuthenticatedRequest(
+        `${baserowUrl}/database/rows/table/${scenesTableId}/${scene.id}/`,
+        {
+          method: 'DELETE',
+          cache: 'no-store',
+        }
+      )
+    );
+
+    await Promise.all(deletePromises);
+    console.log(`Deleted ${relatedScenes.length} related scenes for video ${originalVideoId}`);
+  } catch (error) {
+    console.error('Error deleting related scenes:', error);
+    throw error;
+  }
+}
+
+export async function deleteOriginalVideoWithScenes(originalVideoId: number): Promise<void> {
+  try {
+    // First delete all related scenes
+    await deleteRelatedScenes(originalVideoId);
+    
+    // Then delete the original video
+    await deleteOriginalVideoRow(originalVideoId);
+    
+    console.log(`Successfully deleted original video ${originalVideoId} and all related scenes`);
+  } catch (error) {
+    console.error('Error deleting original video with scenes:', error);
+    throw error;
+  }
+}
+
 export async function createOriginalVideoRow(
   rowData: Record<string, unknown>
 ): Promise<BaserowRow> {
