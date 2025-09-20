@@ -162,6 +162,68 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
   }
 }
 
+export async function getOriginalVideosData(): Promise<BaserowRow[]> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const originalVideosTableId = '713'; // Original videos table ID
+
+  if (!baserowUrl) {
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
+  }
+
+  try {
+    // Set a high page size to get more rows (Baserow allows up to 200 per request)
+    const pageSize = 200;
+    let allRows: BaserowRow[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const url = `${baserowUrl}/database/rows/table/${originalVideosTableId}/?size=${pageSize}&page=${page}`;
+
+      const response = await makeAuthenticatedRequest(url, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          'Original videos data fetch failed with response:',
+          errorText
+        );
+        throw new Error(
+          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      allRows = allRows.concat(results);
+
+      // Check if there are more pages
+      hasMore = data.next !== null;
+      page++;
+
+      console.log(
+        `Fetched original videos page ${page - 1}: ${
+          results.length
+        } rows, Total so far: ${allRows.length}`
+      );
+    }
+
+    console.log(
+      `Total original videos fetched from Baserow: ${allRows.length}`
+    );
+    return allRows;
+  } catch (error) {
+    console.error('Error fetching original videos data:', error);
+    throw error;
+  }
+}
+
 export async function createBaserowRow(
   rowData: Record<string, unknown>
 ): Promise<BaserowRow> {

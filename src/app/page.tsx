@@ -7,6 +7,7 @@ import ModelSelection from '@/components/ModelSelection';
 import TTSSettings from '@/components/TTSSettings';
 import VideoSpeedSettings from '@/components/VideoSpeedSettings';
 import AutoGenerateSettings from '@/components/AutoGenerateSettings';
+import OriginalVideosList from '@/components/OriginalVideosList';
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react';
@@ -106,6 +107,9 @@ export default function Home() {
             </div>
           </div>
         </header>
+
+        {/* Original Videos List */}
+        <OriginalVideosList />
 
         {error ? (
           <div className='bg-red-50 border border-red-200 rounded-xl p-6 mb-8 shadow-sm'>
