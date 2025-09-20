@@ -70,6 +70,8 @@ export default function BatchOperations({
     mergedVideo,
     setMergedVideo,
     clearMergedVideo,
+    saveMergedVideoToOriginalTable,
+    selectedOriginalVideo,
     saveSettingsToLocalStorage,
     loadSettingsFromLocalStorage,
     clearLocalStorageSettings,
@@ -86,6 +88,8 @@ export default function BatchOperations({
   // Settings save/load state
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [savingToDatabase, setSavingToDatabase] = useState(false);
+  const [saveToDbMessage, setSaveToDbMessage] = useState<string | null>(null);
 
   // Load settings on component mount
   useEffect(() => {
@@ -194,6 +198,36 @@ export default function BatchOperations({
       setTimeout(() => setSaveMessage(null), 3000);
     }
   };
+
+  const handleSaveMergedVideoToDatabase = async () => {
+    if (!mergedVideo.url) {
+      setSaveToDbMessage('No merged video available to save');
+      setTimeout(() => setSaveToDbMessage(null), 3000);
+      return;
+    }
+
+    if (!selectedOriginalVideo.id) {
+      setSaveToDbMessage('Please select an original video first');
+      setTimeout(() => setSaveToDbMessage(null), 3000);
+      return;
+    }
+
+    setSavingToDatabase(true);
+    setSaveToDbMessage(null);
+
+    try {
+      await saveMergedVideoToOriginalTable();
+      setSaveToDbMessage('Merged video URL saved to database successfully!');
+      setTimeout(() => setSaveToDbMessage(null), 3000);
+    } catch (error) {
+      console.error('Failed to save merged video to database:', error);
+      setSaveToDbMessage('Failed to save to database. Please try again.');
+      setTimeout(() => setSaveToDbMessage(null), 5000);
+    } finally {
+      setSavingToDatabase(false);
+    }
+  };
+
   const onImproveAllSentences = () => {
     handleImproveAllSentences(
       data,
@@ -481,7 +515,39 @@ export default function BatchOperations({
                     <Film className='w-4 h-4' />
                     Copy URL
                   </button>
+                  <button
+                    onClick={handleSaveMergedVideoToDatabase}
+                    disabled={savingToDatabase || !selectedOriginalVideo.id}
+                    className={`inline-flex items-center gap-2 px-4 py-2 font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md ${
+                      selectedOriginalVideo.id
+                        ? 'bg-green-500 hover:bg-green-600 text-white'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : 'Save merged video URL to original video database'
+                    }
+                  >
+                    {savingToDatabase ? (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    ) : (
+                      <Save className='w-4 h-4' />
+                    )}
+                    {savingToDatabase ? 'Saving...' : 'Save to Database'}
+                  </button>
                 </div>
+
+                {/* Save to Database Message */}
+                {saveToDbMessage && (
+                  <div className={`mt-2 text-sm font-medium ${
+                    saveToDbMessage.includes('successfully') || saveToDbMessage.includes('saved')
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                  }`}>
+                    {saveToDbMessage}
+                  </div>
+                )}
               </div>
             </div>
 

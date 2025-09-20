@@ -140,6 +140,7 @@ interface AppState {
   // Merged Video Actions
   setMergedVideo: (url: string, fileName?: string) => void;
   clearMergedVideo: () => void;
+  saveMergedVideoToOriginalTable: () => Promise<void>;
 
   // Selected Original Video Actions
   setSelectedOriginalVideo: (
@@ -423,19 +424,55 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   // Merged Video Actions
-  setMergedVideo: (url, fileName) =>
+  setMergedVideo: (url, fileName) => {
     set({
       mergedVideo: {
         url,
         createdAt: new Date(),
         fileName: fileName || 'merged-video.mp4',
       },
-    }),
+    });
+    
+    // Automatically save to original table if a video is selected
+    const state = get();
+    if (state.selectedOriginalVideo.id) {
+      // Save asynchronously without blocking the UI
+      state.saveMergedVideoToOriginalTable().catch((error) => {
+        console.error('Auto-save to original table failed:', error);
+      });
+    }
+  },
 
   clearMergedVideo: () =>
     set({
       mergedVideo: defaultMergedVideo,
     }),
+
+  saveMergedVideoToOriginalTable: async () => {
+    const state = get();
+    const { mergedVideo, selectedOriginalVideo } = state;
+    
+    // Only save if we have both a merged video and a selected original video
+    if (!mergedVideo.url || !selectedOriginalVideo.id) {
+      console.warn('Cannot save merged video: missing video URL or selected original video');
+      return;
+    }
+
+    try {
+      // Import the update function (this will be available at runtime)
+      const { updateOriginalVideoRow } = await import('@/lib/baserow-actions');
+      
+      // Update the original video with the merged video URL
+      await updateOriginalVideoRow(selectedOriginalVideo.id, {
+        field_6858: mergedVideo.url, // Final Merged Video URL field
+      });
+      
+      console.log(`Merged video URL saved to original video #${selectedOriginalVideo.id}`);
+    } catch (error) {
+      console.error('Failed to save merged video URL to original table:', error);
+      throw error;
+    }
+  },
 
   // Selected Original Video Actions
   setSelectedOriginalVideo: (id, videoUrl, status, sceneIds) =>

@@ -363,3 +363,40 @@ export async function createOriginalVideoRow(
     throw error;
   }
 }
+
+export async function updateOriginalVideoRow(
+  rowId: number,
+  rowData: Record<string, unknown>
+): Promise<BaserowRow> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const originalVideosTableId = '713'; // Table 713 for original videos
+
+  if (!baserowUrl) {
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
+  }
+
+  try {
+    const response = await makeAuthenticatedRequest(
+      `${baserowUrl}/database/rows/table/${originalVideosTableId}/${rowId}/`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(rowData),
+        cache: 'no-store',
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating original video row:', error);
+    throw error;
+  }
+}

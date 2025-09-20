@@ -33,12 +33,25 @@ export default function OriginalVideosList() {
     saveSettingsToLocalStorage,
     loadSettingsFromLocalStorage,
     getFilteredData,
+    mergedVideo,
   } = useAppStore();
 
   useEffect(() => {
     // Load settings from localStorage on mount
     loadSettingsFromLocalStorage();
   }, [loadSettingsFromLocalStorage]);
+
+  // Refresh the original videos list when a merged video is saved
+  useEffect(() => {
+    if (mergedVideo.url && selectedOriginalVideo.id) {
+      // Small delay to ensure the database update is complete
+      const timer = setTimeout(() => {
+        fetchOriginalVideos(true);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [mergedVideo.url, selectedOriginalVideo.id]);
 
   // Helper function to extract value from Baserow field
   const extractFieldValue = (field: any): string => {
