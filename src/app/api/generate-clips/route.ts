@@ -33,6 +33,13 @@ export async function POST(request: NextRequest) {
             throw new Error('No scenes found for this video');
           }
 
+          // Sort scenes by start time for sequential processing
+          scenes.sort((a, b) => {
+            const startA = parseFloat(a.field_6898) || 0;
+            const startB = parseFloat(b.field_6898) || 0;
+            return startA - startB;
+          });
+
           // Send initial progress
           controller.enqueue(
             encoder.encode(
@@ -46,7 +53,9 @@ export async function POST(request: NextRequest) {
             )
           );
 
-          console.log(`Found ${scenes.length} scenes to process`);
+          console.log(
+            `Found ${scenes.length} scenes to process, sorted by start time`
+          );
 
           // Step 3: Process each scene to create video clips (one by one)
           const processedClips = [];
@@ -81,6 +90,14 @@ export async function POST(request: NextRequest) {
                 sceneNumber,
                 progress: progressPercentage,
               });
+
+              // Force garbage collection every 10 clips to prevent memory buildup
+              if (sceneNumber % 10 === 0 && global.gc) {
+                global.gc();
+                console.log(
+                  `Garbage collection triggered after scene ${sceneNumber}`
+                );
+              }
 
               // Send scene completion update
               controller.enqueue(
@@ -298,20 +315,35 @@ async function getScenesForVideo(videoId: string) {
 async function createVideoClip(videoUrl: string, scene: any) {
   const ncaUrl = 'http://host.docker.internal:8080/v1/video/trim';
 
+  const startTime = parseFloat(scene.field_6898);
+  const endTime = parseFloat(scene.field_6897);
+  const duration = endTime - startTime;
+
+  // Generate unique request ID for tracking
+  const requestId = `${scene.id}_${Date.now()}`;
+
+  console.log(
+    `Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s [${requestId}]`
+  );
+  const trimStartTime = Date.now();
+
   const requestBody = {
     video_url: videoUrl,
-    start: scene.field_6898.toString(), // Pre End Time as string
-    end: scene.field_6897.toString(), // End Time as string
-    id: scene.id.toString(), // Scene ID as string
+    start: scene.field_6898.toString(),
+    end: scene.field_6897.toString(),
+    id: requestId,
+    video_preset: 'medium',
+    video_crf: 23,
   };
 
   const response = await fetch(ncaUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': 'test-key-123', // Using the same API key as other NCA endpoints
+      'x-api-key': 'test-key-123',
     },
     body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(120000), // Increased timeout to 2 minutes
   });
 
   if (!response.ok) {
@@ -320,6 +352,12 @@ async function createVideoClip(videoUrl: string, scene: any) {
   }
 
   const result = await response.json();
+
+  const trimEndTime = Date.now();
+  const processingTime = trimEndTime - trimStartTime;
+  console.log(
+    `Scene ${scene.id} trim completed in ${processingTime}ms (start=${startTime}s)`
+  );
 
   // Extract the clip URL from the response
   const clipUrl =
