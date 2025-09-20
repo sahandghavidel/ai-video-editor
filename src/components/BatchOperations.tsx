@@ -294,7 +294,28 @@ export default function BatchOperations({
     ];
     const currentIndex = modes.indexOf(videoSettings.speedUpMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    updateVideoSettings({ speedUpMode: modes[nextIndex] });
+    const nextMode = modes[nextIndex];
+
+    // Auto-set speed and audio based on mode
+    let autoSettings: Partial<typeof videoSettings> = { speedUpMode: nextMode };
+
+    switch (nextMode) {
+      case 'emptyOnly':
+        // Raw clips: 4x speed, muted
+        autoSettings.selectedSpeed = 4;
+        autoSettings.muteAudio = true;
+        break;
+      case 'withTextOnly':
+        // Final content: 1x speed, with audio
+        autoSettings.selectedSpeed = 1;
+        autoSettings.muteAudio = false;
+        break;
+      case 'all':
+        // Keep current settings for "all" mode
+        break;
+    }
+
+    updateVideoSettings(autoSettings);
   };
 
   const getSpeedUpModeDisplay = () => {
