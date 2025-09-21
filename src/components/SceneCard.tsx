@@ -646,6 +646,7 @@ export default function SceneCard({
           body: JSON.stringify({
             videoUrl,
             audioUrl,
+            sceneId, // Pass sceneId for better tracking
           }),
         });
 
