@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateBaserowRow } from '@/lib/baserow-actions';
+import { speedUpVideoWithUpload } from '@/utils/ffmpeg-direct';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,101 +32,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // NCA Toolkit credentials from your Docker setup
-    const NCA_API_KEY = 'test-key-123';
-    const NCA_BASE_URL = 'http://host.docker.internal:8080';
-
-    // Create FFmpeg command to speed up both video and audio by specified speed (same approach as generate-video)
-    const audioFilter = muteAudio
-      ? `[0:a]atempo=${speed}.0,volume=0[a_processed]` // Mute audio but keep stream
-      : `[0:a]atempo=${speed}.0[a_processed]`; // Keep original volume
-
-    const ffmpegPayload = {
-      id: `speed-up-video-${sceneId}-${Date.now()}`,
-      inputs: [{ file_url: videoUrl }],
-      filters: [
-        // Speed up video by specified speed
-        { filter: `[0:v]setpts=PTS/${speed}[v_fast]` },
-        // Speed up audio by specified speed and conditionally mute
-        { filter: audioFilter },
-      ],
-      outputs: [
-        {
-          options: [
-            { option: '-map', argument: '[v_fast]' },
-            { option: '-map', argument: '[a_processed]' },
-            { option: '-c:v', argument: 'libx264' },
-            { option: '-c:a', argument: 'aac' },
-            { option: '-b:a', argument: '192k' },
-            { option: '-ar', argument: '44100' },
-            { option: '-ac', argument: '2' },
-          ],
-        },
-      ],
-    };
-
     console.log(
-      'Speed-up video payload:',
-      JSON.stringify(ffmpegPayload, null, 2)
+      `[SPEEDUP] Scene ${sceneId}: Processing ${speed}x speed-up with${
+        muteAudio ? '' : 'out'
+      } audio muting`
     );
+    const speedUpStartTime = Date.now();
 
-    // Call NCA Toolkit to process the video
-    const videoProcessingResponse = await fetch(
-      `${NCA_BASE_URL}/v1/ffmpeg/compose`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': NCA_API_KEY,
-        },
-        body: JSON.stringify(ffmpegPayload),
-      }
-    );
+    try {
+      // Use direct FFmpeg with hardware acceleration + MinIO upload (same format as clip generation)
+      const result = await speedUpVideoWithUpload({
+        inputUrl: videoUrl,
+        speed: speed,
+        muteAudio: muteAudio,
+        useHardwareAcceleration: true,
+        videoBitrate: '6000k', // Same bitrate as clip generation for consistent format
+        sceneId: sceneId.toString(),
+        cleanup: true, // Clean up local files after upload
+      });
 
-    if (!videoProcessingResponse.ok) {
-      const errorText = await videoProcessingResponse.text();
-      console.error(
-        'Video processing error:',
-        videoProcessingResponse.status,
-        errorText
+      const speedUpEndTime = Date.now();
+      const processingTime = speedUpEndTime - speedUpStartTime;
+      console.log(
+        `[SPEEDUP] Scene ${sceneId} completed in ${processingTime}ms (${speed}x speed) - Hardware accelerated + MinIO uploaded!`
       );
-      throw new Error(
-        `Video processing error: ${videoProcessingResponse.status} - ${errorText}`
+      console.log(
+        `[UPLOAD] Scene ${sceneId} speed-up uploaded to: ${result.uploadUrl}`
       );
+
+      // Update the scene with the sped-up video URL
+      await updateSceneWithSpeedUpUrl(sceneId, result.uploadUrl);
+
+      return NextResponse.json({
+        videoUrl: result.uploadUrl,
+        message: `Video successfully sped up ${speed}x${
+          muteAudio ? ' with audio muted' : ''
+        }`,
+        processingTime: processingTime,
+      });
+    } catch (error) {
+      console.error(`[SPEEDUP] Failed to process scene ${sceneId}:`, error);
+      throw error;
     }
-
-    const processedVideoResult = await videoProcessingResponse.json();
-    console.log('Processed video result:', processedVideoResult);
-
-    // Extract the processed video URL from various possible response formats
-    const processedVideoUrl =
-      processedVideoResult.response?.[0]?.file_url ||
-      processedVideoResult.output_url ||
-      processedVideoResult.url ||
-      processedVideoResult.result?.output_url ||
-      processedVideoResult.result?.url ||
-      processedVideoResult.data?.output_url ||
-      processedVideoResult.data?.url;
-
-    if (!processedVideoUrl) {
-      console.error(
-        'Could not find processed video URL in response:',
-        processedVideoResult
-      );
-      throw new Error('No processed video URL returned from service');
-    }
-
-    console.log('Speed-up video URL:', processedVideoUrl);
-
-    // Update field_6886 with the processed video URL
-    await updateBaserowRow(sceneId, {
-      field_6886: processedVideoUrl,
-    });
-
-    return NextResponse.json({
-      videoUrl: processedVideoUrl,
-      message: `Video successfully sped up ${speed}x with audio muted`,
-    });
   } catch (error) {
     console.error('Error processing speed-up video:', error);
     return NextResponse.json(
@@ -136,5 +83,76 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  }
+}
+
+// Helper function to get JWT token for Baserow API
+async function getJWTToken(): Promise<string> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const email = process.env.BASEROW_EMAIL;
+  const password = process.env.BASEROW_PASSWORD;
+
+  if (!baserowUrl || !email || !password) {
+    throw new Error('Missing Baserow configuration');
+  }
+
+  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.token;
+}
+
+// Function to update scene with speed-up video URL
+async function updateSceneWithSpeedUpUrl(
+  sceneId: number,
+  speedUpVideoUrl: string
+) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+
+  try {
+    const token = await getJWTToken();
+
+    const updateData = {
+      field_6886: speedUpVideoUrl, // Videos field (same field updated in clip generation)
+    };
+
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/714/${sceneId}/`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `JWT ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to update scene with speed-up URL: ${response.status} ${errorText}`
+      );
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error(`Error updating scene ${sceneId} with speed-up URL:`, error);
+    throw error;
   }
 }

@@ -42,10 +42,6 @@ export async function trimVideoWithFFmpeg(
     const isHardware = attempt === 'hardware';
 
     try {
-      console.log(
-        `[FFMPEG] Attempt ${i + 1}/${attempts.length}: ${attempt} encoding`
-      );
-
       // Calculate duration
       const duration = parseFloat(endTimeStr) - parseFloat(startTimeStr);
 
@@ -96,7 +92,6 @@ export async function trimVideoWithFFmpeg(
       );
 
       const commandString = ffmpegCommand.join(' ');
-      console.log(`Executing FFmpeg command (${attempt}): ${commandString}`);
       const execStartTime = Date.now();
 
       const { stdout, stderr } = await execAsync(commandString, {
@@ -109,10 +104,6 @@ export async function trimVideoWithFFmpeg(
           execEndTime - execStartTime
         }ms (${attempt} encoding)`
       );
-
-      if (stderr) {
-        console.log('FFmpeg stderr:', stderr);
-      }
 
       // Check if output file exists
       await access(fullOutputPath);
@@ -174,6 +165,171 @@ export async function trimMultipleVideosWithFFmpeg(
   return results;
 }
 
+export interface SpeedUpOptions {
+  inputUrl: string;
+  speed: number; // Speed multiplier (1, 2, 4, etc.)
+  muteAudio?: boolean;
+  outputPath?: string;
+  useHardwareAcceleration?: boolean;
+  videoBitrate?: string;
+}
+
+export async function speedUpVideoWithFFmpeg(
+  options: SpeedUpOptions
+): Promise<string> {
+  const {
+    inputUrl,
+    speed,
+    muteAudio = false,
+    outputPath,
+    useHardwareAcceleration = true,
+    videoBitrate = '6000k',
+  } = options;
+
+  // Create a unique output filename
+  const outputFileName =
+    outputPath ||
+    `speedup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
+  const fullOutputPath = path.resolve('/tmp', outputFileName);
+
+  // Try hardware acceleration first, then fallback to software
+  const attempts = useHardwareAcceleration
+    ? ['hardware', 'software']
+    : ['software'];
+
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    const isHardware = attempt === 'hardware';
+
+    try {
+      // Build FFmpeg command for speed adjustment
+      const ffmpegCommand = [
+        'ffmpeg',
+        '-y', // Overwrite output file
+        '-i',
+        `"${inputUrl}"`, // Input file
+      ];
+
+      // Video filter: speed up video by changing PTS (presentation timestamp)
+      let videoFilter = `setpts=PTS/${speed}`;
+
+      // Audio filter: speed up audio and optionally mute
+      let audioFilter;
+      if (muteAudio) {
+        audioFilter = `atempo=${speed},volume=0`; // Speed up and mute
+      } else {
+        // For speeds > 2, we need to chain atempo filters (max 2.0 per filter)
+        if (speed <= 2) {
+          audioFilter = `atempo=${speed}`;
+        } else if (speed === 4) {
+          audioFilter = `atempo=2.0,atempo=2.0`; // Chain two 2x filters for 4x
+        } else {
+          // For other speeds, calculate the chain needed
+          let tempSpeed = speed;
+          const filters = [];
+          while (tempSpeed > 2) {
+            filters.push('atempo=2.0');
+            tempSpeed /= 2;
+          }
+          if (tempSpeed > 1) {
+            filters.push(`atempo=${tempSpeed}`);
+          }
+          audioFilter = filters.join(',');
+        }
+      }
+
+      // Add filter complex for video and audio processing
+      ffmpegCommand.push(
+        '-filter_complex',
+        `"[0:v]${videoFilter}[v];[0:a]${audioFilter}[a]"`,
+        '-map',
+        '[v]',
+        '-map',
+        '[a]'
+      );
+
+      // Add video encoding options (same as trimming for consistent format)
+      if (isHardware) {
+        ffmpegCommand.push(
+          '-c:v',
+          'h264_videotoolbox', // Hardware accelerated H.264 encoding
+          '-b:v',
+          videoBitrate, // Video bitrate (required for videotoolbox)
+          '-allow_sw',
+          '1', // Allow software fallback if hardware fails
+          '-realtime',
+          '0' // Disable realtime encoding for better quality
+        );
+      } else {
+        ffmpegCommand.push(
+          '-c:v',
+          'libx264',
+          '-preset',
+          'medium',
+          '-crf',
+          '23'
+        );
+      }
+
+      // Add audio encoding options (same as trimming for consistent format)
+      ffmpegCommand.push(
+        '-c:a',
+        'aac',
+        '-b:a',
+        '128k',
+        '-avoid_negative_ts',
+        'make_zero',
+        `"${fullOutputPath}"`
+      );
+
+      const commandString = ffmpegCommand.join(' ');
+      const execStartTime = Date.now();
+
+      const { stdout, stderr } = await execAsync(commandString, {
+        timeout: 120000, // 2 minute timeout
+      });
+
+      const execEndTime = Date.now();
+      console.log(
+        `FFmpeg speedup completed in ${
+          execEndTime - execStartTime
+        }ms (${attempt} encoding, ${speed}x speed)`
+      );
+
+      // Check if output file exists
+      await access(fullOutputPath);
+
+      return fullOutputPath;
+    } catch (error) {
+      console.error(`FFmpeg ${attempt} speedup encoding failed:`, error);
+
+      // Clean up output file if it exists
+      try {
+        await unlink(fullOutputPath);
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+
+      // If this was the last attempt, throw the error
+      if (i === attempts.length - 1) {
+        throw new Error(
+          `FFmpeg speedup processing failed after ${
+            attempts.length
+          } attempts: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
+      // Otherwise, continue to next attempt
+      console.log(`Retrying speedup with ${attempts[i + 1]} encoding...`);
+    }
+  }
+
+  // This should never be reached, but just in case
+  throw new Error('FFmpeg speedup processing failed: No successful attempts');
+}
+
 /**
  * Upload a file to MinIO storage using the same pattern as other endpoints
  */
@@ -210,7 +366,6 @@ export async function uploadToMinio(
       throw new Error(`MinIO upload error: ${uploadResponse.status}`);
     }
 
-    console.log(`Successfully uploaded to MinIO: ${uploadUrl}`);
     return uploadUrl;
   } catch (error) {
     console.error('Error uploading to MinIO:', error);
@@ -244,6 +399,60 @@ export async function createVideoClipWithUpload(
     const filename = sceneId
       ? `scene_${sceneId}_${timestamp}.mp4`
       : `clip_${timestamp}.mp4`;
+
+    // Step 3: Upload to MinIO
+    const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
+
+    // Step 4: Cleanup local file if requested
+    if (cleanup && localPath) {
+      try {
+        await unlink(localPath);
+      } catch (cleanupError) {
+        console.warn(`Failed to cleanup local file: ${cleanupError}`);
+      }
+    }
+
+    return {
+      localPath: cleanup ? '' : localPath,
+      uploadUrl,
+    };
+  } catch (error) {
+    // Cleanup on error
+    if (localPath) {
+      try {
+        await unlink(localPath);
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Complete workflow: FFmpeg speed-up + MinIO upload + local cleanup
+ */
+export async function speedUpVideoWithUpload(
+  options: SpeedUpOptions & {
+    sceneId?: string;
+    cleanup?: boolean;
+  }
+): Promise<{ localPath: string; uploadUrl: string }> {
+  const { sceneId, cleanup = true, ...speedUpOptions } = options;
+
+  let localPath: string | null = null;
+
+  try {
+    // Step 1: Speed up the video using FFmpeg
+    localPath = await speedUpVideoWithFFmpeg(speedUpOptions);
+
+    // Step 2: Generate filename for upload
+    const timestamp = Date.now();
+    const speedSuffix = `${speedUpOptions.speed}x`;
+    const filename = sceneId
+      ? `scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
+      : `speedup_${speedSuffix}_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');

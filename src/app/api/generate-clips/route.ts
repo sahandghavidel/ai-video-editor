@@ -318,11 +318,6 @@ async function createVideoClipDirect(
   console.log(
     `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s`
   );
-  console.log(
-    `[TIMING] Scene ${
-      scene.id
-    }: Starting FFmpeg processing at ${new Date().toISOString()}`
-  );
   const ffmpegStartTime = Date.now();
 
   try {
@@ -340,9 +335,8 @@ async function createVideoClipDirect(
     const ffmpegEndTime = Date.now();
     const processingTime = ffmpegEndTime - ffmpegStartTime;
     console.log(
-      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s) - Hardware accelerated + MinIO uploaded!`
+      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s)`
     );
-    console.log(`[UPLOAD] Scene ${scene.id} uploaded to: ${result.uploadUrl}`);
 
     return result.uploadUrl;
   } catch (error) {
