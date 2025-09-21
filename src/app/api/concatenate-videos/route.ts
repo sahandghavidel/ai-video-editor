@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  concatenateVideosWithUpload,
+  concatenateVideosFast,
+} from '@/utils/ffmpeg-merge';
 
 export async function POST(request: NextRequest) {
   try {
-    const { video_urls, id } = await request.json();
+    const { video_urls, id, fast_mode = true } = await request.json();
 
     if (!video_urls || !Array.isArray(video_urls) || video_urls.length === 0) {
       return NextResponse.json(
@@ -11,58 +15,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate video URLs format
-    for (const videoObj of video_urls) {
-      if (!videoObj.video_url || typeof videoObj.video_url !== 'string') {
-        return NextResponse.json(
-          { error: 'Each video_urls item must have a valid video_url string' },
-          { status: 400 }
-        );
+    // Extract URLs from the video_urls array
+    const videoUrls = video_urls.map((videoObj: any) => {
+      if (typeof videoObj === 'string') {
+        return videoObj;
       }
+      if (videoObj.video_url) {
+        return videoObj.video_url;
+      }
+      throw new Error(
+        'Each video_urls item must have a valid video_url string'
+      );
+    });
+
+    console.log(
+      `[MERGE] Starting ${fast_mode ? 'fast' : 'standard'} merge of ${
+        videoUrls.length
+      } videos`
+    );
+    const mergeStartTime = Date.now();
+
+    let result;
+
+    if (fast_mode) {
+      try {
+        // Try fast concatenation first (copy mode - no re-encoding)
+        const localPath = await concatenateVideosFast(videoUrls);
+
+        // Upload to MinIO
+        const { uploadUrl } = await concatenateVideosWithUpload({
+          videoUrls: [localPath], // Just upload the already merged file
+          cleanup: true,
+        });
+
+        result = { videoUrl: uploadUrl };
+      } catch (error) {
+        console.log(
+          '[MERGE] Fast mode failed, falling back to standard mode:',
+          error
+        );
+
+        // Fallback to standard concatenation with re-encoding
+        const { uploadUrl } = await concatenateVideosWithUpload({
+          videoUrls,
+          useHardwareAcceleration: true,
+          videoBitrate: '6000k',
+          cleanup: true,
+        });
+
+        result = { videoUrl: uploadUrl };
+      }
+    } else {
+      // Standard concatenation with re-encoding
+      const { uploadUrl } = await concatenateVideosWithUpload({
+        videoUrls,
+        useHardwareAcceleration: true,
+        videoBitrate: '6000k',
+        cleanup: true,
+      });
+
+      result = { videoUrl: uploadUrl };
     }
 
-    console.log('Concatenating videos:', video_urls);
+    const mergeEndTime = Date.now();
+    const processingTime = mergeEndTime - mergeStartTime;
 
-    // Call NCA toolkit video concatenation endpoint
-    const response = await fetch(
-      'http://host.docker.internal:8080/v1/video/concatenate',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': 'test-key-123', // Using the same API key as other endpoints
-        },
-        body: JSON.stringify({
-          video_urls,
-          id: id || `concatenate_${Date.now()}`,
-        }),
-      }
+    console.log(
+      `[MERGE] Completed in ${processingTime}ms - Output: ${result.videoUrl}`
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('NCA toolkit error:', errorText);
-      throw new Error(`NCA toolkit error: ${response.status} - ${errorText}`);
-    }
-
-    const result = await response.json();
-
-    // The response field contains the concatenated video URL
-    const videoUrl = result.response;
-
-    if (!videoUrl) {
-      throw new Error('No video URL returned from concatenation service');
-    }
-
     return NextResponse.json({
-      videoUrl,
-      jobId: result.job_id,
-      id: result.id,
-      message: result.message,
-      runTime: result.run_time,
+      videoUrl: result.videoUrl,
+      id: id || `merge_${Date.now()}`,
+      message: `Successfully merged ${videoUrls.length} videos using direct FFmpeg`,
+      runTime: `${processingTime}ms`,
+      method: fast_mode ? 'fast_copy' : 'standard_encode',
     });
   } catch (error) {
-    console.error('Error concatenating videos:', error);
+    console.error('[MERGE] Error concatenating videos:', error);
     return NextResponse.json(
       {
         error:
