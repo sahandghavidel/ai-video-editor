@@ -1,0 +1,59 @@
+INFO:     Started server process [90975]
+INFO:     Waiting for application startup.
+Loading Parakeet TDT 0.6B v3 model...
+[NeMo I 2025-09-21 13:26:50 mixins:181] Tokenizer SentencePieceTokenizer initialized with 8192 tokens
+[NeMo W 2025-09-21 13:26:52 modelPT:181] If you intend to do training or fine-tuning, please call the ModelPT.setup_training_data() method and provide a valid configuration file to setup the train data loader.
+    Train config : 
+    use_lhotse: true
+    skip_missing_manifest_entries: true
+    input_cfg: null
+    tarred_audio_filepaths: null
+    manifest_filepath: null
+    sample_rate: 16000
+    shuffle: true
+    num_workers: 2
+    pin_memory: true
+    max_duration: 10.0
+    min_duration: 1.0
+    text_field: answer
+    batch_duration: null
+    max_tps: null
+    use_bucketing: true
+    bucket_duration_bins: null
+    bucket_batch_size: null
+    num_buckets: 30
+    bucket_buffer_size: 20000
+    shuffle_buffer_size: 10000
+    
+[NeMo W 2025-09-21 13:26:52 modelPT:188] If you intend to do validation, please call the ModelPT.setup_validation_data() or ModelPT.setup_multiple_validation_data() method and provide a valid configuration file to setup the validation data loader(s). 
+    Validation config : 
+    use_lhotse: true
+    manifest_filepath: null
+    sample_rate: 16000
+    batch_size: 16
+    shuffle: false
+    max_duration: 40.0
+    min_duration: 0.1
+    num_workers: 2
+    pin_memory: true
+    text_field: answer
+    
+[NeMo I 2025-09-21 13:26:52 features:305] PADDING: 0
+[NeMo I 2025-09-21 13:26:56 rnnt_models:226] Using RNNT Loss : tdt
+    Loss tdt_kwargs: {'fastemit_lambda': 0.0, 'clamp': -1.0, 'durations': [0, 1, 2, 3, 4], 'sigma': 0.02, 'omega': 0.1}
+[NeMo I 2025-09-21 13:26:56 rnnt_models:226] Using RNNT Loss : tdt
+    Loss tdt_kwargs: {'fastemit_lambda': 0.0, 'clamp': -1.0, 'durations': [0, 1, 2, 3, 4], 'sigma': 0.02, 'omega': 0.1}
+[NeMo W 2025-09-21 13:26:56 label_looping_base:109] No conditional node support for Cuda.
+    Cuda graphs with while loops are disabled, decoding speed will be slower
+    Reason: CUDA is not available
+[NeMo I 2025-09-21 13:26:56 rnnt_models:226] Using RNNT Loss : tdt
+    Loss tdt_kwargs: {'fastemit_lambda': 0.0, 'clamp': -1.0, 'durations': [0, 1, 2, 3, 4], 'sigma': 0.02, 'omega': 0.1}
+[NeMo W 2025-09-21 13:26:56 label_looping_base:109] No conditional node support for Cuda.
+    Cuda graphs with while loops are disabled, decoding speed will be slower
+    Reason: CUDA is not available
+[NeMo I 2025-09-21 13:26:58 save_restore_connector:282] Model EncDecRNNTBPEModel was successfully restored from /Users/sahand/.cache/huggingface/hub/models--nvidia--parakeet-tdt-0.6b-v3/snapshots/be0d803fd1970eca8627f5467c208118f0f6c171/parakeet-tdt-0.6b-v3.nemo.
+INFO:     Application startup complete.
+ERROR:    [Errno 48] error while attempting to bind on address ('0.0.0.0', 8080): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+Parakeet model loaded successfully!

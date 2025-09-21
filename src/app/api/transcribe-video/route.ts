@@ -1,31 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { spawn } from 'child_process';
+import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const { media_url } = body;
 
-    // Make the transcription request to NCA toolkit
-    const response = await fetch(
-      'http://host.docker.internal:8080/v1/media/transcribe',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': 'test-key-123', // Using the same API key as other NCA endpoints
-        },
-        body: JSON.stringify(body),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('NCA Toolkit error:', errorText);
-      throw new Error(`NCA Toolkit returned ${response.status}: ${errorText}`);
+    if (!media_url) {
+      return NextResponse.json(
+        { error: 'media_url is required' },
+        { status: 400 }
+      );
     }
 
-    const data = await response.json();
+    console.log('Starting Parakeet transcription for:', media_url);
 
-    return NextResponse.json(data);
+    // Path to the Parakeet transcription script
+    const scriptPath = path.join(process.cwd(), 'parakeet-transcribe.py');
+    const venvPath = path.join(process.cwd(), 'parakeet-env', 'bin', 'python');
+
+    // Run the Parakeet transcription script
+    const transcriptionPromise = new Promise((resolve, reject) => {
+      const pythonProcess = spawn(venvPath, [scriptPath, media_url], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0) {
+          try {
+            // Parse the JSON output from the Python script
+            const result = JSON.parse(stdout);
+            resolve(result);
+          } catch (parseError) {
+            reject(
+              new Error(`Failed to parse transcription result: ${parseError}`)
+            );
+          }
+        } else {
+          reject(
+            new Error(`Transcription failed with code ${code}: ${stderr}`)
+          );
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        reject(
+          new Error(`Failed to start transcription process: ${error.message}`)
+        );
+      });
+    });
+
+    // Wait for transcription to complete
+    const transcriptionResult = await transcriptionPromise;
+
+    console.log('Parakeet transcription completed successfully');
+
+    return NextResponse.json(transcriptionResult);
   } catch (error) {
     console.error('Error in transcribe API:', error);
     return NextResponse.json(
