@@ -536,7 +536,7 @@ export default function OriginalVideosList() {
     try {
       setTranscribing(videoId);
 
-      // Step 1: Transcribe the video using NCA toolkit
+      // Step 1: Transcribe the video using Parakeet
       const transcribeResponse = await fetch('/api/transcribe-video', {
         method: 'POST',
         headers: {
@@ -544,13 +544,6 @@ export default function OriginalVideosList() {
         },
         body: JSON.stringify({
           media_url: videoUrl,
-          task: 'transcribe',
-          include_text: false,
-          include_srt: false,
-          include_segments: true,
-          word_timestamps: true,
-          response_type: 'direct',
-          language: 'en',
         }),
       });
 
@@ -678,7 +671,7 @@ export default function OriginalVideosList() {
     videoId: number,
     videoUrl: string
   ) => {
-    // Step 1: Transcribe the video using NCA toolkit
+    // Step 1: Transcribe the video using Parakeet
     const transcribeResponse = await fetch('/api/transcribe-video', {
       method: 'POST',
       headers: {
@@ -686,13 +679,6 @@ export default function OriginalVideosList() {
       },
       body: JSON.stringify({
         media_url: videoUrl,
-        task: 'transcribe',
-        include_text: false,
-        include_srt: false,
-        include_segments: true,
-        word_timestamps: true,
-        response_type: 'direct',
-        language: 'en',
       }),
     });
 

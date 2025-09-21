@@ -9,7 +9,8 @@ A comprehensive Next.js application for automated video content creation with in
 - **Baserow Integration**: Full CRUD operations with self-hosted Baserow database
 - **Inline Text Editing**: Click-to-edit interface with real-time database updates
 - **TTS Generation**: AI-powered text-to-speech with MinIO cloud storage integration
-- **Video Processing**: FFmpeg-based video synchronization using NCA Toolkit
+- **Video Processing**: Local FFmpeg-based video processing with hardware acceleration
+- **Transcription**: High-quality NVIDIA Parakeet TDT model for speech-to-text
 - **Smart Automation**: Optional auto-generation workflows for streamlined production
 - **Media Playback**: Integrated audio/video players with modal interfaces
 - **File Management**: Centralized MinIO object storage for all media assets
@@ -27,7 +28,7 @@ A comprehensive Next.js application for automated video content creation with in
 ```
 Text Edit → TTS Generation → Video Synchronization → Final Production
      ↓            ↓                    ↓                    ↓
-Baserow      MinIO Storage      NCA Processing      Playback Ready
+Baserow      MinIO Storage      Local FFmpeg        Playback Ready
 field_6890   field_6891         field_6886          Media Players
 ```
 
@@ -36,7 +37,7 @@ field_6890   field_6891         field_6886          Media Players
 - **Baserow Database**: `host.docker.internal:714` - Data persistence
 - **TTS Service**: `host.docker.internal:8004` - Speech synthesis
 - **MinIO Storage**: `host.docker.internal:9000` - File storage
-- **NCA Toolkit**: `host.docker.internal:8080` - Video processing
+- **Parakeet Transcription**: Local NVIDIA model for speech-to-text
 - **Next.js App**: `localhost:3000` - User interface
 
 ## Tech Stack
@@ -45,7 +46,8 @@ field_6890   field_6891         field_6886          Media Players
 - **Database**: Baserow (self-hosted at host.docker.internal:714)
 - **Storage**: MinIO object storage (host.docker.internal:9000)
 - **Audio Processing**: Custom TTS service (host.docker.internal:8004)
-- **Video Processing**: NCA Toolkit with FFmpeg (host.docker.internal:8080)
+- **Video Processing**: Local FFmpeg with hardware acceleration
+- **Transcription**: NVIDIA Parakeet TDT 0.6B v3 model
 - **Authentication**: JWT tokens for Baserow API
 
 ## 🎛️ User Interface
@@ -81,7 +83,7 @@ Each scene provides a complete production interface with:
 
 ```typescript
 /api/generate-tts    # TTS generation + MinIO upload
-/api/generate-video  # Video synchronization via NCA Toolkit
+/api/generate-video  # Video synchronization via local FFmpeg
 ```
 
 ### Database Schema (Baserow Fields)
@@ -95,7 +97,7 @@ Each scene provides a complete production interface with:
 ### Video Synchronization Algorithm
 
 ```javascript
-// NCA Toolkit processing with duration-based speed adjustment
+// Local FFmpeg processing with duration-based speed adjustment
 const speedRatio = videoDuration / audioDuration;
 const syncedVideo = await processVideoWithAudio({
   originalVideo: videoUrl,
@@ -124,7 +126,7 @@ src/
 │   ├── page.tsx                    # Main dashboard
 │   └── api/
 │       ├── generate-tts/route.ts   # TTS + MinIO integration
-│       └── generate-video/route.ts # NCA video processing
+│       └── generate-video/route.ts # Local FFmpeg processing
 ├── components/
 │   └── SceneCard.tsx              # Production interface
 └── lib/
@@ -205,11 +207,17 @@ src/
 - **Output**: WAV audio files uploaded to MinIO storage
 - **Storage**: Automatic MinIO bucket management
 
-### NCA Toolkit (Video Processing)
+### Parakeet Transcription Service
 
-- **Endpoint**: `POST http://host.docker.internal:8080/process`
-- **Authentication**: x-api-key header
-- **Capabilities**: FFmpeg-based video synchronization
+- **Model**: NVIDIA Parakeet TDT 0.6B v3
+- **Features**: High-quality speech-to-text with automatic punctuation
+- **Output**: Word-level timestamps and segment organization
+- **Language**: Multilingual support (25 European languages)
+
+### Local FFmpeg Processing
+
+- **Capabilities**: Hardware-accelerated video processing
+- **Features**: Trimming, speed adjustment, concatenation, synchronization
 - **Algorithm**: Duration-ratio speed adjustment for perfect sync
 
 ### MinIO Object Storage
@@ -261,8 +269,10 @@ services:
     port: 714
   tts-service: # AI speech synthesis
     port: 8004
-  nca-toolkit: # Video processing
-    port: 8080
+  parakeet-env: # Transcription environment
+    python: local
+  local-ffmpeg: # Video processing
+    capabilities: hardware-accelerated
   minio: # Object storage
     port: 9000
 ```
@@ -273,7 +283,7 @@ services:
 
 - [x] **Full Baserow Integration** - CRUD operations with JWT authentication
 - [x] **TTS Generation Pipeline** - AI speech synthesis with MinIO storage
-- [x] **Video Synchronization** - FFmpeg processing via NCA Toolkit
+- [x] **Video Synchronization** - Local FFmpeg processing with hardware acceleration
 - [x] **5-Button Production Interface** - Complete media workflow per scene
 - [x] **Automation Options** - Auto-TTS and Auto-Video generation
 - [x] **Responsive UI** - Card-based design with Tailwind CSS
@@ -350,6 +360,7 @@ This project is licensed under the MIT License. See the LICENSE file for details
 
 - **Baserow**: Self-hosted database platform
 - **MinIO**: High-performance object storage
-- **NCA Toolkit**: Video processing capabilities
+- **NVIDIA Parakeet**: High-quality transcription model
+- **FFmpeg**: Powerful multimedia framework
 - **Next.js Team**: Amazing React framework
 - **Tailwind Labs**: Beautiful utility-first CSS
