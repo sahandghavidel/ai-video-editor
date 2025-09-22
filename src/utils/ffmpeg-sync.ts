@@ -35,6 +35,36 @@ export async function syncVideoWithAudio(
     `synced_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
   const fullOutputPath = path.resolve('/tmp', outputFileName);
 
+  // Variables to store probed audio properties
+  let originalCodec = 'aac';
+  let originalBitrate = 128000;
+  let originalSampleRate = 48000;
+  let originalChannels = 2;
+
+  // Probe video audio properties to preserve quality
+  console.log('[SYNC] Probing video audio properties...');
+  const audioProbeCmd = `ffprobe -v quiet -select_streams a:0 -show_entries stream=codec_name,bit_rate,sample_rate,channels -of json "${videoUrl}"`;
+  const { stdout: audioProbeStr } = await execAsync(audioProbeCmd);
+  const audioProbe = JSON.parse(audioProbeStr);
+  const audioStream = audioProbe.streams?.[0];
+
+  if (!audioStream) {
+    throw new Error('No audio stream found in video input');
+  }
+
+  originalCodec = audioStream.codec_name || 'aac';
+  originalBitrate = audioStream.bit_rate
+    ? parseInt(audioStream.bit_rate)
+    : 128000;
+  originalSampleRate = audioStream.sample_rate
+    ? parseInt(audioStream.sample_rate)
+    : 48000;
+  originalChannels = audioStream.channels || 2;
+
+  console.log(
+    `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
+  );
+
   // Try hardware acceleration first, then fallback to software
   const attempts = useHardwareAcceleration
     ? ['hardware', 'software']
@@ -60,13 +90,14 @@ export async function syncVideoWithAudio(
       // Get video and audio durations to calculate speed ratio
       // We'll use a two-pass approach: first get durations, then sync
 
-      // For now, let's use a simple approach: longest stream wins
       // Video filter: adjust video speed to match audio duration
-      // Audio filter: resample and normalize audio
+      // Audio filter: resample to match original video's sample rate
+      let videoFilter = ``;
+      let audioFilter = `aresample=${originalSampleRate}`;
 
       ffmpegCommand.push(
         '-filter_complex',
-        '"[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2[v];[1:a]aresample=44100,volume=1,pan=stereo|c0=0.5*c0|c1=0.5*c0[a]"',
+        `"[0:v]${videoFilter}[v];[1:a]${audioFilter}[a]"`,
         '-map',
         '[v]',
         '-map',
@@ -97,12 +128,16 @@ export async function syncVideoWithAudio(
         );
       }
 
-      // Add audio encoding options (same as other functions for consistency)
+      // Add audio encoding options (preserve original quality)
       ffmpegCommand.push(
+        '-ar',
+        originalSampleRate.toString(),
         '-c:a',
-        'aac',
+        originalCodec,
         '-b:a',
-        '128k',
+        `${Math.round(originalBitrate / 1000)}k`,
+        '-ac',
+        originalChannels.toString(),
         '-avoid_negative_ts',
         'make_zero',
         `"${fullOutputPath}"`
@@ -178,6 +213,36 @@ export async function syncVideoWithAudioAdvanced(
       .substr(2, 9)}.mp4`;
   const fullOutputPath = path.resolve('/tmp', outputFileName);
 
+  // Variables to store probed audio properties
+  let originalCodec = 'aac';
+  let originalBitrate = 128000;
+  let originalSampleRate = 48000;
+  let originalChannels = 2;
+
+  // Probe video audio properties to preserve quality
+  console.log('[SYNC] Probing video audio properties...');
+  const audioProbeCmd = `ffprobe -v quiet -select_streams a:0 -show_entries stream=codec_name,bit_rate,sample_rate,channels -of json "${videoUrl}"`;
+  const { stdout: audioProbeStr } = await execAsync(audioProbeCmd);
+  const audioProbe = JSON.parse(audioProbeStr);
+  const audioStream = audioProbe.streams?.[0];
+
+  if (!audioStream) {
+    throw new Error('No audio stream found in video input');
+  }
+
+  originalCodec = audioStream.codec_name || 'aac';
+  originalBitrate = audioStream.bit_rate
+    ? parseInt(audioStream.bit_rate)
+    : 128000;
+  originalSampleRate = audioStream.sample_rate
+    ? parseInt(audioStream.sample_rate)
+    : 48000;
+  originalChannels = audioStream.channels || 2;
+
+  console.log(
+    `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
+  );
+
   try {
     console.log('[SYNC] Getting video and audio durations...');
 
@@ -191,7 +256,31 @@ export async function syncVideoWithAudioAdvanced(
     const { stdout: audioDurationStr } = await execAsync(audioDurationCmd);
     const audioDuration = parseFloat(audioDurationStr.trim());
 
-    // Step 3: Calculate speed ratio
+    // Step 3: Probe video audio properties to preserve quality
+    console.log('[SYNC] Probing video audio properties...');
+    const audioProbeCmd = `ffprobe -v quiet -select_streams a:0 -show_entries stream=codec_name,bit_rate,sample_rate,channels -of json "${videoUrl}"`;
+    const { stdout: audioProbeStr } = await execAsync(audioProbeCmd);
+    const audioProbe = JSON.parse(audioProbeStr);
+    const audioStream = audioProbe.streams?.[0];
+
+    if (!audioStream) {
+      throw new Error('No audio stream found in video input');
+    }
+
+    originalCodec = audioStream.codec_name || 'aac';
+    originalBitrate = audioStream.bit_rate
+      ? parseInt(audioStream.bit_rate)
+      : 128000;
+    originalSampleRate = audioStream.sample_rate
+      ? parseInt(audioStream.sample_rate)
+      : 48000;
+    originalChannels = audioStream.channels || 2;
+
+    console.log(
+      `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
+    );
+
+    // Step 4: Calculate speed ratio
     const speedRatio = audioDuration / videoDuration;
     console.log(
       `[SYNC] Video: ${videoDuration}s, Audio: ${audioDuration}s, Speed ratio: ${speedRatio}`
@@ -222,9 +311,12 @@ export async function syncVideoWithAudioAdvanced(
         ];
 
         // Apply speed adjustment to video and audio processing
+        let videoFilter = `setpts=PTS*${speedRatio}`;
+        let audioFilter = `aresample=${originalSampleRate}`;
+
         ffmpegCommand.push(
           '-filter_complex',
-          `"[0:v]setpts=PTS*${speedRatio},scale=trunc(iw/2)*2:trunc(ih/2)*2[v];[1:a]aresample=44100,volume=1,pan=stereo|c0=0.5*c0|c1=0.5*c0[a]"`,
+          `"[0:v]${videoFilter}[v];[1:a]${audioFilter}[a]"`,
           '-map',
           '[v]',
           '-map',
@@ -254,12 +346,16 @@ export async function syncVideoWithAudioAdvanced(
           );
         }
 
-        // Add audio encoding options (same as other functions for consistency)
+        // Add audio encoding options (preserve original quality)
         ffmpegCommand.push(
+          '-ar',
+          originalSampleRate.toString(),
           '-c:a',
-          'aac',
+          originalCodec,
           '-b:a',
-          '128k',
+          `${Math.round(originalBitrate / 1000)}k`,
+          '-ac',
+          originalChannels.toString(),
           '-avoid_negative_ts',
           'make_zero',
           `"${fullOutputPath}"`
