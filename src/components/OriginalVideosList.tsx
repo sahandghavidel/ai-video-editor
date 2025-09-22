@@ -26,6 +26,7 @@ import {
   Trash2,
   Subtitles,
   Grid3x3,
+  Volume2,
 } from 'lucide-react';
 
 export default function OriginalVideosList() {
@@ -48,6 +49,7 @@ export default function OriginalVideosList() {
   const [transcribingAll, setTranscribingAll] = useState(false);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
+  const [normalizing, setNormalizing] = useState<number | null>(null);
 
   // Get clip generation state from global store
   const {
@@ -610,6 +612,52 @@ export default function OriginalVideosList() {
       );
     } finally {
       setTranscribing(null);
+    }
+  };
+
+  const handleNormalizeVideo = async (videoId: number, videoUrl: string) => {
+    try {
+      setNormalizing(videoId);
+
+      // Call the normalize audio API
+      const normalizeResponse = await fetch('/api/normalize-audio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sceneId: videoId, // Use videoId as sceneId for original video normalization
+          videoUrl: videoUrl,
+        }),
+      });
+
+      if (!normalizeResponse.ok) {
+        const errorData = await normalizeResponse.json();
+        throw new Error(errorData.error || 'Failed to normalize audio');
+      }
+
+      const normalizeData = await normalizeResponse.json();
+      console.log('Audio normalized successfully:', normalizeData);
+
+      // Update the original video record with the normalized video URL
+      if (normalizeData.data?.normalizedUrl) {
+        await updateOriginalVideoRow(videoId, {
+          field_6903: normalizeData.data.normalizedUrl, // Normalized Video URL field
+          field_6881: normalizeData.data.normalizedUrl, // Normalized Video URL field
+        });
+      }
+
+      // Refresh the table to show any updates
+      await handleRefresh();
+    } catch (error) {
+      console.error('Error normalizing video:', error);
+      setError(
+        `Failed to normalize video: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setNormalizing(null);
     }
   };
 
@@ -1243,6 +1291,9 @@ export default function OriginalVideosList() {
                     Captions
                   </th>
                   <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Normalized Video
+                  </th>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
                     Actions
                   </th>
                 </tr>
@@ -1488,6 +1539,33 @@ export default function OriginalVideosList() {
                         })()}
                       </td>
 
+                      {/* Normalized Video URL (6903) */}
+                      <td className='py-3 px-4'>
+                        {(() => {
+                          const normalizedVideoUrl = extractUrl(
+                            video.field_6903
+                          );
+                          return normalizedVideoUrl ? (
+                            <a
+                              href={normalizedVideoUrl}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='inline-flex items-center gap-1 text-orange-600 hover:text-orange-800 hover:underline'
+                            >
+                              <Volume2 className='w-4 h-4' />
+                              <span className='truncate max-w-32'>
+                                Normalized
+                              </span>
+                              <ExternalLink className='w-3 h-3' />
+                            </a>
+                          ) : (
+                            <span className='text-gray-400'>
+                              Not normalized
+                            </span>
+                          );
+                        })()}
+                      </td>
+
                       {/* Actions */}
                       <td className='py-3 px-4'>
                         <div className='flex items-center gap-2'>
@@ -1600,6 +1678,43 @@ export default function OriginalVideosList() {
                               )
                             ) : (
                               <Video className='w-4 h-4' />
+                            )}
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const videoUrl = extractUrl(video.field_6881);
+                              if (videoUrl) {
+                                handleNormalizeVideo(video.id, videoUrl);
+                              } else {
+                                setError(
+                                  'No video URL found for normalization'
+                                );
+                              }
+                            }}
+                            disabled={
+                              normalizing !== null ||
+                              !extractUrl(video.field_6881) ||
+                              !!extractUrl(video.field_6903) // Already normalized
+                            }
+                            className='p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                            title={
+                              normalizing !== null
+                                ? normalizing === video.id
+                                  ? 'Normalizing audio...'
+                                  : 'Another normalization in progress'
+                                : !extractUrl(video.field_6881)
+                                ? 'No video URL available'
+                                : !!extractUrl(video.field_6903)
+                                ? 'Video already normalized'
+                                : 'Normalize audio loudness'
+                            }
+                          >
+                            {normalizing === video.id ? (
+                              <Loader2 className='w-4 h-4 animate-spin' />
+                            ) : (
+                              <Volume2 className='w-4 h-4' />
                             )}
                           </button>
                         </div>
