@@ -1279,19 +1279,7 @@ export default function OriginalVideosList() {
                     Video URL
                   </th>
                   <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Status
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Scenes
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
                     Final Merged Video
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Captions
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Normalized Video
                   </th>
                   <th className='text-left py-3 px-4 font-semibold text-gray-700'>
                     Actions
@@ -1444,55 +1432,6 @@ export default function OriginalVideosList() {
                         })()}
                       </td>
 
-                      {/* Status (6864) */}
-                      <td className='py-3 px-4'>
-                        {(() => {
-                          const status = extractFieldValue(video.field_6864);
-                          return (
-                            <div className='flex items-center gap-2'>
-                              {getStatusIcon(status)}
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                  status
-                                )}`}
-                              >
-                                {status || 'Unknown'}
-                              </span>
-                            </div>
-                          );
-                        })()}
-                      </td>
-
-                      {/* Scenes (6866) */}
-                      <td className='py-3 px-4'>
-                        {(() => {
-                          const sceneData = extractScenes(video.field_6866);
-                          if (sceneData.count === 0) {
-                            return <span className='text-gray-400'>N/A</span>;
-                          }
-
-                          return (
-                            <div className='flex items-center gap-2'>
-                              <span className='text-gray-700 font-medium'>
-                                {sceneData.count} scene
-                                {sceneData.count !== 1 ? 's' : ''}
-                              </span>
-                              {sceneData.scenes.length > 0 && (
-                                <div
-                                  className='text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded cursor-help'
-                                  title={`Scene IDs: ${sceneData.scenes.join(
-                                    ', '
-                                  )}`}
-                                >
-                                  IDs: {sceneData.scenes.slice(0, 3).join(', ')}
-                                  {sceneData.scenes.length > 3 ? '...' : ''}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-
                       {/* Final Merged Video URL (6858) */}
                       <td className='py-3 px-4'>
                         {(() => {
@@ -1516,56 +1455,6 @@ export default function OriginalVideosList() {
                         })()}
                       </td>
 
-                      {/* Captions URL (6861) */}
-                      <td className='py-3 px-4'>
-                        {(() => {
-                          const captionsUrl = extractUrl(video.field_6861);
-                          return captionsUrl ? (
-                            <a
-                              href={captionsUrl}
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 hover:underline'
-                            >
-                              <Subtitles className='w-4 h-4' />
-                              <span className='truncate max-w-32'>
-                                Captions
-                              </span>
-                              <ExternalLink className='w-3 h-3' />
-                            </a>
-                          ) : (
-                            <span className='text-gray-400'>Not available</span>
-                          );
-                        })()}
-                      </td>
-
-                      {/* Normalized Video URL (6903) */}
-                      <td className='py-3 px-4'>
-                        {(() => {
-                          const normalizedVideoUrl = extractUrl(
-                            video.field_6903
-                          );
-                          return normalizedVideoUrl ? (
-                            <a
-                              href={normalizedVideoUrl}
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='inline-flex items-center gap-1 text-orange-600 hover:text-orange-800 hover:underline'
-                            >
-                              <Volume2 className='w-4 h-4' />
-                              <span className='truncate max-w-32'>
-                                Normalized
-                              </span>
-                              <ExternalLink className='w-3 h-3' />
-                            </a>
-                          ) : (
-                            <span className='text-gray-400'>
-                              Not normalized
-                            </span>
-                          );
-                        })()}
-                      </td>
-
                       {/* Actions */}
                       <td className='py-3 px-4'>
                         <div className='flex items-center gap-2'>
@@ -1584,7 +1473,8 @@ export default function OriginalVideosList() {
                             disabled={
                               transcribing !== null ||
                               transcribingAll ||
-                              !extractUrl(video.field_6881)
+                              !extractUrl(video.field_6881) ||
+                              !!extractUrl(video.field_6861)
                             }
                             className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                             title={
@@ -1592,8 +1482,12 @@ export default function OriginalVideosList() {
                                 ? transcribing === video.id
                                   ? 'Transcribing...'
                                   : 'Another transcription in progress'
+                                : transcribingAll
+                                ? 'Bulk transcription in progress'
                                 : !extractUrl(video.field_6881)
                                 ? 'No video URL available'
+                                : !!extractUrl(video.field_6861)
+                                ? 'Video already has captions'
                                 : 'Transcribe video'
                             }
                           >
