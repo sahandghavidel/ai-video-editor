@@ -280,7 +280,77 @@ function generateScenesFromTranscription(
     }
   }
 
-  return allSegments;
+  // Step 3: Adjust timings based on gap durations
+  console.log('Adjusting timings based on gap durations...');
+
+  for (let i = 0; i < allSegments.length; i++) {
+    const segment = allSegments[i];
+
+    if (segment.type === 'gap') {
+      const gapDuration = segment.duration;
+
+      if (gapDuration > 0.2) {
+        // Gap is larger than 0.2s - adjust adjacent segments by 0.1s
+        const adjustAmount = 0.1;
+
+        // Check if there's a sentence before this gap
+        if (i > 0 && allSegments[i - 1].type === 'sentence') {
+          // Gap is AFTER a sentence - add 0.1s to sentence end time
+          allSegments[i - 1].endTime = parseFloat((allSegments[i - 1].endTime + adjustAmount).toFixed(2));
+          allSegments[i - 1].duration = parseFloat((allSegments[i - 1].duration + adjustAmount).toFixed(2));
+        }
+
+        // Check if there's a sentence after this gap
+        if (i < allSegments.length - 1 && allSegments[i + 1].type === 'sentence') {
+          // Gap is BEFORE a sentence - subtract 0.1s from sentence start time
+          allSegments[i + 1].startTime = parseFloat((allSegments[i + 1].startTime - adjustAmount).toFixed(2));
+          allSegments[i + 1].duration = parseFloat((allSegments[i + 1].duration + adjustAmount).toFixed(2));
+        }
+
+        // Adjust the gap timing accordingly
+        if (i > 0 && allSegments[i - 1].type === 'sentence') {
+          // Gap starts later (sentence extended into gap)
+          segment.startTime = parseFloat((segment.startTime + adjustAmount).toFixed(2));
+          segment.duration = parseFloat((segment.duration - adjustAmount).toFixed(2));
+        }
+        if (i < allSegments.length - 1 && allSegments[i + 1].type === 'sentence') {
+          // Gap ends earlier (sentence extended into gap)
+          segment.endTime = parseFloat((segment.endTime - adjustAmount).toFixed(2));
+          segment.duration = parseFloat((segment.duration - adjustAmount).toFixed(2));
+        }
+
+      } else if (gapDuration > 0) {
+        // Gap is smaller than 0.2s - distribute evenly to adjacent segments
+        const halfGap = gapDuration / 2;
+
+        // Extend previous segment (if exists and is a sentence)
+        if (i > 0 && allSegments[i - 1].type === 'sentence') {
+          allSegments[i - 1].endTime = parseFloat((allSegments[i - 1].endTime + halfGap).toFixed(2));
+          allSegments[i - 1].duration = parseFloat((allSegments[i - 1].duration + halfGap).toFixed(2));
+        }
+
+        // Extend next segment (if exists and is a sentence)
+        if (i < allSegments.length - 1 && allSegments[i + 1].type === 'sentence') {
+          allSegments[i + 1].startTime = parseFloat((allSegments[i + 1].startTime - halfGap).toFixed(2));
+          allSegments[i + 1].duration = parseFloat((allSegments[i + 1].duration + halfGap).toFixed(2));
+        }
+
+        // Remove the gap entirely by setting it to zero duration
+        segment.startTime = parseFloat(segment.endTime.toFixed(2));
+        segment.duration = 0;
+      }
+    }
+  }
+
+  // Step 4: Remove gaps with zero duration and update IDs
+  const filteredSegments = allSegments.filter(segment => segment.duration > 0);
+  filteredSegments.forEach((segment, index) => {
+    segment.id = index;
+  });
+
+  console.log(`After gap adjustments: ${filteredSegments.length} segments (removed ${allSegments.length - filteredSegments.length} zero-duration gaps)`);
+
+  return filteredSegments;
 }
 
 // Helper function to get JWT token
