@@ -372,34 +372,127 @@ export async function deleteRelatedScenes(
   }
 
   try {
-    // First, get all scenes that belong to this original video
-    const scenesData = await getBaserowData();
-    const relatedScenes = scenesData.filter((scene) => {
-      const videoId = scene.field_6889;
-      if (typeof videoId === 'number') {
-        return videoId === originalVideoId;
-      }
-      if (typeof videoId === 'string') {
-        return parseInt(videoId, 10) === originalVideoId;
-      }
-      return false;
-    });
-
-    // Delete each related scene
-    const deletePromises = relatedScenes.map((scene) =>
-      makeAuthenticatedRequest(
-        `${baserowUrl}/database/rows/table/${scenesTableId}/${scene.id}/`,
-        {
-          method: 'DELETE',
-          cache: 'no-store',
-        }
-      )
-    );
-
-    await Promise.all(deletePromises);
     console.log(
-      `Deleted ${relatedScenes.length} related scenes for video ${originalVideoId}`
+      `Starting to delete related scenes for video ${originalVideoId}`
     );
+
+    // Use API filtering to get only scenes that belong to this original video
+    const pageSize = 200;
+    let allRelatedScenes: BaserowRow[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const url = `${baserowUrl}/database/rows/table/${scenesTableId}/?filter__field_6889__equal=${originalVideoId}&size=${pageSize}&page=${page}`;
+
+      const response = await makeAuthenticatedRequest(url, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Scenes fetch failed with response:', errorText);
+        throw new Error(
+          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      allRelatedScenes = allRelatedScenes.concat(results);
+
+      // Check if there are more pages
+      hasMore = data.next !== null;
+      page++;
+
+      console.log(
+        `Fetched page ${
+          page - 1
+        } for scenes with video ID ${originalVideoId}: ${
+          results.length
+        } scenes, Total so far: ${allRelatedScenes.length}`
+      );
+    }
+
+    console.log(
+      `Found ${allRelatedScenes.length} related scenes for video ${originalVideoId}:`,
+      allRelatedScenes.map((s) => s.id)
+    );
+
+    // Delete each related scene sequentially to avoid rate limiting
+    const deleteResults: Array<{
+      success: boolean;
+      sceneId: number;
+      error?: any;
+    }> = [];
+
+    for (const scene of allRelatedScenes) {
+      try {
+        console.log(
+          `Attempting to delete scene ${scene.id} from table ${scenesTableId}`
+        );
+        const response = await makeAuthenticatedRequest(
+          `${baserowUrl}/database/rows/table/${scenesTableId}/${scene.id}/`,
+          {
+            method: 'DELETE',
+            cache: 'no-store',
+          }
+        );
+
+        if (!response.ok) {
+          let errorText = 'Unknown error';
+          try {
+            errorText = await response.text();
+          } catch (textError) {
+            console.error(
+              `Failed to read error response text for scene ${scene.id}:`,
+              textError
+            );
+          }
+          console.error(
+            `Failed to delete scene ${scene.id}: HTTP ${response.status} ${response.statusText} - ${errorText}`
+          );
+          deleteResults.push({
+            success: false,
+            sceneId: scene.id,
+            error: new Error(
+              `HTTP ${response.status} ${response.statusText}: ${errorText}`
+            ),
+          });
+        } else {
+          console.log(`Successfully deleted scene ${scene.id}`);
+          deleteResults.push({ success: true, sceneId: scene.id });
+        }
+
+        // Small delay to avoid overwhelming the API
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(`Error deleting scene ${scene.id}:`, error);
+        deleteResults.push({ success: false, sceneId: scene.id, error });
+      }
+    }
+
+    const successfulDeletes = deleteResults.filter((result) => result.success);
+    const failedDeletes = deleteResults.filter((result) => !result.success);
+
+    console.log(
+      `Delete summary: ${successfulDeletes.length} successful, ${failedDeletes.length} failed`
+    );
+
+    if (failedDeletes.length > 0) {
+      console.error(
+        'Failed deletes details:',
+        failedDeletes.map((f) => ({
+          sceneId: f.sceneId,
+          error: f.error instanceof Error ? f.error.message : String(f.error),
+        }))
+      );
+      throw new Error(
+        `Failed to delete ${failedDeletes.length} out of ${allRelatedScenes.length} scenes`
+      );
+    }
   } catch (error) {
     console.error('Error deleting related scenes:', error);
     throw error;
