@@ -111,6 +111,7 @@ export async function concatenateVideosWithFFmpeg(
 
       const { stdout, stderr } = await execAsync(commandString, {
         timeout: 300000, // 5 minute timeout for merging
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large stderr output
       });
 
       const execEndTime = Date.now();
@@ -262,6 +263,7 @@ export async function concatenateVideosFast(
 
     const { stdout, stderr } = await execAsync(commandString, {
       timeout: 120000, // 2 minute timeout for fast copy
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large stderr output
     });
 
     const execEndTime = Date.now();

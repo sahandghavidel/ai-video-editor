@@ -113,6 +113,7 @@ export async function syncVideoWithAudio(
 
       const { stdout, stderr } = await execAsync(commandString, {
         timeout: 180000, // 3 minute timeout for sync
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large stderr output
       });
 
       const execEndTime = Date.now();
@@ -269,6 +270,7 @@ export async function syncVideoWithAudioAdvanced(
 
         const { stdout, stderr } = await execAsync(commandString, {
           timeout: 300000, // 5 minute timeout for advanced sync
+          maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large stderr output
         });
 
         const execEndTime = Date.now();

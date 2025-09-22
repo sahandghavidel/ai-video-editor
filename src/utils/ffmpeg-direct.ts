@@ -96,6 +96,7 @@ export async function trimVideoWithFFmpeg(
 
       const { stdout, stderr } = await execAsync(commandString, {
         timeout: 120000, // 2 minute timeout
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large stderr output
       });
 
       const execEndTime = Date.now();
