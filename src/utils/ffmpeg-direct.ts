@@ -51,10 +51,10 @@ export async function trimVideoWithFFmpeg(
         '-y', // Overwrite output file
         '-ss',
         startTimeStr, // Seek to start time BEFORE input (faster)
+        '-to',
+        endTimeStr, // Use end time instead of duration
         '-i',
         `"${inputUrl}"`, // Input file
-        '-t',
-        duration.toString(), // Duration instead of end time
       ];
 
       // Add video encoding options
