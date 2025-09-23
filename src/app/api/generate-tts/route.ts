@@ -6,6 +6,7 @@ import fs from 'fs';
 // TTS Server management - optimized for fast API-only server
 let ttsServerProcess: ReturnType<typeof spawn> | null = null;
 let serverTimeout: NodeJS.Timeout | null = null;
+let timeoutScheduledAt: number = 0; // Track when timeout was scheduled
 const SERVER_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const SERVER_HOST = 'host.docker.internal';
 const SERVER_PORT = 8004;
@@ -61,10 +62,16 @@ async function startTTSServer(): Promise<void> {
       // Handle process events
       ttsServerProcess.on('close', (code: number) => {
         console.log(`🛑 TTS server exited with code ${code}`);
+        const wasRunning = ttsServerProcess !== null;
         ttsServerProcess = null;
-        if (serverTimeout) {
+
+        // Only clear timeout if server exited normally (not killed by us)
+        if (serverTimeout && code !== null) {
+          // code is null when killed by us
+          console.log('🔄 Server exited naturally, clearing shutdown timeout');
           clearTimeout(serverTimeout);
           serverTimeout = null;
+          timeoutScheduledAt = 0;
         }
       });
 
@@ -100,31 +107,79 @@ async function startTTSServer(): Promise<void> {
 }
 
 function scheduleServerStop(): void {
+  const now = Date.now();
+
   // Clear existing timeout
   if (serverTimeout) {
-    console.log('🔄 Clearing existing server shutdown timeout');
+    const timeRemaining = Math.max(
+      0,
+      timeoutScheduledAt + SERVER_TIMEOUT - now
+    );
+    console.log(
+      `🔄 Clearing existing server shutdown timeout (${Math.round(
+        timeRemaining / 1000
+      )}s remaining)`
+    );
     clearTimeout(serverTimeout);
     serverTimeout = null;
+    timeoutScheduledAt = 0;
+  } else {
+    console.log('ℹ️ No existing timeout to clear');
   }
 
   // Schedule new timeout
+  const fireTime = now + SERVER_TIMEOUT;
   console.log('⏰ Scheduling server shutdown in 5 minutes');
-  serverTimeout = setTimeout(() => {
-    if (ttsServerProcess) {
-      console.log('🛑 Auto-stopping TTS server after 5 minutes of inactivity');
-      ttsServerProcess.kill('SIGTERM');
+  timeoutScheduledAt = now;
+  serverTimeout = setTimeout(async () => {
+    const actualDelay = Date.now() - timeoutScheduledAt;
+    const expectedDelay = SERVER_TIMEOUT;
+    console.log('⏰ Server shutdown timeout fired');
 
-      // Force kill after 5 seconds if it doesn't respond
-      setTimeout(() => {
-        if (ttsServerProcess) {
-          console.log('💀 Force killing TTS server');
-          ttsServerProcess.kill('SIGKILL');
-          ttsServerProcess = null;
-        }
-      }, 5000);
+    // Double-check if we should still shut down (in case a request came in and cleared this timeout)
+    if (serverTimeout === null) {
+      console.log('ℹ️ Timeout was cleared, skipping shutdown');
+      return;
     }
+
+    // Check if server is still running before attempting to kill
+    const serverStatus = await checkTTSServer();
+
+    if (serverStatus.running) {
+      console.log('🛑 Auto-stopping TTS server after 5 minutes of inactivity');
+
+      if (ttsServerProcess) {
+        ttsServerProcess.kill('SIGTERM');
+
+        // Force kill after 5 seconds if it doesn't respond
+        setTimeout(() => {
+          if (ttsServerProcess) {
+            console.log('💀 Force killing TTS server');
+            ttsServerProcess.kill('SIGKILL');
+            ttsServerProcess = null;
+          }
+        }, 5000);
+      } else {
+        console.log(
+          '⚠️ No TTS server process found to kill, but server appears to be running'
+        );
+        // Try to shutdown via API as fallback
+        try {
+          await fetch(`${SERVER_URL}/shutdown`, { method: 'POST' });
+          console.log('🔄 Shutdown request sent via API');
+        } catch (error) {
+          console.error('❌ Failed to shutdown via API:', error);
+        }
+      }
+    } else {
+      console.log('✅ TTS server already stopped naturally');
+    }
+
     serverTimeout = null;
+    timeoutScheduledAt = 0;
   }, SERVER_TIMEOUT);
+
+  console.log('✅ Server shutdown timeout scheduled');
 }
 
 async function checkTTSServer(): Promise<{
