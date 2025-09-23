@@ -25,11 +25,26 @@ export default function VideoSpeedSettings({
 
   const speedOptions = [
     { value: 1, label: '1x (Normal Speed)', description: 'Original speed' },
+    {
+      value: 1.125,
+      label: '1.125x (Slightly Faster)',
+      description: '12.5% faster',
+    },
+    {
+      value: 1.5,
+      label: '1.5x (50% Faster)',
+      description: 'One and a half times faster',
+    },
     { value: 2, label: '2x (Double Speed)', description: 'Twice as fast' },
     {
       value: 4,
       label: '4x (Quadruple Speed)',
       description: 'Four times faster',
+    },
+    {
+      value: 8,
+      label: '8x (Octuple Speed)',
+      description: 'Eight times faster',
     },
   ];
 

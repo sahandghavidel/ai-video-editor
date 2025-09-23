@@ -795,7 +795,7 @@ export default function BatchOperations({
             <button
               onClick={cycleSpeed}
               className='px-2 py-1 bg-blue-200 hover:bg-blue-300 text-blue-800 text-xs font-bold rounded transition-colors'
-              title='Click to cycle through speeds (1x → 2x → 4x)'
+              title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
             >
               {videoSettings.selectedSpeed}x
             </button>

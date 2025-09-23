@@ -806,28 +806,6 @@ export default function SceneCard({
     handleVideoGenerate,
   ]);
 
-  if (!data || data.length === 0) {
-    return (
-      <div className='flex flex-col items-center justify-center min-h-[400px] text-gray-500'>
-        <div className='text-6xl mb-4'>📋</div>
-        <h3 className='text-xl font-semibold mb-2'>No Data Available</h3>
-        <p className='text-center max-w-md'>
-          No scenes found in your Baserow table. Add some data to get started!
-        </p>
-        <div className='mt-6 space-y-2'>
-          {refreshData && (
-            <button
-              onClick={refreshData}
-              className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
-            >
-              Refresh Data
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   // Apply filters and sorting
   const filteredAndSortedData = React.useMemo(() => {
     let filtered = data;
@@ -856,6 +834,28 @@ export default function SceneCard({
 
     return filtered;
   }, [data, showOnlyEmptyText, sortByDuration]);
+
+  if (!data || data.length === 0) {
+    return (
+      <div className='flex flex-col items-center justify-center min-h-[400px] text-gray-500'>
+        <div className='text-6xl mb-4'>📋</div>
+        <h3 className='text-xl font-semibold mb-2'>No Data Available</h3>
+        <p className='text-center max-w-md'>
+          No scenes found in your Baserow table. Add some data to get started!
+        </p>
+        <div className='mt-6 space-y-2'>
+          {refreshData && (
+            <button
+              onClick={refreshData}
+              className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
+            >
+              Refresh Data
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='w-full max-w-7xl mx-auto'>
@@ -970,9 +970,7 @@ export default function SceneCard({
                             <RotateCcw className='h-3 w-3' />
                           )}
                           <span>
-                            {revertingId === scene.id
-                              ? 'Reverting...'
-                              : 'Text'}
+                            {revertingId === scene.id ? 'Reverting...' : 'Text'}
                           </span>
                         </button>
                       )}
@@ -1225,7 +1223,7 @@ export default function SceneCard({
                                   cycleSpeed();
                                 }}
                                 className='px-1 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-600/20 rounded transition-colors duration-200 cursor-pointer'
-                                title='Click to cycle through speeds (1x → 2x → 4x)'
+                                title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
                               >
                                 {videoSettings.selectedSpeed}x
                               </div>

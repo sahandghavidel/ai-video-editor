@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate speed parameter
-    if (![1, 2, 4].includes(speed)) {
+    if (![1, 1.125, 1.5, 2, 4, 8].includes(speed)) {
       return NextResponse.json(
-        { error: 'Speed must be 1, 2, or 4' },
+        { error: 'Speed must be 1, 1.125, 1.5, 2, 4, or 8' },
         { status: 400 }
       );
     }

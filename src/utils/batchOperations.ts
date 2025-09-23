@@ -339,7 +339,7 @@ export const cycleSpeed = (
   currentSpeed: number,
   updateVideoSettings: (updates: { selectedSpeed: number }) => void
 ) => {
-  const speedOptions = [1, 2, 4];
+  const speedOptions = [1, 1.125, 1.5, 2, 4, 8];
   const currentIndex = speedOptions.indexOf(currentSpeed);
   const nextIndex = (currentIndex + 1) % speedOptions.length;
   updateVideoSettings({ selectedSpeed: speedOptions[nextIndex] });
