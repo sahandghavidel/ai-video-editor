@@ -102,19 +102,22 @@ async function startTTSServer(): Promise<void> {
 function scheduleServerStop(): void {
   // Clear existing timeout
   if (serverTimeout) {
+    console.log('🔄 Clearing existing server shutdown timeout');
     clearTimeout(serverTimeout);
+    serverTimeout = null;
   }
 
   // Schedule new timeout
+  console.log('⏰ Scheduling server shutdown in 5 minutes');
   serverTimeout = setTimeout(() => {
     if (ttsServerProcess) {
-      console.log('Auto-stopping TTS server after 5 minutes of inactivity');
+      console.log('🛑 Auto-stopping TTS server after 5 minutes of inactivity');
       ttsServerProcess.kill('SIGTERM');
 
       // Force kill after 5 seconds if it doesn't respond
       setTimeout(() => {
         if (ttsServerProcess) {
-          console.log('Force killing TTS server');
+          console.log('💀 Force killing TTS server');
           ttsServerProcess.kill('SIGKILL');
           ttsServerProcess = null;
         }
@@ -207,6 +210,12 @@ export async function POST(request: NextRequest) {
     // Check if TTS server is running, start if not
     const serverStatus = await checkTTSServer();
     console.log('TTS server status:', serverStatus);
+
+    // If server is already running, reset the shutdown timeout
+    if (serverStatus.running) {
+      console.log('🔄 Server already running, resetting shutdown timeout');
+      scheduleServerStop(); // This will clear existing timeout and set a new one
+    }
 
     if (!serverStatus.running) {
       console.log('🚀 TTS server not running, starting it...');
@@ -400,8 +409,5 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: errorMessage }, { status: statusCode });
-  } finally {
-    // Ensure server timeout is scheduled regardless of success/failure
-    scheduleServerStop();
   }
 }
