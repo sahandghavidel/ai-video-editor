@@ -4,38 +4,6 @@ import path from 'path';
 import fs from 'fs';
 
 // TTS Server management - optimized for fast API-only server
-let ttsServerProce; // Brief wait for server initialization (optimized for fast startup)
-console.log('⏳ Waiting for TTS server to be ready...');
-await new Promise((resolve) => setTimeout(resolve, 3000)); // Increased from 1000ms to 3000ms
-
-// Check server status after startup with retries
-let newStatus;
-let readinessAttempts = 0;
-const maxReadinessAttempts = 5;
-
-while (readinessAttempts < maxReadinessAttempts) {
-  newStatus = await checkTTSServer();
-  if (newStatus.running) {
-    if (newStatus.modelLoaded) {
-      console.log('✅ TTS server fully ready with model loaded');
-    } else if (newStatus.modelLoading) {
-      console.log('✅ TTS server ready, model loading in background');
-    } else {
-      console.log('✅ TTS server ready, model will load on first request');
-    }
-    break;
-  } else {
-    console.log(
-      `⏳ TTS server not ready yet (attempt ${
-        readinessAttempts + 1
-      }/${maxReadinessAttempts}), waiting...`
-    );
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    readinessAttempts++;
-  }
-}
-
-// TTS Server management - optimized for fast API-only server
 let ttsServerProcess: ReturnType<typeof spawn> | null = null;
 let serverTimeout: NodeJS.Timeout | null = null;
 const SERVER_TIMEOUT = 5 * 60 * 1000; // 5 minutes
@@ -70,7 +38,6 @@ async function startTTSServer(): Promise<void> {
             break;
           }
         } catch (_error) {
-          // eslint-disable-line @typescript-eslint/no-unused-vars
           // Continue checking other paths
         }
       }
@@ -217,7 +184,6 @@ async function waitForServerShutdown(): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       attempts++;
     } catch (_error) {
-      // eslint-disable-line @typescript-eslint/no-unused-vars
       // Server is no longer responding, it's shut down
       console.log('Previous TTS server has shut down');
       return;
@@ -255,30 +221,88 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Brief wait for server initialization (optimized for fast startup)
+      // Wait for server to be fully ready with model loaded
       console.log('⏳ Waiting for TTS server to be ready...');
-      await new Promise((resolve) => setTimeout(resolve, 3000)); // Increased from 1000ms to 3000ms
+      let readinessAttempts = 0;
+      const maxReadinessAttempts = 15; // 15 attempts = ~30 seconds max wait
+      let currentStatus = await checkTTSServer();
 
-      // Check server status after startup
-      const newStatus = await checkTTSServer();
-      if (newStatus.running) {
-        if (newStatus.modelLoaded) {
+      while (readinessAttempts < maxReadinessAttempts) {
+        if (currentStatus.running && currentStatus.modelLoaded) {
           console.log('✅ TTS server fully ready with model loaded');
-        } else if (newStatus.modelLoading) {
-          console.log('✅ TTS server ready, model loading in background');
+          break;
+        } else if (currentStatus.running && currentStatus.modelLoading) {
+          console.log(
+            `⏳ TTS server ready, model still loading (attempt ${
+              readinessAttempts + 1
+            }/${maxReadinessAttempts})`
+          );
+        } else if (currentStatus.running) {
+          console.log(
+            `⏳ TTS server running but status uncertain (attempt ${
+              readinessAttempts + 1
+            }/${maxReadinessAttempts})`
+          );
         } else {
-          console.log('✅ TTS server ready, model will load on first request');
+          console.log(
+            `⏳ TTS server not ready yet (attempt ${
+              readinessAttempts + 1
+            }/${maxReadinessAttempts})`
+          );
         }
-      } else {
-        console.warn('⚠️ TTS server status uncertain, proceeding anyway');
+
+        await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds between checks
+        currentStatus = await checkTTSServer();
+        readinessAttempts++;
+      }
+
+      if (!currentStatus.running || !currentStatus.modelLoaded) {
+        console.warn(
+          '⚠️ TTS server not fully ready after waiting, but proceeding anyway'
+        );
       }
     } else {
+      // Server is already running, but check if model is loaded
       if (serverStatus.modelLoaded) {
         console.log('✅ TTS server fully ready with model loaded');
-      } else if (serverStatus.modelLoading) {
-        console.log('✅ TTS server ready, model loading in background');
       } else {
-        console.log('✅ TTS server running, model will load on first request');
+        console.log(
+          '⏳ TTS server running but model not loaded yet, waiting...'
+        );
+        let readinessAttempts = 0;
+        const maxReadinessAttempts = 10; // 10 attempts = ~20 seconds max wait
+        let currentStatus = serverStatus;
+
+        while (
+          readinessAttempts < maxReadinessAttempts &&
+          !currentStatus.modelLoaded
+        ) {
+          if (currentStatus.modelLoading) {
+            console.log(
+              `⏳ Model still loading (attempt ${
+                readinessAttempts + 1
+              }/${maxReadinessAttempts})`
+            );
+          } else {
+            console.log(
+              `⏳ Waiting for model to load (attempt ${
+                readinessAttempts + 1
+              }/${maxReadinessAttempts})`
+            );
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds between checks
+          currentStatus = await checkTTSServer();
+          readinessAttempts++;
+        }
+
+        if (currentStatus.modelLoaded) {
+          console.log('✅ Model loaded successfully');
+        } else {
+          console.warn(
+            '⚠️ Model not loaded after waiting, but proceeding anyway'
+          );
+        }
       }
     }
 
@@ -291,7 +315,7 @@ export async function POST(request: NextRequest) {
       reference_audio_filename: 'calmS5wave.wav',
     };
 
-    // Step 1: Generate TTS with retry mechanism
+    // Step 1: Generate TTS (server should be fully ready now)
     const ttsPayload = {
       text: text,
       temperature: settings.temperature,
@@ -307,57 +331,16 @@ export async function POST(request: NextRequest) {
       reference_audio_filename: settings.reference_audio_filename,
     };
 
-    let ttsResponse;
-    let retryCount = 0;
-    const maxRetries = 3;
+    const ttsResponse = await fetch(`${SERVER_URL}/tts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(ttsPayload),
+    });
 
-    while (retryCount < maxRetries) {
-      try {
-        ttsResponse = await fetch(`${SERVER_URL}/tts`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(ttsPayload),
-        });
-
-        if (ttsResponse.ok) {
-          break; // Success, exit retry loop
-        }
-
-        // If we get here, the response was not ok
-        if (retryCount < maxRetries - 1) {
-          console.log(
-            `⚠️ TTS request failed (attempt ${
-              retryCount + 1
-            }/${maxRetries}), retrying in 2s...`
-          );
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          retryCount++;
-        } else {
-          throw new Error(`TTS service error: ${ttsResponse.status}`);
-        }
-      } catch (error) {
-        if (
-          error instanceof TypeError &&
-          error.message.includes('fetch failed') &&
-          retryCount < maxRetries - 1
-        ) {
-          console.log(
-            `⚠️ TTS connection failed (attempt ${
-              retryCount + 1
-            }/${maxRetries}), retrying in 2s...`
-          );
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          retryCount++;
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    if (!ttsResponse || !ttsResponse.ok) {
-      throw new Error(`TTS service error after ${maxRetries} attempts`);
+    if (!ttsResponse.ok) {
+      throw new Error(`TTS service error: ${ttsResponse.status}`);
     }
 
     // Get the audio file as buffer
