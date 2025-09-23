@@ -30,7 +30,7 @@ async function startTTSServer(): Promise<void> {
       let serverPath = null;
       for (const testPath of possiblePaths) {
         try {
-          if (fs.existsSync(path.join(testPath, 'server.py'))) {
+          if (fs.existsSync(path.join(testPath, 'server_api_only.py'))) {
             serverPath = testPath;
             break;
           }
@@ -47,25 +47,14 @@ async function startTTSServer(): Promise<void> {
 
       console.log('Starting TTS server from:', serverPath);
 
-      ttsServerProcess = spawn('python3', ['server.py'], {
+      ttsServerProcess = spawn('python3', ['server_api_only.py'], {
         cwd: serverPath,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        detached: false,
+        stdio: 'ignore', // Don't inherit stdio to prevent hanging
+        detached: true, // Keep server alive independently
       });
 
-      // Handle server output
-      ttsServerProcess.stdout?.on('data', (data: Buffer) => {
-        console.log('TTS Server:', data.toString());
-        // Check if server is ready - look for the final startup message
-        if (data.toString().includes('Application startup complete')) {
-          console.log('TTS server started successfully');
-          resolve();
-        }
-      });
-
-      ttsServerProcess.stderr?.on('data', (data: Buffer) => {
-        console.error('TTS Server Error:', data.toString());
-      });
+      // Handle server output (removed since we're using stdio: 'ignore')
+      // The server will run independently without piping output to this process
 
       ttsServerProcess.on('close', (code: number) => {
         console.log(`TTS server exited with code ${code}`);
@@ -82,13 +71,17 @@ async function startTTSServer(): Promise<void> {
         reject(error);
       });
 
-      // Timeout after 60 seconds if server doesn't start (increased from 30)
+      // Unref to allow parent to exit independently
+      ttsServerProcess.unref();
+
+      // Since we're using server_api_only.py, the server should start much faster
+      // Give it a moment to start up
       setTimeout(() => {
         if (ttsServerProcess) {
-          console.log('TTS server start timeout, proceeding anyway');
+          console.log('TTS server process started (assuming it\'s ready)');
           resolve();
         }
-      }, 60000);
+      }, 2000);
     } catch (error) {
       console.error('Error starting TTS server:', error);
       reject(error);
@@ -121,26 +114,36 @@ function scheduleServerStop(): void {
   }, SERVER_TIMEOUT);
 }
 
-async function checkTTSServer(): Promise<boolean> {
+async function checkTTSServer(): Promise<{
+  running: boolean;
+  modelLoaded: boolean;
+}> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    // Try to access the main UI page instead of /health
-    const response = await fetch('http://host.docker.internal:8004/', {
+    const response = await fetch('http://host.docker.internal:8004/health', {
       method: 'GET',
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
-    return response.ok;
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        running: data.status === 'healthy',
+        modelLoaded: data.model_loaded || false,
+      };
+    }
+
+    return { running: false, modelLoaded: false };
   } catch (error) {
-    // If it's an abort error, the server might be shutting down
     if (error instanceof Error && error.name === 'AbortError') {
       console.log('Server check timed out - server might be shutting down');
-      return false;
+      return { running: false, modelLoaded: false };
     }
-    return false;
+    return { running: false, modelLoaded: false };
   }
 }
 
@@ -154,10 +157,15 @@ async function waitForServerShutdown(): Promise<void> {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1000);
 
-      await fetch('http://host.docker.internal:8004/', {
+      // Use health endpoint for shutdown check
+      const shutdownResponse = await fetch('http://host.docker.internal:8004/health', {
         method: 'GET',
         signal: controller.signal,
       });
+      // Server is shut down if health check fails
+      if (!shutdownResponse.ok) {
+        throw new Error('Server is down');
+      }
 
       clearTimeout(timeoutId);
       // If we get here, server is still responding, wait longer
@@ -185,10 +193,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if TTS server is running, start if not
-    const isServerRunning = await checkTTSServer();
-    console.log('TTS server health check result:', isServerRunning);
+    const serverStatus = await checkTTSServer();
+    console.log('TTS server status:', serverStatus);
 
-    if (!isServerRunning) {
+    if (!serverStatus.running) {
       console.log('TTS server not running, starting it...');
       try {
         await startTTSServer();
@@ -201,11 +209,21 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Wait a bit for server to fully start
+      // Wait for server to be ready (much faster now)
       console.log('Waiting for TTS server to be ready...');
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Check again if model is loaded
+      const newStatus = await checkTTSServer();
+      if (!newStatus.modelLoaded) {
+        console.log('Model still loading, but server is ready for requests');
+      }
+    } else if (!serverStatus.modelLoaded) {
+      console.log(
+        'TTS server running but model still loading - proceeding anyway'
+      );
     } else {
-      console.log('TTS server is already running');
+      console.log('TTS server is fully ready');
     }
 
     // Use dynamic TTS settings or defaults
