@@ -76,6 +76,12 @@ export default function SceneCard({
   }, [data, onDataUpdate, refreshData]);
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
 
+  // Filter and sort states
+  const [sortByDuration, setSortByDuration] = useState<'asc' | 'desc' | null>(
+    null
+  );
+  const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
+
   // State for improving all sentences
   // OpenRouter model selection - now using global state
 
@@ -822,10 +828,92 @@ export default function SceneCard({
     );
   }
 
+  // Apply filters and sorting
+  const filteredAndSortedData = React.useMemo(() => {
+    let filtered = data;
+
+    // Filter by empty text
+    if (showOnlyEmptyText) {
+      filtered = filtered.filter((scene) => {
+        const sentence = String(scene['field_6890'] || scene.field_6890 || '');
+        return !sentence.trim();
+      });
+    }
+
+    // Sort by duration
+    if (sortByDuration) {
+      filtered = [...filtered].sort((a, b) => {
+        const durationA = Number(a.field_6884) || 0;
+        const durationB = Number(b.field_6884) || 0;
+
+        if (sortByDuration === 'asc') {
+          return durationA - durationB;
+        } else {
+          return durationB - durationA;
+        }
+      });
+    }
+
+    return filtered;
+  }, [data, showOnlyEmptyText, sortByDuration]);
+
   return (
     <div className='w-full max-w-7xl mx-auto'>
+      {/* Filter Controls */}
+      <div className='mb-4 flex items-center justify-between bg-gray-50 p-4 rounded-lg'>
+        <div className='flex items-center space-x-4'>
+          <div className='flex items-center space-x-2'>
+            <label className='text-sm font-medium text-gray-700'>
+              Sort by Duration:
+            </label>
+            <button
+              onClick={() =>
+                setSortByDuration(sortByDuration === 'asc' ? null : 'asc')
+              }
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                sortByDuration === 'asc'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              ↑ Ascending
+            </button>
+            <button
+              onClick={() =>
+                setSortByDuration(sortByDuration === 'desc' ? null : 'desc')
+              }
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                sortByDuration === 'desc'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              ↓ Descending
+            </button>
+          </div>
+
+          <div className='flex items-center space-x-2'>
+            <label className='text-sm font-medium text-gray-700'>Filter:</label>
+            <button
+              onClick={() => setShowOnlyEmptyText(!showOnlyEmptyText)}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                showOnlyEmptyText
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {showOnlyEmptyText ? '✓' : ''} Empty Text Only
+            </button>
+          </div>
+        </div>
+
+        <div className='text-sm text-gray-500'>
+          Showing {filteredAndSortedData.length} of {data.length} scenes
+        </div>
+      </div>
+
       <div className='grid gap-4'>
-        {data.map((scene) => (
+        {filteredAndSortedData.map((scene) => (
           <div
             key={scene.id}
             ref={(el) => {
