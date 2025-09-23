@@ -839,7 +839,7 @@ export default function SceneCard({
                 {/* ID */}
                 <div>
                   <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    ID
+                    ID ({String(scene.field_6884 || 'N/A')})
                   </label>
                   <div className='text-2xl font-bold text-blue-600 mt-1'>
                     #{scene.id || 'N/A'}
@@ -1369,7 +1369,10 @@ export default function SceneCard({
                 >
                   Your browser does not support the video tag.
                 </video>
-                <div className='flex justify-end p-2 bg-gray-900'>
+                <div className='flex justify-between items-center p-2 bg-gray-900'>
+                  <span className='text-xs text-gray-300'>
+                    Duration: {String(scene.field_6884 || 'N/A')}
+                  </span>
                   <button
                     onClick={() => handleVideoStop(scene.id)}
                     className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
@@ -1405,7 +1408,14 @@ export default function SceneCard({
                   Your browser does not support the video tag.
                 </video>
                 <div className='flex justify-between items-center p-2 bg-gray-900'>
-                  <span className='text-xs text-gray-300'>Produced Video</span>
+                  <div className='flex items-center space-x-4'>
+                    <span className='text-xs text-gray-300'>
+                      Produced Video
+                    </span>
+                    <span className='text-xs text-gray-300'>
+                      Duration: {String(scene.field_6884 || 'N/A')}
+                    </span>
+                  </div>
                   <button
                     onClick={() => handleProducedVideoStop(scene.id)}
                     className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
