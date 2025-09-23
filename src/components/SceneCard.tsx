@@ -972,7 +972,7 @@ export default function SceneCard({
                           <span>
                             {revertingId === scene.id
                               ? 'Reverting...'
-                              : 'Revert'}
+                              : 'Text'}
                           </span>
                         </button>
                       )}
@@ -1020,7 +1020,7 @@ export default function SceneCard({
                           : sceneLoading.producingTTS !== null ||
                             batchOperations.generatingAllTTS
                           ? 'TTS Busy'
-                          : 'Generate TTS'}
+                          : 'Gen TTS'}
                       </span>
                     </button>
 
@@ -1040,7 +1040,7 @@ export default function SceneCard({
                           scene['field_6890'] || scene.field_6890 || ''
                         ).trim()
                       }
-                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
+                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
                         sceneLoading.improvingSentence === scene.id
                           ? 'bg-gray-100 text-gray-500'
                           : sceneLoading.improvingSentence !== null ||
@@ -1070,8 +1070,8 @@ export default function SceneCard({
                           ? 'Improving...'
                           : sceneLoading.improvingSentence !== null ||
                             batchOperations.improvingAll
-                          ? 'AI Busy'
-                          : 'AI Improve'}
+                          ? 'Busy'
+                          : 'AI'}
                       </span>
                     </button>
 
@@ -1086,7 +1086,7 @@ export default function SceneCard({
                             )
                           }
                           disabled={loadingAudio === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
+                          className={`px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
                             mediaPlayer.playingAudioId === scene.id
                               ? 'bg-red-100 text-red-700 hover:bg-red-200'
                               : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
@@ -1104,11 +1104,6 @@ export default function SceneCard({
                           ) : (
                             <Play className='h-3 w-3' />
                           )}
-                          <span>
-                            {mediaPlayer.playingAudioId === scene.id
-                              ? 'Pause'
-                              : 'Play'}
-                          </span>
                         </button>
                       )}
 
@@ -1129,7 +1124,7 @@ export default function SceneCard({
                           <span>
                             {removingTTSId === scene.id
                               ? 'Removing...'
-                              : 'Remove TTS'}
+                              : 'Del TTS'}
                           </span>
                         </button>
                       )}
@@ -1152,8 +1147,8 @@ export default function SceneCard({
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={
                             mediaPlayer.playingVideoId === scene.id
-                              ? 'Stop video'
-                              : 'Play video'
+                              ? 'Stop'
+                              : 'Play'
                           }
                         >
                           {loadingVideo === scene.id ? (
@@ -1166,7 +1161,7 @@ export default function SceneCard({
                           <span>
                             {mediaPlayer.playingVideoId === scene.id
                               ? 'Stop'
-                              : 'Video'}
+                              : 'Orig Vid'}
                           </span>
                         </button>
                       )}
@@ -1285,7 +1280,7 @@ export default function SceneCard({
                               : clipGeneration.generatingSingleClip !== null ||
                                 clipGeneration.generatingClips !== null
                               ? 'Clip Busy'
-                              : 'Generate Clip'}
+                              : 'Gen Clip'}
                           </span>
                         </button>
                       )}
@@ -1337,7 +1332,7 @@ export default function SceneCard({
                               ? 'Video Busy'
                               : batchOperations.generatingAllVideos
                               ? 'Video Busy'
-                              : 'Generate'}
+                              : 'Sync'}
                           </span>
                         </button>
                       )}
@@ -1360,8 +1355,8 @@ export default function SceneCard({
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={
                             mediaPlayer.playingProducedVideoId === scene.id
-                              ? 'Stop produced video'
-                              : 'Play produced video'
+                              ? 'Stop'
+                              : 'Play'
                           }
                         >
                           {loadingProducedVideo === scene.id ? (
@@ -1375,7 +1370,7 @@ export default function SceneCard({
                           <span>
                             {mediaPlayer.playingProducedVideoId === scene.id
                               ? 'Stop'
-                              : 'Produced'}
+                              : 'Final Vid'}
                           </span>
                         </button>
                       )}
