@@ -70,15 +70,56 @@ export async function POST(request: NextRequest) {
           );
         });
       });
+    } else if (model === 'small') {
+      // Path to the Whisper small transcription script
+      const scriptPath = path.join(process.cwd(), 'whisper-small-transcribe.py');
+      const venvPath = 'python3'; // Use system python3
+
+      // Run the Whisper small transcription script
+      transcriptionPromise = new Promise((resolve, reject) => {
+        const pythonProcess = spawn(venvPath, [scriptPath, media_url], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        pythonProcess.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        pythonProcess.on('close', (code) => {
+          if (code === 0) {
+            try {
+              // Parse the JSON output from the Python script
+              const result = JSON.parse(stdout);
+              resolve(result);
+            } catch (parseError) {
+              reject(
+                new Error(`Failed to parse transcription result: ${parseError}`)
+              );
+            }
+          } else {
+            reject(
+              new Error(`Transcription failed with code ${code}: ${stderr}`)
+            );
+          }
+        });
+
+        pythonProcess.on('error', (error) => {
+          reject(
+            new Error(`Failed to start transcription process: ${error.message}`)
+          );
+        });
+      });
     } else if (model === 'tiny') {
       // Path to the Whisper tiny transcription script
       const scriptPath = path.join(process.cwd(), 'whisper-tiny-transcribe.py');
-      const venvPath = path.join(
-        process.cwd(),
-        'parakeet-env',
-        'bin',
-        'python'
-      );
+      const venvPath = 'python3'; // Use system python3
 
       // Run the Whisper tiny transcription script
       transcriptionPromise = new Promise((resolve, reject) => {
@@ -135,7 +176,7 @@ export async function POST(request: NextRequest) {
     // Wait for transcription to complete
     const transcriptionResult = await transcriptionPromise;
 
-    console.log(`${model} transcription completed successfully`);
+        console.log(`${model} transcription completed successfully`);
 
     return NextResponse.json(transcriptionResult);
   } catch (error) {

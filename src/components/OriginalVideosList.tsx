@@ -1281,9 +1281,6 @@ export default function OriginalVideosList() {
         </div>
       )}
 
-      {/* Transcription Model Selection */}
-      <TranscriptionModelSelection />
-
       {/* Videos Table */}
       <div className='transition-all duration-200 rounded-lg'>
         {originalVideos.length === 0 ? (

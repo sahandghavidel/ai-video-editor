@@ -12,13 +12,20 @@ export default function TranscriptionModelSelection() {
       name: 'Parakeet (High Quality)',
       description:
         'Advanced transcription model with excellent accuracy but higher resource usage',
+      recommended: false,
+    },
+    {
+      id: 'small',
+      name: 'Quality with Punctuation',
+      description:
+        'Whisper Small model with excellent punctuation and good accuracy, moderate speed',
       recommended: true,
     },
     {
       id: 'tiny',
       name: 'Tiny Model (Fast & Light)',
       description:
-        "Lightweight transcription model that's faster and uses less RAM",
+        "Lightweight transcription model that's fastest but has poor punctuation",
       recommended: false,
     },
   ];

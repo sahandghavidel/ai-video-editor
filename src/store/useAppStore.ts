@@ -225,7 +225,7 @@ const defaultVideoSettings: VideoSettings = {
 
 // Default transcription settings
 const defaultTranscriptionSettings: TranscriptionSettings = {
-  selectedModel: 'parakeet', // Default to current Parakeet model
+  selectedModel: 'small', // Default to small model for better punctuation
 };
 
 // Default batch operations settings

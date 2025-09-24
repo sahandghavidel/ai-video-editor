@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Whisper Tiny transcription script that can be called from Node.js
+Whisper Small transcription script that can be called from Node.js
 Takes a media URL as argument and returns JSON transcription
-Uses the tiny Whisper model for faster, lighter transcription
+Uses the small Whisper model for better punctuation and accuracy
 """
 
 import sys
@@ -56,7 +56,7 @@ def download_and_convert_media(url: str) -> str:
 
         return wav_path
 
-def transcribe_with_whisper_tiny(audio_path: str) -> dict:
+def transcribe_with_whisper_small(audio_path: str) -> dict:
     """Transcribe audio using Whisper tiny model"""
 
     # Redirect stdout to stderr temporarily to avoid logs in JSON output
@@ -67,8 +67,8 @@ def transcribe_with_whisper_tiny(audio_path: str) -> dict:
         import whisper
         import torch
 
-        # Load the tiny model (much smaller and faster than base/large)
-        model = whisper.load_model("tiny")
+        # Load the small model (better punctuation than tiny)
+        model = whisper.load_model("small")
 
         # Transcribe with word-level timestamps
         result = model.transcribe(
@@ -157,8 +157,8 @@ def main():
         # Download and convert media
         audio_path = download_and_convert_media(media_url)
 
-        # Transcribe with Whisper tiny
-        result = transcribe_with_whisper_tiny(audio_path)
+        # Transcribe with Whisper small
+        result = transcribe_with_whisper_small(audio_path)
 
         # Clean up
         os.unlink(audio_path)
@@ -168,7 +168,7 @@ def main():
 
     except Exception as e:
         error_response = {
-            "error": f"Whisper tiny transcription failed: {str(e)}"
+            "error": f"Whisper small transcription failed: {str(e)}"
         }
         print(json.dumps(error_response))
         sys.exit(1)
