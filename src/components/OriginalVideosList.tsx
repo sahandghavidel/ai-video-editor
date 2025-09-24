@@ -604,8 +604,15 @@ export default function OriginalVideosList() {
 
       // Refresh the table to show any updates
       await handleRefresh();
+
+      // Play success sound for transcription completion
+      playSuccessSound();
     } catch (error) {
       console.error('Error transcribing video:', error);
+
+      // Play error sound for transcription failure
+      playErrorSound();
+
       setError(
         `Failed to transcribe video: ${
           error instanceof Error ? error.message : 'Unknown error'
@@ -650,8 +657,15 @@ export default function OriginalVideosList() {
 
       // Refresh the table to show any updates
       await handleRefresh();
+
+      // Play success sound for normalization completion
+      playSuccessSound();
     } catch (error) {
       console.error('Error normalizing video:', error);
+
+      // Play error sound for normalization failure
+      playErrorSound();
+
       setError(
         `Failed to normalize video: ${
           error instanceof Error ? error.message : 'Unknown error'
@@ -702,8 +716,15 @@ export default function OriginalVideosList() {
 
       console.log('Batch transcription completed');
       await handleRefresh();
+
+      // Play success sound for batch transcription completion
+      playSuccessSound();
     } catch (error) {
       console.error('Error in batch transcription:', error);
+
+      // Play error sound for batch transcription failure
+      playErrorSound();
+
       setError(
         `Failed to transcribe all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
