@@ -71,11 +71,60 @@ export async function POST(request: NextRequest) {
         });
       });
     } else if (model === 'tiny') {
-      // Placeholder for tiny model - will be implemented later
-      return NextResponse.json(
-        { error: 'Tiny model not yet implemented' },
-        { status: 501 }
+      // Path to the Whisper tiny transcription script
+      const scriptPath = path.join(process.cwd(), 'whisper-tiny-transcribe.py');
+      const venvPath = path.join(
+        process.cwd(),
+        'parakeet-env',
+        'bin',
+        'python'
       );
+
+      // Run the Whisper tiny transcription script
+      transcriptionPromise = new Promise((resolve, reject) => {
+        const pythonProcess = spawn(venvPath, [scriptPath, media_url], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        pythonProcess.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        pythonProcess.on('close', (code) => {
+          if (code === 0) {
+            try {
+              // Parse the JSON output from the Python script
+              const result = JSON.parse(stdout);
+              resolve(result);
+            } catch (parseError) {
+              reject(
+                new Error(`Failed to parse transcription result: ${parseError}`)
+              );
+            }
+          } else {
+            reject(
+              new Error(
+                `Whisper tiny transcription failed with code ${code}: ${stderr}`
+              )
+            );
+          }
+        });
+
+        pythonProcess.on('error', (error) => {
+          reject(
+            new Error(
+              `Failed to start Whisper tiny transcription process: ${error.message}`
+            )
+          );
+        });
+      });
     } else {
       return NextResponse.json(
         { error: `Unknown transcription model: ${model}` },
