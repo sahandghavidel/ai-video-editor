@@ -157,6 +157,7 @@ export async function POST(request: NextRequest) {
               })}\n\n`
             )
           );
+
           controller.close();
         }
       },

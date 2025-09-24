@@ -28,6 +28,7 @@ import {
   Grid3x3,
   Volume2,
 } from 'lucide-react';
+import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 
 export default function OriginalVideosList() {
   const [originalVideos, setOriginalVideos] = useState<BaserowRow[]>([]);
@@ -1001,6 +1002,9 @@ export default function OriginalVideosList() {
                     percentage: 100,
                   });
 
+                  // Play success sound for batch completion
+                  playSuccessSound();
+
                   // Refresh the data to show any changes
                   await handleRefresh();
                   break;
@@ -1016,6 +1020,10 @@ export default function OriginalVideosList() {
       }
     } catch (error) {
       console.error('Error generating clips:', error);
+
+      // Play error sound for batch failure
+      playErrorSound();
+
       setError(
         `Failed to generate clips: ${
           error instanceof Error ? error.message : 'Unknown error'

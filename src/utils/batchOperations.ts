@@ -1,4 +1,5 @@
 import { BaserowRow } from '@/lib/baserow-actions';
+import { playSuccessSound } from './soundManager';
 
 // Helper to wait for a given ms
 export const wait = (ms: number) =>
@@ -35,6 +36,8 @@ export const handleImproveAllSentences = async (
     // Otherwise skip
   }
   completeBatchOperation('improvingAll');
+  // Play success sound when batch operation completes
+  playSuccessSound();
 };
 
 // Batch operation: Generate TTS for all scenes that have text but no TTS audio
@@ -64,6 +67,8 @@ export const handleGenerateAllTTS = async (
     }
   }
   completeBatchOperation('generatingAllTTS');
+  // Play success sound when batch operation completes
+  playSuccessSound();
 };
 
 // Batch operation: Generate videos for all scenes that have both video and TTS audio
@@ -127,6 +132,8 @@ export const handleGenerateAllVideos = async (
     alert(`Error: ${errorMessage}`);
   } finally {
     completeBatchOperation('generatingAllVideos');
+    // Play success sound when batch operation completes
+    playSuccessSound();
   }
 };
 
@@ -210,6 +217,8 @@ export const handleConcatenateAllVideos = async (
     alert(`Error: ${errorMessage}`);
   } finally {
     completeBatchOperation('concatenatingVideos');
+    // Play success sound when batch operation completes
+    playSuccessSound();
   }
 };
 
@@ -331,6 +340,8 @@ export const handleSpeedUpAllVideos = async (
     alert(`Error: ${errorMessage}`);
   } finally {
     completeBatchOperation('speedingUpAllVideos');
+    // Play success sound when batch operation completes
+    playSuccessSound();
   }
 };
 
