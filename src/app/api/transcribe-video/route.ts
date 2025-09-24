@@ -72,7 +72,10 @@ export async function POST(request: NextRequest) {
       });
     } else if (model === 'small') {
       // Path to the Whisper small transcription script
-      const scriptPath = path.join(process.cwd(), 'whisper-small-transcribe.py');
+      const scriptPath = path.join(
+        process.cwd(),
+        'whisper-small-transcribe.py'
+      );
       const venvPath = 'python3'; // Use system python3
 
       // Run the Whisper small transcription script
@@ -176,7 +179,7 @@ export async function POST(request: NextRequest) {
     // Wait for transcription to complete
     const transcriptionResult = await transcriptionPromise;
 
-        console.log(`${model} transcription completed successfully`);
+    console.log(`${model} transcription completed successfully`);
 
     return NextResponse.json(transcriptionResult);
   } catch (error) {
