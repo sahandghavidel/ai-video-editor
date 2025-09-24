@@ -4,6 +4,7 @@ import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
 import SceneCard from '@/components/SceneCard';
 import BatchOperations from '@/components/BatchOperations';
 import ModelSelection from '@/components/ModelSelection';
+import TranscriptionModelSelection from '@/components/TranscriptionModelSelection';
 import TTSSettings from '@/components/TTSSettings';
 import VideoSpeedSettings from '@/components/VideoSpeedSettings';
 import AutoGenerateSettings from '@/components/AutoGenerateSettings';
@@ -213,6 +214,7 @@ export default function Home() {
             {!initialLoading && data.length > 0 && (
               <div className='space-y-6'>
                 <ModelSelection />
+                <TranscriptionModelSelection />
                 <TTSSettings />
                 <VideoSpeedSettings />
                 <AutoGenerateSettings />

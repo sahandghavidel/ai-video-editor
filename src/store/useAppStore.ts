@@ -22,6 +22,11 @@ export interface VideoSettings {
   speedUpMode: SpeedUpMode;
 }
 
+// Transcription settings interface
+export interface TranscriptionSettings {
+  selectedModel: string;
+}
+
 // Batch operations state interface
 export interface BatchOperationsState {
   improvingAll: boolean;
@@ -93,6 +98,9 @@ interface AppState {
   // Video Settings
   videoSettings: VideoSettings;
 
+  // Transcription Settings
+  transcriptionSettings: TranscriptionSettings;
+
   // Batch Operations State
   batchOperations: BatchOperationsState;
 
@@ -129,6 +137,12 @@ interface AppState {
   // Video Settings Actions
   updateVideoSettings: (updates: Partial<VideoSettings>) => void;
   resetVideoSettings: () => void;
+
+  // Transcription Settings Actions
+  updateTranscriptionSettings: (
+    updates: Partial<TranscriptionSettings>
+  ) => void;
+  resetTranscriptionSettings: () => void;
 
   // Batch Operations Actions
   startBatchOperation: (operation: keyof BatchOperationsState) => void;
@@ -209,6 +223,11 @@ const defaultVideoSettings: VideoSettings = {
   speedUpMode: 'emptyOnly',
 };
 
+// Default transcription settings
+const defaultTranscriptionSettings: TranscriptionSettings = {
+  selectedModel: 'parakeet', // Default to current Parakeet model
+};
+
 // Default batch operations settings
 const defaultBatchOperations: BatchOperationsState = {
   improvingAll: false,
@@ -274,6 +293,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Video Settings
   videoSettings: defaultVideoSettings,
+
+  // Transcription Settings
+  transcriptionSettings: defaultTranscriptionSettings,
 
   // Batch Operations State
   batchOperations: defaultBatchOperations,
@@ -349,6 +371,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   resetVideoSettings: () => set({ videoSettings: defaultVideoSettings }),
+
+  // Transcription Settings Actions
+  updateTranscriptionSettings: (updates) =>
+    set((state) => ({
+      transcriptionSettings: { ...state.transcriptionSettings, ...updates },
+    })),
+
+  resetTranscriptionSettings: () =>
+    set({ transcriptionSettings: defaultTranscriptionSettings }),
 
   // Batch Operations Actions
   startBatchOperation: (operation) =>
@@ -586,6 +617,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const settingsToSave = {
       ttsSettings: state.ttsSettings,
       videoSettings: state.videoSettings,
+      transcriptionSettings: state.transcriptionSettings,
       modelSelection: {
         selectedModel: state.modelSelection.selectedModel,
         modelSearch: state.modelSelection.modelSearch,
@@ -613,6 +645,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         set((state) => ({
           ttsSettings: { ...defaultTTSSettings, ...settings.ttsSettings },
           videoSettings: { ...defaultVideoSettings, ...settings.videoSettings },
+          transcriptionSettings: {
+            ...defaultTranscriptionSettings,
+            ...settings.transcriptionSettings,
+          },
           modelSelection: {
             ...state.modelSelection,
             selectedModel:
@@ -643,6 +679,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         ttsSettings: defaultTTSSettings,
         videoSettings: defaultVideoSettings,
+        transcriptionSettings: defaultTranscriptionSettings,
         modelSelection: {
           ...get().modelSelection,
           selectedModel: defaultModelSelection.selectedModel,

@@ -69,6 +69,7 @@ export default function OriginalVideosList() {
     loadSettingsFromLocalStorage,
     getFilteredData,
     mergedVideo,
+    transcriptionSettings,
   } = useAppStore();
 
   useEffect(() => {
@@ -539,7 +540,7 @@ export default function OriginalVideosList() {
     try {
       setTranscribing(videoId);
 
-      // Step 1: Transcribe the video using Parakeet
+      // Step 1: Transcribe the video using selected model
       const transcribeResponse = await fetch('/api/transcribe-video', {
         method: 'POST',
         headers: {
@@ -547,6 +548,7 @@ export default function OriginalVideosList() {
         },
         body: JSON.stringify({
           media_url: videoUrl,
+          model: transcriptionSettings.selectedModel,
         }),
       });
 
@@ -741,7 +743,7 @@ export default function OriginalVideosList() {
     videoId: number,
     videoUrl: string
   ) => {
-    // Step 1: Transcribe the video using Parakeet
+    // Step 1: Transcribe the video using selected model
     const transcribeResponse = await fetch('/api/transcribe-video', {
       method: 'POST',
       headers: {
@@ -749,6 +751,7 @@ export default function OriginalVideosList() {
       },
       body: JSON.stringify({
         media_url: videoUrl,
+        model: transcriptionSettings.selectedModel,
       }),
     });
 
