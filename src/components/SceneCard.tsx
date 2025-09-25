@@ -1019,6 +1019,31 @@ export default function SceneCard({
             >
               {showRecentlyModifiedTTS ? '✓' : ''} TTS Only
             </button>
+            <button
+              onClick={() => {
+                // Find the most recently modified scene
+                const mostRecentScene = data.reduce((latest, current) => {
+                  const currentTime = current.field_6905 || current['field_6905'];
+                  const latestTime = latest.field_6905 || latest['field_6905'];
+                  
+                  if (!currentTime) return latest;
+                  if (!latestTime) return current;
+                  
+                  const currentDate = typeof currentTime === 'string' ? new Date(currentTime) : new Date(currentTime as number);
+                  const latestDate = typeof latestTime === 'string' ? new Date(latestTime) : new Date(latestTime as number);
+                  
+                  return currentDate > latestDate ? current : latest;
+                });
+                
+                if (mostRecentScene) {
+                  scrollCardToTop(mostRecentScene.id);
+                }
+              }}
+              className='px-3 py-1 text-xs rounded-full transition-colors bg-orange-100 text-orange-700 hover:bg-orange-200'
+              title='Scroll to most recently modified scene'
+            >
+              📍 Recent
+            </button>
           </div>
         </div>
 
