@@ -1023,18 +1023,25 @@ export default function SceneCard({
               onClick={() => {
                 // Find the most recently modified scene
                 const mostRecentScene = data.reduce((latest, current) => {
-                  const currentTime = current.field_6905 || current['field_6905'];
+                  const currentTime =
+                    current.field_6905 || current['field_6905'];
                   const latestTime = latest.field_6905 || latest['field_6905'];
-                  
+
                   if (!currentTime) return latest;
                   if (!latestTime) return current;
-                  
-                  const currentDate = typeof currentTime === 'string' ? new Date(currentTime) : new Date(currentTime as number);
-                  const latestDate = typeof latestTime === 'string' ? new Date(latestTime) : new Date(latestTime as number);
-                  
+
+                  const currentDate =
+                    typeof currentTime === 'string'
+                      ? new Date(currentTime)
+                      : new Date(currentTime as number);
+                  const latestDate =
+                    typeof latestTime === 'string'
+                      ? new Date(latestTime)
+                      : new Date(latestTime as number);
+
                   return currentDate > latestDate ? current : latest;
                 });
-                
+
                 if (mostRecentScene) {
                   scrollCardToTop(mostRecentScene.id);
                 }
@@ -1664,6 +1671,49 @@ export default function SceneCard({
           }}
         />
       ))}
+
+      {/* Floating Scroll to Top Button */}
+      <button
+        onClick={() => {
+          // Scroll to just above the first scene
+          if (filteredAndSortedData.length > 0) {
+            const firstScene = filteredAndSortedData[0];
+            const cardElement = sceneCardRefs.current[firstScene.id];
+            if (cardElement) {
+              const cardTop =
+                cardElement.getBoundingClientRect().top + window.pageYOffset;
+              const offsetTop = cardTop - 100; // 100px above the first scene
+              window.scrollTo({
+                top: Math.max(0, offsetTop), // Ensure we don't go above the page
+                behavior: 'smooth',
+              });
+            }
+          }
+        }}
+        style={{
+          position: 'fixed',
+          bottom: '2rem',
+          right: '2rem',
+          zIndex: 99999,
+        }}
+        className='w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl hover:bg-blue-700 hover:shadow-3xl transition-all duration-300 flex items-center justify-center border-2 border-white'
+        title='Scroll to first scene'
+      >
+        <svg
+          className='w-7 h-7'
+          fill='none'
+          stroke='currentColor'
+          viewBox='0 0 24 24'
+          xmlns='http://www.w3.org/2000/svg'
+        >
+          <path
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            strokeWidth={2}
+            d='M5 10l7-7m0 0l7 7m-7-7v18'
+          />
+        </svg>
+      </button>
     </div>
   );
 }
