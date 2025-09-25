@@ -80,9 +80,9 @@ export default function SceneCard({
   const [sortByDuration, setSortByDuration] = useState<'asc' | 'desc' | null>(
     null
   );
-  const [sortByTTSTime, setSortByTTSTime] = useState<'asc' | 'desc' | null>(
-    null
-  );
+  const [sortByLastModified, setSortByLastModified] = useState<
+    'asc' | 'desc' | null
+  >(null);
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
   const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
     useState<boolean>(false);
@@ -858,28 +858,39 @@ export default function SceneCard({
       });
     }
 
-    // Sort by TTS timestamp
-    if (sortByTTSTime) {
+    // Sort by last modified
+    if (sortByLastModified) {
       filtered = [...filtered].sort((a, b) => {
-        const getTTSTimestamp = (scene: Record<string, unknown>) => {
-          const url = scene.field_6891 || scene['field_6891'];
-          if (!url || typeof url !== 'string') return 0;
+        const getLastModified = (scene: Record<string, unknown>) => {
+          const lastModified = scene.field_6905 || scene['field_6905'];
+          if (!lastModified) return 0;
 
-          // Extract timestamp from URL (format: tts_ID_TIMESTAMP.wav)
-          const match = url.match(/_(\d+)\.wav$/);
-          if (!match) return 0;
-
-          const timestamp = parseInt(match[1]);
-          return isNaN(timestamp) ? 0 : timestamp;
+          // Handle different date formats
+          if (typeof lastModified === 'string') {
+            const date = new Date(lastModified);
+            const timestamp = date.getTime();
+            console.log(
+              'Parsing date:',
+              lastModified,
+              '-> timestamp:',
+              timestamp,
+              'valid:',
+              !isNaN(timestamp)
+            );
+            return isNaN(timestamp) ? 0 : timestamp;
+          } else if (typeof lastModified === 'number') {
+            return lastModified;
+          }
+          return 0;
         };
 
-        const timestampA = getTTSTimestamp(a);
-        const timestampB = getTTSTimestamp(b);
+        const timeA = getLastModified(a);
+        const timeB = getLastModified(b);
 
-        if (sortByTTSTime === 'asc') {
-          return timestampA - timestampB;
+        if (sortByLastModified === 'asc') {
+          return timeA - timeB;
         } else {
-          return timestampB - timestampA;
+          return timeB - timeA;
         }
       });
     }
@@ -889,7 +900,7 @@ export default function SceneCard({
     data,
     showOnlyEmptyText,
     sortByDuration,
-    sortByTTSTime,
+    sortByLastModified,
     showRecentlyModifiedTTS,
   ]);
 
@@ -952,14 +963,16 @@ export default function SceneCard({
 
           <div className='flex items-center space-x-2'>
             <label className='text-sm font-medium text-gray-700'>
-              Sort by TTS Time:
+              Sort by Last Modified:
             </label>
             <button
               onClick={() =>
-                setSortByTTSTime(sortByTTSTime === 'asc' ? null : 'asc')
+                setSortByLastModified(
+                  sortByLastModified === 'asc' ? null : 'asc'
+                )
               }
               className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                sortByTTSTime === 'asc'
+                sortByLastModified === 'asc'
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
@@ -968,10 +981,12 @@ export default function SceneCard({
             </button>
             <button
               onClick={() =>
-                setSortByTTSTime(sortByTTSTime === 'desc' ? null : 'desc')
+                setSortByLastModified(
+                  sortByLastModified === 'desc' ? null : 'desc'
+                )
               }
               className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                sortByTTSTime === 'desc'
+                sortByLastModified === 'desc'
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
@@ -1002,7 +1017,7 @@ export default function SceneCard({
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              {showRecentlyModifiedTTS ? '✓' : ''} Recently Modified TTS
+              {showRecentlyModifiedTTS ? '✓' : ''} TTS Only
             </button>
           </div>
         </div>
