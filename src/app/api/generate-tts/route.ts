@@ -5,6 +5,7 @@ import fs from 'fs';
 
 // TTS Server management - optimized for fast API-only server
 let ttsServerProcess: ReturnType<typeof spawn> | null = null;
+let ttsServerPid: number | null = null; // Track PID for reliable killing
 let serverTimeout: NodeJS.Timeout | null = null;
 let timeoutScheduledAt: number = 0; // Track when timeout was scheduled
 const SERVER_TIMEOUT = 5 * 60 * 1000; // 5 minutes
@@ -13,6 +14,12 @@ const SERVER_PORT = 8004;
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
 
 async function startTTSServer(): Promise<void> {
+  // Clear any stale references
+  if (!ttsServerProcess && ttsServerPid) {
+    console.log('Clearing stale TTS server PID reference');
+    ttsServerPid = null;
+  }
+
   if (ttsServerProcess) {
     console.log('TTS server already running');
     return;
@@ -59,11 +66,15 @@ async function startTTSServer(): Promise<void> {
         env: { ...process.env, PYTHONUNBUFFERED: '1' }, // Ensure Python output is not buffered
       });
 
+      // Store PID for reliable process management
+      ttsServerPid = ttsServerProcess.pid || null;
+
       // Handle process events
       ttsServerProcess.on('close', (code: number) => {
         console.log(`🛑 TTS server exited with code ${code}`);
         const wasRunning = ttsServerProcess !== null;
         ttsServerProcess = null;
+        ttsServerPid = null; // Clear PID as well
 
         // Only clear timeout if server exited normally (not killed by us)
         if (serverTimeout && code !== null) {
@@ -78,6 +89,7 @@ async function startTTSServer(): Promise<void> {
       ttsServerProcess.on('error', (error: Error) => {
         console.error('❌ Failed to start TTS server:', error);
         ttsServerProcess = null;
+        ttsServerPid = null; // Clear PID on error
         reject(error);
       });
 
@@ -157,19 +169,177 @@ function scheduleServerStop(): void {
             console.log('💀 Force killing TTS server');
             ttsServerProcess.kill('SIGKILL');
             ttsServerProcess = null;
+            ttsServerPid = null;
           }
         }, 5000);
+      } else if (ttsServerPid) {
+        console.log(`🔪 Killing TTS server process ${ttsServerPid} by PID`);
+        try {
+          process.kill(ttsServerPid, 'SIGTERM');
+
+          // Force kill after 5 seconds if it doesn't respond
+          setTimeout(() => {
+            try {
+              process.kill(ttsServerPid!, 'SIGKILL');
+              console.log('💀 Force killed TTS server by PID');
+            } catch (error) {
+              console.log('ℹ️ Process already dead or inaccessible');
+            }
+            ttsServerPid = null;
+          }, 5000);
+        } catch (error) {
+          console.error('❌ Failed to kill by PID:', error);
+          ttsServerPid = null;
+        }
       } else {
         console.log(
-          '⚠️ No TTS server process found to kill, but server appears to be running'
+          '⚠️ No TTS server process reference or PID found, but server appears to be running'
         );
-        // Try to shutdown via API as fallback
+
+        // Try multiple approaches to kill the server
+        console.log('🔍 Attempting to kill TTS server processes...');
+
+        // First try: Kill by port using lsof (most precise)
         try {
-          await fetch(`${SERVER_URL}/shutdown`, { method: 'POST' });
-          console.log('🔄 Shutdown request sent via API');
+          console.log(
+            `🔍 Finding processes listening on port ${SERVER_PORT}...`
+          );
+          const lsofProcess = spawn('lsof', ['-ti', `:${SERVER_PORT}`], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+
+          let pids = '';
+          lsofProcess.stdout.on('data', (data) => {
+            pids += data.toString();
+          });
+
+          lsofProcess.on('close', (code: number) => {
+            if (code === 0 && pids.trim()) {
+              const pidList = pids.trim().split('\n');
+              console.log(
+                `📋 Found ${
+                  pidList.length
+                } process(es) on port ${SERVER_PORT}: ${pidList.join(', ')}`
+              );
+
+              // Verify these are TTS server processes before killing
+              pidList.forEach((pid) => {
+                const psProcess = spawn('ps', ['-p', pid, '-o', 'comm='], {
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                });
+
+                let command = '';
+                psProcess.stdout.on('data', (data) => {
+                  command += data.toString().trim();
+                });
+
+                psProcess.on('close', () => {
+                  // Only kill if it's a Python process (likely the TTS server)
+                  if (
+                    command.includes('python') ||
+                    command.includes('uvicorn')
+                  ) {
+                    try {
+                      process.kill(parseInt(pid), 'SIGTERM');
+                      console.log(
+                        `✅ Sent SIGTERM to TTS server process ${pid} (${command})`
+                      );
+                    } catch (error) {
+                      console.error(`❌ Failed to kill process ${pid}:`, error);
+                    }
+                  } else {
+                    console.log(
+                      `⚠️ Skipping non-TTS process ${pid} (${command})`
+                    );
+                  }
+                });
+              });
+            } else {
+              console.log(
+                `ℹ️ No processes found listening on port ${SERVER_PORT}`
+              );
+            }
+          });
         } catch (error) {
-          console.error('❌ Failed to shutdown via API:', error);
+          console.error('❌ Failed to run lsof:', error);
         }
+
+        // Second try: Kill by port (find process listening on port 8004)
+        setTimeout(() => {
+          try {
+            const portKillProcess = spawn('pkill', ['-f', `:${SERVER_PORT}`], {
+              stdio: 'inherit',
+            });
+
+            portKillProcess.on('close', (code: number) => {
+              if (code === 0) {
+                console.log(
+                  `✅ Killed processes matching port ${SERVER_PORT} pattern`
+                );
+              }
+            });
+          } catch (error) {
+            console.error('❌ Failed to kill by port pattern:', error);
+          }
+        }, 1000);
+
+        // Third try: Kill by script name (most specific)
+        setTimeout(() => {
+          try {
+            const scriptKillProcess = spawn(
+              'pkill',
+              ['-f', 'server_api_only.py'],
+              {
+                stdio: 'inherit',
+              }
+            );
+
+            scriptKillProcess.on('close', (code: number) => {
+              if (code === 0) {
+                console.log('✅ Killed TTS server processes by script name');
+              } else {
+                console.log(`⚠️ pkill by script name returned code ${code}`);
+              }
+            });
+          } catch (error) {
+            console.error('❌ Failed to kill by script name:', error);
+          }
+        }, 2000);
+
+        // Fourth try: Kill any uvicorn processes (more aggressive but targeted)
+        setTimeout(() => {
+          try {
+            const uvicornKillProcess = spawn(
+              'pkill',
+              ['-f', 'uvicorn.*server_api_only'],
+              {
+                stdio: 'inherit',
+              }
+            );
+
+            uvicornKillProcess.on('close', (code: number) => {
+              if (code === 0) {
+                console.log('✅ Killed uvicorn TTS server processes');
+              } else {
+                console.log(`⚠️ pkill uvicorn returned code ${code}`);
+              }
+            });
+          } catch (error) {
+            console.error('❌ Failed to kill uvicorn processes:', error);
+          }
+        }, 3000); // Wait 3 seconds before trying uvicorn kill
+
+        // Verify shutdown after attempts
+        setTimeout(async () => {
+          const finalStatus = await checkTTSServer();
+          if (finalStatus.running) {
+            console.log(
+              '❌ TTS server still running after kill attempts - may need manual intervention'
+            );
+          } else {
+            console.log('✅ TTS server successfully shut down');
+          }
+        }, 5000); // Check after 5 seconds
       }
     } else {
       console.log('✅ TTS server already stopped naturally');

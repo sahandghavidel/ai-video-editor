@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "pkill -f 'next dev.*9540' || true && sleep 1 && next dev -p 9540",
+    "dev:restart": "pkill -f 'next dev' || true && sleep 2 && next dev -p 9540",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
