@@ -80,7 +80,12 @@ export default function SceneCard({
   const [sortByDuration, setSortByDuration] = useState<'asc' | 'desc' | null>(
     null
   );
+  const [sortByTTSTime, setSortByTTSTime] = useState<'asc' | 'desc' | null>(
+    null
+  );
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
+  const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
+    useState<boolean>(false);
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -818,6 +823,27 @@ export default function SceneCard({
       });
     }
 
+    // Filter by recently modified TTS (last 24 hours)
+    if (showRecentlyModifiedTTS) {
+      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+      filtered = filtered.filter((scene) => {
+        // Extract timestamp from the TTS URL in field_6891
+        const url = scene.field_6891 || scene['field_6891'];
+        if (!url || typeof url !== 'string') return false;
+
+        // Extract timestamp from URL (format: tts_ID_TIMESTAMP.wav)
+        const match = url.match(/_(\d+)\.wav$/);
+        if (!match) return false;
+
+        const timestamp = parseInt(match[1]);
+        if (isNaN(timestamp)) return false;
+
+        // Check if within last 24 hours
+        return timestamp >= oneDayAgo;
+      });
+    }
+
     // Sort by duration
     if (sortByDuration) {
       filtered = [...filtered].sort((a, b) => {
@@ -832,8 +858,40 @@ export default function SceneCard({
       });
     }
 
+    // Sort by TTS timestamp
+    if (sortByTTSTime) {
+      filtered = [...filtered].sort((a, b) => {
+        const getTTSTimestamp = (scene: Record<string, unknown>) => {
+          const url = scene.field_6891 || scene['field_6891'];
+          if (!url || typeof url !== 'string') return 0;
+
+          // Extract timestamp from URL (format: tts_ID_TIMESTAMP.wav)
+          const match = url.match(/_(\d+)\.wav$/);
+          if (!match) return 0;
+
+          const timestamp = parseInt(match[1]);
+          return isNaN(timestamp) ? 0 : timestamp;
+        };
+
+        const timestampA = getTTSTimestamp(a);
+        const timestampB = getTTSTimestamp(b);
+
+        if (sortByTTSTime === 'asc') {
+          return timestampA - timestampB;
+        } else {
+          return timestampB - timestampA;
+        }
+      });
+    }
+
     return filtered;
-  }, [data, showOnlyEmptyText, sortByDuration]);
+  }, [
+    data,
+    showOnlyEmptyText,
+    sortByDuration,
+    sortByTTSTime,
+    showRecentlyModifiedTTS,
+  ]);
 
   if (!data || data.length === 0) {
     return (
@@ -893,6 +951,36 @@ export default function SceneCard({
           </div>
 
           <div className='flex items-center space-x-2'>
+            <label className='text-sm font-medium text-gray-700'>
+              Sort by TTS Time:
+            </label>
+            <button
+              onClick={() =>
+                setSortByTTSTime(sortByTTSTime === 'asc' ? null : 'asc')
+              }
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                sortByTTSTime === 'asc'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              ↑ Ascending
+            </button>
+            <button
+              onClick={() =>
+                setSortByTTSTime(sortByTTSTime === 'desc' ? null : 'desc')
+              }
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                sortByTTSTime === 'desc'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              ↓ Descending
+            </button>
+          </div>
+
+          <div className='flex items-center space-x-2'>
             <label className='text-sm font-medium text-gray-700'>Filter:</label>
             <button
               onClick={() => setShowOnlyEmptyText(!showOnlyEmptyText)}
@@ -903,6 +991,18 @@ export default function SceneCard({
               }`}
             >
               {showOnlyEmptyText ? '✓' : ''} Empty Text Only
+            </button>
+            <button
+              onClick={() =>
+                setShowRecentlyModifiedTTS(!showRecentlyModifiedTTS)
+              }
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                showRecentlyModifiedTTS
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {showRecentlyModifiedTTS ? '✓' : ''} Recently Modified TTS
             </button>
           </div>
         </div>
