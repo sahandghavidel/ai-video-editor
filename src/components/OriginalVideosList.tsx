@@ -54,6 +54,8 @@ export default function OriginalVideosList() {
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
+  const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
+  const [timestampData, setTimestampData] = useState<string>('');
 
   // Get clip generation state from global store
   const {
@@ -93,6 +95,25 @@ export default function OriginalVideosList() {
       return () => clearTimeout(timer);
     }
   }, [mergedVideo.url, selectedOriginalVideo.id]);
+
+  // Load timestamp data from localStorage on mount
+  useEffect(() => {
+    const savedTimestampData = localStorage.getItem('final-video-data');
+    if (savedTimestampData) {
+      try {
+        const parsedData = JSON.parse(savedTimestampData);
+        // Handle both old string format and new object format
+        if (typeof parsedData === 'string') {
+          setTimestampData(parsedData);
+        } else if (parsedData && parsedData.timestamp) {
+          setTimestampData(parsedData.timestamp);
+        }
+      } catch (error) {
+        // If parsing fails, treat as old string format
+        setTimestampData(savedTimestampData);
+      }
+    }
+  }, []);
 
   // Helper function to extract value from Baserow field
   const extractFieldValue = (field: any): string => {
@@ -1054,6 +1075,135 @@ export default function OriginalVideosList() {
     }
   };
 
+  // Generate Timestamps for Final Videos
+  const handleGenerateTimestamps = async () => {
+    try {
+      setGeneratingTimestamps(true);
+      setError(null);
+
+      // Filter videos that have Final Merged Video URLs, Titles, and Order values
+      const videosWithTimestamps = originalVideos.filter((video) => {
+        const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
+        const title = video.field_6852; // Title field
+        const order = video.field_6902; // Order field
+        return finalVideoUrl && title && order !== null && order !== undefined;
+      });
+
+      if (videosWithTimestamps.length === 0) {
+        alert(
+          'No videos found with final merged videos, titles, and order values'
+        );
+        return;
+      }
+
+      // Sort videos by Order (field_6902)
+      videosWithTimestamps.sort((a, b) => {
+        const orderA = parseInt(String(a.field_6902)) || 0;
+        const orderB = parseInt(String(b.field_6902)) || 0;
+        return orderA - orderB;
+      });
+
+      console.log(
+        'Generating timestamps for videos:',
+        videosWithTimestamps.map((v) => ({
+          title: v.field_6852,
+          order: v.field_6902,
+          url: extractUrl(v.field_6858),
+        }))
+      );
+
+      // Calculate cumulative timestamps
+      let cumulativeSeconds = 0;
+      const timestampLines: string[] = [];
+
+      for (const video of videosWithTimestamps) {
+        try {
+          // Get video duration
+          const videoUrl = extractUrl(video.field_6858);
+          const response = await fetch('/api/get-video-duration', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ videoUrl }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to get video duration');
+          }
+
+          const durationData = await response.json();
+          const durationSeconds = durationData.duration || 0;
+
+          // Format timestamp
+          const timestamp = formatTimestamp(cumulativeSeconds);
+          const title = String(video.field_6852);
+
+          timestampLines.push(`${timestamp} - ${title}`);
+
+          // Add duration to cumulative time
+          cumulativeSeconds += durationSeconds;
+        } catch (durationError) {
+          console.warn(
+            `Failed to get duration for video ${video.id}, using 0:`,
+            durationError
+          );
+          // Still add the timestamp with 0 duration
+          const timestamp = formatTimestamp(cumulativeSeconds);
+          const title = String(video.field_6852);
+          timestampLines.push(`${timestamp} - ${title}`);
+        }
+      }
+
+      // Create final timestamp text
+      const timestampText = timestampLines.join('\n');
+
+      // Set timestamp data
+      setTimestampData(timestampText);
+
+      // Save to localStorage as an object
+      const timestampObject = {
+        timestamp: timestampText,
+        createdAt: new Date().toISOString(),
+        videoCount: videosWithTimestamps.length,
+      };
+      localStorage.setItem('final-video-data', JSON.stringify(timestampObject));
+
+      console.log('Generated timestamps:', timestampText);
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error generating timestamps:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to generate timestamps: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setGeneratingTimestamps(false);
+    }
+  };
+
+  // Helper function to format seconds into HH:MM:SS or MM:SS
+  const formatTimestamp = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs
+        .toString()
+        .padStart(2, '0')}`;
+    } else {
+      return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+  };
+
   // Generate Clips for video
   const handleGenerateClips = async (videoId: number) => {
     try {
@@ -1365,6 +1515,36 @@ export default function OriginalVideosList() {
               />
               <span>
                 {mergingFinalVideos ? 'Merging...' : 'Merge All Final Videos'}
+              </span>
+            </button>
+
+            {/* Generate Timestamps Button */}
+            <button
+              onClick={handleGenerateTimestamps}
+              disabled={
+                generatingTimestamps ||
+                uploading ||
+                reordering ||
+                transcribing !== null ||
+                transcribingAll ||
+                generatingScenes !== null ||
+                generatingScenesAll ||
+                mergingFinalVideos
+              }
+              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              title={
+                generatingTimestamps
+                  ? 'Generating timestamps...'
+                  : 'Generate timestamps for final merged videos'
+              }
+            >
+              <Clock
+                className={`w-4 h-4 ${
+                  generatingTimestamps ? 'animate-pulse' : ''
+                }`}
+              />
+              <span>
+                {generatingTimestamps ? 'Generating...' : 'Generate Timestamps'}
               </span>
             </button>
           </div>
@@ -1812,6 +1992,33 @@ export default function OriginalVideosList() {
           </div>
         )}
       </div>
+
+      {/* Timestamp Display */}
+      {timestampData && (
+        <div className='mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4'>
+          <div className='flex items-center justify-between mb-3'>
+            <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
+              <Clock className='w-5 h-5 text-teal-500' />
+              Video Timestamps
+            </h3>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(timestampData);
+                // Could add a toast notification here
+              }}
+              className='px-3 py-1 text-sm bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors'
+              title='Copy timestamps to clipboard'
+            >
+              Copy
+            </button>
+          </div>
+          <div className='bg-white border border-gray-200 rounded-md p-3'>
+            <pre className='text-sm text-gray-700 whitespace-pre-wrap font-mono'>
+              {timestampData}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
