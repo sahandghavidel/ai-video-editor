@@ -29,6 +29,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
+import MergedVideoDisplay from './MergedVideoDisplay';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 
 export default function OriginalVideosList() {
@@ -52,6 +53,7 @@ export default function OriginalVideosList() {
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
+  const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
 
   // Get clip generation state from global store
   const {
@@ -59,6 +61,7 @@ export default function OriginalVideosList() {
     setGeneratingClips: setGeneratingClipsGlobal,
     setClipsProgress: setClipsProgressGlobal,
     clearClipGeneration,
+    setMergedVideo,
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,6 +73,7 @@ export default function OriginalVideosList() {
     loadSettingsFromLocalStorage,
     getFilteredData,
     mergedVideo,
+    clearMergedVideo,
     transcriptionSettings,
   } = useAppStore();
 
@@ -936,6 +940,91 @@ export default function OriginalVideosList() {
     return response.json();
   };
 
+  // Merge All Final Videos
+  const handleMergeAllFinalVideos = async () => {
+    try {
+      setMergingFinalVideos(true);
+      setError(null);
+
+      // Filter videos that have Final Merged Video URLs and Order values
+      const videosWithFinalVideos = originalVideos.filter((video) => {
+        const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
+        const order = video.field_6902; // Order field
+        return finalVideoUrl && order !== null && order !== undefined;
+      });
+
+      if (videosWithFinalVideos.length === 0) {
+        alert('No videos found with final merged videos to merge');
+        return;
+      }
+
+      // Sort videos by Order (field_6902)
+      videosWithFinalVideos.sort((a, b) => {
+        const orderA = parseInt(String(a.field_6902)) || 0;
+        const orderB = parseInt(String(b.field_6902)) || 0;
+        return orderA - orderB;
+      });
+
+      // Extract video URLs in order
+      const videoUrls = videosWithFinalVideos.map((video) =>
+        extractUrl(video.field_6858)
+      );
+
+      console.log(
+        `Merging ${videoUrls.length} final videos in order:`,
+        videoUrls
+      );
+
+      // Call the concatenate API with fast mode
+      const response = await fetch('/api/concatenate-videos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_urls: videoUrls,
+          fast_mode: true, // Use fast merging without re-encoding
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to merge final videos');
+      }
+
+      const result = await response.json();
+      console.log('Final videos merged successfully:', result);
+
+      // Save the merged video URL to global state and local storage
+      const mergedVideoUrl = result.videoUrl || result.url || result.video_url;
+      const fileName = `final-merged-videos-${Date.now()}.mp4`;
+      console.log('Setting merged video:', mergedVideoUrl, fileName);
+      setMergedVideo(mergedVideoUrl, fileName);
+
+      // Verify the state was set
+      setTimeout(() => {
+        const currentState = useAppStore.getState().mergedVideo;
+        console.log('Current mergedVideo state:', currentState);
+      }, 100);
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error merging final videos:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to merge final videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setMergingFinalVideos(false);
+    }
+  };
+
   // Generate Clips for video
   const handleGenerateClips = async (videoId: number) => {
     try {
@@ -1218,8 +1307,43 @@ export default function OriginalVideosList() {
                 : 'Generate All Scenes'}
             </span>
           </button>
+
+          {/* Merge All Final Videos Button */}
+          <button
+            onClick={handleMergeAllFinalVideos}
+            disabled={
+              mergingFinalVideos ||
+              uploading ||
+              reordering ||
+              transcribing !== null ||
+              transcribingAll ||
+              generatingScenes !== null ||
+              generatingScenesAll
+            }
+            className='inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+            title={
+              mergingFinalVideos
+                ? 'Merging final videos...'
+                : 'Merge all final merged videos in order'
+            }
+          >
+            <Video
+              className={`w-4 h-4 ${mergingFinalVideos ? 'animate-pulse' : ''}`}
+            />
+            <span>
+              {mergingFinalVideos ? 'Merging...' : 'Merge All Final Videos'}
+            </span>
+          </button>
         </div>
       </div>
+
+      {/* Merged Video Display */}
+      {mergedVideo.url && (
+        <MergedVideoDisplay
+          mergedVideo={mergedVideo}
+          onClear={clearMergedVideo}
+        />
+      )}
 
       {/* Selected Video Info */}
       {selectedOriginalVideo.id && (
