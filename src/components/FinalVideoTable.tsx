@@ -6,6 +6,7 @@ import { playSuccessSound } from '@/utils/soundManager';
 const FinalVideoTable: React.FC = () => {
   const [transcribing, setTranscribing] = useState(false);
   const [generatingTitle, setGeneratingTitle] = useState(false);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
   const [videoData, setVideoData] = useState<any>(null);
   const { transcriptionSettings, modelSelection } = useAppStore();
 
@@ -223,6 +224,93 @@ const FinalVideoTable: React.FC = () => {
     }
   };
 
+  const handleGenerateDescription = async () => {
+    if (!parsedData?.captionsUrl) {
+      alert('No transcription available. Please transcribe the video first.');
+      return;
+    }
+
+    try {
+      setGeneratingDescription(true);
+
+      // Fetch the transcription from the captions URL
+      const transcriptionResponse = await fetch(parsedData.captionsUrl);
+      if (!transcriptionResponse.ok) {
+        throw new Error('Failed to fetch transcription');
+      }
+
+      const transcriptionData = await transcriptionResponse.json();
+
+      // Extract text from word timestamps
+      const transcriptionText = transcriptionData
+        .map((word: any) => word.word)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      console.log(
+        'Generating description for transcription:',
+        transcriptionText.substring(0, 100) + '...'
+      );
+
+      // Call the sentence improvement API with description generation prompt
+      const response = await fetch('/api/improve-sentence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentSentence: `Generate a YouTube video description for this video transcription. Make it engaging and SEO-friendly: ${transcriptionText}`,
+          allSentences: [transcriptionText],
+          sceneId: 'description_generation',
+          model: modelSelection.selectedModel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Description generation failed');
+      }
+
+      const result = await response.json();
+      const generatedDescription =
+        result.improvedSentence ||
+        result.description ||
+        'Generated Description';
+
+      // Save the generated description to localStorage
+      const existingData = localStorage.getItem('final-video-data');
+      let dataObject = {};
+
+      if (existingData) {
+        try {
+          dataObject = JSON.parse(existingData);
+        } catch (parseError) {
+          dataObject = {};
+        }
+      }
+
+      // Update with generated description
+      const updatedData = {
+        ...dataObject,
+        description: generatedDescription,
+        descriptionGeneratedAt: new Date().toISOString(),
+      };
+
+      localStorage.setItem('final-video-data', JSON.stringify(updatedData));
+      console.log('Description saved to localStorage:', generatedDescription);
+
+      // Update local state to trigger re-render
+      setVideoData(updatedData);
+
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error generating description:', error);
+      alert('Failed to generate description. Please try again.');
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
   if (!parsedData || !parsedData.finalVideoUrl) {
     return null;
   }
@@ -247,6 +335,9 @@ const FinalVideoTable: React.FC = () => {
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
                 Caption
+              </th>
+              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
+                Description
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
                 Actions
@@ -303,6 +394,30 @@ const FinalVideoTable: React.FC = () => {
                 </div>
               </td>
               <td className='px-6 py-4 whitespace-nowrap'>
+                <div className='text-sm text-gray-500 max-w-xs truncate'>
+                  {parsedData.description ? (
+                    <div className='flex items-center gap-2'>
+                      <span className='text-green-600 font-medium'>
+                        Generated
+                      </span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(parsedData.description);
+                          // Could add a toast notification here
+                        }}
+                        className='inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors'
+                        title='Copy description'
+                      >
+                        <Check className='w-3 h-3' />
+                        Copy
+                      </button>
+                    </div>
+                  ) : (
+                    'No description generated'
+                  )}
+                </div>
+              </td>
+              <td className='px-6 py-4 whitespace-nowrap'>
                 <div className='flex items-center gap-2'>
                   <button
                     onClick={() =>
@@ -354,6 +469,25 @@ const FinalVideoTable: React.FC = () => {
                       }`}
                     />
                     {generatingTitle ? 'Generating...' : 'Generate Title'}
+                  </button>
+                  <button
+                    onClick={handleGenerateDescription}
+                    disabled={generatingDescription || !parsedData.captionsUrl}
+                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                    title={
+                      parsedData.captionsUrl
+                        ? 'Generate YouTube description from transcription'
+                        : 'Transcription required for description generation'
+                    }
+                  >
+                    <Sparkles
+                      className={`w-3 h-3 ${
+                        generatingDescription ? 'animate-pulse' : ''
+                      }`}
+                    />
+                    {generatingDescription
+                      ? 'Generating...'
+                      : 'Generate Description'}
                   </button>
                 </div>
               </td>

@@ -2037,19 +2037,66 @@ export default function OriginalVideosList() {
             </h3>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(timestampData);
+                const finalVideoData = localStorage.getItem('final-video-data');
+                let description = '';
+                if (finalVideoData) {
+                  try {
+                    const parsed = JSON.parse(finalVideoData);
+                    description = parsed.description || '';
+                  } catch (error) {
+                    console.warn('Failed to parse final video data:', error);
+                  }
+                }
+                const fullContent = `${description}\n\ntimestamp:\n${timestampData}`;
+                navigator.clipboard.writeText(fullContent);
                 // Could add a toast notification here
               }}
               className='px-3 py-1 text-sm bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors'
-              title='Copy timestamps to clipboard'
+              title='Copy description and timestamps to clipboard'
             >
-              Copy
+              Copy All
             </button>
           </div>
           <div className='bg-white border border-gray-200 rounded-md p-3'>
-            <pre className='text-sm text-gray-700 whitespace-pre-wrap font-mono'>
-              {timestampData}
-            </pre>
+            <div className='space-y-4'>
+              {/* Description Section */}
+              <div>
+                <h4 className='text-sm font-medium text-gray-900 mb-2'>
+                  Description
+                </h4>
+                <div className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                  {(() => {
+                    const finalVideoData =
+                      localStorage.getItem('final-video-data');
+                    if (finalVideoData) {
+                      try {
+                        const parsed = JSON.parse(finalVideoData);
+                        return (
+                          parsed.description || 'No description generated yet'
+                        );
+                      } catch (error) {
+                        console.warn(
+                          'Failed to parse final video data:',
+                          error
+                        );
+                        return 'No description generated yet';
+                      }
+                    }
+                    return 'No description generated yet';
+                  })()}
+                </div>
+              </div>
+
+              {/* Timestamp Section */}
+              <div>
+                <h4 className='text-sm font-medium text-gray-900 mb-2'>
+                  Timestamps
+                </h4>
+                <pre className='text-sm text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-md'>
+                  {timestampData}
+                </pre>
+              </div>
+            </div>
           </div>
         </div>
       )}
