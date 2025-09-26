@@ -162,7 +162,10 @@ const FinalVideoTable: React.FC = () => {
         .replace(/\s+/g, ' ')
         .trim();
 
-      console.log('Generating title for transcription:', transcriptionText.substring(0, 100) + '...');
+      console.log(
+        'Generating title for transcription:',
+        transcriptionText.substring(0, 100) + '...'
+      );
 
       // Call the sentence improvement API with title generation prompt
       const response = await fetch('/api/improve-sentence', {
@@ -183,7 +186,8 @@ const FinalVideoTable: React.FC = () => {
       }
 
       const result = await response.json();
-      const generatedTitle = result.improvedSentence || result.title || 'Generated Title';
+      const generatedTitle =
+        result.improvedSentence || result.title || 'Generated Title';
 
       // Save the generated title to localStorage
       const existingData = localStorage.getItem('final-video-data');
@@ -338,7 +342,11 @@ const FinalVideoTable: React.FC = () => {
                     onClick={handleGenerateTitle}
                     disabled={generatingTitle || !parsedData.captionsUrl}
                     className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
-                    title={parsedData.captionsUrl ? 'Generate YouTube title from transcription' : 'Transcription required for title generation'}
+                    title={
+                      parsedData.captionsUrl
+                        ? 'Generate YouTube title from transcription'
+                        : 'Transcription required for title generation'
+                    }
                   >
                     <Sparkles
                       className={`w-3 h-3 ${
