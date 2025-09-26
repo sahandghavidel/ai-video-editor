@@ -114,6 +114,49 @@ const FinalVideoTable: React.FC = () => {
 
   const parsedData = videoData;
 
+  const handleResetData = () => {
+    try {
+      const existingData = localStorage.getItem('final-video-data');
+      if (existingData) {
+        const parsed = JSON.parse(existingData);
+        // Keep only finalVideoUrl and timestamp, set everything else to empty string
+        const resetData = {
+          finalVideoUrl: parsed.finalVideoUrl || '',
+          timestamp: parsed.timestamp || '',
+          caption: '',
+          captionsUrl: '',
+          title: '',
+          description: '',
+          createdAt: '',
+          videoCount: '',
+          transcribedAt: '',
+          titleGeneratedAt: '',
+          descriptionGeneratedAt: '',
+          mergedAt: '',
+          lastUpdated: new Date().toISOString(),
+        };
+
+        localStorage.setItem('final-video-data', JSON.stringify(resetData));
+
+        // Dispatch custom event to notify other components
+        window.dispatchEvent(new CustomEvent('localStorageUpdate'));
+
+        // Update local state
+        setVideoData(resetData);
+        setTimestampData('');
+
+        console.log(
+          'Data reset successfully, kept finalVideoUrl and timestamp:',
+          parsed.finalVideoUrl,
+          parsed.timestamp
+        );
+      }
+    } catch (error) {
+      console.error('Error resetting data:', error);
+      alert('Failed to reset data. Please try again.');
+    }
+  };
+
   const handleTranscribeVideo = async () => {
     if (!parsedData?.finalVideoUrl) return;
 
@@ -340,15 +383,7 @@ const FinalVideoTable: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentSentence: `Write a YouTube description for this video. Use this EXACT format (minimum 3 paragraphs and each paragraph should be at least 5 sentences long):
-
-[Introduction paragraph here]
-
-[Main content paragraph here]
-
-[Call to action paragraph with hashtags]
-
-Video transcription: ${transcriptionText}`,
+          currentSentence: `Write a YouTube description for this video. Use this EXACT format (minimum 3 paragraphs and each paragraph should be at least 5 sentences long and add only 3 hashtags at the end) This is the video transcription: ${transcriptionText} `,
           allSentences: [''],
           sceneId: 'description_generation',
           model: modelSelection.selectedModel,
@@ -379,8 +414,8 @@ Video transcription: ${transcriptionText}`,
       ) {
         // AI provided formatting - clean it up but preserve structure
         generatedDescription = generatedDescription
-          .replace(/\n\n\n+/g, '\n\n') // Remove excessive line breaks
-          .replace(/\n/g, '\n\n') // Ensure double line breaks
+          .replace(/\n\n\n+/g, '\n') // Remove excessive line breaks
+          .replace(/\n/g, '\n') // Ensure double line breaks
           .trim();
         console.log('Using AI-provided formatting');
       } else {
@@ -405,15 +440,12 @@ Video transcription: ${transcriptionText}`,
 
           generatedDescription = [intro, main, cta]
             .filter((p) => p.length > 10)
-            .join('\n\n');
+            .join('\n');
         }
       }
 
       console.log('Final formatted description:', generatedDescription);
-      console.log(
-        'Description split test:',
-        generatedDescription.split('\n\n')
-      );
+      console.log('Description split test:', generatedDescription.split('\n'));
 
       // Save the generated description to localStorage
       const existingData = localStorage.getItem('final-video-data');
@@ -597,6 +629,13 @@ Video transcription: ${transcriptionText}`,
                     {generatingDescription
                       ? 'Generating...'
                       : 'Generate Description'}
+                  </button>
+                  <button
+                    onClick={handleResetData}
+                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors'
+                    title='Reset all data except final video URL and timestamps'
+                  >
+                    Reset Data
                   </button>
                 </div>
               </td>
