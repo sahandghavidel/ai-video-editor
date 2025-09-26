@@ -1051,6 +1051,36 @@ export default function OriginalVideosList() {
         },
       });
 
+      // Also save to localStorage with final-video-data key
+      try {
+        const existingData = localStorage.getItem('final-video-data');
+        let dataObject = {};
+
+        if (existingData) {
+          try {
+            dataObject = JSON.parse(existingData);
+          } catch (parseError) {
+            // If parsing fails, start with empty object
+            dataObject = {};
+          }
+        }
+
+        // Update with final video URL
+        const updatedData = {
+          ...dataObject,
+          finalVideoUrl: mergedVideoUrl,
+          mergedAt: new Date().toISOString(),
+        };
+
+        localStorage.setItem('final-video-data', JSON.stringify(updatedData));
+        console.log('Saved final video URL to localStorage:', mergedVideoUrl);
+      } catch (storageError) {
+        console.warn(
+          'Failed to save final video URL to localStorage:',
+          storageError
+        );
+      }
+
       // Verify the state was set
       setTimeout(() => {
         const currentState = useAppStore.getState().mergedVideo;
