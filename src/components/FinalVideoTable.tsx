@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Video, ExternalLink, Check, Mic, Sparkles } from 'lucide-react';
+import { Video, ExternalLink, Check, Mic, Sparkles, Clock } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { playSuccessSound } from '@/utils/soundManager';
 
@@ -7,16 +7,63 @@ const FinalVideoTable: React.FC = () => {
   const [transcribing, setTranscribing] = useState(false);
   const [generatingTitle, setGeneratingTitle] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [videoData, setVideoData] = useState<any>(null);
+  const [timestampData, setTimestampData] = useState<string>('');
+
   const { transcriptionSettings, modelSelection } = useAppStore();
 
   // Load data from localStorage on mount and when it changes
   React.useEffect(() => {
     const loadData = () => {
       const finalVideoData = localStorage.getItem('final-video-data');
+      const timestampData = localStorage.getItem('timestamp');
+
       if (finalVideoData) {
         try {
           const parsed = JSON.parse(finalVideoData);
+          console.log(
+            'Loaded description from localStorage:',
+            parsed.description
+          );
+          console.log(
+            'Description with line breaks visible:',
+            JSON.stringify(parsed.description)
+          );
+          console.log('Description length:', parsed.description?.length);
+
+          // Handle timestamps from final-video-data object
+          if (parsed.timestamp) {
+            if (typeof parsed.timestamp === 'string') {
+              parsed.timestamps = parsed.timestamp
+                .split('\n')
+                .filter((t: string) => t.trim());
+            } else if (Array.isArray(parsed.timestamp)) {
+              parsed.timestamps = parsed.timestamp;
+            }
+          }
+
+          // Merge timestamp data if available
+          if (timestampData) {
+            try {
+              // Try to parse as JSON first (for array format)
+              const timestamps = JSON.parse(timestampData);
+              if (Array.isArray(timestamps)) {
+                parsed.timestamps = timestamps;
+              } else {
+                // If it's a string, split by newlines
+                parsed.timestamps = timestampData
+                  .split('\n')
+                  .filter((t) => t.trim());
+              }
+            } catch (error) {
+              // If JSON parsing fails, treat as newline-separated string
+              parsed.timestamps = timestampData
+                .split('\n')
+                .filter((t: string) => t.trim());
+            }
+          }
+
           setVideoData(parsed);
         } catch (error) {
           console.warn('Failed to parse final video data:', error);
@@ -25,13 +72,25 @@ const FinalVideoTable: React.FC = () => {
       } else {
         setVideoData(null);
       }
+
+      // Set timestamp data for display
+      if (finalVideoData) {
+        try {
+          const parsed = JSON.parse(finalVideoData);
+          setTimestampData(parsed.timestamp || '');
+        } catch (error) {
+          setTimestampData('');
+        }
+      } else {
+        setTimestampData('');
+      }
     };
 
     loadData();
 
     // Listen for storage changes
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'final-video-data') {
+      if (e.key === 'final-video-data' || e.key === 'timestamp') {
         loadData();
       }
     };
@@ -122,6 +181,7 @@ const FinalVideoTable: React.FC = () => {
         caption: 'Transcription completed',
         captionsUrl: captionsUrl,
         transcribedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
       };
 
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
@@ -207,6 +267,7 @@ const FinalVideoTable: React.FC = () => {
         ...dataObject,
         title: generatedTitle,
         titleGeneratedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
       };
 
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
@@ -260,7 +321,15 @@ const FinalVideoTable: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentSentence: `Generate a YouTube video description for this video transcription. Make it engaging and SEO-friendly: ${transcriptionText}`,
+          currentSentence: `Write a YouTube description for this video. Use this EXACT format:
+
+[Introduction paragraph here]
+
+[Main content paragraph here]
+
+[Call to action paragraph with hashtags]
+
+Video transcription: ${transcriptionText}`,
           allSentences: [transcriptionText],
           sceneId: 'description_generation',
           model: modelSelection.selectedModel,
@@ -272,10 +341,60 @@ const FinalVideoTable: React.FC = () => {
       }
 
       const result = await response.json();
-      const generatedDescription =
+      console.log('AI Response:', result);
+
+      let generatedDescription =
         result.improvedSentence ||
         result.description ||
+        result.response ||
+        result.text ||
         'Generated Description';
+
+      console.log('Raw generated description:', generatedDescription);
+      console.log('Formatted description:', generatedDescription);
+
+      // Check if AI already provided proper paragraph formatting
+      if (
+        generatedDescription.includes('\n\n') ||
+        generatedDescription.includes('\n')
+      ) {
+        // AI provided formatting - clean it up but preserve structure
+        generatedDescription = generatedDescription
+          .replace(/\n\n\n+/g, '\n\n') // Remove excessive line breaks
+          .replace(/\n/g, '\n\n') // Ensure double line breaks
+          .trim();
+        console.log('Using AI-provided formatting');
+      } else {
+        // AI didn't provide formatting - apply our own paragraph logic
+        console.log('Applying post-processing formatting');
+        const sentences = generatedDescription
+          .split(/[.!?]+/)
+          .filter((s: string) => s.trim().length > 0);
+
+        if (sentences.length <= 3) {
+          // If few sentences, keep as is but ensure some breaks
+          generatedDescription = sentences.join('. ') + '.';
+        } else {
+          // Break into logical paragraphs
+          const introEnd = Math.min(2, Math.floor(sentences.length * 0.3));
+          const mainEnd = Math.floor(sentences.length * 0.7);
+
+          const intro = sentences.slice(0, introEnd).join('. ').trim() + '.';
+          const main =
+            sentences.slice(introEnd, mainEnd).join('. ').trim() + '.';
+          const cta = sentences.slice(mainEnd).join('. ').trim() + '.';
+
+          generatedDescription = [intro, main, cta]
+            .filter((p) => p.length > 10)
+            .join('\n\n');
+        }
+      }
+
+      console.log('Final formatted description:', generatedDescription);
+      console.log(
+        'Description split test:',
+        generatedDescription.split('\n\n')
+      );
 
       // Save the generated description to localStorage
       const existingData = localStorage.getItem('final-video-data');
@@ -294,10 +413,16 @@ const FinalVideoTable: React.FC = () => {
         ...dataObject,
         description: generatedDescription,
         descriptionGeneratedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
       };
 
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
       console.log('Description saved to localStorage:', generatedDescription);
+      console.log(
+        'Description with line breaks visible:',
+        JSON.stringify(generatedDescription)
+      );
+      console.log('Raw description in updatedData:', updatedData.description);
 
       // Update local state to trigger re-render
       setVideoData(updatedData);
@@ -308,6 +433,90 @@ const FinalVideoTable: React.FC = () => {
       alert('Failed to generate description. Please try again.');
     } finally {
       setGeneratingDescription(false);
+    }
+  };
+
+  const handleGenerateTimestamps = async () => {
+    if (!parsedData?.captionsUrl) {
+      alert('No transcription available. Please transcribe the video first.');
+      return;
+    }
+
+    try {
+      setGeneratingTimestamps(true);
+
+      // Fetch the transcription from the captions URL
+      const transcriptionResponse = await fetch(parsedData.captionsUrl);
+      if (!transcriptionResponse.ok) {
+        throw new Error('Failed to fetch transcription');
+      }
+
+      const transcriptionData = await transcriptionResponse.json();
+
+      // Extract text from word timestamps and group by time segments
+      const segments = [];
+      let currentSegment = { start: 0, end: 0, text: '' };
+      const segmentDuration = 60; // 1 minute segments
+
+      for (const word of transcriptionData) {
+        const wordTime = word.start;
+        const segmentIndex = Math.floor(wordTime / segmentDuration);
+        const segmentStart = segmentIndex * segmentDuration;
+        const segmentEnd = (segmentIndex + 1) * segmentDuration;
+
+        if (wordTime >= segmentStart && wordTime < segmentEnd) {
+          if (currentSegment.text === '') {
+            currentSegment.start = segmentStart;
+            currentSegment.end = segmentEnd;
+          }
+          currentSegment.text += word.word + ' ';
+        } else {
+          if (currentSegment.text.trim()) {
+            segments.push({ ...currentSegment });
+          }
+          currentSegment = {
+            start: segmentStart,
+            end: segmentEnd,
+            text: word.word + ' ',
+          };
+        }
+      }
+
+      if (currentSegment.text.trim()) {
+        segments.push(currentSegment);
+      }
+
+      // Generate timestamps based on content analysis
+      const timestamps = [];
+      const maxTimestamps = 5; // Limit to 5 timestamps
+
+      for (let i = 0; i < Math.min(segments.length, maxTimestamps); i++) {
+        const segment = segments[i];
+        const timeString = new Date(segment.start * 1000)
+          .toISOString()
+          .substr(14, 5);
+
+        // Extract key topic from the segment text
+        const words = segment.text.trim().split(' ');
+        const topicWords = words.slice(0, 3).join(' '); // First few words as topic
+
+        timestamps.push(`${timeString} - ${topicWords}`);
+      }
+
+      // Save timestamps to localStorage
+      localStorage.setItem('timestamp', JSON.stringify(timestamps));
+      console.log('Timestamps saved to localStorage:', timestamps);
+
+      // Update local state to trigger re-render
+      const updatedData = { ...parsedData, timestamps };
+      setVideoData(updatedData);
+
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error generating timestamps:', error);
+      alert('Failed to generate timestamps. Please try again.');
+    } finally {
+      setGeneratingTimestamps(false);
     }
   };
 
@@ -331,13 +540,7 @@ const FinalVideoTable: React.FC = () => {
                 Title
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
-                Video URL
-              </th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
                 Caption
-              </th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
-                Description
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
                 Actions
@@ -354,14 +557,6 @@ const FinalVideoTable: React.FC = () => {
                   {parsedData.mergedAt
                     ? new Date(parsedData.mergedAt).toLocaleDateString()
                     : 'Unknown date'}
-                </div>
-              </td>
-              <td className='px-6 py-4 whitespace-nowrap'>
-                <div
-                  className='text-sm text-gray-900 max-w-xs truncate'
-                  title={parsedData.finalVideoUrl}
-                >
-                  {parsedData.finalVideoUrl}
                 </div>
               </td>
               <td className='px-6 py-4 whitespace-nowrap'>
@@ -390,30 +585,6 @@ const FinalVideoTable: React.FC = () => {
                     `${parsedData.videoCount} videos merged`
                   ) : (
                     'No caption available'
-                  )}
-                </div>
-              </td>
-              <td className='px-6 py-4 whitespace-nowrap'>
-                <div className='text-sm text-gray-500 max-w-xs truncate'>
-                  {parsedData.description ? (
-                    <div className='flex items-center gap-2'>
-                      <span className='text-green-600 font-medium'>
-                        Generated
-                      </span>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(parsedData.description);
-                          // Could add a toast notification here
-                        }}
-                        className='inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors'
-                        title='Copy description'
-                      >
-                        <Check className='w-3 h-3' />
-                        Copy
-                      </button>
-                    </div>
-                  ) : (
-                    'No description generated'
                   )}
                 </div>
               </td>
@@ -489,12 +660,105 @@ const FinalVideoTable: React.FC = () => {
                       ? 'Generating...'
                       : 'Generate Description'}
                   </button>
+                  <button
+                    onClick={handleGenerateTimestamps}
+                    disabled={generatingTimestamps || !parsedData.captionsUrl}
+                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                    title={
+                      parsedData.captionsUrl
+                        ? 'Generate video chapter timestamps from transcription'
+                        : 'Transcription required for timestamp generation'
+                    }
+                  >
+                    <Sparkles
+                      className={`w-3 h-3 ${
+                        generatingTimestamps ? 'animate-pulse' : ''
+                      }`}
+                    />
+                    {generatingTimestamps
+                      ? 'Generating...'
+                      : 'Generate Timestamps'}
+                  </button>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      {/* Video Description and Timestamps Section */}
+      {timestampData && (
+        <div className='mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4'>
+          <div className='flex items-center justify-between mb-3'>
+            <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
+              <Clock className='w-5 h-5 text-teal-500' />
+              Video Timestamps
+            </h3>
+            <button
+              onClick={() => {
+                const finalVideoData = localStorage.getItem('final-video-data');
+                let description = '';
+                if (finalVideoData) {
+                  try {
+                    const parsed = JSON.parse(finalVideoData);
+                    description = parsed.description || '';
+                  } catch (error) {
+                    console.warn('Failed to parse final video data:', error);
+                  }
+                }
+                const fullContent = `${description}\n\ntimestamp:\n${timestampData}`;
+                navigator.clipboard.writeText(fullContent);
+                // Could add a toast notification here
+              }}
+              className='px-3 py-1 text-sm bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors'
+              title='Copy description and timestamps to clipboard'
+            >
+              Copy All
+            </button>
+          </div>
+          <div className='bg-white border border-gray-200 rounded-md p-3'>
+            <div className='space-y-4'>
+              {/* Description Section */}
+              <div>
+                <h4 className='text-sm font-medium text-gray-900 mb-2'>
+                  Description
+                </h4>
+                <div className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                  {(() => {
+                    const finalVideoData =
+                      localStorage.getItem('final-video-data');
+                    if (finalVideoData) {
+                      try {
+                        const parsed = JSON.parse(finalVideoData);
+                        return (
+                          parsed.description || 'No description generated yet'
+                        );
+                      } catch (error) {
+                        console.warn(
+                          'Failed to parse final video data:',
+                          error
+                        );
+                        return 'No description generated yet';
+                      }
+                    }
+                    return 'No description generated yet';
+                  })()}
+                </div>
+              </div>
+
+              {/* Timestamp Section */}
+              <div>
+                <h4 className='text-sm font-medium text-gray-900 mb-2'>
+                  Timestamps
+                </h4>
+                <pre className='text-sm text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-md'>
+                  {timestampData}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
