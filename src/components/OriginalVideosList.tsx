@@ -1192,13 +1192,27 @@ export default function OriginalVideosList() {
       // Set timestamp data
       setTimestampData(timestampText);
 
-      // Save to localStorage as an object
-      const timestampObject = {
+      // Save to localStorage - preserve existing data
+      const existingData = localStorage.getItem('final-video-data');
+      let dataObject: any = {};
+
+      if (existingData) {
+        try {
+          dataObject = JSON.parse(existingData);
+        } catch (parseError) {
+          dataObject = {};
+        }
+      }
+
+      // Update with timestamp data
+      const updatedData = {
+        ...dataObject,
         timestamp: timestampText,
         createdAt: new Date().toISOString(),
         videoCount: videosWithTimestamps.length,
       };
-      localStorage.setItem('final-video-data', JSON.stringify(timestampObject));
+
+      localStorage.setItem('final-video-data', JSON.stringify(updatedData));
 
       console.log('Generated timestamps:', timestampText);
 

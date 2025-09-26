@@ -164,7 +164,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Step 4: Save transcription result to localStorage with captions URL
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject = {};
+      let dataObject: any = {};
 
       if (existingData) {
         try {
@@ -252,7 +252,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Save the generated title to localStorage
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject = {};
+      let dataObject: any = {};
 
       if (existingData) {
         try {
@@ -398,7 +398,7 @@ Video transcription: ${transcriptionText}`,
 
       // Save the generated description to localStorage
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject = {};
+      let dataObject: any = {};
 
       if (existingData) {
         try {
