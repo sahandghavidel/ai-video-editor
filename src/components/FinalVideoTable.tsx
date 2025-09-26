@@ -1,22 +1,45 @@
 import React, { useState } from 'react';
-import { Video, ExternalLink, Check, Mic } from 'lucide-react';
+import { Video, ExternalLink, Check, Mic, Sparkles } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { playSuccessSound } from '@/utils/soundManager';
 
 const FinalVideoTable: React.FC = () => {
   const [transcribing, setTranscribing] = useState(false);
-  const { transcriptionSettings } = useAppStore();
+  const [generatingTitle, setGeneratingTitle] = useState(false);
+  const [videoData, setVideoData] = useState<any>(null);
+  const { transcriptionSettings, modelSelection } = useAppStore();
 
-  const finalVideoData = localStorage.getItem('final-video-data');
-  let parsedData = null;
+  // Load data from localStorage on mount and when it changes
+  React.useEffect(() => {
+    const loadData = () => {
+      const finalVideoData = localStorage.getItem('final-video-data');
+      if (finalVideoData) {
+        try {
+          const parsed = JSON.parse(finalVideoData);
+          setVideoData(parsed);
+        } catch (error) {
+          console.warn('Failed to parse final video data:', error);
+          setVideoData(null);
+        }
+      } else {
+        setVideoData(null);
+      }
+    };
 
-  if (finalVideoData) {
-    try {
-      parsedData = JSON.parse(finalVideoData);
-    } catch (error) {
-      console.warn('Failed to parse final video data:', error);
-    }
-  }
+    loadData();
+
+    // Listen for storage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'final-video-data') {
+        loadData();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const parsedData = videoData;
 
   const handleTranscribeVideo = async () => {
     if (!parsedData?.finalVideoUrl) return;
@@ -103,15 +126,96 @@ const FinalVideoTable: React.FC = () => {
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
       console.log('Transcription saved to localStorage:', result);
 
-      // Force re-render by updating state (this will cause the component to re-render with new data)
-      window.location.reload();
+      // Update local state to trigger re-render
+      setVideoData(updatedData);
+
+      playSuccessSound();
     } catch (error) {
       console.error('Error transcribing video:', error);
       alert('Failed to transcribe video. Please try again.');
     } finally {
       setTranscribing(false);
-      //   add a sound notification here if desired
+    }
+  };
+
+  const handleGenerateTitle = async () => {
+    if (!parsedData?.captionsUrl) {
+      alert('No transcription available. Please transcribe the video first.');
+      return;
+    }
+
+    try {
+      setGeneratingTitle(true);
+
+      // Fetch the transcription from the captions URL
+      const transcriptionResponse = await fetch(parsedData.captionsUrl);
+      if (!transcriptionResponse.ok) {
+        throw new Error('Failed to fetch transcription');
+      }
+
+      const transcriptionData = await transcriptionResponse.json();
+
+      // Extract text from word timestamps
+      const transcriptionText = transcriptionData
+        .map((word: any) => word.word)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      console.log('Generating title for transcription:', transcriptionText.substring(0, 100) + '...');
+
+      // Call the sentence improvement API with title generation prompt
+      const response = await fetch('/api/improve-sentence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentSentence: `Generate a YouTube title for this video transcription: ${transcriptionText}`,
+          allSentences: [transcriptionText],
+          sceneId: 'title_generation',
+          model: modelSelection.selectedModel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Title generation failed');
+      }
+
+      const result = await response.json();
+      const generatedTitle = result.improvedSentence || result.title || 'Generated Title';
+
+      // Save the generated title to localStorage
+      const existingData = localStorage.getItem('final-video-data');
+      let dataObject = {};
+
+      if (existingData) {
+        try {
+          dataObject = JSON.parse(existingData);
+        } catch (parseError) {
+          dataObject = {};
+        }
+      }
+
+      // Update with generated title
+      const updatedData = {
+        ...dataObject,
+        title: generatedTitle,
+        titleGeneratedAt: new Date().toISOString(),
+      };
+
+      localStorage.setItem('final-video-data', JSON.stringify(updatedData));
+      console.log('Title saved to localStorage:', generatedTitle);
+
+      // Update local state to trigger re-render
+      setVideoData(updatedData);
+
       playSuccessSound();
+    } catch (error) {
+      console.error('Error generating title:', error);
+      alert('Failed to generate title. Please try again.');
+    } finally {
+      setGeneratingTitle(false);
     }
   };
 
@@ -149,7 +253,7 @@ const FinalVideoTable: React.FC = () => {
             <tr className='hover:bg-gray-50'>
               <td className='px-6 py-4 whitespace-nowrap'>
                 <div className='text-sm font-medium text-gray-900'>
-                  Final Merged Video
+                  {parsedData.title || 'Final Merged Video'}
                 </div>
                 <div className='text-sm text-gray-500'>
                   {parsedData.mergedAt
@@ -229,6 +333,19 @@ const FinalVideoTable: React.FC = () => {
                       }`}
                     />
                     {transcribing ? 'Transcribing...' : 'Transcribe'}
+                  </button>
+                  <button
+                    onClick={handleGenerateTitle}
+                    disabled={generatingTitle || !parsedData.captionsUrl}
+                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                    title={parsedData.captionsUrl ? 'Generate YouTube title from transcription' : 'Transcription required for title generation'}
+                  >
+                    <Sparkles
+                      className={`w-3 h-3 ${
+                        generatingTitle ? 'animate-pulse' : ''
+                      }`}
+                    />
+                    {generatingTitle ? 'Generating...' : 'Generate Title'}
                   </button>
                 </div>
               </td>
