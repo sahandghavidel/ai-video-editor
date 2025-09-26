@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
+import FinalVideoTable from './FinalVideoTable';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 
 export default function OriginalVideosList() {
@@ -2022,6 +2023,9 @@ export default function OriginalVideosList() {
           </div>
         )}
       </div>
+
+      {/* Final Video Table */}
+      <FinalVideoTable />
 
       {/* Timestamp Display */}
       {timestampData && (
