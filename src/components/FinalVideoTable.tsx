@@ -236,7 +236,7 @@ const FinalVideoTable: React.FC = () => {
         },
         body: JSON.stringify({
           currentSentence: `Generate a YouTube title for this video transcription: ${transcriptionText}`,
-          allSentences: [transcriptionText],
+          allSentences: [''],
           sceneId: 'title_generation',
           model: modelSelection.selectedModel,
         }),
@@ -321,7 +321,7 @@ const FinalVideoTable: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentSentence: `Write a YouTube description for this video. Use this EXACT format:
+          currentSentence: `Write a YouTube description for this video. Use this EXACT format (minimum 3 paragraphs and each paragraph should be at least 5 sentences long):
 
 [Introduction paragraph here]
 
@@ -330,7 +330,7 @@ const FinalVideoTable: React.FC = () => {
 [Call to action paragraph with hashtags]
 
 Video transcription: ${transcriptionText}`,
-          allSentences: [transcriptionText],
+          allSentences: [''],
           sceneId: 'description_generation',
           model: modelSelection.selectedModel,
         }),
@@ -433,90 +433,6 @@ Video transcription: ${transcriptionText}`,
       alert('Failed to generate description. Please try again.');
     } finally {
       setGeneratingDescription(false);
-    }
-  };
-
-  const handleGenerateTimestamps = async () => {
-    if (!parsedData?.captionsUrl) {
-      alert('No transcription available. Please transcribe the video first.');
-      return;
-    }
-
-    try {
-      setGeneratingTimestamps(true);
-
-      // Fetch the transcription from the captions URL
-      const transcriptionResponse = await fetch(parsedData.captionsUrl);
-      if (!transcriptionResponse.ok) {
-        throw new Error('Failed to fetch transcription');
-      }
-
-      const transcriptionData = await transcriptionResponse.json();
-
-      // Extract text from word timestamps and group by time segments
-      const segments = [];
-      let currentSegment = { start: 0, end: 0, text: '' };
-      const segmentDuration = 60; // 1 minute segments
-
-      for (const word of transcriptionData) {
-        const wordTime = word.start;
-        const segmentIndex = Math.floor(wordTime / segmentDuration);
-        const segmentStart = segmentIndex * segmentDuration;
-        const segmentEnd = (segmentIndex + 1) * segmentDuration;
-
-        if (wordTime >= segmentStart && wordTime < segmentEnd) {
-          if (currentSegment.text === '') {
-            currentSegment.start = segmentStart;
-            currentSegment.end = segmentEnd;
-          }
-          currentSegment.text += word.word + ' ';
-        } else {
-          if (currentSegment.text.trim()) {
-            segments.push({ ...currentSegment });
-          }
-          currentSegment = {
-            start: segmentStart,
-            end: segmentEnd,
-            text: word.word + ' ',
-          };
-        }
-      }
-
-      if (currentSegment.text.trim()) {
-        segments.push(currentSegment);
-      }
-
-      // Generate timestamps based on content analysis
-      const timestamps = [];
-      const maxTimestamps = 5; // Limit to 5 timestamps
-
-      for (let i = 0; i < Math.min(segments.length, maxTimestamps); i++) {
-        const segment = segments[i];
-        const timeString = new Date(segment.start * 1000)
-          .toISOString()
-          .substr(14, 5);
-
-        // Extract key topic from the segment text
-        const words = segment.text.trim().split(' ');
-        const topicWords = words.slice(0, 3).join(' '); // First few words as topic
-
-        timestamps.push(`${timeString} - ${topicWords}`);
-      }
-
-      // Save timestamps to localStorage
-      localStorage.setItem('timestamp', JSON.stringify(timestamps));
-      console.log('Timestamps saved to localStorage:', timestamps);
-
-      // Update local state to trigger re-render
-      const updatedData = { ...parsedData, timestamps };
-      setVideoData(updatedData);
-
-      playSuccessSound();
-    } catch (error) {
-      console.error('Error generating timestamps:', error);
-      alert('Failed to generate timestamps. Please try again.');
-    } finally {
-      setGeneratingTimestamps(false);
     }
   };
 
@@ -660,25 +576,6 @@ Video transcription: ${transcriptionText}`,
                       ? 'Generating...'
                       : 'Generate Description'}
                   </button>
-                  <button
-                    onClick={handleGenerateTimestamps}
-                    disabled={generatingTimestamps || !parsedData.captionsUrl}
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
-                    title={
-                      parsedData.captionsUrl
-                        ? 'Generate video chapter timestamps from transcription'
-                        : 'Transcription required for timestamp generation'
-                    }
-                  >
-                    <Sparkles
-                      className={`w-3 h-3 ${
-                        generatingTimestamps ? 'animate-pulse' : ''
-                      }`}
-                    />
-                    {generatingTimestamps
-                      ? 'Generating...'
-                      : 'Generate Timestamps'}
-                  </button>
                 </div>
               </td>
             </tr>
@@ -692,12 +589,13 @@ Video transcription: ${transcriptionText}`,
           <div className='flex items-center justify-between mb-3'>
             <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
               <Clock className='w-5 h-5 text-teal-500' />
-              Video Timestamps
+              Video Title, Description & Timestamps
             </h3>
             <button
               onClick={() => {
                 const finalVideoData = localStorage.getItem('final-video-data');
                 let description = '';
+                let title = parsedData.title || 'Final Merged Video';
                 if (finalVideoData) {
                   try {
                     const parsed = JSON.parse(finalVideoData);
@@ -706,7 +604,7 @@ Video transcription: ${transcriptionText}`,
                     console.warn('Failed to parse final video data:', error);
                   }
                 }
-                const fullContent = `${description}\n\ntimestamp:\n${timestampData}`;
+                const fullContent = `${title}\n\n${description}\n\ntimestamp:\n${timestampData}`;
                 navigator.clipboard.writeText(fullContent);
                 // Could add a toast notification here
               }}
