@@ -1225,17 +1225,17 @@ export default function OriginalVideosList() {
           </p>
         </div>
 
-        <div className='flex items-center gap-3'>
+        <div className='flex flex-col sm:flex-row gap-3 w-full sm:w-auto'>
           {/* Upload Button */}
-          <div className='relative'>
+          <div className='relative flex-1 sm:flex-none'>
             <button
               onClick={openFileDialog}
               disabled={uploading}
-              className={`inline-flex items-center gap-2 px-4 py-2 ${
+              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 ${
                 uploading
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-green-500 hover:bg-green-600'
-              } text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed`}
+              } text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]`}
             >
               {uploading ? (
                 <>
@@ -1259,110 +1259,115 @@ export default function OriginalVideosList() {
             />
           </div>
 
-          {/* Refresh Button */}
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || uploading || reordering}
-            className='inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${
-                refreshing || reordering ? 'animate-spin' : ''
-              }`}
-            />
-            <span>
-              {reordering
-                ? 'Reordering...'
-                : refreshing
-                ? 'Refreshing...'
-                : 'Refresh'}
-            </span>
-          </button>
+          {/* Action Buttons - Responsive Layout */}
+          <div className='flex flex-col sm:flex-row gap-3 w-full sm:w-auto'>
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing || uploading || reordering}
+              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${
+                  refreshing || reordering ? 'animate-spin' : ''
+                }`}
+              />
+              <span>
+                {reordering
+                  ? 'Reordering...'
+                  : refreshing
+                  ? 'Refreshing...'
+                  : 'Refresh'}
+              </span>
+            </button>
 
-          {/* Transcribe All Button */}
-          <button
-            onClick={handleTranscribeAll}
-            disabled={
-              transcribing !== null ||
-              transcribingAll ||
-              uploading ||
-              reordering
-            }
-            className='inline-flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-            title={
-              transcribing !== null || transcribingAll
-                ? 'Transcription in progress...'
-                : 'Transcribe all videos without captions'
-            }
-          >
-            <Subtitles
-              className={`w-4 h-4 ${transcribingAll ? 'animate-pulse' : ''}`}
-            />
-            <span>
-              {transcribingAll
-                ? transcribing !== null
-                  ? `Transcribing #${transcribing}...`
-                  : 'Processing...'
-                : 'Transcribe All'}
-            </span>
-          </button>
+            {/* Transcribe All Button */}
+            <button
+              onClick={handleTranscribeAll}
+              disabled={
+                transcribing !== null ||
+                transcribingAll ||
+                uploading ||
+                reordering
+              }
+              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              title={
+                transcribing !== null || transcribingAll
+                  ? 'Transcription in progress...'
+                  : 'Transcribe all videos without captions'
+              }
+            >
+              <Subtitles
+                className={`w-4 h-4 ${transcribingAll ? 'animate-pulse' : ''}`}
+              />
+              <span>
+                {transcribingAll
+                  ? transcribing !== null
+                    ? `Transcribing #${transcribing}...`
+                    : 'Processing...'
+                  : 'Transcribe All'}
+              </span>
+            </button>
 
-          {/* Generate All Scenes Button */}
-          <button
-            onClick={handleGenerateScenesAll}
-            disabled={
-              generatingScenes !== null ||
-              generatingScenesAll ||
-              uploading ||
-              reordering
-            }
-            className='inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-            title={
-              generatingScenes !== null || generatingScenesAll
-                ? 'Scene generation in progress...'
-                : 'Generate scenes for all videos with captions'
-            }
-          >
-            <Grid3x3
-              className={`w-4 h-4 ${
-                generatingScenesAll ? 'animate-pulse' : ''
-              }`}
-            />
-            <span>
-              {generatingScenesAll
-                ? generatingScenes !== null
-                  ? `Generating #${generatingScenes}...`
-                  : 'Processing...'
-                : 'Generate All Scenes'}
-            </span>
-          </button>
+            {/* Generate All Scenes Button */}
+            <button
+              onClick={handleGenerateScenesAll}
+              disabled={
+                generatingScenes !== null ||
+                generatingScenesAll ||
+                uploading ||
+                reordering
+              }
+              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              title={
+                generatingScenes !== null || generatingScenesAll
+                  ? 'Scene generation in progress...'
+                  : 'Generate scenes for all videos with captions'
+              }
+            >
+              <Grid3x3
+                className={`w-4 h-4 ${
+                  generatingScenesAll ? 'animate-pulse' : ''
+                }`}
+              />
+              <span>
+                {generatingScenesAll
+                  ? generatingScenes !== null
+                    ? `Generating #${generatingScenes}...`
+                    : 'Processing...'
+                  : 'Generate All Scenes'}
+              </span>
+            </button>
 
-          {/* Merge All Final Videos Button */}
-          <button
-            onClick={handleMergeAllFinalVideos}
-            disabled={
-              mergingFinalVideos ||
-              uploading ||
-              reordering ||
-              transcribing !== null ||
-              transcribingAll ||
-              generatingScenes !== null ||
-              generatingScenesAll
-            }
-            className='inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-            title={
-              mergingFinalVideos
-                ? 'Merging final videos...'
-                : 'Merge all final merged videos in order'
-            }
-          >
-            <Video
-              className={`w-4 h-4 ${mergingFinalVideos ? 'animate-pulse' : ''}`}
-            />
-            <span>
-              {mergingFinalVideos ? 'Merging...' : 'Merge All Final Videos'}
-            </span>
-          </button>
+            {/* Merge All Final Videos Button */}
+            <button
+              onClick={handleMergeAllFinalVideos}
+              disabled={
+                mergingFinalVideos ||
+                uploading ||
+                reordering ||
+                transcribing !== null ||
+                transcribingAll ||
+                generatingScenes !== null ||
+                generatingScenesAll
+              }
+              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              title={
+                mergingFinalVideos
+                  ? 'Merging final videos...'
+                  : 'Merge all final merged videos in order'
+              }
+            >
+              <Video
+                className={`w-4 h-4 ${
+                  mergingFinalVideos ? 'animate-pulse' : ''
+                }`}
+              />
+              <span>
+                {mergingFinalVideos ? 'Merging...' : 'Merge All Final Videos'}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
