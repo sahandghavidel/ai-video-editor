@@ -105,7 +105,7 @@ export async function syncVideoWithAudio(
         '-shortest' // End when shortest stream ends
       );
 
-      // Add video encoding options (same as speed-up function for consistency)
+      // Add video encoding options (same as trimming for consistency)
       if (isHardware) {
         ffmpegCommand.push(
           '-c:v',
@@ -323,7 +323,7 @@ export async function syncVideoWithAudioAdvanced(
           '[a]'
         );
 
-        // Add video encoding options (same as speed-up function for consistency)
+        // Add video encoding options (same as trimming for consistency)
         if (isHardware) {
           ffmpegCommand.push(
             '-c:v',
