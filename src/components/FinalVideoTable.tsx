@@ -95,8 +95,21 @@ const FinalVideoTable: React.FC = () => {
       }
     };
 
+    // Listen for custom storage events (for same-tab updates)
+    const handleCustomStorageChange = () => {
+      loadData();
+    };
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('localStorageUpdate', handleCustomStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener(
+        'localStorageUpdate',
+        handleCustomStorageChange
+      );
+    };
   }, []);
 
   const parsedData = videoData;
@@ -187,6 +200,9 @@ const FinalVideoTable: React.FC = () => {
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
       console.log('Transcription saved to localStorage:', result);
 
+      // Dispatch custom event to notify other components of localStorage update
+      window.dispatchEvent(new CustomEvent('localStorageUpdate'));
+
       // Update local state to trigger re-render
       setVideoData(updatedData);
 
@@ -272,6 +288,9 @@ const FinalVideoTable: React.FC = () => {
 
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
       console.log('Title saved to localStorage:', generatedTitle);
+
+      // Dispatch custom event to notify other components of localStorage update
+      window.dispatchEvent(new CustomEvent('localStorageUpdate'));
 
       // Update local state to trigger re-render
       setVideoData(updatedData);
@@ -423,6 +442,9 @@ Video transcription: ${transcriptionText}`,
         JSON.stringify(generatedDescription)
       );
       console.log('Raw description in updatedData:', updatedData.description);
+
+      // Dispatch custom event to notify other components of localStorage update
+      window.dispatchEvent(new CustomEvent('localStorageUpdate'));
 
       // Update local state to trigger re-render
       setVideoData(updatedData);

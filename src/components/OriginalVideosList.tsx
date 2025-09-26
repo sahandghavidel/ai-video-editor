@@ -1074,6 +1074,10 @@ export default function OriginalVideosList() {
         };
 
         localStorage.setItem('final-video-data', JSON.stringify(updatedData));
+
+        // Dispatch custom event to notify other components of localStorage update
+        window.dispatchEvent(new CustomEvent('localStorageUpdate'));
+
         console.log('Saved final video URL to localStorage:', mergedVideoUrl);
       } catch (storageError) {
         console.warn(
@@ -1213,6 +1217,9 @@ export default function OriginalVideosList() {
       };
 
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
+
+      // Dispatch custom event to notify other components of localStorage update
+      window.dispatchEvent(new CustomEvent('localStorageUpdate'));
 
       console.log('Generated timestamps:', timestampText);
 
