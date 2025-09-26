@@ -4,6 +4,8 @@ import {
   concatenateVideosFast,
 } from '@/utils/ffmpeg-merge';
 
+type VideoUrlInput = string | { video_url: string };
+
 export async function POST(request: NextRequest) {
   try {
     const { video_urls, id, fast_mode = true } = await request.json();
@@ -16,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Extract URLs from the video_urls array
-    const videoUrls = video_urls.map((videoObj: any) => {
+    const videoUrls = video_urls.map((videoObj: VideoUrlInput) => {
       if (typeof videoObj === 'string') {
         return videoObj;
       }

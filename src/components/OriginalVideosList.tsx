@@ -950,8 +950,15 @@ export default function OriginalVideosList() {
       const videosWithFinalVideos = originalVideos.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
         const order = video.field_6902; // Order field
+        console.log(
+          `Video ${video.id}: field_6858=${video.field_6858}, extracted URL=${finalVideoUrl}, order=${order}`
+        );
         return finalVideoUrl && order !== null && order !== undefined;
       });
+
+      console.log(
+        `Found ${videosWithFinalVideos.length} videos with final merged videos`
+      );
 
       if (videosWithFinalVideos.length === 0) {
         alert('No videos found with final merged videos to merge');
@@ -962,13 +969,27 @@ export default function OriginalVideosList() {
       videosWithFinalVideos.sort((a, b) => {
         const orderA = parseInt(String(a.field_6902)) || 0;
         const orderB = parseInt(String(b.field_6902)) || 0;
+        console.log(
+          `Sorting: Video ${a.id} order=${orderA}, Video ${b.id} order=${orderB}`
+        );
         return orderA - orderB;
       });
+
+      console.log(
+        'Sorted videos:',
+        videosWithFinalVideos.map((v) => ({
+          id: v.id,
+          order: v.field_6902,
+          url: extractUrl(v.field_6858),
+        }))
+      );
 
       // Extract video URLs in order
       const videoUrls = videosWithFinalVideos.map((video) =>
         extractUrl(video.field_6858)
       );
+
+      console.log('Final video URLs to merge:', videoUrls);
 
       console.log(
         `Merging ${videoUrls.length} final videos in order:`,
@@ -995,11 +1016,19 @@ export default function OriginalVideosList() {
       const result = await response.json();
       console.log('Final videos merged successfully:', result);
 
-      // Save the merged video URL to global state and local storage
+      // Save the merged video URL to global state and local storage (without saving to Baserow)
       const mergedVideoUrl = result.videoUrl || result.url || result.video_url;
       const fileName = `final-merged-videos-${Date.now()}.mp4`;
       console.log('Setting merged video:', mergedVideoUrl, fileName);
-      setMergedVideo(mergedVideoUrl, fileName);
+
+      // Set merged video directly in store without triggering Baserow save
+      useAppStore.setState({
+        mergedVideo: {
+          url: mergedVideoUrl,
+          createdAt: new Date(),
+          fileName: fileName,
+        },
+      });
 
       // Verify the state was set
       setTimeout(() => {

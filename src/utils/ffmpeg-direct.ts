@@ -1,9 +1,63 @@
+// Custom streaming upload for large files
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
-import { readFile, access, unlink } from 'fs/promises';
+import { readFile, access, unlink, stat } from 'fs/promises';
+import { createReadStream } from 'fs';
+import { pipeline } from 'stream/promises';
+import http from 'http';
+import https from 'https';
+import type { IncomingMessage } from 'http';
 
 const execAsync = promisify(exec);
+
+// Custom streaming upload for large files
+function uploadLargeFileToMinio(
+  filePath: string,
+  uploadUrl: string,
+  contentType: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fileStream = createReadStream(filePath);
+    const url = new URL(uploadUrl);
+
+    const options = {
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname + url.search,
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType,
+      },
+    };
+
+    const req = http.request(options, (res: IncomingMessage) => {
+      if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+        resolve();
+      } else {
+        let errorData = '';
+        res.on('data', (chunk: Buffer) => {
+          errorData += chunk.toString();
+        });
+        res.on('end', () => {
+          reject(new Error(`Upload failed: ${res.statusCode} ${errorData}`));
+        });
+      }
+    });
+
+    req.on('error', (error: Error) => {
+      reject(error);
+    });
+
+    // Pipe the file stream to the request
+    fileStream.pipe(req);
+
+    fileStream.on('error', (error: Error) => {
+      req.destroy();
+      reject(error);
+    });
+  });
+}
 
 export interface TrimOptions {
   inputUrl: string;
@@ -340,8 +394,9 @@ export async function uploadToMinio(
   contentType: string = 'video/mp4'
 ): Promise<string> {
   try {
-    // Read the file as Buffer (which works with fetch)
-    const fileBuffer = await readFile(filePath);
+    // Check file size first
+    const stats = await stat(filePath);
+    const fileSize = stats.size;
 
     // Generate filename if not provided
     const finalFilename =
@@ -352,22 +407,39 @@ export async function uploadToMinio(
     const bucket = 'nca-toolkit';
     const uploadUrl = `http://host.docker.internal:9000/${bucket}/${finalFilename}`;
 
-    // Upload to MinIO using direct HTTP PUT (convert Buffer to Uint8Array)
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': contentType,
-      },
-      body: new Uint8Array(fileBuffer),
-    });
+    // For large files (> 2GB), use streaming upload
+    if (fileSize > 2 * 1024 * 1024 * 1024) {
+      // 2GB limit
+      console.log(
+        `Large file detected (${(fileSize / (1024 * 1024 * 1024)).toFixed(
+          2
+        )}GB), using streaming upload`
+      );
 
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('MinIO upload error:', errorText);
-      throw new Error(`MinIO upload error: ${uploadResponse.status}`);
+      await uploadLargeFileToMinio(filePath, uploadUrl, contentType);
+
+      return uploadUrl;
+    } else {
+      // For smaller files, use the original buffer method
+      const fileBuffer = await readFile(filePath);
+
+      // Upload to MinIO using direct HTTP PUT
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': contentType,
+        },
+        body: new Uint8Array(fileBuffer),
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('MinIO upload error:', errorText);
+        throw new Error(`MinIO upload error: ${uploadResponse.status}`);
+      }
+
+      return uploadUrl;
     }
-
-    return uploadUrl;
   } catch (error) {
     console.error('Error uploading to MinIO:', error);
     throw new Error(
