@@ -246,9 +246,9 @@ export default function OriginalVideosList() {
       return;
     }
 
-    const maxSize = 1024 * 1024 * 1024; // 1GB
+    const maxSize = 10 * 1024 * 1024 * 1024; // 10GB
     if (file.size > maxSize) {
-      setError('File size must be less than 1GB');
+      setError('File size must be less than 10GB');
       return;
     }
 
