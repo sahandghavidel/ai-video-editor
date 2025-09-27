@@ -63,10 +63,10 @@ export default function ModelSelection() {
             {/* Search Input - Compact */}
             <div className='space-y-1'>
               <div className='relative'>
-                <Search className='absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5' />
+             
                 <input
                   type='text'
-                  className='w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors'
+                  className='w-full pl-8 p-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors'
                   placeholder='Search models...'
                   value={modelSelection.modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}

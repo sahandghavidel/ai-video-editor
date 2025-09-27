@@ -131,7 +131,7 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
         </div>
 
         {/* Seed */}
-        <div className='space-y-2'>
+        <div className='flex gap-1 items-center justify-between'>
           <label className='text-xs font-medium text-gray-700'>Seed</label>
           <input
             type='number'
@@ -146,10 +146,8 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
         </div>
 
         {/* Reference Audio Filename */}
-        <div className='space-y-2'>
-          <label className='text-xs font-medium text-gray-700'>
-            Reference Audio
-          </label>
+        <div className='flex gap-1 items-center justify-between'>
+          <label className='text-xs font-medium text-gray-700'>Reference</label>
           <input
             type='text'
             value={ttsSettings.reference_audio_filename}

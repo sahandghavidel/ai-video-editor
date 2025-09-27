@@ -225,7 +225,7 @@ export default function Home() {
                 <div className='flex-1 min-w-80'>
                   <VideoSpeedSettings />
                 </div>
-                <div className='w-full'>
+                <div className='flex-1 min-w-80'>
                   <AutoGenerateSettings />
                 </div>
               </div>
