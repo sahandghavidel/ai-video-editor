@@ -83,8 +83,8 @@ export default function VideoSpeedSettings({
         </button>
       </div>
 
-      {/* Settings Grid - Compact */}
-      <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+      {/* Settings - Vertical Stack */}
+      <div className='flex flex-col space-y-3'>
         {/* Speed Multiplier */}
         <div className='space-y-2'>
           <label className='text-xs font-medium text-gray-700 flex items-center'>
@@ -146,8 +146,8 @@ export default function VideoSpeedSettings({
           </p>
         </div>
 
-        {/* Current Configuration Summary - Compact */}
-        <div className='space-y-2 sm:col-span-2'>
+        {/* Current Configuration Summary */}
+        <div className='space-y-2'>
           <label className='text-xs font-medium text-gray-700'>
             Configuration
           </label>

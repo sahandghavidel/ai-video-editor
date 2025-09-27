@@ -47,8 +47,8 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
         </button>
       </div>
 
-      {/* Settings Grid - Compact */}
-      <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+      {/* Settings - Vertical Stack */}
+      <div className='flex flex-col space-y-3'>
         {/* Temperature */}
         <div className='space-y-2'>
           <div className='flex items-center justify-between'>
@@ -145,8 +145,8 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
           />
         </div>
 
-        {/* Reference Audio Filename - Full Width */}
-        <div className='space-y-2 sm:col-span-2'>
+        {/* Reference Audio Filename */}
+        <div className='space-y-2'>
           <label className='text-xs font-medium text-gray-700'>
             Reference Audio
           </label>

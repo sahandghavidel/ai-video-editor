@@ -212,12 +212,20 @@ export default function Home() {
 
             {/* Global Settings - Only show when data is loaded */}
             {!initialLoading && data.length > 0 && (
-              <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'>
-                <ModelSelection />
-                <TranscriptionModelSelection />
-                <TTSSettings />
-                <VideoSpeedSettings />
-                <div className='md:col-span-2 lg:col-span-4'>
+              <div className='flex flex-wrap gap-4 mb-8'>
+                <div className='flex-1 min-w-80'>
+                  <ModelSelection />
+                </div>
+                <div className='flex-1 min-w-80'>
+                  <TranscriptionModelSelection />
+                </div>
+                <div className='flex-1 min-w-80'>
+                  <TTSSettings />
+                </div>
+                <div className='flex-1 min-w-80'>
+                  <VideoSpeedSettings />
+                </div>
+                <div className='w-full'>
                   <AutoGenerateSettings />
                 </div>
               </div>
