@@ -1,7 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { Mic, Settings } from 'lucide-react';
+import { Mic } from 'lucide-react';
 
 export default function TranscriptionModelSelection() {
   const { transcriptionSettings, updateTranscriptionSettings } = useAppStore();
@@ -9,30 +9,23 @@ export default function TranscriptionModelSelection() {
   const transcriptionModels = [
     {
       id: 'parakeet',
-      name: 'Parakeet (High Quality)',
-      description:
-        'Advanced transcription model with excellent accuracy but higher resource usage',
+      name: 'Parakeet',
+      description: '',
       recommended: false,
     },
     {
       id: 'small',
-      name: 'Quality with Punctuation',
-      description:
-        'Whisper Small model with excellent punctuation and good accuracy, moderate speed',
+      name: 'Small',
+      description: '',
       recommended: true,
     },
     {
       id: 'tiny',
-      name: 'Tiny Model (Fast & Light)',
-      description:
-        "Lightweight transcription model that's fastest but has poor punctuation",
+      name: 'Tiny',
+      description: '',
       recommended: false,
     },
   ];
-
-  const selectedModel = transcriptionModels.find(
-    (model) => model.id === transcriptionSettings.selectedModel
-  );
 
   return (
     <div className='p-3 rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200'>
@@ -45,11 +38,6 @@ export default function TranscriptionModelSelection() {
             <span className='px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded-full'>
               Speech-to-Text
             </span>
-            {selectedModel && (
-              <span className='px-1.5 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full'>
-                Active
-              </span>
-            )}
           </div>
         </div>
       </div>
@@ -79,11 +67,10 @@ export default function TranscriptionModelSelection() {
                       </h4>
                       {model.recommended && (
                         <span className='px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full'>
-                          Recommended
+                          Rec
                         </span>
                       )}
                     </div>
-                    <p className='text-xs text-gray-600'>{model.description}</p>
                   </div>
                   <div className='ml-2'>
                     {transcriptionSettings.selectedModel === model.id ? (
@@ -97,29 +84,6 @@ export default function TranscriptionModelSelection() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* Selected Model Display - Compact */}
-        {selectedModel && (
-          <div className='p-2 bg-green-50 border border-green-200 rounded-lg'>
-            <p className='text-xs font-medium text-green-800 mb-1'>Selected</p>
-            <p className='text-green-700 font-medium text-xs'>
-              {selectedModel.name}
-            </p>
-            <p className='text-green-600 text-xs mt-0.5'>
-              {selectedModel.description}
-            </p>
-          </div>
-        )}
-
-        {/* Info - Compact */}
-        <div className='p-2 bg-blue-50 border border-blue-200 rounded-lg'>
-          <div className='flex items-start space-x-2'>
-            <Settings className='w-3.5 h-3.5 text-blue-600 mt-0.5 flex-shrink-0' />
-            <p className='text-xs text-blue-700'>
-              Settings are auto-saved and apply to all transcription operations.
-            </p>
           </div>
         </div>
       </div>
