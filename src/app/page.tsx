@@ -212,7 +212,7 @@ export default function Home() {
 
             {/* Global Settings - Only show when data is loaded */}
             {!initialLoading && data.length > 0 && (
-              <div className='flex flex-wrap gap-4 mb-8'>
+              <div className='flex flex-wrap overflow-x-auto pb-2 mb-4 gap-2'>
                 <div className='flex-1 min-w-80'>
                   <ModelSelection />
                 </div>

@@ -559,6 +559,8 @@ export default function OriginalVideosList() {
       alert('Failed to delete video. Please try again.');
     } finally {
       setDeleting(null);
+      // add sound effect
+      playSuccessSound();
     }
   };
 
