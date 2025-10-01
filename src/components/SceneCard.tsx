@@ -825,7 +825,7 @@ export default function SceneCard({
 
     // Filter by recently modified TTS (last 24 hours)
     if (showRecentlyModifiedTTS) {
-      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const oneDayAgo = Date.now() - 10 * 24 * 60 * 60 * 1000;
 
       filtered = filtered.filter((scene) => {
         // Extract timestamp from the TTS URL in field_6891
