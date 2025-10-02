@@ -1595,7 +1595,7 @@ export default function OriginalVideosList({
             <button
               onClick={openFileDialog}
               disabled={uploading}
-              className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 ${
+              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 ${
                 uploading
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-green-500 hover:bg-green-600'
@@ -1608,14 +1608,14 @@ export default function OriginalVideosList({
             >
               {uploading ? (
                 <>
-                  <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                  <Loader2 className='w-4 h-4 animate-spin' />
                   <span className='truncate'>
                     Uploading... {uploadProgress}%
                   </span>
                 </>
               ) : (
                 <>
-                  <Upload className='w-3.5 h-3.5' />
+                  <Upload className='w-4 h-4' />
                   <span>Upload</span>
                 </>
               )}
@@ -1634,11 +1634,11 @@ export default function OriginalVideosList({
             <button
               onClick={handleRefresh}
               disabled={refreshing || uploading || reordering}
-              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title='Refresh the videos list'
             >
               <RefreshCw
-                className={`w-3.5 h-3.5 ${
+                className={`w-4 h-4 ${
                   refreshing || reordering ? 'animate-spin' : ''
                 }`}
               />
@@ -1660,7 +1660,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 transcribing !== null || transcribingAll
                   ? 'Transcription in progress...'
@@ -1668,11 +1668,9 @@ export default function OriginalVideosList({
               }
             >
               <Subtitles
-                className={`w-3.5 h-3.5 ${
-                  transcribingAll ? 'animate-pulse' : ''
-                }`}
+                className={`w-4 h-4 ${transcribingAll ? 'animate-pulse' : ''}`}
               />
-              <span className='text-sm'>
+              <span>
                 {transcribingAll
                   ? transcribing !== null
                     ? `#${transcribing}...`
@@ -1690,7 +1688,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 generatingScenes !== null || generatingScenesAll
                   ? 'Scene generation in progress...'
@@ -1698,7 +1696,7 @@ export default function OriginalVideosList({
               }
             >
               <Grid3x3
-                className={`w-3.5 h-3.5 ${
+                className={`w-4 h-4 ${
                   generatingScenesAll ? 'animate-pulse' : ''
                 }`}
               />
@@ -1722,7 +1720,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -1732,7 +1730,7 @@ export default function OriginalVideosList({
               }
             >
               <Sparkles
-                className={`w-3.5 h-3.5 ${
+                className={`w-4 h-4 ${
                   improvingAllVideosScenes ? 'animate-pulse' : ''
                 }`}
               />
@@ -1757,7 +1755,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -1767,11 +1765,11 @@ export default function OriginalVideosList({
               }
             >
               <Mic2
-                className={`w-3.5 h-3.5 ${
+                className={`w-4 h-4 ${
                   generatingAllTTSForAllVideos ? 'animate-pulse' : ''
                 }`}
               />
-              <span className='text-sm'>
+              <span>
                 {generatingAllTTSForAllVideos
                   ? currentProcessingVideoId !== null
                     ? `V${currentProcessingVideoId}`
@@ -1794,7 +1792,7 @@ export default function OriginalVideosList({
                 generatingScenes !== null ||
                 generatingScenesAll
               }
-              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 mergingFinalVideos
                   ? 'Merging final videos...'
@@ -1802,7 +1800,7 @@ export default function OriginalVideosList({
               }
             >
               <Video
-                className={`w-3.5 h-3.5 ${
+                className={`w-4 h-4 ${
                   mergingFinalVideos ? 'animate-pulse' : ''
                 }`}
               />
@@ -1823,7 +1821,7 @@ export default function OriginalVideosList({
                 generatingScenesAll ||
                 mergingFinalVideos
               }
-              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 generatingTimestamps
                   ? 'Generating timestamps...'
@@ -1831,7 +1829,7 @@ export default function OriginalVideosList({
               }
             >
               <Clock
-                className={`w-3.5 h-3.5 ${
+                className={`w-4 h-4 ${
                   generatingTimestamps ? 'animate-pulse' : ''
                 }`}
               />
