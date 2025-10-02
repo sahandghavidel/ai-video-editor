@@ -28,6 +28,7 @@ import {
   Grid3x3,
   Volume2,
   Mic,
+  Upload,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
@@ -37,7 +38,7 @@ import {
   handleImproveAllSentencesForAllVideos,
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
 } from '@/utils/batchOperations';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Mic2 } from 'lucide-react';
 
 interface SceneHandlers {
   handleSentenceImprovement: (
@@ -1568,39 +1569,54 @@ export default function OriginalVideosList({
   return (
     <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
       {/* Header */}
-      <div className='flex items-center justify-between mb-6'>
-        <div>
-          <h2 className='text-2xl font-bold text-gray-900 flex items-center gap-2'>
-            <Video className='w-6 h-6 text-blue-500' />
-            Original Videos
-          </h2>
-          <p className='text-gray-600 mt-1'>
-            {originalVideos.length} video
-            {originalVideos.length !== 1 ? 's' : ''} in library
-          </p>
+      <div className='mb-6'>
+        <div className='flex items-center justify-between mb-4'>
+          <div>
+            <h2 className='text-2xl font-bold text-gray-900 flex items-center gap-2'>
+              <Video className='w-6 h-6 text-blue-500' />
+              Original Videos
+            </h2>
+            <p className='text-gray-600 mt-1'>
+              {originalVideos.length} video
+              {originalVideos.length !== 1 ? 's' : ''} in library
+            </p>
+          </div>
         </div>
 
-        <div className='flex flex-col sm:flex-row gap-3 w-full sm:w-auto'>
-          {/* Upload Button */}
-          <div className='relative flex-1 sm:flex-none'>
+        {/* Action Buttons - Full Width Grid Layout */}
+        <div className='w-full'>
+          <div
+            className='grid gap-2'
+            style={{
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            }}
+          >
+            {/* Upload Button */}
             <button
               onClick={openFileDialog}
               disabled={uploading}
-              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 ${
+              className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 ${
                 uploading
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-green-500 hover:bg-green-600'
-              } text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]`}
+              } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]`}
+              title={
+                uploading
+                  ? `Uploading... ${uploadProgress}%`
+                  : 'Upload a new video'
+              }
             >
               {uploading ? (
                 <>
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                  <span>Uploading... {uploadProgress}%</span>
+                  <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                  <span className='truncate'>
+                    Uploading... {uploadProgress}%
+                  </span>
                 </>
               ) : (
                 <>
-                  <Plus className='w-4 h-4' />
-                  <span>Upload Video</span>
+                  <Upload className='w-3.5 h-3.5' />
+                  <span>Upload</span>
                 </>
               )}
             </button>
@@ -1612,18 +1628,17 @@ export default function OriginalVideosList({
               onChange={handleFileSelect}
               className='hidden'
             />
-          </div>
 
-          {/* Action Buttons - Responsive Layout */}
-          <div className='flex flex-col sm:flex-row gap-3 w-full sm:w-auto'>
+            {/* Primary Actions */}
             {/* Refresh Button */}
             <button
               onClick={handleRefresh}
               disabled={refreshing || uploading || reordering}
-              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              title='Refresh the videos list'
             >
               <RefreshCw
-                className={`w-4 h-4 ${
+                className={`w-3.5 h-3.5 ${
                   refreshing || reordering ? 'animate-spin' : ''
                 }`}
               />
@@ -1653,12 +1668,14 @@ export default function OriginalVideosList({
               }
             >
               <Subtitles
-                className={`w-4 h-4 ${transcribingAll ? 'animate-pulse' : ''}`}
+                className={`w-3.5 h-3.5 ${
+                  transcribingAll ? 'animate-pulse' : ''
+                }`}
               />
-              <span>
+              <span className='text-sm'>
                 {transcribingAll
                   ? transcribing !== null
-                    ? `Transcribing #${transcribing}...`
+                    ? `#${transcribing}...`
                     : 'Processing...'
                   : 'Transcribe All'}
               </span>
@@ -1673,7 +1690,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 generatingScenes !== null || generatingScenesAll
                   ? 'Scene generation in progress...'
@@ -1681,19 +1698,20 @@ export default function OriginalVideosList({
               }
             >
               <Grid3x3
-                className={`w-4 h-4 ${
+                className={`w-3.5 h-3.5 ${
                   generatingScenesAll ? 'animate-pulse' : ''
                 }`}
               />
               <span>
                 {generatingScenesAll
                   ? generatingScenes !== null
-                    ? `Generating #${generatingScenes}...`
+                    ? `#${generatingScenes}...`
                     : 'Processing...'
-                  : 'Generate All Scenes'}
+                  : 'Generate Scenes'}
               </span>
             </button>
 
+            {/* Processing Actions */}
             {/* Improve All Videos Button */}
             <button
               onClick={handleImproveAllVideosScenes}
@@ -1704,7 +1722,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -1714,18 +1732,18 @@ export default function OriginalVideosList({
               }
             >
               <Sparkles
-                className={`w-4 h-4 ${
+                className={`w-3.5 h-3.5 ${
                   improvingAllVideosScenes ? 'animate-pulse' : ''
                 }`}
               />
               <span>
                 {improvingAllVideosScenes
                   ? currentProcessingVideoId !== null
-                    ? `Video #${currentProcessingVideoId}`
+                    ? `V${currentProcessingVideoId}`
                     : sceneLoading.improvingSentence !== null
-                    ? `Scene #${sceneLoading.improvingSentence}`
+                    ? `S${sceneLoading.improvingSentence}`
                     : 'Processing...'
-                  : 'Improve All Videos'}
+                  : 'Improve All'}
               </span>
             </button>
 
@@ -1739,7 +1757,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -1748,19 +1766,19 @@ export default function OriginalVideosList({
                   : 'Generate TTS for all scenes in all videos'
               }
             >
-              <Mic
-                className={`w-4 h-4 ${
+              <Mic2
+                className={`w-3.5 h-3.5 ${
                   generatingAllTTSForAllVideos ? 'animate-pulse' : ''
                 }`}
               />
-              <span>
+              <span className='text-sm'>
                 {generatingAllTTSForAllVideos
                   ? currentProcessingVideoId !== null
-                    ? `Video #${currentProcessingVideoId}`
+                    ? `V${currentProcessingVideoId}`
                     : sceneLoading.producingTTS !== null
-                    ? `Scene #${sceneLoading.producingTTS}`
+                    ? `S${sceneLoading.producingTTS}`
                     : 'Processing...'
-                  : 'Generate TTS All'}
+                  : 'TTS All'}
               </span>
             </button>
 
@@ -1776,7 +1794,7 @@ export default function OriginalVideosList({
                 generatingScenes !== null ||
                 generatingScenesAll
               }
-              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 mergingFinalVideos
                   ? 'Merging final videos...'
@@ -1784,15 +1802,14 @@ export default function OriginalVideosList({
               }
             >
               <Video
-                className={`w-4 h-4 ${
+                className={`w-3.5 h-3.5 ${
                   mergingFinalVideos ? 'animate-pulse' : ''
                 }`}
               />
-              <span>
-                {mergingFinalVideos ? 'Merging...' : 'Merge All Final Videos'}
-              </span>
+              <span>{mergingFinalVideos ? 'Merging...' : 'Merge Final'}</span>
             </button>
 
+            {/* Final Actions */}
             {/* Generate Timestamps Button */}
             <button
               onClick={handleGenerateTimestamps}
@@ -1806,7 +1823,7 @@ export default function OriginalVideosList({
                 generatingScenesAll ||
                 mergingFinalVideos
               }
-              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              className='w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 generatingTimestamps
                   ? 'Generating timestamps...'
@@ -1814,12 +1831,12 @@ export default function OriginalVideosList({
               }
             >
               <Clock
-                className={`w-4 h-4 ${
+                className={`w-3.5 h-3.5 ${
                   generatingTimestamps ? 'animate-pulse' : ''
                 }`}
               />
               <span>
-                {generatingTimestamps ? 'Generating...' : 'Generate Timestamps'}
+                {generatingTimestamps ? 'Generating...' : 'Timestamps'}
               </span>
             </button>
           </div>
