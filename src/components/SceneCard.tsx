@@ -32,7 +32,8 @@ interface SceneCardProps {
     handleSentenceImprovement: (
       sceneId: number,
       sentence: string,
-      model?: string
+      model?: string,
+      sceneData?: BaserowRow
     ) => Promise<void>;
     handleTTSProduce: (
       sceneId: number,
@@ -709,7 +710,8 @@ export default function SceneCard({
     async (
       sceneId: number,
       currentSentence: string,
-      modelOverride?: string
+      modelOverride?: string,
+      sceneData?: BaserowRow
     ) => {
       try {
         setImprovingSentence(sceneId);
@@ -774,7 +776,7 @@ export default function SceneCard({
         if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
           // Wait a moment to ensure the text is properly updated
           setTimeout(() => {
-            handleTTSProduce(sceneId, improvedSentence);
+            handleTTSProduce(sceneId, improvedSentence, sceneData);
           }, 1000);
         }
       } catch (error) {

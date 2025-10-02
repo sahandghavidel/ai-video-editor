@@ -362,7 +362,8 @@ export const handleImproveAllSentencesForAllVideos = async (
   handleSentenceImprovement: (
     sceneId: number,
     sentence: string,
-    model?: string
+    model?: string,
+    sceneData?: BaserowRow
   ) => Promise<void>,
   selectedModel: string | null,
   setImprovingAllVideos: (isImproving: boolean) => void,
@@ -451,7 +452,8 @@ export const handleImproveAllSentencesForAllVideos = async (
             await handleSentenceImprovement(
               scene.id,
               currentSentence,
-              selectedModel || undefined
+              selectedModel || undefined,
+              scene
             );
             totalImproved++;
             console.log(`  ✓ Successfully improved scene ${scene.id}`);
