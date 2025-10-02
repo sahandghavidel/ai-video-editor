@@ -34,7 +34,11 @@ interface SceneCardProps {
       sentence: string,
       model?: string
     ) => Promise<void>;
-    handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+    handleTTSProduce: (
+      sceneId: number,
+      text: string,
+      sceneData?: BaserowRow
+    ) => Promise<void>;
     handleVideoGenerate: (
       sceneId: number,
       videoUrl: string,
@@ -570,7 +574,7 @@ export default function SceneCard({
   };
 
   const handleTTSProduce = useCallback(
-    async (sceneId: number, text: string) => {
+    async (sceneId: number, text: string, sceneData?: BaserowRow) => {
       try {
         setProducingTTS(sceneId);
 
@@ -621,9 +625,9 @@ export default function SceneCard({
 
         // Auto-generate video if option is enabled
         if (videoSettings.autoGenerateVideo) {
-          const currentScene = dataRef.current.find(
-            (scene) => scene.id === sceneId
-          );
+          // Use sceneData if provided (from batch operation), otherwise look up in dataRef
+          const currentScene =
+            sceneData || dataRef.current.find((scene) => scene.id === sceneId);
           const videoUrl = currentScene?.field_6888;
 
           if (typeof videoUrl === 'string' && videoUrl) {

@@ -492,7 +492,11 @@ export const handleImproveAllSentencesForAllVideos = async (
 // Batch operation: Generate TTS for all scenes in all videos (not filtered by selected video)
 export const handleGenerateAllTTSForAllVideos = async (
   allData: BaserowRow[],
-  handleTTSProduce: (sceneId: number, text: string) => Promise<void>,
+  handleTTSProduce: (
+    sceneId: number,
+    text: string,
+    sceneData?: BaserowRow
+  ) => Promise<void>,
   setGeneratingAllVideos: (isGenerating: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
   setProducingTTS: (sceneId: number | null) => void
@@ -575,7 +579,7 @@ export const handleGenerateAllTTSForAllVideos = async (
           console.log(`  ✓ Will generate TTS for scene ${scene.id}`);
           setProducingTTS(scene.id);
           try {
-            await handleTTSProduce(scene.id, currentSentence);
+            await handleTTSProduce(scene.id, currentSentence, scene);
             totalGenerated++;
             console.log(`  ✓ Successfully generated TTS for scene ${scene.id}`);
             await wait(3000); // 3 seconds delay between generations
