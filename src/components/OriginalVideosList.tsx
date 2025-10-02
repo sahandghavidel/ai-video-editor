@@ -116,6 +116,7 @@ export default function OriginalVideosList({
   const [isExpanded, setIsExpanded] = useState(true); // Collapsible state
   const [isBatchOperationsExpanded, setIsBatchOperationsExpanded] =
     useState(false); // Batch operations collapsed by default
+  const [isFinalVideoExpanded, setIsFinalVideoExpanded] = useState(false); // Final video section collapsed by default
 
   // Get clip generation state from global store
   const {
@@ -3138,8 +3139,48 @@ export default function OriginalVideosList({
             )}
           </div>
 
-          {/* Final Video Table */}
-          <FinalVideoTable />
+          {/* Final Video Section - Collapsible */}
+          <div className='bg-white rounded-lg border border-gray-200 overflow-hidden'>
+            {/* Final Video Header */}
+            <button
+              onClick={() => setIsFinalVideoExpanded(!isFinalVideoExpanded)}
+              className='w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors'
+            >
+              <div className='flex items-center gap-2'>
+                <Video className='w-5 h-5 text-green-600' />
+                <h3 className='text-lg font-semibold text-gray-900'>
+                  Final Video
+                </h3>
+              </div>
+              <div className='flex items-center gap-2'>
+                <span className='text-xs text-gray-400'>
+                  {isFinalVideoExpanded ? 'Collapse' : 'Expand'}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                    isFinalVideoExpanded ? 'rotate-180' : ''
+                  }`}
+                  fill='none'
+                  stroke='currentColor'
+                  viewBox='0 0 24 24'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M19 9l-7 7-7-7'
+                  />
+                </svg>
+              </div>
+            </button>
+
+            {/* Collapsible Final Video Content */}
+            {isFinalVideoExpanded && (
+              <div>
+                <FinalVideoTable />
+              </div>
+            )}
+          </div>
 
           {/* Timestamp Display */}
         </div>
