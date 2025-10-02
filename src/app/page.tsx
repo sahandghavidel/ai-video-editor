@@ -252,7 +252,10 @@ export default function Home() {
             )}
 
             {/* Original Videos List */}
-            <OriginalVideosList sceneHandlers={sceneHandlers} />
+            <OriginalVideosList
+              sceneHandlers={sceneHandlers}
+              refreshScenesData={refreshData}
+            />
 
             {/* No Video Selected Message */}
             {!initialLoading &&

@@ -68,10 +68,12 @@ interface SceneHandlers {
 
 interface OriginalVideosListProps {
   sceneHandlers?: SceneHandlers | null;
+  refreshScenesData?: () => void;
 }
 
 export default function OriginalVideosList({
   sceneHandlers,
+  refreshScenesData,
 }: OriginalVideosListProps) {
   const [originalVideos, setOriginalVideos] = useState<BaserowRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +137,7 @@ export default function OriginalVideosList({
     completeBatchOperation,
     setProducingTTS,
     setSpeedingUpVideo,
+    videoSettings,
   } = useAppStore();
 
   useEffect(() => {
@@ -1132,13 +1135,6 @@ export default function OriginalVideosList({
 
   // Speed Up All Videos for All Scenes
   const handleSpeedUpAllVideos = async () => {
-    if (!sceneHandlers) {
-      alert(
-        'Scene handlers are not available yet. Please wait a moment and try again.'
-      );
-      return;
-    }
-
     try {
       setSpeedingUpAllVideos(true);
 
@@ -1155,18 +1151,22 @@ export default function OriginalVideosList({
 
       await handleSpeedUpAllVideosForAllScenes(
         allScenesData,
-        sceneHandlers.handleSpeedUpVideo,
+        videoSettings,
         setSpeedingUpAllVideos,
         setCurrentProcessingVideoId,
-        setSpeedingUpVideo
+        setSpeedingUpVideo,
+        async () => {
+          // Refresh both original videos and scenes data
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+        }
       );
 
       console.log('Batch speed up completed for all videos');
 
-      // Refresh the original videos list to show any updates
-      await handleRefresh();
-
-      // Note: Success sound is already played in the batch operation utility
+      // Note: Success sound and refresh are already handled in the batch operation utility
     } catch (error) {
       console.error('Error speeding up all videos:', error);
 
@@ -1858,7 +1858,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-black text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'

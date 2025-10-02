@@ -621,17 +621,14 @@ export const handleGenerateAllTTSForAllVideos = async (
   }
 };
 
-// Batch operation: Speed up all videos for all scenes that have sped up video clips
+// Batch operation: Speed up all videos for all scenes that have video clips
 export const handleSpeedUpAllVideosForAllScenes = async (
   allData: BaserowRow[],
-  handleSpeedUpVideo: (
-    sceneId: number,
-    sceneData?: BaserowRow,
-    skipRefresh?: boolean
-  ) => Promise<void>,
+  videoSettings: { selectedSpeed: number; muteAudio: boolean },
   setSpeedingUpAllVideos: (isSpeedingUp: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
-  setSpeedingUpVideo: (sceneId: number | null) => void
+  setSpeedingUpVideo: (sceneId: number | null) => void,
+  onRefresh?: () => void
 ) => {
   setSpeedingUpAllVideos(true);
 
@@ -647,8 +644,6 @@ export const handleSpeedUpAllVideosForAllScenes = async (
       const videoIdField = scene['field_6889'];
       let videoId: number | null = null;
 
-      console.log(`Scene ${scene.id} field_6889:`, videoIdField);
-
       if (typeof videoIdField === 'number') {
         videoId = videoIdField;
       } else if (typeof videoIdField === 'string') {
@@ -662,15 +657,11 @@ export const handleSpeedUpAllVideosForAllScenes = async (
         videoId = parseInt(String(firstId), 10);
       }
 
-      console.log(`Scene ${scene.id} extracted videoId:`, videoId);
-
       if (videoId && !isNaN(videoId)) {
         if (!scenesByVideo.has(videoId)) {
           scenesByVideo.set(videoId, []);
         }
         scenesByVideo.get(videoId)?.push(scene);
-      } else {
-        console.warn(`Scene ${scene.id} has no valid video ID, skipping`);
       }
     }
 
@@ -696,23 +687,43 @@ export const handleSpeedUpAllVideosForAllScenes = async (
 
       for (const scene of scenes) {
         const videoUrl = scene['field_6888'] as string; // Original video clip URL
-        const syncedVideo = scene['field_6886']; // Already sped up video
 
         console.log(`Scene ${scene.id}:`);
         console.log('  Video URL (field_6888):', videoUrl);
-        console.log('  Synced Video (field_6886):', syncedVideo);
-        console.log('  Has video URL?', !!videoUrl);
-        console.log('  Already sped up?', !!syncedVideo);
 
-        // Speed up if scene has video URL (even if already has a synced video - will re-process with current settings)
+        // Speed up if scene has video URL
         if (videoUrl && typeof videoUrl === 'string' && videoUrl.trim()) {
           console.log(`  ✓ Will speed up video for scene ${scene.id}`);
           setSpeedingUpVideo(scene.id);
           try {
-            await handleSpeedUpVideo(scene.id, scene, true); // Skip refresh in batch mode
-            totalSpedUp++;
+            // Call the API directly
+            const response = await fetch('/api/speed-up-video', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                sceneId: scene.id,
+                videoUrl,
+                speed: videoSettings.selectedSpeed,
+                muteAudio: videoSettings.muteAudio,
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error(`Speed-up error: ${response.status}`);
+            }
+
+            const result = await response.json();
             console.log(`  ✓ Successfully sped up video for scene ${scene.id}`);
-            await wait(5000); // 5 seconds delay between speed ups
+            totalSpedUp++;
+
+            // Refresh data after each successful speed up to show updates in real-time
+            if (onRefresh) {
+              await onRefresh();
+            }
+
+            await wait(3000); // 3 seconds delay between speed ups
           } catch (error) {
             console.error(
               `  ✗ Failed to speed up video for scene ${scene.id}:`,
@@ -735,6 +746,8 @@ export const handleSpeedUpAllVideosForAllScenes = async (
     console.log(`Total scenes processed: ${totalProcessed}`);
     console.log(`Total videos sped up: ${totalSpedUp}`);
     console.log('==============================\n');
+
+    // Note: Data is refreshed after each scene, no need for final refresh
 
     // Play success sound when batch operation completes
     playSuccessSound();
