@@ -39,6 +39,7 @@ import {
   handleImproveAllSentencesForAllVideos,
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
   handleSpeedUpAllVideosForAllScenes,
+  handleGenerateAllVideos,
 } from '@/utils/batchOperations';
 import { Sparkles, Mic2 } from 'lucide-react';
 
@@ -106,6 +107,7 @@ export default function OriginalVideosList({
   const [generatingAllTTSForAllVideos, setGeneratingAllTTSForAllVideos] =
     useState(false);
   const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
+  const [generatingAllVideos, setGeneratingAllVideos] = useState(false);
 
   // Get clip generation state from global store
   const {
@@ -137,6 +139,7 @@ export default function OriginalVideosList({
     completeBatchOperation,
     setProducingTTS,
     setSpeedingUpVideo,
+    setGeneratingVideo,
     videoSettings,
   } = useAppStore();
 
@@ -1133,6 +1136,62 @@ export default function OriginalVideosList({
     }
   };
 
+  // Generate Video for All Scenes in All Videos
+  const handleGenerateAllVideosForAllScenes = async () => {
+    if (!sceneHandlers) {
+      alert(
+        'Scene handlers are not available yet. Please wait a moment and try again.'
+      );
+      return;
+    }
+
+    try {
+      setGeneratingAllVideos(true);
+
+      // Get all scenes from the store
+      if (!allScenesData || allScenesData.length === 0) {
+        alert('No scenes found to generate videos');
+        return;
+      }
+
+      console.log(
+        `Starting video generation for all scenes with ${allScenesData.length} scenes...`
+      );
+
+      await handleGenerateAllVideos(
+        allScenesData,
+        sceneHandlers.handleVideoGenerate,
+        () => {}, // startBatchOperation (not used in OriginalVideosList)
+        () => {}, // completeBatchOperation (not used in OriginalVideosList)
+        setGeneratingVideo,
+        async () => {
+          // Refresh both original videos and scenes data
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+        }
+      );
+
+      console.log('Batch video generation completed for all videos');
+
+      // Note: Success sound and refresh are already handled in the batch operation utility
+    } catch (error) {
+      console.error('Error generating videos for all scenes:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to generate videos for all scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setGeneratingAllVideos(false);
+    }
+  };
+
   // Speed Up All Videos for All Scenes
   const handleSpeedUpAllVideos = async () => {
     try {
@@ -1880,6 +1939,39 @@ export default function OriginalVideosList({
                     ? `S${sceneLoading.speedingUpVideo}`
                     : 'Processing...'
                   : 'Speed Up All'}
+              </span>
+            </button>
+
+            {/* Generate Video All Button */}
+            <button
+              onClick={handleGenerateAllVideosForAllScenes}
+              disabled={
+                generatingAllVideos ||
+                sceneLoading.generatingVideo !== null ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+              }
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              title={
+                !sceneHandlers
+                  ? 'Scene handlers not ready. Please wait...'
+                  : generatingAllVideos
+                  ? 'Generating videos for all scenes...'
+                  : 'Generate videos for all scenes with video and TTS audio'
+              }
+            >
+              <Video
+                className={`w-4 h-4 ${
+                  generatingAllVideos ? 'animate-pulse' : ''
+                }`}
+              />
+              <span>
+                {generatingAllVideos
+                  ? sceneLoading.generatingVideo !== null
+                    ? `S${sceneLoading.generatingVideo}`
+                    : 'Processing...'
+                  : 'Sync All'}
               </span>
             </button>
 
