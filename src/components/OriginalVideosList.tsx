@@ -113,6 +113,7 @@ export default function OriginalVideosList({
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
   const [pipelineStep, setPipelineStep] = useState<string>('');
+  const [isExpanded, setIsExpanded] = useState(true); // Collapsible state
 
   // Get clip generation state from global store
   const {
@@ -2070,12 +2071,15 @@ export default function OriginalVideosList({
 
   return (
     <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
-      {/* Header */}
-      <div className='mb-6'>
-        <div className='flex items-center justify-between mb-4'>
-          <div>
-            <h2 className='text-2xl font-bold text-gray-900 flex items-center gap-2'>
-              <Video className='w-6 h-6 text-blue-500' />
+      {/* Header - Clickable to expand/collapse */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className='w-full mb-6 flex items-center justify-between hover:bg-gray-50 -m-6 p-6 rounded-t-xl transition-colors'
+      >
+        <div className='flex items-center gap-2'>
+          <Video className='w-6 h-6 text-blue-500' />
+          <div className='text-left'>
+            <h2 className='text-2xl font-bold text-gray-900'>
               Original Videos
             </h2>
             <p className='text-gray-600 mt-1'>
@@ -2084,971 +2088,1013 @@ export default function OriginalVideosList({
             </p>
           </div>
         </div>
-
-        {/* Pipeline Configuration */}
-        <div className='mb-6'>
-          <PipelineConfig />
-        </div>
-
-        {/* Action Buttons - Full Width Grid Layout */}
-        <div className='w-full'>
-          <div
-            className='grid gap-2'
-            style={{
-              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-            }}
+        <div className='flex items-center gap-3'>
+          <span className='text-xs text-gray-400'>
+            {isExpanded ? 'Click to collapse' : 'Click to expand'}
+          </span>
+          <svg
+            className={`w-5 h-5 text-gray-400 transition-transform ${
+              isExpanded ? 'rotate-180' : ''
+            }`}
+            fill='none'
+            stroke='currentColor'
+            viewBox='0 0 24 24'
           >
-            {/* Upload Button */}
-            <button
-              onClick={openFileDialog}
-              disabled={uploading}
-              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
-                uploading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-green-500 hover:bg-green-600'
-              } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
-              title={
-                uploading
-                  ? `Uploading... ${uploadProgress}%`
-                  : 'Upload a new video'
-              }
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                  <span className='truncate'>
-                    Uploading... {uploadProgress}%
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Upload className='w-4 h-4' />
-                  <span>Upload</span>
-                </>
-              )}
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type='file'
-              accept='video/*'
-              onChange={handleFileSelect}
-              className='hidden'
+            <path
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              strokeWidth={2}
+              d='M19 9l-7 7-7-7'
             />
-
-            {/* Primary Actions */}
-            {/* Refresh Button */}
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing || uploading || reordering}
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title='Refresh the videos list'
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${
-                  refreshing || reordering ? 'animate-spin' : ''
-                }`}
-              />
-              <span>
-                {reordering
-                  ? 'Reordering...'
-                  : refreshing
-                  ? 'Refreshing...'
-                  : 'Refresh'}
-              </span>
-            </button>
-
-            {/* Transcribe All Button */}
-            <button
-              onClick={handleTranscribeAll}
-              disabled={
-                transcribing !== null ||
-                transcribingAll ||
-                uploading ||
-                reordering
-              }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                transcribing !== null || transcribingAll
-                  ? 'Transcription in progress...'
-                  : 'Transcribe all videos without captions'
-              }
-            >
-              <Subtitles
-                className={`w-4 h-4 ${transcribingAll ? 'animate-pulse' : ''}`}
-              />
-              <span>
-                {transcribingAll
-                  ? transcribing !== null
-                    ? `#${transcribing}...`
-                    : 'Processing...'
-                  : 'Transcribe All'}
-              </span>
-            </button>
-
-            {/* Generate All Scenes Button */}
-            <button
-              onClick={handleGenerateScenesAll}
-              disabled={
-                generatingScenes !== null ||
-                generatingScenesAll ||
-                uploading ||
-                reordering
-              }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                generatingScenes !== null || generatingScenesAll
-                  ? 'Scene generation in progress...'
-                  : 'Generate scenes for all videos with captions'
-              }
-            >
-              <Grid3x3
-                className={`w-4 h-4 ${
-                  generatingScenesAll ? 'animate-pulse' : ''
-                }`}
-              />
-              <span>
-                {generatingScenesAll
-                  ? generatingScenes !== null
-                    ? `#${generatingScenes}...`
-                    : 'Processing...'
-                  : 'Generate Scenes'}
-              </span>
-            </button>
-
-            {/* Processing Actions */}
-            {/* Improve All Videos Button */}
-            <button
-              onClick={handleImproveAllVideosScenes}
-              disabled={
-                improvingAllVideosScenes ||
-                sceneLoading.improvingSentence !== null ||
-                !sceneHandlers ||
-                uploading ||
-                reordering
-              }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                !sceneHandlers
-                  ? 'Scene handlers not ready. Please wait...'
-                  : improvingAllVideosScenes
-                  ? 'Improving all scenes for all videos...'
-                  : 'Improve all scenes for all videos with AI'
-              }
-            >
-              <Sparkles
-                className={`w-4 h-4 ${
-                  improvingAllVideosScenes ? 'animate-pulse' : ''
-                }`}
-              />
-              <span>
-                {improvingAllVideosScenes
-                  ? currentProcessingVideoId !== null
-                    ? `V${currentProcessingVideoId}`
-                    : sceneLoading.improvingSentence !== null
-                    ? `S${sceneLoading.improvingSentence}`
-                    : 'Processing...'
-                  : 'Improve All'}
-              </span>
-            </button>
-
-            {/* Generate TTS All Videos Button */}
-            <button
-              onClick={handleGenerateAllTTSForAllVideos}
-              disabled={
-                generatingAllTTSForAllVideos ||
-                sceneLoading.producingTTS !== null ||
-                !sceneHandlers ||
-                uploading ||
-                reordering
-              }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                !sceneHandlers
-                  ? 'Scene handlers not ready. Please wait...'
-                  : generatingAllTTSForAllVideos
-                  ? 'Generating TTS for all scenes in all videos...'
-                  : 'Generate TTS for all scenes in all videos'
-              }
-            >
-              <Mic2
-                className={`w-4 h-4 ${
-                  generatingAllTTSForAllVideos ? 'animate-pulse' : ''
-                }`}
-              />
-              <span>
-                {generatingAllTTSForAllVideos
-                  ? currentProcessingVideoId !== null
-                    ? `V${currentProcessingVideoId}`
-                    : sceneLoading.producingTTS !== null
-                    ? `S${sceneLoading.producingTTS}`
-                    : 'Processing...'
-                  : 'TTS All'}
-              </span>
-            </button>
-
-            {/* Speed Up All Videos Button */}
-            <button
-              onClick={handleSpeedUpAllVideos}
-              disabled={
-                speedingUpAllVideos ||
-                sceneLoading.speedingUpVideo !== null ||
-                !sceneHandlers ||
-                uploading ||
-                reordering
-              }
-              style={
-                speedingUpAllVideos ||
-                sceneLoading.speedingUpVideo !== null ||
-                !sceneHandlers ||
-                uploading ||
-                reordering
-                  ? { backgroundColor: '#fde047' }
-                  : { backgroundColor: '#eab308' }
-              }
-              onMouseEnter={(e) => {
-                if (
-                  !speedingUpAllVideos &&
-                  sceneLoading.speedingUpVideo === null &&
-                  sceneHandlers &&
-                  !uploading &&
-                  !reordering
-                ) {
-                  e.currentTarget.style.backgroundColor = '#ca8a04';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (
-                  !speedingUpAllVideos &&
-                  sceneLoading.speedingUpVideo === null &&
-                  sceneHandlers &&
-                  !uploading &&
-                  !reordering
-                ) {
-                  e.currentTarget.style.backgroundColor = '#eab308';
-                }
-              }}
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                !sceneHandlers
-                  ? 'Scene handlers not ready. Please wait...'
-                  : speedingUpAllVideos
-                  ? 'Speeding up all videos...'
-                  : 'Speed up all video clips with current speed settings'
-              }
-            >
-              <Zap
-                className={`w-4 h-4 ${
-                  speedingUpAllVideos ? 'animate-pulse' : ''
-                }`}
-              />
-              <span>
-                {speedingUpAllVideos
-                  ? currentProcessingVideoId !== null
-                    ? `V${currentProcessingVideoId}`
-                    : sceneLoading.speedingUpVideo !== null
-                    ? `S${sceneLoading.speedingUpVideo}`
-                    : 'Processing...'
-                  : 'Speed Up All'}
-              </span>
-            </button>
-
-            {/* Generate Video All Button */}
-            <button
-              onClick={handleGenerateAllVideosForAllScenes}
-              disabled={
-                generatingAllVideos ||
-                sceneLoading.generatingVideo !== null ||
-                !sceneHandlers ||
-                uploading ||
-                reordering
-              }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                !sceneHandlers
-                  ? 'Scene handlers not ready. Please wait...'
-                  : generatingAllVideos
-                  ? 'Generating videos for all scenes...'
-                  : 'Generate videos for all scenes with video and TTS audio'
-              }
-            >
-              <Video
-                className={`w-4 h-4 ${
-                  generatingAllVideos ? 'animate-pulse' : ''
-                }`}
-              />
-              <span>
-                {generatingAllVideos
-                  ? sceneLoading.generatingVideo !== null
-                    ? `S${sceneLoading.generatingVideo}`
-                    : 'Processing...'
-                  : 'Sync All'}
-              </span>
-            </button>
-
-            {/* Generate Clips All Button */}
-            <button
-              onClick={handleGenerateClipsAll}
-              disabled={
-                generatingClipsAll ||
-                clipGeneration.generatingClips !== null ||
-                uploading ||
-                reordering
-              }
-              style={
-                generatingClipsAll ||
-                clipGeneration.generatingClips !== null ||
-                uploading ||
-                reordering
-                  ? { backgroundColor: '#67e8f9' }
-                  : { backgroundColor: '#06b6d4' }
-              }
-              onMouseEnter={(e) => {
-                if (
-                  !generatingClipsAll &&
-                  clipGeneration.generatingClips === null &&
-                  !uploading &&
-                  !reordering
-                ) {
-                  e.currentTarget.style.backgroundColor = '#0891b2';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (
-                  !generatingClipsAll &&
-                  clipGeneration.generatingClips === null &&
-                  !uploading &&
-                  !reordering
-                ) {
-                  e.currentTarget.style.backgroundColor = '#06b6d4';
-                }
-              }}
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                generatingClipsAll
-                  ? 'Generating clips for all videos...'
-                  : clipGeneration.generatingClips !== null
-                  ? 'Another clip generation in progress'
-                  : 'Generate video clips for all videos with scenes'
-              }
-            >
-              <Video
-                className={`w-4 h-4 ${
-                  generatingClipsAll || clipGeneration.generatingClips !== null
-                    ? 'animate-pulse'
-                    : ''
-                }`}
-              />
-              <span>
-                {generatingClipsAll
-                  ? clipGeneration.generatingClips !== null
-                    ? `#${clipGeneration.generatingClips}`
-                    : 'Processing...'
-                  : 'Gen Clips All'}
-              </span>
-            </button>
-
-            {/* Merge All Final Videos Button */}
-            <button
-              onClick={handleMergeAllFinalVideos}
-              disabled={
-                mergingFinalVideos ||
-                uploading ||
-                reordering ||
-                transcribing !== null ||
-                transcribingAll ||
-                generatingScenes !== null ||
-                generatingScenesAll
-              }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                mergingFinalVideos
-                  ? 'Merging final videos...'
-                  : 'Merge all final merged videos in order'
-              }
-            >
-              <Video
-                className={`w-4 h-4 ${
-                  mergingFinalVideos ? 'animate-pulse' : ''
-                }`}
-              />
-              <span>{mergingFinalVideos ? 'Merging...' : 'Merge Final'}</span>
-            </button>
-
-            {/* Final Actions */}
-            {/* Generate Timestamps Button */}
-            <button
-              onClick={handleGenerateTimestamps}
-              disabled={
-                generatingTimestamps ||
-                uploading ||
-                reordering ||
-                transcribing !== null ||
-                transcribingAll ||
-                generatingScenes !== null ||
-                generatingScenesAll ||
-                mergingFinalVideos
-              }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                generatingTimestamps
-                  ? 'Generating timestamps...'
-                  : 'Generate timestamps for final merged videos'
-              }
-            >
-              <Clock
-                className={`w-4 h-4 ${
-                  generatingTimestamps ? 'animate-pulse' : ''
-                }`}
-              />
-              <span>
-                {generatingTimestamps ? 'Generating...' : 'Timestamps'}
-              </span>
-            </button>
-
-            {/* Full Pipeline Button */}
-            <button
-              onClick={handleRunFullPipeline}
-              disabled={
-                runningFullPipeline ||
-                transcribing !== null ||
-                transcribingAll ||
-                generatingScenes !== null ||
-                generatingScenesAll ||
-                improvingAllVideosScenes ||
-                generatingAllTTSForAllVideos ||
-                speedingUpAllVideos ||
-                generatingAllVideos ||
-                generatingClipsAll ||
-                !sceneHandlers ||
-                uploading ||
-                reordering
-              }
-              style={
-                runningFullPipeline ||
-                transcribing !== null ||
-                transcribingAll ||
-                generatingScenes !== null ||
-                generatingScenesAll ||
-                improvingAllVideosScenes ||
-                generatingAllTTSForAllVideos ||
-                speedingUpAllVideos ||
-                generatingAllVideos ||
-                generatingClipsAll ||
-                !sceneHandlers ||
-                uploading ||
-                reordering
-                  ? { backgroundColor: '#d8b4fe' }
-                  : { backgroundColor: '#9333ea' }
-              }
-              onMouseEnter={(e) => {
-                if (
-                  !runningFullPipeline &&
-                  transcribing === null &&
-                  !transcribingAll &&
-                  generatingScenes === null &&
-                  !generatingScenesAll &&
-                  !improvingAllVideosScenes &&
-                  !generatingAllTTSForAllVideos &&
-                  !speedingUpAllVideos &&
-                  !generatingAllVideos &&
-                  !generatingClipsAll &&
-                  sceneHandlers &&
-                  !uploading &&
-                  !reordering
-                ) {
-                  e.currentTarget.style.backgroundColor = '#7c3aed';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (
-                  !runningFullPipeline &&
-                  transcribing === null &&
-                  !transcribingAll &&
-                  generatingScenes === null &&
-                  !generatingScenesAll &&
-                  !improvingAllVideosScenes &&
-                  !generatingAllTTSForAllVideos &&
-                  !speedingUpAllVideos &&
-                  !generatingAllVideos &&
-                  !generatingClipsAll &&
-                  sceneHandlers &&
-                  !uploading &&
-                  !reordering
-                ) {
-                  e.currentTarget.style.backgroundColor = '#9333ea';
-                }
-              }}
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-bold rounded-md transition-all shadow-md hover:shadow-lg disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-              title={
-                !sceneHandlers
-                  ? 'Scene handlers not ready. Please wait...'
-                  : runningFullPipeline
-                  ? pipelineStep
-                  : 'Run full pipeline: Transcribe → Scenes → Clips → Speed Up → Improve → TTS → Sync'
-              }
-            >
-              <Workflow
-                className={`w-4 h-4 ${
-                  runningFullPipeline ? 'animate-pulse' : ''
-                }`}
-              />
-              <span className='truncate'>
-                {runningFullPipeline
-                  ? pipelineStep.split('...')[0] || 'Processing...'
-                  : 'Full Pipeline'}
-              </span>
-            </button>
-          </div>
+          </svg>
         </div>
-      </div>
+      </button>
 
-      {/* Merged Video Display */}
-      {mergedVideo.url && (
-        <MergedVideoDisplay
-          mergedVideo={mergedVideo}
-          onClear={clearMergedVideo}
-        />
-      )}
+      {/* Collapsible Content */}
+      {isExpanded && (
+        <div>
+          {/* Pipeline Configuration */}
+          <div className='mb-6'>
+            <PipelineConfig />
+          </div>
 
-      {/* Selected Video Info */}
-      {selectedOriginalVideo.id && (
-        <div className='bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6'>
-          <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-3'>
-              <div className='w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center'>
-                <Check className='w-6 h-6 text-white' />
-              </div>
-              <div>
-                <h3 className='font-semibold text-blue-900'>
-                  Selected Video: #{selectedOriginalVideo.id}
-                </h3>
-                <p className='text-blue-700 text-sm'>
-                  Status: {selectedOriginalVideo.status} |
-                  {(() => {
-                    const filteredScenes = getFilteredData();
-                    return filteredScenes.length > 0
-                      ? ` ${filteredScenes.length} scene${
-                          filteredScenes.length !== 1 ? 's' : ''
-                        } available for editing`
-                      : ' No scenes found for this video';
-                  })()}
-                </p>
-              </div>
-            </div>
-            <div className='flex items-center gap-2'>
+          {/* Action Buttons - Full Width Grid Layout */}
+          <div className='w-full'>
+            <div
+              className='grid gap-2'
+              style={{
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              }}
+            >
+              {/* Upload Button */}
               <button
-                onClick={() =>
-                  selectedOriginalVideo.id &&
-                  handleDeleteVideo(selectedOriginalVideo.id)
+                onClick={openFileDialog}
+                disabled={uploading}
+                className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
+                  uploading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-600'
+                } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
+                title={
+                  uploading
+                    ? `Uploading... ${uploadProgress}%`
+                    : 'Upload a new video'
                 }
-                disabled={
-                  deleting === selectedOriginalVideo.id ||
-                  !selectedOriginalVideo.id
-                }
-                className='text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                title='Delete video and all related scenes'
               >
-                {selectedOriginalVideo.id &&
-                deleting === selectedOriginalVideo.id ? (
-                  <Loader2 className='w-5 h-5 animate-spin' />
+                {uploading ? (
+                  <>
+                    <Loader2 className='w-4 h-4 animate-spin' />
+                    <span className='truncate'>
+                      Uploading... {uploadProgress}%
+                    </span>
+                  </>
                 ) : (
-                  <Trash2 className='w-5 h-5' />
+                  <>
+                    <Upload className='w-4 h-4' />
+                    <span>Upload</span>
+                  </>
                 )}
               </button>
+
+              <input
+                ref={fileInputRef}
+                type='file'
+                accept='video/*'
+                onChange={handleFileSelect}
+                className='hidden'
+              />
+
+              {/* Primary Actions */}
+              {/* Refresh Button */}
               <button
-                onClick={() => {
-                  setSelectedOriginalVideo(null);
-                  saveSettingsToLocalStorage();
-                }}
-                className='text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-100 rounded-full transition-colors'
-                title='Clear selection'
+                onClick={handleRefresh}
+                disabled={refreshing || uploading || reordering}
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title='Refresh the videos list'
               >
-                <X className='w-5 h-5' />
+                <RefreshCw
+                  className={`w-4 h-4 ${
+                    refreshing || reordering ? 'animate-spin' : ''
+                  }`}
+                />
+                <span>
+                  {reordering
+                    ? 'Reordering...'
+                    : refreshing
+                    ? 'Refreshing...'
+                    : 'Refresh'}
+                </span>
+              </button>
+
+              {/* Transcribe All Button */}
+              <button
+                onClick={handleTranscribeAll}
+                disabled={
+                  transcribing !== null ||
+                  transcribingAll ||
+                  uploading ||
+                  reordering
+                }
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  transcribing !== null || transcribingAll
+                    ? 'Transcription in progress...'
+                    : 'Transcribe all videos without captions'
+                }
+              >
+                <Subtitles
+                  className={`w-4 h-4 ${
+                    transcribingAll ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>
+                  {transcribingAll
+                    ? transcribing !== null
+                      ? `#${transcribing}...`
+                      : 'Processing...'
+                    : 'Transcribe All'}
+                </span>
+              </button>
+
+              {/* Generate All Scenes Button */}
+              <button
+                onClick={handleGenerateScenesAll}
+                disabled={
+                  generatingScenes !== null ||
+                  generatingScenesAll ||
+                  uploading ||
+                  reordering
+                }
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  generatingScenes !== null || generatingScenesAll
+                    ? 'Scene generation in progress...'
+                    : 'Generate scenes for all videos with captions'
+                }
+              >
+                <Grid3x3
+                  className={`w-4 h-4 ${
+                    generatingScenesAll ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>
+                  {generatingScenesAll
+                    ? generatingScenes !== null
+                      ? `#${generatingScenes}...`
+                      : 'Processing...'
+                    : 'Generate Scenes'}
+                </span>
+              </button>
+
+              {/* Processing Actions */}
+              {/* Improve All Videos Button */}
+              <button
+                onClick={handleImproveAllVideosScenes}
+                disabled={
+                  improvingAllVideosScenes ||
+                  sceneLoading.improvingSentence !== null ||
+                  !sceneHandlers ||
+                  uploading ||
+                  reordering
+                }
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  !sceneHandlers
+                    ? 'Scene handlers not ready. Please wait...'
+                    : improvingAllVideosScenes
+                    ? 'Improving all scenes for all videos...'
+                    : 'Improve all scenes for all videos with AI'
+                }
+              >
+                <Sparkles
+                  className={`w-4 h-4 ${
+                    improvingAllVideosScenes ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>
+                  {improvingAllVideosScenes
+                    ? currentProcessingVideoId !== null
+                      ? `V${currentProcessingVideoId}`
+                      : sceneLoading.improvingSentence !== null
+                      ? `S${sceneLoading.improvingSentence}`
+                      : 'Processing...'
+                    : 'Improve All'}
+                </span>
+              </button>
+
+              {/* Generate TTS All Videos Button */}
+              <button
+                onClick={handleGenerateAllTTSForAllVideos}
+                disabled={
+                  generatingAllTTSForAllVideos ||
+                  sceneLoading.producingTTS !== null ||
+                  !sceneHandlers ||
+                  uploading ||
+                  reordering
+                }
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  !sceneHandlers
+                    ? 'Scene handlers not ready. Please wait...'
+                    : generatingAllTTSForAllVideos
+                    ? 'Generating TTS for all scenes in all videos...'
+                    : 'Generate TTS for all scenes in all videos'
+                }
+              >
+                <Mic2
+                  className={`w-4 h-4 ${
+                    generatingAllTTSForAllVideos ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>
+                  {generatingAllTTSForAllVideos
+                    ? currentProcessingVideoId !== null
+                      ? `V${currentProcessingVideoId}`
+                      : sceneLoading.producingTTS !== null
+                      ? `S${sceneLoading.producingTTS}`
+                      : 'Processing...'
+                    : 'TTS All'}
+                </span>
+              </button>
+
+              {/* Speed Up All Videos Button */}
+              <button
+                onClick={handleSpeedUpAllVideos}
+                disabled={
+                  speedingUpAllVideos ||
+                  sceneLoading.speedingUpVideo !== null ||
+                  !sceneHandlers ||
+                  uploading ||
+                  reordering
+                }
+                style={
+                  speedingUpAllVideos ||
+                  sceneLoading.speedingUpVideo !== null ||
+                  !sceneHandlers ||
+                  uploading ||
+                  reordering
+                    ? { backgroundColor: '#fde047' }
+                    : { backgroundColor: '#eab308' }
+                }
+                onMouseEnter={(e) => {
+                  if (
+                    !speedingUpAllVideos &&
+                    sceneLoading.speedingUpVideo === null &&
+                    sceneHandlers &&
+                    !uploading &&
+                    !reordering
+                  ) {
+                    e.currentTarget.style.backgroundColor = '#ca8a04';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (
+                    !speedingUpAllVideos &&
+                    sceneLoading.speedingUpVideo === null &&
+                    sceneHandlers &&
+                    !uploading &&
+                    !reordering
+                  ) {
+                    e.currentTarget.style.backgroundColor = '#eab308';
+                  }
+                }}
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  !sceneHandlers
+                    ? 'Scene handlers not ready. Please wait...'
+                    : speedingUpAllVideos
+                    ? 'Speeding up all videos...'
+                    : 'Speed up all video clips with current speed settings'
+                }
+              >
+                <Zap
+                  className={`w-4 h-4 ${
+                    speedingUpAllVideos ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>
+                  {speedingUpAllVideos
+                    ? currentProcessingVideoId !== null
+                      ? `V${currentProcessingVideoId}`
+                      : sceneLoading.speedingUpVideo !== null
+                      ? `S${sceneLoading.speedingUpVideo}`
+                      : 'Processing...'
+                    : 'Speed Up All'}
+                </span>
+              </button>
+
+              {/* Generate Video All Button */}
+              <button
+                onClick={handleGenerateAllVideosForAllScenes}
+                disabled={
+                  generatingAllVideos ||
+                  sceneLoading.generatingVideo !== null ||
+                  !sceneHandlers ||
+                  uploading ||
+                  reordering
+                }
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  !sceneHandlers
+                    ? 'Scene handlers not ready. Please wait...'
+                    : generatingAllVideos
+                    ? 'Generating videos for all scenes...'
+                    : 'Generate videos for all scenes with video and TTS audio'
+                }
+              >
+                <Video
+                  className={`w-4 h-4 ${
+                    generatingAllVideos ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>
+                  {generatingAllVideos
+                    ? sceneLoading.generatingVideo !== null
+                      ? `S${sceneLoading.generatingVideo}`
+                      : 'Processing...'
+                    : 'Sync All'}
+                </span>
+              </button>
+
+              {/* Generate Clips All Button */}
+              <button
+                onClick={handleGenerateClipsAll}
+                disabled={
+                  generatingClipsAll ||
+                  clipGeneration.generatingClips !== null ||
+                  uploading ||
+                  reordering
+                }
+                style={
+                  generatingClipsAll ||
+                  clipGeneration.generatingClips !== null ||
+                  uploading ||
+                  reordering
+                    ? { backgroundColor: '#67e8f9' }
+                    : { backgroundColor: '#06b6d4' }
+                }
+                onMouseEnter={(e) => {
+                  if (
+                    !generatingClipsAll &&
+                    clipGeneration.generatingClips === null &&
+                    !uploading &&
+                    !reordering
+                  ) {
+                    e.currentTarget.style.backgroundColor = '#0891b2';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (
+                    !generatingClipsAll &&
+                    clipGeneration.generatingClips === null &&
+                    !uploading &&
+                    !reordering
+                  ) {
+                    e.currentTarget.style.backgroundColor = '#06b6d4';
+                  }
+                }}
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  generatingClipsAll
+                    ? 'Generating clips for all videos...'
+                    : clipGeneration.generatingClips !== null
+                    ? 'Another clip generation in progress'
+                    : 'Generate video clips for all videos with scenes'
+                }
+              >
+                <Video
+                  className={`w-4 h-4 ${
+                    generatingClipsAll ||
+                    clipGeneration.generatingClips !== null
+                      ? 'animate-pulse'
+                      : ''
+                  }`}
+                />
+                <span>
+                  {generatingClipsAll
+                    ? clipGeneration.generatingClips !== null
+                      ? `#${clipGeneration.generatingClips}`
+                      : 'Processing...'
+                    : 'Gen Clips All'}
+                </span>
+              </button>
+
+              {/* Merge All Final Videos Button */}
+              <button
+                onClick={handleMergeAllFinalVideos}
+                disabled={
+                  mergingFinalVideos ||
+                  uploading ||
+                  reordering ||
+                  transcribing !== null ||
+                  transcribingAll ||
+                  generatingScenes !== null ||
+                  generatingScenesAll
+                }
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  mergingFinalVideos
+                    ? 'Merging final videos...'
+                    : 'Merge all final merged videos in order'
+                }
+              >
+                <Video
+                  className={`w-4 h-4 ${
+                    mergingFinalVideos ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>{mergingFinalVideos ? 'Merging...' : 'Merge Final'}</span>
+              </button>
+
+              {/* Final Actions */}
+              {/* Generate Timestamps Button */}
+              <button
+                onClick={handleGenerateTimestamps}
+                disabled={
+                  generatingTimestamps ||
+                  uploading ||
+                  reordering ||
+                  transcribing !== null ||
+                  transcribingAll ||
+                  generatingScenes !== null ||
+                  generatingScenesAll ||
+                  mergingFinalVideos
+                }
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  generatingTimestamps
+                    ? 'Generating timestamps...'
+                    : 'Generate timestamps for final merged videos'
+                }
+              >
+                <Clock
+                  className={`w-4 h-4 ${
+                    generatingTimestamps ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span>
+                  {generatingTimestamps ? 'Generating...' : 'Timestamps'}
+                </span>
+              </button>
+
+              {/* Full Pipeline Button */}
+              <button
+                onClick={handleRunFullPipeline}
+                disabled={
+                  runningFullPipeline ||
+                  transcribing !== null ||
+                  transcribingAll ||
+                  generatingScenes !== null ||
+                  generatingScenesAll ||
+                  improvingAllVideosScenes ||
+                  generatingAllTTSForAllVideos ||
+                  speedingUpAllVideos ||
+                  generatingAllVideos ||
+                  generatingClipsAll ||
+                  !sceneHandlers ||
+                  uploading ||
+                  reordering
+                }
+                style={
+                  runningFullPipeline ||
+                  transcribing !== null ||
+                  transcribingAll ||
+                  generatingScenes !== null ||
+                  generatingScenesAll ||
+                  improvingAllVideosScenes ||
+                  generatingAllTTSForAllVideos ||
+                  speedingUpAllVideos ||
+                  generatingAllVideos ||
+                  generatingClipsAll ||
+                  !sceneHandlers ||
+                  uploading ||
+                  reordering
+                    ? { backgroundColor: '#d8b4fe' }
+                    : { backgroundColor: '#9333ea' }
+                }
+                onMouseEnter={(e) => {
+                  if (
+                    !runningFullPipeline &&
+                    transcribing === null &&
+                    !transcribingAll &&
+                    generatingScenes === null &&
+                    !generatingScenesAll &&
+                    !improvingAllVideosScenes &&
+                    !generatingAllTTSForAllVideos &&
+                    !speedingUpAllVideos &&
+                    !generatingAllVideos &&
+                    !generatingClipsAll &&
+                    sceneHandlers &&
+                    !uploading &&
+                    !reordering
+                  ) {
+                    e.currentTarget.style.backgroundColor = '#7c3aed';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (
+                    !runningFullPipeline &&
+                    transcribing === null &&
+                    !transcribingAll &&
+                    generatingScenes === null &&
+                    !generatingScenesAll &&
+                    !improvingAllVideosScenes &&
+                    !generatingAllTTSForAllVideos &&
+                    !speedingUpAllVideos &&
+                    !generatingAllVideos &&
+                    !generatingClipsAll &&
+                    sceneHandlers &&
+                    !uploading &&
+                    !reordering
+                  ) {
+                    e.currentTarget.style.backgroundColor = '#9333ea';
+                  }
+                }}
+                className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-bold rounded-md transition-all shadow-md hover:shadow-lg disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                title={
+                  !sceneHandlers
+                    ? 'Scene handlers not ready. Please wait...'
+                    : runningFullPipeline
+                    ? pipelineStep
+                    : 'Run full pipeline: Transcribe → Scenes → Clips → Speed Up → Improve → TTS → Sync'
+                }
+              >
+                <Workflow
+                  className={`w-4 h-4 ${
+                    runningFullPipeline ? 'animate-pulse' : ''
+                  }`}
+                />
+                <span className='truncate'>
+                  {runningFullPipeline
+                    ? pipelineStep.split('...')[0] || 'Processing...'
+                    : 'Full Pipeline'}
+                </span>
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Videos Table */}
-      <div className='transition-all duration-200 rounded-lg'>
-        {originalVideos.length === 0 ? (
-          <div className='text-center py-8'>
-            <Video className='w-12 h-12 text-gray-300 mx-auto mb-4' />
-            <p className='text-gray-500 text-lg'>No original videos found</p>
-            <p className='text-gray-400 text-sm mt-2'>
-              Upload a video to get started
-            </p>
-          </div>
-        ) : (
-          <div className='overflow-x-auto'>
-            <table className='w-full'>
-              <thead>
-                <tr className='border-b border-gray-200'>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700 w-8'>
-                    {/* Drag handle column */}
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700 w-12'>
-                    Select
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    ID
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Title
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Video URL
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Final Merged Video
-                  </th>
-                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {originalVideos.map((video, index) => {
-                  const isSelected = isRowSelected(video.id);
-                  return (
-                    <tr
-                      key={video.id}
-                      draggable={!editingTitle}
-                      onDragStart={(e) => handleRowDragStart(e, video.id)}
-                      onDragOver={(e) => handleRowDragOver(e, video.id)}
-                      onDragLeave={handleRowDragLeave}
-                      onDragEnd={handleRowDragEnd}
-                      onDrop={(e) => handleRowDrop(e, video.id)}
-                      onClick={() => !draggedRow && handleRowClick(video)}
-                      className={`border-b border-gray-100 transition-all duration-200 ${
-                        draggedRow === video.id
-                          ? 'opacity-50 cursor-grabbing'
-                          : dragOverRow === video.id
-                          ? 'border-t-4 border-t-blue-500 cursor-pointer'
-                          : 'cursor-pointer'
-                      } ${
-                        isSelected
-                          ? 'bg-blue-50 hover:bg-blue-100 border-blue-200'
-                          : index % 2 === 0
-                          ? 'bg-white hover:bg-gray-50'
-                          : 'bg-gray-50/50 hover:bg-gray-100'
-                      }`}
-                    >
-                      {/* Drag Handle */}
-                      <td className='py-3 px-2'>
-                        <div
-                          className='cursor-grab hover:cursor-grabbing p-1 rounded hover:bg-gray-200 transition-colors'
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          <GripVertical className='w-4 h-4 text-gray-400' />
-                        </div>
-                      </td>
+          {/* Merged Video Display */}
+          {mergedVideo.url && (
+            <MergedVideoDisplay
+              mergedVideo={mergedVideo}
+              onClear={clearMergedVideo}
+            />
+          )}
 
-                      {/* Selection */}
-                      <td className='py-3 px-4'>
-                        <div
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+          {/* Selected Video Info */}
+          {selectedOriginalVideo.id && (
+            <div className='bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6'>
+              <div className='flex items-center justify-between'>
+                <div className='flex items-center gap-3'>
+                  <div className='w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center'>
+                    <Check className='w-6 h-6 text-white' />
+                  </div>
+                  <div>
+                    <h3 className='font-semibold text-blue-900'>
+                      Selected Video: #{selectedOriginalVideo.id}
+                    </h3>
+                    <p className='text-blue-700 text-sm'>
+                      Status: {selectedOriginalVideo.status} |
+                      {(() => {
+                        const filteredScenes = getFilteredData();
+                        return filteredScenes.length > 0
+                          ? ` ${filteredScenes.length} scene${
+                              filteredScenes.length !== 1 ? 's' : ''
+                            } available for editing`
+                          : ' No scenes found for this video';
+                      })()}
+                    </p>
+                  </div>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <button
+                    onClick={() =>
+                      selectedOriginalVideo.id &&
+                      handleDeleteVideo(selectedOriginalVideo.id)
+                    }
+                    disabled={
+                      deleting === selectedOriginalVideo.id ||
+                      !selectedOriginalVideo.id
+                    }
+                    className='text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    title='Delete video and all related scenes'
+                  >
+                    {selectedOriginalVideo.id &&
+                    deleting === selectedOriginalVideo.id ? (
+                      <Loader2 className='w-5 h-5 animate-spin' />
+                    ) : (
+                      <Trash2 className='w-5 h-5' />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedOriginalVideo(null);
+                      saveSettingsToLocalStorage();
+                    }}
+                    className='text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-100 rounded-full transition-colors'
+                    title='Clear selection'
+                  >
+                    <X className='w-5 h-5' />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Videos Table */}
+          <div className='transition-all duration-200 rounded-lg'>
+            {originalVideos.length === 0 ? (
+              <div className='text-center py-8'>
+                <Video className='w-12 h-12 text-gray-300 mx-auto mb-4' />
+                <p className='text-gray-500 text-lg'>
+                  No original videos found
+                </p>
+                <p className='text-gray-400 text-sm mt-2'>
+                  Upload a video to get started
+                </p>
+              </div>
+            ) : (
+              <div className='overflow-x-auto'>
+                <table className='w-full'>
+                  <thead>
+                    <tr className='border-b border-gray-200'>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700 w-8'>
+                        {/* Drag handle column */}
+                      </th>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700 w-12'>
+                        Select
+                      </th>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                        ID
+                      </th>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                        Title
+                      </th>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                        Video URL
+                      </th>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                        Final Merged Video
+                      </th>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {originalVideos.map((video, index) => {
+                      const isSelected = isRowSelected(video.id);
+                      return (
+                        <tr
+                          key={video.id}
+                          draggable={!editingTitle}
+                          onDragStart={(e) => handleRowDragStart(e, video.id)}
+                          onDragOver={(e) => handleRowDragOver(e, video.id)}
+                          onDragLeave={handleRowDragLeave}
+                          onDragEnd={handleRowDragEnd}
+                          onDrop={(e) => handleRowDrop(e, video.id)}
+                          onClick={() => !draggedRow && handleRowClick(video)}
+                          className={`border-b border-gray-100 transition-all duration-200 ${
+                            draggedRow === video.id
+                              ? 'opacity-50 cursor-grabbing'
+                              : dragOverRow === video.id
+                              ? 'border-t-4 border-t-blue-500 cursor-pointer'
+                              : 'cursor-pointer'
+                          } ${
                             isSelected
-                              ? 'bg-blue-500 border-blue-500'
-                              : 'border-gray-300 hover:border-blue-400'
+                              ? 'bg-blue-50 hover:bg-blue-100 border-blue-200'
+                              : index % 2 === 0
+                              ? 'bg-white hover:bg-gray-50'
+                              : 'bg-gray-50/50 hover:bg-gray-100'
                           }`}
                         >
-                          {isSelected && (
-                            <Check className='w-4 h-4 text-white' />
-                          )}
-                        </div>
-                      </td>
+                          {/* Drag Handle */}
+                          <td className='py-3 px-2'>
+                            <div
+                              className='cursor-grab hover:cursor-grabbing p-1 rounded hover:bg-gray-200 transition-colors'
+                              onMouseDown={(e) => e.stopPropagation()}
+                            >
+                              <GripVertical className='w-4 h-4 text-gray-400' />
+                            </div>
+                          </td>
 
-                      {/* ID */}
-                      <td className='py-3 px-4'>
-                        <span
-                          className={`font-medium ${
-                            isSelected ? 'text-blue-900' : 'text-gray-900'
-                          }`}
-                        >
-                          #{video.id}
-                        </span>
-                      </td>
+                          {/* Selection */}
+                          <td className='py-3 px-4'>
+                            <div
+                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-500 border-blue-500'
+                                  : 'border-gray-300 hover:border-blue-400'
+                              }`}
+                            >
+                              {isSelected && (
+                                <Check className='w-4 h-4 text-white' />
+                              )}
+                            </div>
+                          </td>
 
-                      {/* Title (6852) - Editable */}
-                      <td className='py-3 px-4'>
-                        {editingTitle?.videoId === video.id ? (
-                          <div className='flex items-center gap-2'>
-                            <input
-                              type='text'
-                              value={editingTitle.value}
-                              onChange={(e) =>
-                                setEditingTitle((prev) =>
-                                  prev
-                                    ? { ...prev, value: e.target.value }
-                                    : null
-                                )
-                              }
-                              onKeyDown={(e) => handleTitleKeyDown(e, video.id)}
-                              onBlur={() =>
-                                saveTitleEdit(video.id, editingTitle.value)
-                              }
-                              className='flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                              autoFocus
-                              disabled={editingTitle.saving}
-                            />
-                            {editingTitle.saving ? (
-                              <Loader2 className='w-4 h-4 animate-spin text-blue-500' />
-                            ) : (
-                              <button
-                                onClick={() =>
-                                  saveTitleEdit(video.id, editingTitle.value)
-                                }
-                                className='p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors'
-                                title='Save title'
-                              >
-                                <Save className='w-4 h-4' />
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div
-                            className='group flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1 -mx-2 -my-1'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const currentTitle = extractFieldValue(
-                                video.field_6852
-                              );
-                              startTitleEdit(video.id, currentTitle);
-                            }}
-                          >
+                          {/* ID */}
+                          <td className='py-3 px-4'>
                             <span
-                              className={`${
+                              className={`font-medium ${
                                 isSelected ? 'text-blue-900' : 'text-gray-900'
                               }`}
                             >
-                              {extractFieldValue(video.field_6852) ||
-                                'Click to add title'}
+                              #{video.id}
                             </span>
-                            <Edit3 className='w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity' />
-                          </div>
-                        )}
-                      </td>
+                          </td>
 
-                      {/* Video Uploaded URL (6881) */}
-                      <td className='py-3 px-4'>
-                        {(() => {
-                          const videoUrl = extractUrl(video.field_6881);
-                          return videoUrl ? (
-                            <a
-                              href={videoUrl}
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline'
-                            >
-                              <Video className='w-4 h-4' />
-                              <span className='truncate max-w-32'>
-                                View Video
-                              </span>
-                              <ExternalLink className='w-3 h-3' />
-                            </a>
-                          ) : (
-                            <span className='text-gray-400'>No video</span>
-                          );
-                        })()}
-                      </td>
+                          {/* Title (6852) - Editable */}
+                          <td className='py-3 px-4'>
+                            {editingTitle?.videoId === video.id ? (
+                              <div className='flex items-center gap-2'>
+                                <input
+                                  type='text'
+                                  value={editingTitle.value}
+                                  onChange={(e) =>
+                                    setEditingTitle((prev) =>
+                                      prev
+                                        ? { ...prev, value: e.target.value }
+                                        : null
+                                    )
+                                  }
+                                  onKeyDown={(e) =>
+                                    handleTitleKeyDown(e, video.id)
+                                  }
+                                  onBlur={() =>
+                                    saveTitleEdit(video.id, editingTitle.value)
+                                  }
+                                  className='flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                                  autoFocus
+                                  disabled={editingTitle.saving}
+                                />
+                                {editingTitle.saving ? (
+                                  <Loader2 className='w-4 h-4 animate-spin text-blue-500' />
+                                ) : (
+                                  <button
+                                    onClick={() =>
+                                      saveTitleEdit(
+                                        video.id,
+                                        editingTitle.value
+                                      )
+                                    }
+                                    className='p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors'
+                                    title='Save title'
+                                  >
+                                    <Save className='w-4 h-4' />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div
+                                className='group flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1 -mx-2 -my-1'
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const currentTitle = extractFieldValue(
+                                    video.field_6852
+                                  );
+                                  startTitleEdit(video.id, currentTitle);
+                                }}
+                              >
+                                <span
+                                  className={`${
+                                    isSelected
+                                      ? 'text-blue-900'
+                                      : 'text-gray-900'
+                                  }`}
+                                >
+                                  {extractFieldValue(video.field_6852) ||
+                                    'Click to add title'}
+                                </span>
+                                <Edit3 className='w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity' />
+                              </div>
+                            )}
+                          </td>
 
-                      {/* Final Merged Video URL (6858) */}
-                      <td className='py-3 px-4'>
-                        {(() => {
-                          const finalVideoUrl = extractUrl(video.field_6858);
-                          return finalVideoUrl ? (
-                            <a
-                              href={finalVideoUrl}
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
-                            >
-                              <Video className='w-4 h-4' />
-                              <span className='truncate max-w-32'>
-                                Final Video
-                              </span>
-                              <ExternalLink className='w-3 h-3' />
-                            </a>
-                          ) : (
-                            <span className='text-gray-400'>Not ready</span>
-                          );
-                        })()}
-                      </td>
-
-                      {/* Actions */}
-                      <td className='py-3 px-4'>
-                        <div className='flex items-center gap-2'>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
+                          {/* Video Uploaded URL (6881) */}
+                          <td className='py-3 px-4'>
+                            {(() => {
                               const videoUrl = extractUrl(video.field_6881);
-                              if (videoUrl) {
-                                handleTranscribeVideo(video.id, videoUrl);
-                              } else {
-                                setError(
-                                  'No video URL found for transcription'
-                                );
-                              }
-                            }}
-                            disabled={
-                              transcribing !== null ||
-                              transcribingAll ||
-                              !extractUrl(video.field_6881) ||
-                              !!extractUrl(video.field_6861)
-                            }
-                            className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                            title={
-                              transcribing !== null
-                                ? transcribing === video.id
-                                  ? 'Transcribing...'
-                                  : 'Another transcription in progress'
-                                : transcribingAll
-                                ? 'Bulk transcription in progress'
-                                : !extractUrl(video.field_6881)
-                                ? 'No video URL available'
-                                : !!extractUrl(video.field_6861)
-                                ? 'Video already has captions'
-                                : 'Transcribe video'
-                            }
-                          >
-                            {transcribing === video.id ? (
-                              <Loader2 className='w-4 h-4 animate-spin' />
-                            ) : (
-                              <Subtitles className='w-4 h-4' />
-                            )}
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const captionsUrl = extractUrl(video.field_6861);
-                              if (captionsUrl) {
-                                handleGenerateScenes(video.id);
-                              } else {
-                                setError(
-                                  'No captions URL found for scene generation'
-                                );
-                              }
-                            }}
-                            disabled={
-                              generatingScenes !== null ||
-                              generatingScenesAll ||
-                              !extractUrl(video.field_6861) ||
-                              hasScenes(video)
-                            }
-                            className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                            title={
-                              generatingScenes !== null
-                                ? generatingScenes === video.id
-                                  ? 'Generating scenes...'
-                                  : 'Another scene generation in progress'
-                                : !extractUrl(video.field_6861)
-                                ? 'No captions URL available'
-                                : hasScenes(video)
-                                ? 'Scenes already generated for this video'
-                                : 'Generate scenes from captions'
-                            }
-                          >
-                            {generatingScenes === video.id ? (
-                              <Loader2 className='w-4 h-4 animate-spin' />
-                            ) : (
-                              <Grid3x3 className='w-4 h-4' />
-                            )}
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleGenerateClips(video.id);
-                            }}
-                            disabled={
-                              clipGeneration.generatingClips !== null ||
-                              !hasScenes(video)
-                            }
-                            className='p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                            title={
-                              clipGeneration.generatingClips !== null
-                                ? clipGeneration.generatingClips === video.id
-                                  ? clipGeneration.clipsProgress
-                                    ? `Generating clips... Scene ${clipGeneration.clipsProgress.current}/${clipGeneration.clipsProgress.total} (${clipGeneration.clipsProgress.percentage}%)`
-                                    : 'Generating clips...'
-                                  : 'Another clip generation in progress'
-                                : !hasScenes(video)
-                                ? 'No scenes available - generate scenes first'
-                                : 'Generate video clips for all scenes'
-                            }
-                          >
-                            {clipGeneration.generatingClips === video.id ? (
-                              clipGeneration.clipsProgress ? (
-                                <div className='flex items-center space-x-1'>
-                                  <Loader2 className='w-4 h-4 animate-spin' />
-                                  <span className='text-xs font-medium'>
-                                    {clipGeneration.clipsProgress.current}/
-                                    {clipGeneration.clipsProgress.total}
+                              return videoUrl ? (
+                                <a
+                                  href={videoUrl}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  className='inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline'
+                                >
+                                  <Video className='w-4 h-4' />
+                                  <span className='truncate max-w-32'>
+                                    View Video
                                   </span>
-                                </div>
+                                  <ExternalLink className='w-3 h-3' />
+                                </a>
                               ) : (
-                                <Loader2 className='w-4 h-4 animate-spin' />
-                              )
-                            ) : (
-                              <Video className='w-4 h-4' />
-                            )}
-                          </button>
+                                <span className='text-gray-400'>No video</span>
+                              );
+                            })()}
+                          </td>
 
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const videoUrl = extractUrl(video.field_6881);
-                              if (videoUrl) {
-                                handleNormalizeVideo(video.id, videoUrl);
-                              } else {
-                                setError(
-                                  'No video URL found for normalization'
-                                );
-                              }
-                            }}
-                            disabled={
-                              normalizing !== null ||
-                              !extractUrl(video.field_6881) ||
-                              !!extractUrl(video.field_6903) // Already normalized
-                            }
-                            className='p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                            title={
-                              normalizing !== null
-                                ? normalizing === video.id
-                                  ? 'Normalizing audio...'
-                                  : 'Another normalization in progress'
-                                : !extractUrl(video.field_6881)
-                                ? 'No video URL available'
-                                : !!extractUrl(video.field_6903)
-                                ? 'Video already normalized'
-                                : 'Normalize audio loudness'
-                            }
-                          >
-                            {normalizing === video.id ? (
-                              <Loader2 className='w-4 h-4 animate-spin' />
-                            ) : (
-                              <Volume2 className='w-4 h-4' />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          {/* Final Merged Video URL (6858) */}
+                          <td className='py-3 px-4'>
+                            {(() => {
+                              const finalVideoUrl = extractUrl(
+                                video.field_6858
+                              );
+                              return finalVideoUrl ? (
+                                <a
+                                  href={finalVideoUrl}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
+                                >
+                                  <Video className='w-4 h-4' />
+                                  <span className='truncate max-w-32'>
+                                    Final Video
+                                  </span>
+                                  <ExternalLink className='w-3 h-3' />
+                                </a>
+                              ) : (
+                                <span className='text-gray-400'>Not ready</span>
+                              );
+                            })()}
+                          </td>
+
+                          {/* Actions */}
+                          <td className='py-3 px-4'>
+                            <div className='flex items-center gap-2'>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const videoUrl = extractUrl(video.field_6881);
+                                  if (videoUrl) {
+                                    handleTranscribeVideo(video.id, videoUrl);
+                                  } else {
+                                    setError(
+                                      'No video URL found for transcription'
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  transcribing !== null ||
+                                  transcribingAll ||
+                                  !extractUrl(video.field_6881) ||
+                                  !!extractUrl(video.field_6861)
+                                }
+                                className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                title={
+                                  transcribing !== null
+                                    ? transcribing === video.id
+                                      ? 'Transcribing...'
+                                      : 'Another transcription in progress'
+                                    : transcribingAll
+                                    ? 'Bulk transcription in progress'
+                                    : !extractUrl(video.field_6881)
+                                    ? 'No video URL available'
+                                    : !!extractUrl(video.field_6861)
+                                    ? 'Video already has captions'
+                                    : 'Transcribe video'
+                                }
+                              >
+                                {transcribing === video.id ? (
+                                  <Loader2 className='w-4 h-4 animate-spin' />
+                                ) : (
+                                  <Subtitles className='w-4 h-4' />
+                                )}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const captionsUrl = extractUrl(
+                                    video.field_6861
+                                  );
+                                  if (captionsUrl) {
+                                    handleGenerateScenes(video.id);
+                                  } else {
+                                    setError(
+                                      'No captions URL found for scene generation'
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  generatingScenes !== null ||
+                                  generatingScenesAll ||
+                                  !extractUrl(video.field_6861) ||
+                                  hasScenes(video)
+                                }
+                                className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                title={
+                                  generatingScenes !== null
+                                    ? generatingScenes === video.id
+                                      ? 'Generating scenes...'
+                                      : 'Another scene generation in progress'
+                                    : !extractUrl(video.field_6861)
+                                    ? 'No captions URL available'
+                                    : hasScenes(video)
+                                    ? 'Scenes already generated for this video'
+                                    : 'Generate scenes from captions'
+                                }
+                              >
+                                {generatingScenes === video.id ? (
+                                  <Loader2 className='w-4 h-4 animate-spin' />
+                                ) : (
+                                  <Grid3x3 className='w-4 h-4' />
+                                )}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleGenerateClips(video.id);
+                                }}
+                                disabled={
+                                  clipGeneration.generatingClips !== null ||
+                                  !hasScenes(video)
+                                }
+                                className='p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                title={
+                                  clipGeneration.generatingClips !== null
+                                    ? clipGeneration.generatingClips ===
+                                      video.id
+                                      ? clipGeneration.clipsProgress
+                                        ? `Generating clips... Scene ${clipGeneration.clipsProgress.current}/${clipGeneration.clipsProgress.total} (${clipGeneration.clipsProgress.percentage}%)`
+                                        : 'Generating clips...'
+                                      : 'Another clip generation in progress'
+                                    : !hasScenes(video)
+                                    ? 'No scenes available - generate scenes first'
+                                    : 'Generate video clips for all scenes'
+                                }
+                              >
+                                {clipGeneration.generatingClips === video.id ? (
+                                  clipGeneration.clipsProgress ? (
+                                    <div className='flex items-center space-x-1'>
+                                      <Loader2 className='w-4 h-4 animate-spin' />
+                                      <span className='text-xs font-medium'>
+                                        {clipGeneration.clipsProgress.current}/
+                                        {clipGeneration.clipsProgress.total}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <Loader2 className='w-4 h-4 animate-spin' />
+                                  )
+                                ) : (
+                                  <Video className='w-4 h-4' />
+                                )}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const videoUrl = extractUrl(video.field_6881);
+                                  if (videoUrl) {
+                                    handleNormalizeVideo(video.id, videoUrl);
+                                  } else {
+                                    setError(
+                                      'No video URL found for normalization'
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  normalizing !== null ||
+                                  !extractUrl(video.field_6881) ||
+                                  !!extractUrl(video.field_6903) // Already normalized
+                                }
+                                className='p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                title={
+                                  normalizing !== null
+                                    ? normalizing === video.id
+                                      ? 'Normalizing audio...'
+                                      : 'Another normalization in progress'
+                                    : !extractUrl(video.field_6881)
+                                    ? 'No video URL available'
+                                    : !!extractUrl(video.field_6903)
+                                    ? 'Video already normalized'
+                                    : 'Normalize audio loudness'
+                                }
+                              >
+                                {normalizing === video.id ? (
+                                  <Loader2 className='w-4 h-4 animate-spin' />
+                                ) : (
+                                  <Volume2 className='w-4 h-4' />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Final Video Table */}
-      <FinalVideoTable />
+          {/* Final Video Table */}
+          <FinalVideoTable />
 
-      {/* Timestamp Display */}
+          {/* Timestamp Display */}
+        </div>
+      )}
     </div>
   );
 }
