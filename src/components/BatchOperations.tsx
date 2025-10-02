@@ -632,7 +632,7 @@ export default function BatchOperations({
                     )}
 
                     {/* Action Buttons */}
-                    <div className='flex flex-col sm:flex-row gap-3'>
+                    <div className='flex flex-wrap gap-3'>
                       <button
                         onClick={() => setShowPlayer(!showPlayer)}
                         className='inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'

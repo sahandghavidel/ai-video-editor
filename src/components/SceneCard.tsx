@@ -950,10 +950,10 @@ export default function SceneCard({
   }
 
   return (
-    <div className='w-full max-w-7xl mx-auto'>
+    <div className='w-full'>
       {/* Filter Controls */}
-      <div className='mb-4 flex items-center justify-between bg-gray-50 p-4 rounded-lg'>
-        <div className='flex items-center space-x-4'>
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6'>
+        <div className='grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6'>
           <div className='flex items-center space-x-2'>
             <label className='text-sm font-medium text-gray-700'>
               Sort by Duration:
@@ -1082,7 +1082,7 @@ export default function SceneCard({
         </div>
       </div>
 
-      <div className='grid gap-4'>
+      <div className='w-full flex flex-col space-y-6'>
         {filteredAndSortedData.map((scene) => (
           <div
             key={scene.id}
@@ -1091,8 +1091,8 @@ export default function SceneCard({
             }}
             className='bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200'
           >
-            <div className='flex items-center justify-between'>
-              {/* Left side - ID and Order */}
+            <div className='space-y-4'>
+              {/* Top row - ID and Order */}
               <div className='flex items-center space-x-8'>
                 {/* ID */}
                 <div>
@@ -1115,434 +1115,437 @@ export default function SceneCard({
                 </div>
               </div>
 
-              {/* Right side - Sentence */}
-              <div className='flex-1 ml-8'>
-                <div className='flex items-center justify-between'>
-                  <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    Sentence{' '}
-                    {isUpdating && editingId === scene.id && '(Saving...)'}
-                  </label>
-                  {/* Media Controls Group */}
-                  <div className='flex items-center space-x-2'>
-                    {/* Revert to Original Button */}
-                    {typeof scene['field_6901'] === 'string' &&
-                      scene['field_6901'] &&
-                      scene['field_6901'] !== scene['field_6890'] && (
-                        <button
-                          onClick={() => handleRevertToOriginal(scene.id)}
-                          disabled={revertingId === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title='Revert to original sentence'
-                        >
-                          {revertingId === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <RotateCcw className='h-3 w-3' />
-                          )}
-                          <span>
-                            {revertingId === scene.id ? 'Reverting...' : 'Text'}
-                          </span>
-                        </button>
-                      )}
-                    {/* TTS Produce Button */}
-                    <button
-                      onClick={() =>
-                        handleTTSProduce(
-                          scene.id,
-                          String(scene['field_6890'] || scene.field_6890 || '')
-                        )
-                      }
-                      disabled={
-                        sceneLoading.producingTTS !== null ||
-                        batchOperations.generatingAllTTS ||
-                        !String(
-                          scene['field_6890'] || scene.field_6890 || ''
-                        ).trim()
-                      }
-                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[100px] rounded-full text-xs font-medium transition-colors ${
-                        sceneLoading.producingTTS === scene.id
-                          ? 'bg-gray-100 text-gray-500'
-                          : sceneLoading.producingTTS !== null ||
-                            batchOperations.generatingAllTTS
-                          ? 'bg-gray-50 text-gray-400'
-                          : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      title={
-                        sceneLoading.producingTTS === scene.id
-                          ? 'Generating TTS for this scene...'
-                          : sceneLoading.producingTTS !== null
-                          ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
-                          : batchOperations.generatingAllTTS
-                          ? 'Batch TTS generation is in progress'
-                          : 'Generate TTS from sentence'
-                      }
-                    >
-                      {sceneLoading.producingTTS === scene.id ? (
-                        <Loader2 className='animate-spin h-3 w-3' />
-                      ) : (
-                        <CheckCircle className='h-3 w-3' />
-                      )}
-                      <span>
-                        {sceneLoading.producingTTS === scene.id
-                          ? 'Producing...'
-                          : sceneLoading.producingTTS !== null ||
-                            batchOperations.generatingAllTTS
-                          ? 'TTS Busy'
-                          : 'Gen TTS'}
-                      </span>
-                    </button>
+              {/* Bottom row - Sentence and buttons */}
+              <div>
+                <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2'>
+                  Sentence{' '}
+                  {isUpdating && editingId === scene.id && '(Saving...)'}
+                </label>
+                {/* Media Controls Group - Auto-fill Grid Layout */}
+                <div
+                  className='grid gap-2 ml-auto'
+                  style={{
+                    gridTemplateColumns:
+                      'repeat(auto-fill, minmax(110px, max-content))',
+                  }}
+                >
+                  {/* Revert to Original Button */}
+                  {typeof scene['field_6901'] === 'string' &&
+                    scene['field_6901'] &&
+                    scene['field_6901'] !== scene['field_6890'] && (
+                      <button
+                        onClick={() => handleRevertToOriginal(scene.id)}
+                        disabled={revertingId === scene.id}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title='Revert to original sentence'
+                      >
+                        {revertingId === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <RotateCcw className='h-3 w-3' />
+                        )}
+                        <span>
+                          {revertingId === scene.id ? 'Reverting...' : 'Text'}
+                        </span>
+                      </button>
+                    )}
+                  {/* TTS Produce Button */}
+                  <button
+                    onClick={() =>
+                      handleTTSProduce(
+                        scene.id,
+                        String(scene['field_6890'] || scene.field_6890 || '')
+                      )
+                    }
+                    disabled={
+                      sceneLoading.producingTTS !== null ||
+                      batchOperations.generatingAllTTS ||
+                      !String(
+                        scene['field_6890'] || scene.field_6890 || ''
+                      ).trim()
+                    }
+                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[100px] rounded-full text-xs font-medium transition-colors ${
+                      sceneLoading.producingTTS === scene.id
+                        ? 'bg-gray-100 text-gray-500'
+                        : sceneLoading.producingTTS !== null ||
+                          batchOperations.generatingAllTTS
+                        ? 'bg-gray-50 text-gray-400'
+                        : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title={
+                      sceneLoading.producingTTS === scene.id
+                        ? 'Generating TTS for this scene...'
+                        : sceneLoading.producingTTS !== null
+                        ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
+                        : batchOperations.generatingAllTTS
+                        ? 'Batch TTS generation is in progress'
+                        : 'Generate TTS from sentence'
+                    }
+                  >
+                    {sceneLoading.producingTTS === scene.id ? (
+                      <Loader2 className='animate-spin h-3 w-3' />
+                    ) : (
+                      <CheckCircle className='h-3 w-3' />
+                    )}
+                    <span>
+                      {sceneLoading.producingTTS === scene.id
+                        ? 'Producing...'
+                        : sceneLoading.producingTTS !== null ||
+                          batchOperations.generatingAllTTS
+                        ? 'TTS Busy'
+                        : 'Gen TTS'}
+                    </span>
+                  </button>
 
-                    {/* AI Improvement Button */}
-                    <button
-                      onClick={() =>
-                        handleSentenceImprovement(
-                          scene.id,
-                          String(scene['field_6890'] || scene.field_6890 || ''),
-                          modelSelection.selectedModel || undefined
-                        )
-                      }
-                      disabled={
-                        sceneLoading.improvingSentence !== null ||
-                        batchOperations.improvingAll ||
-                        !String(
-                          scene['field_6890'] || scene.field_6890 || ''
-                        ).trim()
-                      }
-                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
-                        sceneLoading.improvingSentence === scene.id
-                          ? 'bg-gray-100 text-gray-500'
-                          : sceneLoading.improvingSentence !== null ||
-                            batchOperations.improvingAll
-                          ? 'bg-gray-50 text-gray-400'
-                          : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      title={
-                        sceneLoading.improvingSentence === scene.id
-                          ? 'Improving this sentence...'
-                          : sceneLoading.improvingSentence !== null
-                          ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
-                          : batchOperations.improvingAll
-                          ? 'Batch AI improvement is in progress'
-                          : modelSelection.selectedModel
-                          ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
-                          : 'Improve sentence with AI (no model selected)'
-                      }
-                    >
-                      {sceneLoading.improvingSentence === scene.id ? (
-                        <Loader2 className='animate-spin h-3 w-3' />
-                      ) : (
-                        <Sparkles className='h-3 w-3' />
-                      )}
-                      <span>
-                        {sceneLoading.improvingSentence === scene.id
-                          ? 'Improving...'
-                          : sceneLoading.improvingSentence !== null ||
-                            batchOperations.improvingAll
-                          ? 'Busy'
-                          : 'AI'}
-                      </span>
-                    </button>
+                  {/* AI Improvement Button */}
+                  <button
+                    onClick={() =>
+                      handleSentenceImprovement(
+                        scene.id,
+                        String(scene['field_6890'] || scene.field_6890 || ''),
+                        modelSelection.selectedModel || undefined
+                      )
+                    }
+                    disabled={
+                      sceneLoading.improvingSentence !== null ||
+                      batchOperations.improvingAll ||
+                      !String(
+                        scene['field_6890'] || scene.field_6890 || ''
+                      ).trim()
+                    }
+                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
+                      sceneLoading.improvingSentence === scene.id
+                        ? 'bg-gray-100 text-gray-500'
+                        : sceneLoading.improvingSentence !== null ||
+                          batchOperations.improvingAll
+                        ? 'bg-gray-50 text-gray-400'
+                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title={
+                      sceneLoading.improvingSentence === scene.id
+                        ? 'Improving this sentence...'
+                        : sceneLoading.improvingSentence !== null
+                        ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
+                        : batchOperations.improvingAll
+                        ? 'Batch AI improvement is in progress'
+                        : modelSelection.selectedModel
+                        ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
+                        : 'Improve sentence with AI (no model selected)'
+                    }
+                  >
+                    {sceneLoading.improvingSentence === scene.id ? (
+                      <Loader2 className='animate-spin h-3 w-3' />
+                    ) : (
+                      <Sparkles className='h-3 w-3' />
+                    )}
+                    <span>
+                      {sceneLoading.improvingSentence === scene.id
+                        ? 'Improving...'
+                        : sceneLoading.improvingSentence !== null ||
+                          batchOperations.improvingAll
+                        ? 'Busy'
+                        : 'AI'}
+                    </span>
+                  </button>
 
-                    {/* TTS Audio Button */}
-                    {typeof scene['field_6891'] === 'string' &&
-                      scene['field_6891'] && (
-                        <button
-                          onClick={() =>
-                            handleAudioPlay(
-                              scene.id,
-                              scene['field_6891'] as string
-                            )
-                          }
-                          disabled={loadingAudio === scene.id}
-                          className={`px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
-                            mediaPlayer.playingAudioId === scene.id
-                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={
-                            mediaPlayer.playingAudioId === scene.id
-                              ? 'Pause audio'
-                              : 'Play audio'
-                          }
-                        >
-                          {loadingAudio === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : mediaPlayer.playingAudioId === scene.id ? (
-                            <Pause className='h-3 w-3' />
-                          ) : (
-                            <Play className='h-3 w-3' />
-                          )}
-                        </button>
-                      )}
+                  {/* TTS Audio Button */}
+                  {typeof scene['field_6891'] === 'string' &&
+                    scene['field_6891'] && (
+                      <button
+                        onClick={() =>
+                          handleAudioPlay(
+                            scene.id,
+                            scene['field_6891'] as string
+                          )
+                        }
+                        disabled={loadingAudio === scene.id}
+                        className={`px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
+                          mediaPlayer.playingAudioId === scene.id
+                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          mediaPlayer.playingAudioId === scene.id
+                            ? 'Pause audio'
+                            : 'Play audio'
+                        }
+                      >
+                        {loadingAudio === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : mediaPlayer.playingAudioId === scene.id ? (
+                          <Pause className='h-3 w-3' />
+                        ) : (
+                          <Play className='h-3 w-3' />
+                        )}
+                      </button>
+                    )}
 
-                    {/* Remove TTS Button */}
-                    {typeof scene['field_6891'] === 'string' &&
-                      scene['field_6891'] && (
-                        <button
-                          onClick={() => handleRemoveTTS(scene.id)}
-                          disabled={removingTTSId === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title='Remove TTS audio'
-                        >
-                          {removingTTSId === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <X className='h-3 w-3' />
-                          )}
-                          <span>
-                            {removingTTSId === scene.id
-                              ? 'Removing...'
-                              : 'Del TTS'}
-                          </span>
-                        </button>
-                      )}
+                  {/* Remove TTS Button */}
+                  {typeof scene['field_6891'] === 'string' &&
+                    scene['field_6891'] && (
+                      <button
+                        onClick={() => handleRemoveTTS(scene.id)}
+                        disabled={removingTTSId === scene.id}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title='Remove TTS audio'
+                      >
+                        {removingTTSId === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <X className='h-3 w-3' />
+                        )}
+                        <span>
+                          {removingTTSId === scene.id
+                            ? 'Removing...'
+                            : 'Del TTS'}
+                        </span>
+                      </button>
+                    )}
 
-                    {/* Video Play Button */}
-                    {typeof scene['field_6888'] === 'string' &&
-                      scene['field_6888'] && (
-                        <button
-                          onClick={() =>
-                            handleVideoPlay(
-                              scene.id,
-                              scene['field_6888'] as string
-                            )
-                          }
-                          disabled={loadingVideo === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
-                            mediaPlayer.playingVideoId === scene.id
-                              ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                              : 'bg-green-100 text-green-700 hover:bg-green-200'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={
-                            mediaPlayer.playingVideoId === scene.id
-                              ? 'Stop'
-                              : 'Play'
-                          }
-                        >
-                          {loadingVideo === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : mediaPlayer.playingVideoId === scene.id ? (
-                            <Square className='h-3 w-3' />
-                          ) : (
-                            <Video className='h-3 w-3' />
-                          )}
-                          <span>
-                            {mediaPlayer.playingVideoId === scene.id
-                              ? 'Stop'
-                              : 'Orig Vid'}
-                          </span>
-                        </button>
-                      )}
+                  {/* Video Play Button */}
+                  {typeof scene['field_6888'] === 'string' &&
+                    scene['field_6888'] && (
+                      <button
+                        onClick={() =>
+                          handleVideoPlay(
+                            scene.id,
+                            scene['field_6888'] as string
+                          )
+                        }
+                        disabled={loadingVideo === scene.id}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
+                          mediaPlayer.playingVideoId === scene.id
+                            ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          mediaPlayer.playingVideoId === scene.id
+                            ? 'Stop'
+                            : 'Play'
+                        }
+                      >
+                        {loadingVideo === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : mediaPlayer.playingVideoId === scene.id ? (
+                          <Square className='h-3 w-3' />
+                        ) : (
+                          <Video className='h-3 w-3' />
+                        )}
+                        <span>
+                          {mediaPlayer.playingVideoId === scene.id
+                            ? 'Stop'
+                            : 'Orig Vid'}
+                        </span>
+                      </button>
+                    )}
 
-                    {/* Speed Up Video Button */}
-                    {typeof scene['field_6888'] === 'string' &&
-                      scene['field_6888'] && (
-                        <button
-                          onClick={() => handleSpeedUpVideo(scene.id)}
-                          disabled={
-                            sceneLoading.speedingUpVideo !== null ||
-                            batchOperations.speedingUpAllVideos
-                          }
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
-                            sceneLoading.speedingUpVideo === scene.id
-                              ? 'bg-gray-100 text-gray-500'
-                              : sceneLoading.speedingUpVideo !== null ||
-                                batchOperations.speedingUpAllVideos
-                              ? 'bg-gray-50 text-gray-400'
-                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                          }`}
-                          title={
-                            sceneLoading.speedingUpVideo === scene.id
-                              ? 'Speed up video processing for this scene...'
-                              : sceneLoading.speedingUpVideo !== null
-                              ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
-                              : batchOperations.speedingUpAllVideos
-                              ? 'Batch video speed-up is in progress'
-                              : `Speed up video ${
-                                  videoSettings.selectedSpeed
-                                }x and ${
-                                  videoSettings.muteAudio ? 'mute' : 'keep'
-                                } audio (saves to field 6886)`
-                          }
-                        >
-                          {sceneLoading.speedingUpVideo === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <div className='flex items-center space-x-1'>
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  updateVideoSettings({
-                                    muteAudio: !videoSettings.muteAudio,
-                                  });
-                                }}
-                                className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
-                                title={`Click to ${
-                                  videoSettings.muteAudio ? 'enable' : 'mute'
-                                } audio`}
-                              >
-                                {videoSettings.muteAudio ? (
-                                  <VolumeX className='h-3 w-3 text-blue-700' />
-                                ) : (
-                                  <Volume2 className='h-3 w-3 text-blue-700' />
-                                )}
-                              </div>
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  cycleSpeed();
-                                }}
-                                className='px-1 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-600/20 rounded transition-colors duration-200 cursor-pointer'
-                                title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
-                              >
-                                {videoSettings.selectedSpeed}x
-                              </div>
+                  {/* Speed Up Video Button */}
+                  {typeof scene['field_6888'] === 'string' &&
+                    scene['field_6888'] && (
+                      <button
+                        onClick={() => handleSpeedUpVideo(scene.id)}
+                        disabled={
+                          sceneLoading.speedingUpVideo !== null ||
+                          batchOperations.speedingUpAllVideos
+                        }
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          sceneLoading.speedingUpVideo === scene.id
+                            ? 'bg-gray-100 text-gray-500'
+                            : sceneLoading.speedingUpVideo !== null ||
+                              batchOperations.speedingUpAllVideos
+                            ? 'bg-gray-50 text-gray-400'
+                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                        }`}
+                        title={
+                          sceneLoading.speedingUpVideo === scene.id
+                            ? 'Speed up video processing for this scene...'
+                            : sceneLoading.speedingUpVideo !== null
+                            ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
+                            : batchOperations.speedingUpAllVideos
+                            ? 'Batch video speed-up is in progress'
+                            : `Speed up video ${
+                                videoSettings.selectedSpeed
+                              }x and ${
+                                videoSettings.muteAudio ? 'mute' : 'keep'
+                              } audio (saves to field 6886)`
+                        }
+                      >
+                        {sceneLoading.speedingUpVideo === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <div className='flex items-center space-x-1'>
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateVideoSettings({
+                                  muteAudio: !videoSettings.muteAudio,
+                                });
+                              }}
+                              className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                              title={`Click to ${
+                                videoSettings.muteAudio ? 'enable' : 'mute'
+                              } audio`}
+                            >
+                              {videoSettings.muteAudio ? (
+                                <VolumeX className='h-3 w-3 text-blue-700' />
+                              ) : (
+                                <Volume2 className='h-3 w-3 text-blue-700' />
+                              )}
                             </div>
-                          )}
-                          <span>
-                            {sceneLoading.speedingUpVideo === scene.id
-                              ? 'Processing...'
-                              : sceneLoading.speedingUpVideo !== null ||
-                                batchOperations.speedingUpAllVideos
-                              ? 'Speed Busy'
-                              : 'Speed'}
-                          </span>
-                        </button>
-                      )}
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cycleSpeed();
+                              }}
+                              className='px-1 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-600/20 rounded transition-colors duration-200 cursor-pointer'
+                              title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
+                            >
+                              {videoSettings.selectedSpeed}x
+                            </div>
+                          </div>
+                        )}
+                        <span>
+                          {sceneLoading.speedingUpVideo === scene.id
+                            ? 'Processing...'
+                            : sceneLoading.speedingUpVideo !== null ||
+                              batchOperations.speedingUpAllVideos
+                            ? 'Speed Busy'
+                            : 'Speed'}
+                        </span>
+                      </button>
+                    )}
 
-                    {/* Generate Clip Button */}
-                    {typeof scene['field_6889'] === 'string' &&
-                      scene['field_6889'] && (
-                        <button
-                          onClick={() => handleGenerateSingleClip(scene.id)}
-                          disabled={
-                            clipGeneration.generatingSingleClip !== null ||
-                            clipGeneration.generatingClips !== null
-                          }
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
-                            clipGeneration.generatingSingleClip === scene.id
-                              ? 'bg-purple-100 text-purple-500'
-                              : clipGeneration.generatingSingleClip !== null ||
-                                clipGeneration.generatingClips !== null
-                              ? 'bg-gray-50 text-gray-400'
-                              : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                          }`}
-                          title={
-                            clipGeneration.generatingSingleClip === scene.id
-                              ? 'Generating clip for this scene...'
-                              : clipGeneration.generatingSingleClip !== null
-                              ? `Clip is being generated for scene ${clipGeneration.generatingSingleClip}`
-                              : clipGeneration.generatingClips !== null
-                              ? 'Bulk clip generation is in progress'
-                              : 'Generate video clip for this scene'
-                          }
-                        >
-                          {clipGeneration.generatingSingleClip === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <Scissors className='h-3 w-3' />
-                          )}
-                          <span>
-                            {clipGeneration.generatingSingleClip === scene.id
-                              ? 'Generating...'
-                              : clipGeneration.generatingSingleClip !== null ||
-                                clipGeneration.generatingClips !== null
-                              ? 'Clip Busy'
-                              : 'Gen Clip'}
-                          </span>
-                        </button>
-                      )}
+                  {/* Generate Clip Button */}
+                  {typeof scene['field_6889'] === 'string' &&
+                    scene['field_6889'] && (
+                      <button
+                        onClick={() => handleGenerateSingleClip(scene.id)}
+                        disabled={
+                          clipGeneration.generatingSingleClip !== null ||
+                          clipGeneration.generatingClips !== null
+                        }
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          clipGeneration.generatingSingleClip === scene.id
+                            ? 'bg-purple-100 text-purple-500'
+                            : clipGeneration.generatingSingleClip !== null ||
+                              clipGeneration.generatingClips !== null
+                            ? 'bg-gray-50 text-gray-400'
+                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                        }`}
+                        title={
+                          clipGeneration.generatingSingleClip === scene.id
+                            ? 'Generating clip for this scene...'
+                            : clipGeneration.generatingSingleClip !== null
+                            ? `Clip is being generated for scene ${clipGeneration.generatingSingleClip}`
+                            : clipGeneration.generatingClips !== null
+                            ? 'Bulk clip generation is in progress'
+                            : 'Generate video clip for this scene'
+                        }
+                      >
+                        {clipGeneration.generatingSingleClip === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <Scissors className='h-3 w-3' />
+                        )}
+                        <span>
+                          {clipGeneration.generatingSingleClip === scene.id
+                            ? 'Generating...'
+                            : clipGeneration.generatingSingleClip !== null ||
+                              clipGeneration.generatingClips !== null
+                            ? 'Clip Busy'
+                            : 'Gen Clip'}
+                        </span>
+                      </button>
+                    )}
 
-                    {/* Generate Video Button */}
-                    {typeof scene['field_6888'] === 'string' &&
-                      scene['field_6888'] &&
-                      typeof scene['field_6891'] === 'string' &&
-                      scene['field_6891'] && (
-                        <button
-                          onClick={() =>
-                            handleVideoGenerate(
-                              scene.id,
-                              scene['field_6888'] as string,
-                              scene['field_6891'] as string
-                            )
-                          }
-                          disabled={
-                            sceneLoading.generatingVideo !== null ||
-                            batchOperations.generatingAllVideos
-                          }
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
-                            sceneLoading.generatingVideo === scene.id
-                              ? 'bg-gray-100 text-gray-500'
-                              : sceneLoading.generatingVideo !== null ||
-                                batchOperations.generatingAllVideos
-                              ? 'bg-gray-50 text-gray-400'
-                              : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={
-                            sceneLoading.generatingVideo === scene.id
-                              ? 'Generating synchronized video for this scene...'
-                              : sceneLoading.generatingVideo !== null
-                              ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
-                              : batchOperations.generatingAllVideos
-                              ? 'Batch video generation is in progress'
-                              : 'Generate synchronized video'
-                          }
-                        >
-                          {sceneLoading.generatingVideo === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <Settings className='h-3 w-3' />
-                          )}
-                          <span>
-                            {sceneLoading.generatingVideo === scene.id
-                              ? 'Generating...'
-                              : sceneLoading.generatingVideo !== null
-                              ? 'Video Busy'
-                              : batchOperations.generatingAllVideos
-                              ? 'Video Busy'
-                              : 'Sync'}
-                          </span>
-                        </button>
-                      )}
+                  {/* Generate Video Button */}
+                  {typeof scene['field_6888'] === 'string' &&
+                    scene['field_6888'] &&
+                    typeof scene['field_6891'] === 'string' &&
+                    scene['field_6891'] && (
+                      <button
+                        onClick={() =>
+                          handleVideoGenerate(
+                            scene.id,
+                            scene['field_6888'] as string,
+                            scene['field_6891'] as string
+                          )
+                        }
+                        disabled={
+                          sceneLoading.generatingVideo !== null ||
+                          batchOperations.generatingAllVideos
+                        }
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
+                          sceneLoading.generatingVideo === scene.id
+                            ? 'bg-gray-100 text-gray-500'
+                            : sceneLoading.generatingVideo !== null ||
+                              batchOperations.generatingAllVideos
+                            ? 'bg-gray-50 text-gray-400'
+                            : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          sceneLoading.generatingVideo === scene.id
+                            ? 'Generating synchronized video for this scene...'
+                            : sceneLoading.generatingVideo !== null
+                            ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
+                            : batchOperations.generatingAllVideos
+                            ? 'Batch video generation is in progress'
+                            : 'Generate synchronized video'
+                        }
+                      >
+                        {sceneLoading.generatingVideo === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <Settings className='h-3 w-3' />
+                        )}
+                        <span>
+                          {sceneLoading.generatingVideo === scene.id
+                            ? 'Generating...'
+                            : sceneLoading.generatingVideo !== null
+                            ? 'Video Busy'
+                            : batchOperations.generatingAllVideos
+                            ? 'Video Busy'
+                            : 'Sync'}
+                        </span>
+                      </button>
+                    )}
 
-                    {/* Produced Video Button */}
-                    {typeof scene['field_6886'] === 'string' &&
-                      scene['field_6886'] && (
-                        <button
-                          onClick={() =>
-                            handleProducedVideoPlay(
-                              scene.id,
-                              scene['field_6886'] as string
-                            )
-                          }
-                          disabled={loadingProducedVideo === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[85px] rounded-full text-xs font-medium transition-colors ${
-                            mediaPlayer.playingProducedVideoId === scene.id
-                              ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                              : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={
-                            mediaPlayer.playingProducedVideoId === scene.id
-                              ? 'Stop'
-                              : 'Play'
-                          }
-                        >
-                          {loadingProducedVideo === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : mediaPlayer.playingProducedVideoId ===
-                            scene.id ? (
-                            <Pause className='h-3 w-3' />
-                          ) : (
-                            <Monitor className='h-3 w-3' />
-                          )}
-                          <span>
-                            {mediaPlayer.playingProducedVideoId === scene.id
-                              ? 'Stop'
-                              : 'Final Vid'}
-                          </span>
-                        </button>
-                      )}
-                  </div>
+                  {/* Produced Video Button */}
+                  {typeof scene['field_6886'] === 'string' &&
+                    scene['field_6886'] && (
+                      <button
+                        onClick={() =>
+                          handleProducedVideoPlay(
+                            scene.id,
+                            scene['field_6886'] as string
+                          )
+                        }
+                        disabled={loadingProducedVideo === scene.id}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[85px] rounded-full text-xs font-medium transition-colors ${
+                          mediaPlayer.playingProducedVideoId === scene.id
+                            ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                            : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          mediaPlayer.playingProducedVideoId === scene.id
+                            ? 'Stop'
+                            : 'Play'
+                        }
+                      >
+                        {loadingProducedVideo === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : mediaPlayer.playingProducedVideoId === scene.id ? (
+                          <Pause className='h-3 w-3' />
+                        ) : (
+                          <Monitor className='h-3 w-3' />
+                        )}
+                        <span>
+                          {mediaPlayer.playingProducedVideoId === scene.id
+                            ? 'Stop'
+                            : 'Final Vid'}
+                        </span>
+                      </button>
+                    )}
                 </div>
                 {editingId === scene.id ? (
                   <div className='mt-1'>
