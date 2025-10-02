@@ -35,6 +35,7 @@ export interface BatchOperationsState {
   speedingUpAllVideos: boolean;
   concatenatingVideos: boolean;
   improvingAllVideos: boolean;
+  generatingAllTTSForAllVideos: boolean;
 }
 
 // Media player state interface
@@ -239,6 +240,7 @@ const defaultBatchOperations: BatchOperationsState = {
   speedingUpAllVideos: false,
   concatenatingVideos: false,
   improvingAllVideos: false,
+  generatingAllTTSForAllVideos: false,
 };
 
 // Default media player state

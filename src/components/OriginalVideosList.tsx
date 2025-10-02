@@ -27,12 +27,16 @@ import {
   Subtitles,
   Grid3x3,
   Volume2,
+  Mic,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
 import FinalVideoTable from './FinalVideoTable';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
-import { handleImproveAllSentencesForAllVideos } from '@/utils/batchOperations';
+import {
+  handleImproveAllSentencesForAllVideos,
+  handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
+} from '@/utils/batchOperations';
 import { Sparkles } from 'lucide-react';
 
 interface SceneHandlers {
@@ -84,6 +88,8 @@ export default function OriginalVideosList({
   const [currentProcessingVideoId, setCurrentProcessingVideoId] = useState<
     number | null
   >(null);
+  const [generatingAllTTSForAllVideos, setGeneratingAllTTSForAllVideos] =
+    useState(false);
 
   // Get clip generation state from global store
   const {
@@ -113,6 +119,7 @@ export default function OriginalVideosList({
     batchOperations,
     startBatchOperation,
     completeBatchOperation,
+    setProducingTTS,
   } = useAppStore();
 
   useEffect(() => {
@@ -1054,6 +1061,60 @@ export default function OriginalVideosList({
     }
   };
 
+  // Generate TTS for All Scenes in All Videos
+  const handleGenerateAllTTSForAllVideos = async () => {
+    if (!sceneHandlers) {
+      alert(
+        'Scene handlers are not available yet. Please wait a moment and try again.'
+      );
+      return;
+    }
+
+    try {
+      setGeneratingAllTTSForAllVideos(true);
+
+      // Get all scenes from the store
+      if (!allScenesData || allScenesData.length === 0) {
+        alert('No scenes found to generate TTS');
+        return;
+      }
+
+      console.log(
+        `Starting TTS generation for all videos with ${allScenesData.length} scenes...`
+      );
+      console.log('All scenes data:', allScenesData);
+
+      await generateAllTTSForAllVideosUtil(
+        allScenesData,
+        sceneHandlers.handleTTSProduce,
+        setGeneratingAllTTSForAllVideos,
+        setCurrentProcessingVideoId,
+        setProducingTTS
+      );
+
+      console.log('Batch TTS generation completed for all videos');
+
+      // Refresh the original videos list to show any updates
+      await handleRefresh();
+
+      // Note: Success sound is already played in the batch operation utility
+    } catch (error) {
+      console.error('Error generating TTS for all videos scenes:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to generate TTS for all videos scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setGeneratingAllTTSForAllVideos(false);
+      setCurrentProcessingVideoId(null);
+    }
+  };
+
   // Merge All Final Videos
   const handleMergeAllFinalVideos = async () => {
     try {
@@ -1665,6 +1726,41 @@ export default function OriginalVideosList({
                     ? `Scene #${sceneLoading.improvingSentence}`
                     : 'Processing...'
                   : 'Improve All Videos'}
+              </span>
+            </button>
+
+            {/* Generate TTS All Videos Button */}
+            <button
+              onClick={handleGenerateAllTTSForAllVideos}
+              disabled={
+                generatingAllTTSForAllVideos ||
+                sceneLoading.producingTTS !== null ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+              }
+              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              title={
+                !sceneHandlers
+                  ? 'Scene handlers not ready. Please wait...'
+                  : generatingAllTTSForAllVideos
+                  ? 'Generating TTS for all scenes in all videos...'
+                  : 'Generate TTS for all scenes in all videos'
+              }
+            >
+              <Mic
+                className={`w-4 h-4 ${
+                  generatingAllTTSForAllVideos ? 'animate-pulse' : ''
+                }`}
+              />
+              <span>
+                {generatingAllTTSForAllVideos
+                  ? currentProcessingVideoId !== null
+                    ? `Video #${currentProcessingVideoId}`
+                    : sceneLoading.producingTTS !== null
+                    ? `Scene #${sceneLoading.producingTTS}`
+                    : 'Processing...'
+                  : 'Generate TTS All'}
               </span>
             </button>
 

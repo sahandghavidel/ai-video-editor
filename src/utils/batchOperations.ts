@@ -488,3 +488,129 @@ export const handleImproveAllSentencesForAllVideos = async (
     setImprovingAllVideos(false);
   }
 };
+
+// Batch operation: Generate TTS for all scenes in all videos (not filtered by selected video)
+export const handleGenerateAllTTSForAllVideos = async (
+  allData: BaserowRow[],
+  handleTTSProduce: (sceneId: number, text: string) => Promise<void>,
+  setGeneratingAllVideos: (isGenerating: boolean) => void,
+  setCurrentlyProcessingVideo: (videoId: number | null) => void,
+  setProducingTTS: (sceneId: number | null) => void
+) => {
+  setGeneratingAllVideos(true);
+
+  try {
+    console.log('=== Starting Generate TTS for All Videos Batch Operation ===');
+    console.log('Total scenes to process:', allData.length);
+
+    // Group scenes by video ID
+    const scenesByVideo = new Map<number, BaserowRow[]>();
+
+    for (const scene of allData) {
+      // Extract video ID from field_6889 (Videos ID field - references Original Videos table)
+      const videoIdField = scene['field_6889'];
+      let videoId: number | null = null;
+
+      console.log(`Scene ${scene.id} field_6889:`, videoIdField);
+
+      if (typeof videoIdField === 'number') {
+        videoId = videoIdField;
+      } else if (typeof videoIdField === 'string') {
+        videoId = parseInt(videoIdField, 10);
+      } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+        // If it's an array, get the first item
+        const firstId =
+          typeof videoIdField[0] === 'object'
+            ? videoIdField[0].id || videoIdField[0].value
+            : videoIdField[0];
+        videoId = parseInt(String(firstId), 10);
+      }
+
+      console.log(`Scene ${scene.id} extracted videoId:`, videoId);
+
+      if (videoId && !isNaN(videoId)) {
+        if (!scenesByVideo.has(videoId)) {
+          scenesByVideo.set(videoId, []);
+        }
+        scenesByVideo.get(videoId)?.push(scene);
+      } else {
+        console.warn(`Scene ${scene.id} has no valid video ID, skipping`);
+      }
+    }
+
+    console.log(
+      `Grouped into ${scenesByVideo.size} videos:`,
+      Array.from(scenesByVideo.keys())
+    );
+
+    if (scenesByVideo.size === 0) {
+      console.warn('No videos found with valid scenes!');
+      return;
+    }
+
+    let totalProcessed = 0;
+    let totalGenerated = 0;
+
+    // Process each video's scenes
+    for (const [videoId, scenes] of scenesByVideo.entries()) {
+      setCurrentlyProcessingVideo(videoId);
+      console.log(
+        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`
+      );
+
+      for (const scene of scenes) {
+        const currentSentence = String(
+          scene['field_6890'] || scene.field_6890 || ''
+        );
+        const hasAudio =
+          scene['field_6891'] && String(scene['field_6891']).trim();
+
+        console.log(`Scene ${scene.id}:`);
+        console.log('  Current sentence:', currentSentence);
+        console.log('  Has audio?', !!hasAudio);
+        console.log('  Has text content?', currentSentence.trim() !== '');
+
+        // Only generate TTS if scene has text but no audio
+        if (currentSentence.trim() && !hasAudio) {
+          console.log(`  ✓ Will generate TTS for scene ${scene.id}`);
+          setProducingTTS(scene.id);
+          try {
+            await handleTTSProduce(scene.id, currentSentence);
+            totalGenerated++;
+            console.log(`  ✓ Successfully generated TTS for scene ${scene.id}`);
+            await wait(3000); // 3 seconds delay between generations
+          } catch (error) {
+            console.error(
+              `  ✗ Failed to generate TTS for scene ${scene.id}:`,
+              error
+            );
+            // Continue with next scene even if one fails
+          } finally {
+            setProducingTTS(null);
+          }
+        } else {
+          console.log(
+            `  ✗ Skipping scene ${scene.id} (already has audio or no text)`
+          );
+        }
+        totalProcessed++;
+      }
+
+      console.log(`--- Completed video #${videoId} ---`);
+    }
+
+    console.log('\n=== Batch TTS Generation Summary ===');
+    console.log(`Total scenes processed: ${totalProcessed}`);
+    console.log(`Total TTS generated: ${totalGenerated}`);
+    console.log('====================================\n');
+
+    // Play success sound when batch operation completes
+    playSuccessSound();
+  } catch (error) {
+    console.error('Error in batch TTS generation for all videos:', error);
+    throw error;
+  } finally {
+    setCurrentlyProcessingVideo(null);
+    setGeneratingAllVideos(false);
+  }
+};
