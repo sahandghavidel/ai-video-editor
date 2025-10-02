@@ -1116,14 +1116,10 @@ export default function SceneCard({
               </div>
 
               {/* Bottom row - Sentence and buttons */}
-              <div>
-                <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2'>
-                  Sentence{' '}
-                  {isUpdating && editingId === scene.id && '(Saving...)'}
-                </label>
+              <div className='grid grid-cols-1'>
                 {/* Media Controls Group - Auto-fill Grid Layout */}
                 <div
-                  className='grid gap-2 ml-auto'
+                  className='grid auto-cols-max right-justify gap-2'
                   style={{
                     gridTemplateColumns:
                       'repeat(auto-fill, minmax(110px, max-content))',
