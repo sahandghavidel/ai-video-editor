@@ -787,7 +787,7 @@ export default function OriginalVideosList({
       });
 
       if (videosToTranscribe.length === 0) {
-        alert('No videos found that need transcription');
+        console.log('No videos found that need transcription');
         return;
       }
 
@@ -964,7 +964,7 @@ export default function OriginalVideosList({
       });
 
       if (videosToProcess.length === 0) {
-        alert('No videos found with captions that need scene generation');
+        console.log('No videos found with captions that need scene generation');
         return;
       }
 
@@ -1034,7 +1034,7 @@ export default function OriginalVideosList({
   // Improve All Scenes for All Videos
   const handleImproveAllVideosScenes = async () => {
     if (!sceneHandlers) {
-      alert(
+      console.log(
         'Scene handlers are not available yet. Please wait a moment and try again.'
       );
       return;
@@ -1045,7 +1045,7 @@ export default function OriginalVideosList({
 
       // Get all scenes from the store
       if (!allScenesData || allScenesData.length === 0) {
-        alert('No scenes found to improve');
+        console.log('No scenes found to improve');
         return;
       }
 
@@ -1089,7 +1089,7 @@ export default function OriginalVideosList({
   // Generate TTS for All Scenes in All Videos
   const handleGenerateAllTTSForAllVideos = async () => {
     if (!sceneHandlers) {
-      alert(
+      console.log(
         'Scene handlers are not available yet. Please wait a moment and try again.'
       );
       return;
@@ -1100,7 +1100,7 @@ export default function OriginalVideosList({
 
       // Get all scenes from the store
       if (!allScenesData || allScenesData.length === 0) {
-        alert('No scenes found to generate TTS');
+        console.log('No scenes found to generate TTS');
         return;
       }
 
@@ -1143,7 +1143,7 @@ export default function OriginalVideosList({
   // Generate Video for All Scenes in All Videos
   const handleGenerateAllVideosForAllScenes = async () => {
     if (!sceneHandlers) {
-      alert(
+      console.log(
         'Scene handlers are not available yet. Please wait a moment and try again.'
       );
       return;
@@ -1154,7 +1154,7 @@ export default function OriginalVideosList({
 
       // Get all scenes from the store
       if (!allScenesData || allScenesData.length === 0) {
-        alert('No scenes found to generate videos');
+        console.log('No scenes found to generate videos');
         return;
       }
 
@@ -1203,7 +1203,7 @@ export default function OriginalVideosList({
 
       // Get all scenes from the store
       if (!allScenesData || allScenesData.length === 0) {
-        alert('No scenes found to speed up videos');
+        console.log('No scenes found to speed up videos');
         return;
       }
 
@@ -1268,7 +1268,7 @@ export default function OriginalVideosList({
       );
 
       if (videosWithFinalVideos.length === 0) {
-        alert('No videos found with final merged videos to merge');
+        console.log('No videos found with final merged videos to merge');
         return;
       }
 
@@ -1410,7 +1410,7 @@ export default function OriginalVideosList({
       });
 
       if (videosWithTimestamps.length === 0) {
-        alert(
+        console.log(
           'No videos found with final merged videos, titles, and order values'
         );
         return;
@@ -1553,7 +1553,7 @@ export default function OriginalVideosList({
       );
 
       if (videosWithScenes.length === 0) {
-        alert('No videos found with scenes to generate clips');
+        console.log('No videos found with scenes to generate clips');
         return;
       }
 
@@ -1606,7 +1606,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline: Transcribe All -> Generate Scenes -> Gen Clips All -> Speed Up All -> Improve All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
-      alert(
+      console.log(
         'Scene handlers are not available yet. Please wait a moment and try again.'
       );
       return;
