@@ -89,6 +89,17 @@ export interface ClipGenerationState {
   generatingSingleClip: number | null; // For single scene generation (scene ID)
 }
 
+// Pipeline configuration state interface
+export interface PipelineConfig {
+  transcribe: boolean;
+  generateScenes: boolean;
+  generateClips: boolean;
+  speedUp: boolean;
+  improve: boolean;
+  generateTTS: boolean;
+  sync: boolean;
+}
+
 interface AppState {
   // Core data state
   data: BaserowRow[];
@@ -124,6 +135,9 @@ interface AppState {
 
   // Clip Generation State
   clipGeneration: ClipGenerationState;
+
+  // Pipeline Configuration
+  pipelineConfig: PipelineConfig;
 
   // Computed properties
   getFilteredData: () => BaserowRow[];
@@ -198,6 +212,11 @@ interface AppState {
   ) => void;
   clearClipGeneration: () => void;
   setGeneratingSingleClip: (sceneId: number | null) => void;
+
+  // Pipeline Configuration Actions
+  updatePipelineConfig: (updates: Partial<PipelineConfig>) => void;
+  togglePipelineStep: (step: keyof PipelineConfig) => void;
+  resetPipelineConfig: () => void;
 
   // Settings Persistence Actions
   saveSettingsToLocalStorage: () => void;
@@ -289,6 +308,17 @@ const defaultClipGeneration: ClipGenerationState = {
   generatingSingleClip: null,
 };
 
+// Default pipeline configuration (all steps enabled by default)
+const defaultPipelineConfig: PipelineConfig = {
+  transcribe: true,
+  generateScenes: true,
+  generateClips: true,
+  speedUp: true,
+  improve: true,
+  generateTTS: true,
+  sync: true,
+};
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   data: [],
@@ -324,6 +354,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Clip Generation State
   clipGeneration: defaultClipGeneration,
+
+  // Pipeline Configuration
+  pipelineConfig: defaultPipelineConfig,
 
   // Computed properties
   getFilteredData: () => {
@@ -613,6 +646,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     })),
 
+  // Pipeline Configuration Actions
+  updatePipelineConfig: (updates) =>
+    set((state) => {
+      const newConfig = {
+        ...state.pipelineConfig,
+        ...updates,
+      };
+      // Save to localStorage whenever updated
+      localStorage.setItem('pipelineConfig', JSON.stringify(newConfig));
+      return { pipelineConfig: newConfig };
+    }),
+
+  togglePipelineStep: (step) =>
+    set((state) => {
+      const newConfig = {
+        ...state.pipelineConfig,
+        [step]: !state.pipelineConfig[step],
+      };
+      // Save to localStorage whenever updated
+      localStorage.setItem('pipelineConfig', JSON.stringify(newConfig));
+      return { pipelineConfig: newConfig };
+    }),
+
+  resetPipelineConfig: () =>
+    set(() => {
+      // Save to localStorage when reset
+      localStorage.setItem(
+        'pipelineConfig',
+        JSON.stringify(defaultPipelineConfig)
+      );
+      return { pipelineConfig: defaultPipelineConfig };
+    }),
+
   // Data operations
   updateRow: (id, updates) =>
     set((state) => ({
@@ -679,9 +745,20 @@ export const useAppStore = create<AppState>((set, get) => ({
                 ...settings.selectedOriginalVideo,
               }
             : defaultSelectedOriginalVideo,
+          pipelineConfig: {
+            ...defaultPipelineConfig,
+            ...settings.pipelineConfig,
+          },
         }));
 
         console.log('Settings loaded from localStorage');
+      }
+
+      // Also try to load pipelineConfig from its own key for backward compatibility
+      const savedPipelineConfig = localStorage.getItem('pipelineConfig');
+      if (savedPipelineConfig) {
+        const config = JSON.parse(savedPipelineConfig);
+        set({ pipelineConfig: { ...defaultPipelineConfig, ...config } });
       }
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);
@@ -691,6 +768,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearLocalStorageSettings: () => {
     try {
       localStorage.removeItem('video-editor-settings');
+      localStorage.removeItem('pipelineConfig');
       set({
         ttsSettings: defaultTTSSettings,
         videoSettings: defaultVideoSettings,
@@ -701,6 +779,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           modelSearch: defaultModelSelection.modelSearch,
         },
         selectedOriginalVideo: defaultSelectedOriginalVideo,
+        pipelineConfig: defaultPipelineConfig,
       });
       console.log('Settings cleared from localStorage');
     } catch (error) {

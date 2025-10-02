@@ -35,6 +35,7 @@ import {
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
 import FinalVideoTable from './FinalVideoTable';
+import PipelineConfig from './PipelineConfig';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import {
   handleImproveAllSentencesForAllVideos,
@@ -145,6 +146,7 @@ export default function OriginalVideosList({
     setSpeedingUpVideo,
     setGeneratingVideo,
     videoSettings,
+    pipelineConfig,
   } = useAppStore();
 
   useEffect(() => {
@@ -1603,7 +1605,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: Transcribe All -> Generate Scenes -> Gen Clips All -> Speed Up All -> Improve All
+  // Run Full Pipeline: Transcribe All -> Generate Scenes -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -1618,115 +1620,177 @@ export default function OriginalVideosList({
 
       console.log('========================================');
       console.log('Starting Full Pipeline Processing');
+      console.log('Pipeline Configuration:', pipelineConfig);
       console.log('========================================');
 
+      let stepNumber = 0;
+
       // Step 1: Transcribe All
-      setPipelineStep('Transcribing all videos...');
-      console.log('Step 1: Transcribing all videos');
-      try {
-        await handleTranscribeAll();
-        console.log('✓ Step 1 Complete: Transcription finished');
-      } catch (error) {
-        console.error('✗ Step 1 Failed: Transcription error', error);
-        throw new Error(
-          `Transcription failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`
-        );
+      if (pipelineConfig.transcribe) {
+        stepNumber++;
+        setPipelineStep(`Step ${stepNumber}: Transcribing all videos...`);
+        console.log(`Step ${stepNumber}: Transcribing all videos`);
+        try {
+          await handleTranscribeAll();
+          console.log(`✓ Step ${stepNumber} Complete: Transcription finished`);
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Transcription error`,
+            error
+          );
+          throw new Error(
+            `Transcription failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Transcribe (disabled in config)');
       }
 
       // Step 2: Generate Scenes
-      setPipelineStep('Generating scenes for all videos...');
-      console.log('Step 2: Generating scenes for all videos');
-      try {
-        await handleGenerateScenesAll();
-        console.log('✓ Step 2 Complete: Scene generation finished');
-      } catch (error) {
-        console.error('✗ Step 2 Failed: Scene generation error', error);
-        throw new Error(
-          `Scene generation failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`
+      if (pipelineConfig.generateScenes) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating scenes for all videos...`
         );
+        console.log(`Step ${stepNumber}: Generating scenes for all videos`);
+        try {
+          await handleGenerateScenesAll();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Scene generation finished`
+          );
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Scene generation error`,
+            error
+          );
+          throw new Error(
+            `Scene generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Generate Scenes (disabled in config)');
       }
 
       // Step 3: Generate Clips All
-      setPipelineStep('Generating clips for all videos...');
-      console.log('Step 3: Generating clips for all videos');
-      try {
-        await handleGenerateClipsAll();
-        console.log('✓ Step 3 Complete: Clip generation finished');
-      } catch (error) {
-        console.error('✗ Step 3 Failed: Clip generation error', error);
-        throw new Error(
-          `Clip generation failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`
+      if (pipelineConfig.generateClips) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating clips for all videos...`
         );
+        console.log(`Step ${stepNumber}: Generating clips for all videos`);
+        try {
+          await handleGenerateClipsAll();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Clip generation finished`
+          );
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Clip generation error`,
+            error
+          );
+          throw new Error(
+            `Clip generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Generate Clips (disabled in config)');
       }
 
       // Step 4: Speed Up All
-      setPipelineStep('Speeding up all videos...');
-      console.log('Step 4: Speeding up all videos');
-      try {
-        await handleSpeedUpAllVideos();
-        console.log('✓ Step 4 Complete: Speed up finished');
-      } catch (error) {
-        console.error('✗ Step 4 Failed: Speed up error', error);
-        throw new Error(
-          `Speed up failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`
-        );
+      if (pipelineConfig.speedUp) {
+        stepNumber++;
+        setPipelineStep(`Step ${stepNumber}: Speeding up all videos...`);
+        console.log(`Step ${stepNumber}: Speeding up all videos`);
+        try {
+          await handleSpeedUpAllVideos();
+          console.log(`✓ Step ${stepNumber} Complete: Speed up finished`);
+        } catch (error) {
+          console.error(`✗ Step ${stepNumber} Failed: Speed up error`, error);
+          throw new Error(
+            `Speed up failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Speed Up (disabled in config)');
       }
 
       // Step 5: Improve All
-      setPipelineStep('Improving all scenes...');
-      console.log('Step 5: Improving all scenes');
-      try {
-        await handleImproveAllVideosScenes();
-        console.log('✓ Step 5 Complete: AI improvement finished');
-      } catch (error) {
-        console.error('✗ Step 5 Failed: AI improvement error', error);
-        throw new Error(
-          `AI improvement failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`
-        );
+      if (pipelineConfig.improve) {
+        stepNumber++;
+        setPipelineStep(`Step ${stepNumber}: Improving all scenes...`);
+        console.log(`Step ${stepNumber}: Improving all scenes`);
+        try {
+          await handleImproveAllVideosScenes();
+          console.log(`✓ Step ${stepNumber} Complete: AI improvement finished`);
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: AI improvement error`,
+            error
+          );
+          throw new Error(
+            `AI improvement failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Improve (disabled in config)');
       }
 
       // Step 6: TTS All
-      setPipelineStep('Generating TTS for all scenes...');
-      console.log('Step 6: Generating TTS for all scenes');
-      try {
-        await handleGenerateAllTTSForAllVideos();
-        console.log('✓ Step 6 Complete: TTS generation finished');
-      } catch (error) {
-        console.error('✗ Step 6 Failed: TTS generation error', error);
-        throw new Error(
-          `TTS generation failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`
-        );
+      if (pipelineConfig.generateTTS) {
+        stepNumber++;
+        setPipelineStep(`Step ${stepNumber}: Generating TTS for all scenes...`);
+        console.log(`Step ${stepNumber}: Generating TTS for all scenes`);
+        try {
+          await handleGenerateAllTTSForAllVideos();
+          console.log(`✓ Step ${stepNumber} Complete: TTS generation finished`);
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: TTS generation error`,
+            error
+          );
+          throw new Error(
+            `TTS generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Generate TTS (disabled in config)');
       }
 
       // Step 7: Sync All
-      setPipelineStep('Syncing all videos...');
-      console.log('Step 7: Syncing all videos');
-      try {
-        await handleGenerateAllVideosForAllScenes();
-        console.log('✓ Step 7 Complete: Video sync finished');
-      } catch (error) {
-        console.error('✗ Step 7 Failed: Video sync error', error);
-        throw new Error(
-          `Video sync failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`
-        );
+      if (pipelineConfig.sync) {
+        stepNumber++;
+        setPipelineStep(`Step ${stepNumber}: Syncing all videos...`);
+        console.log(`Step ${stepNumber}: Syncing all videos`);
+        try {
+          await handleGenerateAllVideosForAllScenes();
+          console.log(`✓ Step ${stepNumber} Complete: Video sync finished`);
+        } catch (error) {
+          console.error(`✗ Step ${stepNumber} Failed: Video sync error`, error);
+          throw new Error(
+            `Video sync failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Sync (disabled in config)');
       }
 
       console.log('========================================');
       console.log('✓ Full Pipeline Complete!');
+      console.log(`Total steps executed: ${stepNumber}`);
       console.log('========================================');
 
       // Final refresh
@@ -2019,6 +2083,11 @@ export default function OriginalVideosList({
               {originalVideos.length !== 1 ? 's' : ''} in library
             </p>
           </div>
+        </div>
+
+        {/* Pipeline Configuration */}
+        <div className='mb-6'>
+          <PipelineConfig />
         </div>
 
         {/* Action Buttons - Full Width Grid Layout */}
