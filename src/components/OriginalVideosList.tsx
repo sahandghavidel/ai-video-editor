@@ -113,7 +113,7 @@ export default function OriginalVideosList({
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
   const [pipelineStep, setPipelineStep] = useState<string>('');
-  const [isExpanded, setIsExpanded] = useState(true); // Collapsible state
+  const [isExpanded, setIsExpanded] = useState(false); // Collapsible state - collapsed by default
   const [isBatchOperationsExpanded, setIsBatchOperationsExpanded] =
     useState(false); // Batch operations collapsed by default
   const [isFinalVideoExpanded, setIsFinalVideoExpanded] = useState(false); // Final video section collapsed by default
