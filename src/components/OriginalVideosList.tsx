@@ -108,6 +108,7 @@ export default function OriginalVideosList({
     useState(false);
   const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
   const [generatingAllVideos, setGeneratingAllVideos] = useState(false);
+  const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
 
   // Get clip generation state from global store
   const {
@@ -440,8 +441,8 @@ export default function OriginalVideosList({
     fetchOriginalVideos();
   }, []);
 
-  const handleRefresh = () => {
-    fetchOriginalVideos(true);
+  const handleRefresh = async () => {
+    await fetchOriginalVideos(true);
   };
 
   const getStatusIcon = (status: string) => {
@@ -1537,6 +1538,151 @@ export default function OriginalVideosList({
     }
   };
 
+  // Generate Clips for all videos
+  const handleGenerateClipsAll = async () => {
+    try {
+      setGeneratingClipsAll(true);
+      setError(null);
+
+      // Filter videos that have scenes
+      const videosWithScenes = originalVideos.filter((video) =>
+        hasScenes(video)
+      );
+
+      if (videosWithScenes.length === 0) {
+        alert('No videos found with scenes to generate clips');
+        return;
+      }
+
+      console.log(
+        `Starting clip generation for ${videosWithScenes.length} videos...`
+      );
+
+      // Process videos one by one
+      for (const video of videosWithScenes) {
+        console.log(`Generating clips for video ${video.id}...`);
+
+        try {
+          await handleGenerateClipsInternal(video.id);
+          console.log(`Successfully generated clips for video ${video.id}`);
+
+          // No need to refresh here since we refresh after each scene in handleGenerateClipsInternal
+
+          // Small delay between videos
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error(
+            `Failed to generate clips for video ${video.id}:`,
+            error
+          );
+          // Continue with next video
+        }
+      }
+
+      console.log('Batch clip generation completed');
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error in batch clip generation:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to generate clips for all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setGeneratingClipsAll(false);
+      clearClipGeneration();
+    }
+  };
+
+  // Internal clip generation function (without UI state management)
+  const handleGenerateClipsInternal = async (videoId: number) => {
+    setGeneratingClipsGlobal(videoId);
+    setClipsProgressGlobal({ current: 0, total: 1, percentage: 0 });
+
+    const response = await fetch('/api/generate-clips', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        videoId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to start clip generation');
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error('No response body available');
+    }
+
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete lines
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.substring(6));
+
+            if (data.progress) {
+              setClipsProgressGlobal({
+                current: data.progress.current,
+                total: data.progress.total,
+                percentage: data.progress.percentage,
+              });
+            }
+
+            // Refresh data only when a scene is completed (not on every progress update)
+            if (data.type === 'scene_complete') {
+              console.log(
+                `Scene ${data.sceneNumber}/${data.total} completed, refreshing data...`
+              );
+
+              // Refresh both original videos and scenes data after each scene completes
+              await handleRefresh();
+              if (refreshScenesData) {
+                refreshScenesData();
+              }
+
+              // Small delay to ensure UI updates
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            }
+
+            if (data.error) {
+              throw new Error(data.error);
+            }
+
+            if (data.completed) {
+              console.log('Clip generation completed for video:', videoId);
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse SSE data:', line);
+          }
+        }
+      }
+    }
+  };
+
   // Generate Clips for video
   const handleGenerateClips = async (videoId: number) => {
     try {
@@ -1972,6 +2118,40 @@ export default function OriginalVideosList({
                     ? `S${sceneLoading.generatingVideo}`
                     : 'Processing...'
                   : 'Sync All'}
+              </span>
+            </button>
+
+            {/* Generate Clips All Button */}
+            <button
+              onClick={handleGenerateClipsAll}
+              disabled={
+                generatingClipsAll ||
+                clipGeneration.generatingClips !== null ||
+                uploading ||
+                reordering
+              }
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-cyan-500 hover:bg-cyan-600 disabled:bg-cyan-300 text-black text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              title={
+                generatingClipsAll
+                  ? 'Generating clips for all videos...'
+                  : clipGeneration.generatingClips !== null
+                  ? 'Another clip generation in progress'
+                  : 'Generate video clips for all videos with scenes'
+              }
+            >
+              <Video
+                className={`w-4 h-4 ${
+                  generatingClipsAll || clipGeneration.generatingClips !== null
+                    ? 'animate-pulse'
+                    : ''
+                }`}
+              />
+              <span>
+                {generatingClipsAll
+                  ? clipGeneration.generatingClips !== null
+                    ? `#${clipGeneration.generatingClips}`
+                    : 'Processing...'
+                  : 'Gen Clips All'}
               </span>
             </button>
 
