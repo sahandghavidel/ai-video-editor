@@ -11,7 +11,7 @@ import AutoGenerateSettings from '@/components/AutoGenerateSettings';
 import OriginalVideosList from '@/components/OriginalVideosList';
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, Video, Loader2, RefreshCw, Settings } from 'lucide-react';
 
 export default function Home() {
   const {
@@ -24,6 +24,8 @@ export default function Home() {
   } = useAppStore();
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isGlobalSettingsExpanded, setIsGlobalSettingsExpanded] =
+    useState(false); // Global settings collapsed by default
 
   // Get filtered data based on selected original video
   const filteredData = getFilteredData();
@@ -230,24 +232,70 @@ export default function Home() {
               </div>
             )}
 
-            {/* Global Settings - Only show when data is loaded */}
+            {/* Global Settings - Collapsible */}
             {!initialLoading && data.length > 0 && (
-              <div className='flex flex-wrap overflow-x-auto pb-2 mb-4 gap-2'>
-                <div className='flex-1 min-w-80'>
-                  <ModelSelection />
-                </div>
-                <div className='flex-1 min-w-80'>
-                  <TranscriptionModelSelection />
-                </div>
-                <div className='flex-1 min-w-80'>
-                  <TTSSettings />
-                </div>
-                <div className='flex-1 min-w-80'>
-                  <VideoSpeedSettings />
-                </div>
-                <div className='flex-1 min-w-80'>
-                  <AutoGenerateSettings />
-                </div>
+              <div className='bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 overflow-hidden mb-6'>
+                {/* Settings Header */}
+                <button
+                  onClick={() =>
+                    setIsGlobalSettingsExpanded(!isGlobalSettingsExpanded)
+                  }
+                  className='w-full px-6 py-4 flex items-center justify-between hover:bg-white/50 transition-colors'
+                >
+                  <div className='flex items-center gap-3'>
+                    <Settings className='w-6 h-6 text-blue-600' />
+                    <div className='text-left'>
+                      <h2 className='text-xl font-bold text-gray-900'>
+                        Global Settings
+                      </h2>
+                      <p className='text-sm text-gray-600'>
+                        AI Models, Transcription, TTS, Video Speed &
+                        Auto-Generation
+                      </p>
+                    </div>
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <span className='text-xs text-gray-400'>
+                      {isGlobalSettingsExpanded
+                        ? 'Click to collapse'
+                        : 'Click to expand'}
+                    </span>
+                    <svg
+                      className={`w-5 h-5 text-gray-400 transition-transform ${
+                        isGlobalSettingsExpanded ? 'rotate-180' : ''
+                      }`}
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
+                      <path
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                        strokeWidth={2}
+                        d='M19 9l-7 7-7-7'
+                      />
+                    </svg>
+                  </div>
+                </button>
+
+                {/* Collapsible Settings Content */}
+                {isGlobalSettingsExpanded && (
+                  <div className='px-6 pb-6 pt-2'>
+                    <div
+                      className='grid gap-3'
+                      style={{
+                        gridTemplateColumns:
+                          'repeat(auto-fit, minmax(320px, 1fr))',
+                      }}
+                    >
+                      <ModelSelection />
+                      <TranscriptionModelSelection />
+                      <TTSSettings />
+                      <VideoSpeedSettings />
+                      <AutoGenerateSettings />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
