@@ -1,7 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { RotateCcw, Zap, Volume2, VolumeX } from 'lucide-react';
+import { RotateCcw, Zap, Volume2, VolumeX, Filter } from 'lucide-react';
 
 interface VideoSpeedSettingsProps {
   className?: string;
@@ -11,6 +11,7 @@ interface VideoSpeedSettingsProps {
 const defaultVideoSpeedSettings = {
   selectedSpeed: 4,
   muteAudio: true,
+  speedUpMode: 'emptyOnly' as const,
 };
 
 export default function VideoSpeedSettings({
@@ -60,6 +61,24 @@ export default function VideoSpeedSettings({
       label: 'Keep Original Audio',
       icon: Volume2,
       description: 'Preserve original audio',
+    },
+  ];
+
+  const speedUpModeOptions = [
+    {
+      value: 'all',
+      label: 'All Videos',
+      description: 'Speed up all videos',
+    },
+    {
+      value: 'emptyOnly',
+      label: 'Empty Only (Raw Clips)',
+      description: 'Only videos without text',
+    },
+    {
+      value: 'withTextOnly',
+      label: 'With Text Only (Final)',
+      description: 'Only videos with text content',
     },
   ];
 
@@ -146,13 +165,46 @@ export default function VideoSpeedSettings({
           </p>
         </div>
 
+        {/* Speed Up Mode Filter */}
+        <div className='space-y-2'>
+          <label className='text-xs font-medium text-gray-700 flex items-center'>
+            <Filter className='w-3.5 h-3.5 mr-1.5 text-purple-500' />
+            Speed Up Filter
+          </label>
+          <select
+            value={videoSettings.speedUpMode}
+            onChange={(e) =>
+              updateVideoSettings({
+                speedUpMode: e.target.value as
+                  | 'all'
+                  | 'emptyOnly'
+                  | 'withTextOnly',
+              })
+            }
+            className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-colors duration-200 text-xs bg-white appearance-none cursor-pointer'
+          >
+            {speedUpModeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className='text-xs text-gray-500'>
+            {
+              speedUpModeOptions.find(
+                (opt) => opt.value === videoSettings.speedUpMode
+              )?.description
+            }
+          </p>
+        </div>
+
         {/* Current Configuration Summary */}
         <div className='space-y-2'>
           <label className='text-xs font-medium text-gray-700'>
             Configuration
           </label>
-          <div className='p-2 bg-orange-50 border border-orange-200 rounded-lg'>
-            <div className='flex items-center justify-between mb-1'>
+          <div className='p-2 bg-orange-50 border border-orange-200 rounded-lg space-y-1'>
+            <div className='flex items-center justify-between'>
               <span className='text-xs text-gray-600'>Speed:</span>
               <span className='text-xs font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded'>
                 {videoSettings.selectedSpeed}x
@@ -168,6 +220,14 @@ export default function VideoSpeedSettings({
                 }`}
               >
                 {videoSettings.muteAudio ? 'Muted' : 'Preserved'}
+              </span>
+            </div>
+            <div className='flex items-center justify-between'>
+              <span className='text-xs text-gray-600'>Filter:</span>
+              <span className='text-xs font-semibold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded'>
+                {speedUpModeOptions.find(
+                  (opt) => opt.value === videoSettings.speedUpMode
+                )?.label || 'All'}
               </span>
             </div>
           </div>

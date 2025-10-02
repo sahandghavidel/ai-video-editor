@@ -624,7 +624,11 @@ export const handleGenerateAllTTSForAllVideos = async (
 // Batch operation: Speed up all videos for all scenes that have video clips
 export const handleSpeedUpAllVideosForAllScenes = async (
   allData: BaserowRow[],
-  videoSettings: { selectedSpeed: number; muteAudio: boolean },
+  videoSettings: {
+    selectedSpeed: number;
+    muteAudio: boolean;
+    speedUpMode: 'all' | 'emptyOnly' | 'withTextOnly';
+  },
   setSpeedingUpAllVideos: (isSpeedingUp: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
   setSpeedingUpVideo: (sceneId: number | null) => void,
@@ -634,6 +638,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
 
   try {
     console.log('=== Starting Speed Up All Videos Batch Operation ===');
+    console.log('Speed Up Mode:', videoSettings.speedUpMode);
     console.log('Total scenes to process:', allData.length);
 
     // Group scenes by video ID
@@ -687,12 +692,49 @@ export const handleSpeedUpAllVideosForAllScenes = async (
 
       for (const scene of scenes) {
         const videoUrl = scene['field_6888'] as string; // Original video clip URL
+        const sentence = String(scene['field_6890'] || '');
 
         console.log(`Scene ${scene.id}:`);
         console.log('  Video URL (field_6888):', videoUrl);
+        console.log('  Sentence (field_6890):', sentence);
 
-        // Speed up if scene has video URL
-        if (videoUrl && typeof videoUrl === 'string' && videoUrl.trim()) {
+        // Check if scene has video URL
+        if (!(videoUrl && typeof videoUrl === 'string' && videoUrl.trim())) {
+          console.log(`  ✗ Skipping scene ${scene.id} (no video URL)`);
+          totalProcessed++;
+          continue;
+        }
+
+        // Filter based on speedUpMode
+        let shouldProcess = false;
+        switch (videoSettings.speedUpMode) {
+          case 'emptyOnly':
+            // Only process scenes with empty sentences
+            shouldProcess = !sentence.trim();
+            if (!shouldProcess) {
+              console.log(
+                `  ✗ Skipping scene ${scene.id} (has text, mode: emptyOnly)`
+              );
+            }
+            break;
+          case 'withTextOnly':
+            // Only process scenes with text content
+            shouldProcess = sentence.trim() !== '';
+            if (!shouldProcess) {
+              console.log(
+                `  ✗ Skipping scene ${scene.id} (no text, mode: withTextOnly)`
+              );
+            }
+            break;
+          case 'all':
+          default:
+            // Process all scenes with videos
+            shouldProcess = true;
+            break;
+        }
+
+        // Speed up if scene passes filters
+        if (shouldProcess) {
           console.log(`  ✓ Will speed up video for scene ${scene.id}`);
           setSpeedingUpVideo(scene.id);
           try {
@@ -733,8 +775,6 @@ export const handleSpeedUpAllVideosForAllScenes = async (
           } finally {
             setSpeedingUpVideo(null);
           }
-        } else {
-          console.log(`  ✗ Skipping scene ${scene.id} (no video URL)`);
         }
         totalProcessed++;
       }
@@ -743,6 +783,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
     }
 
     console.log('\n=== Batch Speed Up Summary ===');
+    console.log(`Mode: ${videoSettings.speedUpMode}`);
     console.log(`Total scenes processed: ${totalProcessed}`);
     console.log(`Total videos sped up: ${totalSpedUp}`);
     console.log('==============================\n');
