@@ -1695,6 +1695,36 @@ export default function OriginalVideosList({
         );
       }
 
+      // Step 6: TTS All
+      setPipelineStep('Generating TTS for all scenes...');
+      console.log('Step 6: Generating TTS for all scenes');
+      try {
+        await handleGenerateAllTTSForAllVideos();
+        console.log('✓ Step 6 Complete: TTS generation finished');
+      } catch (error) {
+        console.error('✗ Step 6 Failed: TTS generation error', error);
+        throw new Error(
+          `TTS generation failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
+      // Step 7: Sync All
+      setPipelineStep('Syncing all videos...');
+      console.log('Step 7: Syncing all videos');
+      try {
+        await handleGenerateAllVideosForAllScenes();
+        console.log('✓ Step 7 Complete: Video sync finished');
+      } catch (error) {
+        console.error('✗ Step 7 Failed: Video sync error', error);
+        throw new Error(
+          `Video sync failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
       console.log('========================================');
       console.log('✓ Full Pipeline Complete!');
       console.log('========================================');
@@ -2486,7 +2516,7 @@ export default function OriginalVideosList({
                   ? 'Scene handlers not ready. Please wait...'
                   : runningFullPipeline
                   ? pipelineStep
-                  : 'Run full pipeline: Transcribe → Scenes → Clips → Speed Up → Improve'
+                  : 'Run full pipeline: Transcribe → Scenes → Clips → Speed Up → Improve → TTS → Sync'
               }
             >
               <Workflow
