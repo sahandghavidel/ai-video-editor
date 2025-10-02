@@ -232,7 +232,7 @@ export default function Home() {
             )}
 
             {/* Original Videos List */}
-            <OriginalVideosList />
+            <OriginalVideosList sceneHandlers={sceneHandlers} />
 
             {/* No Video Selected Message */}
             {!initialLoading &&

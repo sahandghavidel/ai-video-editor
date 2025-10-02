@@ -34,6 +34,7 @@ export interface BatchOperationsState {
   generatingAllVideos: boolean;
   speedingUpAllVideos: boolean;
   concatenatingVideos: boolean;
+  improvingAllVideos: boolean;
 }
 
 // Media player state interface
@@ -58,6 +59,7 @@ export interface SceneLoadingState {
   improvingSentence: number | null;
   speedingUpVideo: number | null;
   generatingVideo: number | null;
+  currentlyProcessingVideo: number | null;
 }
 
 // Merged video state interface
@@ -168,6 +170,7 @@ interface AppState {
   setImprovingSentence: (sceneId: number | null) => void;
   setSpeedingUpVideo: (sceneId: number | null) => void;
   setGeneratingVideo: (sceneId: number | null) => void;
+  setCurrentlyProcessingVideo: (videoId: number | null) => void;
 
   // Merged Video Actions
   setMergedVideo: (url: string, fileName?: string) => void;
@@ -235,6 +238,7 @@ const defaultBatchOperations: BatchOperationsState = {
   generatingAllVideos: false,
   speedingUpAllVideos: false,
   concatenatingVideos: false,
+  improvingAllVideos: false,
 };
 
 // Default media player state
@@ -259,6 +263,7 @@ const defaultSceneLoading: SceneLoadingState = {
   improvingSentence: null,
   speedingUpVideo: null,
   generatingVideo: null,
+  currentlyProcessingVideo: null,
 };
 
 // Default merged video state
@@ -492,6 +497,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   setGeneratingVideo: (sceneId) =>
     set((state) => ({
       sceneLoading: { ...state.sceneLoading, generatingVideo: sceneId },
+    })),
+
+  setCurrentlyProcessingVideo: (videoId) =>
+    set((state) => ({
+      sceneLoading: {
+        ...state.sceneLoading,
+        currentlyProcessingVideo: videoId,
+      },
     })),
 
   // Merged Video Actions

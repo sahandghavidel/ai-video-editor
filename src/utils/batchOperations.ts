@@ -355,3 +355,136 @@ export const cycleSpeed = (
   const nextIndex = (currentIndex + 1) % speedOptions.length;
   updateVideoSettings({ selectedSpeed: speedOptions[nextIndex] });
 };
+
+// Batch operation: Improve all sentences for all videos (not filtered by selected video)
+export const handleImproveAllSentencesForAllVideos = async (
+  allData: BaserowRow[],
+  handleSentenceImprovement: (
+    sceneId: number,
+    sentence: string,
+    model?: string
+  ) => Promise<void>,
+  selectedModel: string | null,
+  setImprovingAllVideos: (isImproving: boolean) => void,
+  setCurrentlyProcessingVideo: (videoId: number | null) => void,
+  setImprovingSentence: (sceneId: number | null) => void
+) => {
+  setImprovingAllVideos(true);
+
+  try {
+    console.log('=== Starting Improve All Videos Batch Operation ===');
+    console.log('Total scenes to process:', allData.length);
+    console.log('Selected model:', selectedModel);
+
+    // Group scenes by video ID
+    const scenesByVideo = new Map<number, BaserowRow[]>();
+
+    for (const scene of allData) {
+      // Extract video ID from field_6889 (Videos ID field - references Original Videos table)
+      const videoIdField = scene['field_6889'];
+      let videoId: number | null = null;
+
+      console.log(`Scene ${scene.id} field_6889:`, videoIdField);
+
+      if (typeof videoIdField === 'number') {
+        videoId = videoIdField;
+      } else if (typeof videoIdField === 'string') {
+        videoId = parseInt(videoIdField, 10);
+      } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+        // If it's an array, get the first item
+        const firstId =
+          typeof videoIdField[0] === 'object'
+            ? videoIdField[0].id || videoIdField[0].value
+            : videoIdField[0];
+        videoId = parseInt(String(firstId), 10);
+      }
+
+      console.log(`Scene ${scene.id} extracted videoId:`, videoId);
+
+      if (videoId && !isNaN(videoId)) {
+        if (!scenesByVideo.has(videoId)) {
+          scenesByVideo.set(videoId, []);
+        }
+        scenesByVideo.get(videoId)?.push(scene);
+      } else {
+        console.warn(`Scene ${scene.id} has no valid video ID, skipping`);
+      }
+    }
+
+    console.log(
+      `Grouped into ${scenesByVideo.size} videos:`,
+      Array.from(scenesByVideo.keys())
+    );
+
+    if (scenesByVideo.size === 0) {
+      console.warn('No videos found with valid scenes!');
+      return;
+    }
+
+    let totalProcessed = 0;
+    let totalImproved = 0;
+
+    // Process each video's scenes
+    for (const [videoId, scenes] of scenesByVideo.entries()) {
+      setCurrentlyProcessingVideo(videoId);
+      console.log(
+        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`
+      );
+
+      for (const scene of scenes) {
+        const currentSentence = String(
+          scene['field_6890'] || scene.field_6890 || ''
+        );
+        const originalSentence = String(scene['field_6901'] || '');
+
+        console.log(`Scene ${scene.id}:`);
+        console.log('  Current sentence:', currentSentence);
+        console.log('  Original sentence:', originalSentence);
+        console.log('  Are they equal?', currentSentence === originalSentence);
+        console.log('  Has content?', currentSentence.trim() !== '');
+
+        // Only improve if the sentence is the same as the original
+        if (currentSentence === originalSentence && currentSentence.trim()) {
+          console.log(`  ✓ Will improve scene ${scene.id}`);
+          setImprovingSentence(scene.id);
+          try {
+            await handleSentenceImprovement(
+              scene.id,
+              currentSentence,
+              selectedModel || undefined
+            );
+            totalImproved++;
+            console.log(`  ✓ Successfully improved scene ${scene.id}`);
+            await wait(10000); // 10 seconds delay
+          } catch (error) {
+            console.error(`  ✗ Failed to improve scene ${scene.id}:`, error);
+            // Continue with next scene even if one fails
+          } finally {
+            setImprovingSentence(null);
+          }
+        } else {
+          console.log(
+            `  ✗ Skipping scene ${scene.id} (already improved or empty)`
+          );
+        }
+        totalProcessed++;
+      }
+
+      console.log(`--- Completed video #${videoId} ---`);
+    }
+
+    console.log('\n=== Batch Improvement Summary ===');
+    console.log(`Total scenes processed: ${totalProcessed}`);
+    console.log(`Total scenes improved: ${totalImproved}`);
+    console.log('=================================\n');
+
+    // Play success sound when batch operation completes
+    playSuccessSound();
+  } catch (error) {
+    console.error('Error in batch improvement for all videos:', error);
+    throw error;
+  } finally {
+    setCurrentlyProcessingVideo(null);
+    setImprovingAllVideos(false);
+  }
+};

@@ -32,8 +32,30 @@ import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
 import FinalVideoTable from './FinalVideoTable';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
+import { handleImproveAllSentencesForAllVideos } from '@/utils/batchOperations';
+import { Sparkles } from 'lucide-react';
 
-export default function OriginalVideosList() {
+interface SceneHandlers {
+  handleSentenceImprovement: (
+    sceneId: number,
+    sentence: string,
+    model?: string
+  ) => Promise<void>;
+  handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+  handleVideoGenerate: (
+    sceneId: number,
+    videoUrl: string,
+    audioUrl: string
+  ) => Promise<void>;
+}
+
+interface OriginalVideosListProps {
+  sceneHandlers?: SceneHandlers | null;
+}
+
+export default function OriginalVideosList({
+  sceneHandlers,
+}: OriginalVideosListProps) {
   const [originalVideos, setOriginalVideos] = useState<BaserowRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +79,11 @@ export default function OriginalVideosList() {
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [timestampData, setTimestampData] = useState<string>('');
+  const [improvingAllVideosScenes, setImprovingAllVideosScenes] =
+    useState(false);
+  const [currentProcessingVideoId, setCurrentProcessingVideoId] = useState<
+    number | null
+  >(null);
 
   // Get clip generation state from global store
   const {
@@ -78,6 +105,14 @@ export default function OriginalVideosList() {
     mergedVideo,
     clearMergedVideo,
     transcriptionSettings,
+    data: allScenesData,
+    modelSelection,
+    sceneLoading,
+    setImprovingSentence,
+    setCurrentlyProcessingVideo,
+    batchOperations,
+    startBatchOperation,
+    completeBatchOperation,
   } = useAppStore();
 
   useEffect(() => {
@@ -964,6 +999,61 @@ export default function OriginalVideosList() {
     return response.json();
   };
 
+  // Improve All Scenes for All Videos
+  const handleImproveAllVideosScenes = async () => {
+    if (!sceneHandlers) {
+      alert(
+        'Scene handlers are not available yet. Please wait a moment and try again.'
+      );
+      return;
+    }
+
+    try {
+      setImprovingAllVideosScenes(true);
+
+      // Get all scenes from the store
+      if (!allScenesData || allScenesData.length === 0) {
+        alert('No scenes found to improve');
+        return;
+      }
+
+      console.log(
+        `Starting AI improvement for all videos with ${allScenesData.length} scenes...`
+      );
+      console.log('All scenes data:', allScenesData);
+
+      await handleImproveAllSentencesForAllVideos(
+        allScenesData,
+        sceneHandlers.handleSentenceImprovement,
+        modelSelection.selectedModel,
+        setImprovingAllVideosScenes,
+        setCurrentProcessingVideoId,
+        setImprovingSentence
+      );
+
+      console.log('Batch improvement completed for all videos');
+
+      // Refresh the original videos list to show any updates
+      await handleRefresh();
+
+      // Note: Success sound is already played in the batch operation utility
+    } catch (error) {
+      console.error('Error improving all videos scenes:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to improve all videos scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setImprovingAllVideosScenes(false);
+      setCurrentProcessingVideoId(null);
+    }
+  };
+
   // Merge All Final Videos
   const handleMergeAllFinalVideos = async () => {
     try {
@@ -1540,6 +1630,41 @@ export default function OriginalVideosList() {
                     ? `Generating #${generatingScenes}...`
                     : 'Processing...'
                   : 'Generate All Scenes'}
+              </span>
+            </button>
+
+            {/* Improve All Videos Button */}
+            <button
+              onClick={handleImproveAllVideosScenes}
+              disabled={
+                improvingAllVideosScenes ||
+                sceneLoading.improvingSentence !== null ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+              }
+              className='flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-h-[44px]'
+              title={
+                !sceneHandlers
+                  ? 'Scene handlers not ready. Please wait...'
+                  : improvingAllVideosScenes
+                  ? 'Improving all scenes for all videos...'
+                  : 'Improve all scenes for all videos with AI'
+              }
+            >
+              <Sparkles
+                className={`w-4 h-4 ${
+                  improvingAllVideosScenes ? 'animate-pulse' : ''
+                }`}
+              />
+              <span>
+                {improvingAllVideosScenes
+                  ? currentProcessingVideoId !== null
+                    ? `Video #${currentProcessingVideoId}`
+                    : sceneLoading.improvingSentence !== null
+                    ? `Scene #${sceneLoading.improvingSentence}`
+                    : 'Processing...'
+                  : 'Improve All Videos'}
               </span>
             </button>
 
