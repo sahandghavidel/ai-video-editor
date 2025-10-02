@@ -87,6 +87,8 @@ export default function BatchOperations({
 
   // Collapsible state - collapsed by default
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isSettingsSectionExpanded, setIsSettingsSectionExpanded] =
+    useState(false); // Settings section collapsed by default
 
   // Settings save/load state
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -400,60 +402,108 @@ export default function BatchOperations({
       {/* Collapsible Content */}
       {isExpanded && (
         <div className='p-6'>
-          {/* Action Buttons Section */}
-          <div className='flex items-center gap-3 justify-end mb-6'>
-            {/* Settings Dropdown */}
-            <div className='relative'>
-              <button
-                onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-                className='inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
-              >
-                <Save className='w-4 h-4' />
-                <span>Settings</span>
-              </button>
+          {/* Settings Section - Collapsible */}
+          <div className='bg-gray-50 rounded-lg border border-gray-200 mb-6'>
+            {/* Settings Header */}
+            <button
+              onClick={() =>
+                setIsSettingsSectionExpanded(!isSettingsSectionExpanded)
+              }
+              className='w-full px-4 py-3 flex items-center justify-between hover:bg-gray-100 transition-colors rounded-lg'
+            >
+              <div className='flex items-center gap-2'>
+                <Save className='w-5 h-5 text-blue-600' />
+                <h3 className='text-lg font-semibold text-gray-900'>
+                  Settings & Actions
+                </h3>
+              </div>
+              <div className='flex items-center gap-2'>
+                <span className='text-xs text-gray-400'>
+                  {isSettingsSectionExpanded
+                    ? 'Click to collapse'
+                    : 'Click to expand'}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                    isSettingsSectionExpanded ? 'rotate-180' : ''
+                  }`}
+                  fill='none'
+                  stroke='currentColor'
+                  viewBox='0 0 24 24'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M19 9l-7 7-7-7'
+                  />
+                </svg>
+              </div>
+            </button>
 
-              {/* Settings Dropdown Menu */}
-              {showSettingsMenu && (
-                <div className='absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-10'>
-                  <div className='p-2'>
+            {/* Collapsible Settings Content */}
+            {isSettingsSectionExpanded && (
+              <div className='px-4 pb-4'>
+                <div className='flex items-center gap-3 justify-end'>
+                  {/* Settings Dropdown */}
+                  <div className='relative'>
                     <button
-                      onClick={handleSaveSettings}
-                      className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
+                      onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                      className='inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
                     >
-                      <Save className='w-4 h-4 text-green-600' />
-                      <span>Save Settings</span>
+                      <Save className='w-4 h-4' />
+                      <span>Settings</span>
                     </button>
-                    <button
-                      onClick={handleLoadSettings}
-                      className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
-                    >
-                      <Upload className='w-4 h-4 text-blue-600' />
-                      <span>Load Settings</span>
-                    </button>
-                    <button
-                      onClick={handleClearSettings}
-                      className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
-                    >
-                      <Trash2 className='w-4 h-4 text-red-600' />
-                      <span>Clear Settings</span>
-                    </button>
+
+                    {/* Settings Dropdown Menu */}
+                    {showSettingsMenu && (
+                      <div className='absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-10'>
+                        <div className='p-2'>
+                          <button
+                            onClick={handleSaveSettings}
+                            className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
+                          >
+                            <Save className='w-4 h-4 text-green-600' />
+                            <span>Save Settings</span>
+                          </button>
+                          <button
+                            onClick={handleLoadSettings}
+                            className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
+                          >
+                            <Upload className='w-4 h-4 text-blue-600' />
+                            <span>Load Settings</span>
+                          </button>
+                          <button
+                            onClick={handleClearSettings}
+                            className='w-full flex items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded-md transition-colors'
+                          >
+                            <Trash2 className='w-4 h-4 text-red-600' />
+                            <span>Clear Settings</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </div>
 
-            {/* Refresh Button */}
-            {onRefresh && (
-              <button
-                onClick={onRefresh}
-                disabled={refreshing}
-                className='inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-w-[120px] justify-center'
-              >
-                <RefreshCw
-                  className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
-                />
-                <span>{refreshing ? 'Refreshing...' : 'Refresh Data'}</span>
-              </button>
+                  {/* Refresh Button */}
+                  {onRefresh && (
+                    <button
+                      onClick={onRefresh}
+                      disabled={refreshing}
+                      className='inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:cursor-not-allowed min-w-[120px] justify-center'
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 ${
+                          refreshing ? 'animate-spin' : ''
+                        }`}
+                      />
+                      <span>
+                        {refreshing ? 'Refreshing...' : 'Refresh Data'}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
