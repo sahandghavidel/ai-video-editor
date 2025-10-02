@@ -1557,7 +1557,7 @@ export default function OriginalVideosList({
           </div>
           <button
             onClick={handleRefresh}
-            className='px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors'
+            className='px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors truncate'
           >
             Retry
           </button>
@@ -1595,7 +1595,7 @@ export default function OriginalVideosList({
             <button
               onClick={openFileDialog}
               disabled={uploading}
-              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 ${
+              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
                 uploading
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-green-500 hover:bg-green-600'
@@ -1634,7 +1634,7 @@ export default function OriginalVideosList({
             <button
               onClick={handleRefresh}
               disabled={refreshing || uploading || reordering}
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title='Refresh the videos list'
             >
               <RefreshCw
@@ -1660,7 +1660,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 transcribing !== null || transcribingAll
                   ? 'Transcription in progress...'
@@ -1688,7 +1688,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 generatingScenes !== null || generatingScenesAll
                   ? 'Scene generation in progress...'
@@ -1720,7 +1720,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -1755,7 +1755,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -1792,7 +1792,7 @@ export default function OriginalVideosList({
                 generatingScenes !== null ||
                 generatingScenesAll
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 mergingFinalVideos
                   ? 'Merging final videos...'
@@ -1821,7 +1821,7 @@ export default function OriginalVideosList({
                 generatingScenesAll ||
                 mergingFinalVideos
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
               title={
                 generatingTimestamps
                   ? 'Generating timestamps...'
