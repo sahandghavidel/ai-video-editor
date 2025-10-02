@@ -32,13 +32,23 @@ export default function Home() {
     handleSentenceImprovement: (
       sceneId: number,
       sentence: string,
-      model?: string
+      model?: string,
+      sceneData?: BaserowRow
     ) => Promise<void>;
-    handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+    handleTTSProduce: (
+      sceneId: number,
+      text: string,
+      sceneData?: BaserowRow
+    ) => Promise<void>;
     handleVideoGenerate: (
       sceneId: number,
       videoUrl: string,
       audioUrl: string
+    ) => Promise<void>;
+    handleSpeedUpVideo: (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      skipRefresh?: boolean
     ) => Promise<void>;
   } | null>(null);
 
@@ -83,13 +93,23 @@ export default function Home() {
       handleSentenceImprovement: (
         sceneId: number,
         sentence: string,
-        model?: string
+        model?: string,
+        sceneData?: BaserowRow
       ) => Promise<void>;
-      handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+      handleTTSProduce: (
+        sceneId: number,
+        text: string,
+        sceneData?: BaserowRow
+      ) => Promise<void>;
       handleVideoGenerate: (
         sceneId: number,
         videoUrl: string,
         audioUrl: string
+      ) => Promise<void>;
+      handleSpeedUpVideo: (
+        sceneId: number,
+        sceneData?: BaserowRow,
+        skipRefresh?: boolean
       ) => Promise<void>;
     }) => {
       setSceneHandlers(handlers);

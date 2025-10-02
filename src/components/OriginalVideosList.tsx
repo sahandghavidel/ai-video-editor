@@ -29,6 +29,7 @@ import {
   Volume2,
   Mic,
   Upload,
+  Zap,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
@@ -37,6 +38,7 @@ import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import {
   handleImproveAllSentencesForAllVideos,
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
+  handleSpeedUpAllVideosForAllScenes,
 } from '@/utils/batchOperations';
 import { Sparkles, Mic2 } from 'lucide-react';
 
@@ -44,13 +46,23 @@ interface SceneHandlers {
   handleSentenceImprovement: (
     sceneId: number,
     sentence: string,
-    model?: string
+    model?: string,
+    sceneData?: BaserowRow
   ) => Promise<void>;
-  handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+  handleTTSProduce: (
+    sceneId: number,
+    text: string,
+    sceneData?: BaserowRow
+  ) => Promise<void>;
   handleVideoGenerate: (
     sceneId: number,
     videoUrl: string,
     audioUrl: string
+  ) => Promise<void>;
+  handleSpeedUpVideo: (
+    sceneId: number,
+    sceneData?: BaserowRow,
+    skipRefresh?: boolean
   ) => Promise<void>;
 }
 
@@ -91,6 +103,7 @@ export default function OriginalVideosList({
   >(null);
   const [generatingAllTTSForAllVideos, setGeneratingAllTTSForAllVideos] =
     useState(false);
+  const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
 
   // Get clip generation state from global store
   const {
@@ -121,6 +134,7 @@ export default function OriginalVideosList({
     startBatchOperation,
     completeBatchOperation,
     setProducingTTS,
+    setSpeedingUpVideo,
   } = useAppStore();
 
   useEffect(() => {
@@ -1116,6 +1130,60 @@ export default function OriginalVideosList({
     }
   };
 
+  // Speed Up All Videos for All Scenes
+  const handleSpeedUpAllVideos = async () => {
+    if (!sceneHandlers) {
+      alert(
+        'Scene handlers are not available yet. Please wait a moment and try again.'
+      );
+      return;
+    }
+
+    try {
+      setSpeedingUpAllVideos(true);
+
+      // Get all scenes from the store
+      if (!allScenesData || allScenesData.length === 0) {
+        alert('No scenes found to speed up videos');
+        return;
+      }
+
+      console.log(
+        `Starting speed up for all videos with ${allScenesData.length} scenes...`
+      );
+      console.log('All scenes data:', allScenesData);
+
+      await handleSpeedUpAllVideosForAllScenes(
+        allScenesData,
+        sceneHandlers.handleSpeedUpVideo,
+        setSpeedingUpAllVideos,
+        setCurrentProcessingVideoId,
+        setSpeedingUpVideo
+      );
+
+      console.log('Batch speed up completed for all videos');
+
+      // Refresh the original videos list to show any updates
+      await handleRefresh();
+
+      // Note: Success sound is already played in the batch operation utility
+    } catch (error) {
+      console.error('Error speeding up all videos:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to speed up all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setSpeedingUpAllVideos(false);
+      setCurrentProcessingVideoId(null);
+    }
+  };
+
   // Merge All Final Videos
   const handleMergeAllFinalVideos = async () => {
     try {
@@ -1777,6 +1845,41 @@ export default function OriginalVideosList({
                     ? `S${sceneLoading.producingTTS}`
                     : 'Processing...'
                   : 'TTS All'}
+              </span>
+            </button>
+
+            {/* Speed Up All Videos Button */}
+            <button
+              onClick={handleSpeedUpAllVideos}
+              disabled={
+                speedingUpAllVideos ||
+                sceneLoading.speedingUpVideo !== null ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+              }
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              title={
+                !sceneHandlers
+                  ? 'Scene handlers not ready. Please wait...'
+                  : speedingUpAllVideos
+                  ? 'Speeding up all videos...'
+                  : 'Speed up all video clips with current speed settings'
+              }
+            >
+              <Zap
+                className={`w-4 h-4 ${
+                  speedingUpAllVideos ? 'animate-pulse' : ''
+                }`}
+              />
+              <span>
+                {speedingUpAllVideos
+                  ? currentProcessingVideoId !== null
+                    ? `V${currentProcessingVideoId}`
+                    : sceneLoading.speedingUpVideo !== null
+                    ? `S${sceneLoading.speedingUpVideo}`
+                    : 'Processing...'
+                  : 'Speed Up All'}
               </span>
             </button>
 

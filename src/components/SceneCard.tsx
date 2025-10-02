@@ -45,6 +45,11 @@ interface SceneCardProps {
       videoUrl: string,
       audioUrl: string
     ) => Promise<void>;
+    handleSpeedUpVideo: (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      skipRefresh?: boolean
+    ) => Promise<void>;
   }) => void;
 }
 
@@ -192,72 +197,87 @@ export default function SceneCard({
   };
 
   // Speed up video handler
-  const handleSpeedUpVideo = async (sceneId: number) => {
-    const currentScene = data.find((scene) => scene.id === sceneId);
-    if (!currentScene) return;
+  const handleSpeedUpVideo = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow, skipRefresh?: boolean) => {
+      const currentScene =
+        sceneData || data.find((scene) => scene.id === sceneId);
+      if (!currentScene) return;
 
-    const videoUrl = currentScene.field_6888 as string;
-    if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
-      alert('No video found in field 6888 to speed up');
-      return;
-    }
+      const videoUrl = currentScene.field_6888 as string;
+      if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
+        alert('No video found in field 6888 to speed up');
+        return;
+      }
 
-    setSpeedingUpVideo(sceneId);
+      setSpeedingUpVideo(sceneId);
 
-    try {
-      console.log(
-        'Starting speed-up for scene:',
-        sceneId,
-        'with video:',
-        videoUrl
-      );
-
-      const response = await fetch('/api/speed-up-video', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      try {
+        console.log(
+          'Starting speed-up for scene:',
           sceneId,
-          videoUrl,
-          speed: videoSettings.selectedSpeed,
-          muteAudio: videoSettings.muteAudio,
-        }),
-      });
+          'with video:',
+          videoUrl
+        );
 
-      if (!response.ok) {
-        let errorMessage = `Speed-up error: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          errorMessage = `Speed-up error: ${response.status} - ${response.statusText}`;
+        const response = await fetch('/api/speed-up-video', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sceneId,
+            videoUrl,
+            speed: videoSettings.selectedSpeed,
+            muteAudio: videoSettings.muteAudio,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Speed-up error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = `Speed-up error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
+
+        const result = await response.json();
+        console.log('Speed-up result:', result);
+
+        // Optimistic update - update field_6886 with the processed video
+        const optimisticData = data.map((scene) =>
+          scene.id === sceneId
+            ? { ...scene, field_6886: result.videoUrl }
+            : scene
+        );
+        onDataUpdate?.(optimisticData);
+
+        // Refresh data from server to ensure consistency (skip in batch mode)
+        if (!skipRefresh) {
+          refreshData?.();
+        }
+      } catch (error) {
+        console.error('Error speeding up video:', error);
+        let errorMessage = 'Failed to speed up video';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        alert(`Error: ${errorMessage}`);
+      } finally {
+        setSpeedingUpVideo(null);
       }
-
-      const result = await response.json();
-      console.log('Speed-up result:', result);
-
-      // Optimistic update - update field_6886 with the processed video
-      const optimisticData = data.map((scene) =>
-        scene.id === sceneId ? { ...scene, field_6886: result.videoUrl } : scene
-      );
-      onDataUpdate?.(optimisticData);
-
-      // Refresh data from server to ensure consistency
-      refreshData?.();
-    } catch (error) {
-      console.error('Error speeding up video:', error);
-      let errorMessage = 'Failed to speed up video';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      alert(`Error: ${errorMessage}`);
-    } finally {
-      setSpeedingUpVideo(null);
-    }
-  };
+    },
+    [
+      data,
+      videoSettings.selectedSpeed,
+      videoSettings.muteAudio,
+      setSpeedingUpVideo,
+      onDataUpdate,
+      refreshData,
+    ]
+  );
 
   // Generate single clip handler
   const handleGenerateSingleClip = async (sceneId: number) => {
@@ -801,21 +821,18 @@ export default function SceneCard({
     ]
   );
 
-  // Expose handler functions to parent component
+  // Expose handler functions to parent component (only once on mount)
   useEffect(() => {
     if (onHandlersReady) {
       onHandlersReady({
         handleSentenceImprovement,
         handleTTSProduce,
         handleVideoGenerate,
+        handleSpeedUpVideo,
       });
     }
-  }, [
-    onHandlersReady,
-    handleSentenceImprovement,
-    handleTTSProduce,
-    handleVideoGenerate,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onHandlersReady]);
 
   // Apply filters and sorting
   const filteredAndSortedData = React.useMemo(() => {

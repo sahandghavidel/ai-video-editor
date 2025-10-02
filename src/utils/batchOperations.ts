@@ -620,3 +620,129 @@ export const handleGenerateAllTTSForAllVideos = async (
     setGeneratingAllVideos(false);
   }
 };
+
+// Batch operation: Speed up all videos for all scenes that have sped up video clips
+export const handleSpeedUpAllVideosForAllScenes = async (
+  allData: BaserowRow[],
+  handleSpeedUpVideo: (
+    sceneId: number,
+    sceneData?: BaserowRow,
+    skipRefresh?: boolean
+  ) => Promise<void>,
+  setSpeedingUpAllVideos: (isSpeedingUp: boolean) => void,
+  setCurrentlyProcessingVideo: (videoId: number | null) => void,
+  setSpeedingUpVideo: (sceneId: number | null) => void
+) => {
+  setSpeedingUpAllVideos(true);
+
+  try {
+    console.log('=== Starting Speed Up All Videos Batch Operation ===');
+    console.log('Total scenes to process:', allData.length);
+
+    // Group scenes by video ID
+    const scenesByVideo = new Map<number, BaserowRow[]>();
+
+    for (const scene of allData) {
+      // Extract video ID from field_6889 (Videos ID field - references Original Videos table)
+      const videoIdField = scene['field_6889'];
+      let videoId: number | null = null;
+
+      console.log(`Scene ${scene.id} field_6889:`, videoIdField);
+
+      if (typeof videoIdField === 'number') {
+        videoId = videoIdField;
+      } else if (typeof videoIdField === 'string') {
+        videoId = parseInt(videoIdField, 10);
+      } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+        // If it's an array, get the first item
+        const firstId =
+          typeof videoIdField[0] === 'object'
+            ? videoIdField[0].id || videoIdField[0].value
+            : videoIdField[0];
+        videoId = parseInt(String(firstId), 10);
+      }
+
+      console.log(`Scene ${scene.id} extracted videoId:`, videoId);
+
+      if (videoId && !isNaN(videoId)) {
+        if (!scenesByVideo.has(videoId)) {
+          scenesByVideo.set(videoId, []);
+        }
+        scenesByVideo.get(videoId)?.push(scene);
+      } else {
+        console.warn(`Scene ${scene.id} has no valid video ID, skipping`);
+      }
+    }
+
+    console.log(
+      `Grouped into ${scenesByVideo.size} videos:`,
+      Array.from(scenesByVideo.keys())
+    );
+
+    if (scenesByVideo.size === 0) {
+      console.warn('No videos found with valid scenes!');
+      return;
+    }
+
+    let totalProcessed = 0;
+    let totalSpedUp = 0;
+
+    // Process each video's scenes
+    for (const [videoId, scenes] of scenesByVideo.entries()) {
+      setCurrentlyProcessingVideo(videoId);
+      console.log(
+        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`
+      );
+
+      for (const scene of scenes) {
+        const videoUrl = scene['field_6888'] as string; // Original video clip URL
+        const syncedVideo = scene['field_6886']; // Already sped up video
+
+        console.log(`Scene ${scene.id}:`);
+        console.log('  Video URL (field_6888):', videoUrl);
+        console.log('  Synced Video (field_6886):', syncedVideo);
+        console.log('  Has video URL?', !!videoUrl);
+        console.log('  Already sped up?', !!syncedVideo);
+
+        // Speed up if scene has video URL (even if already has a synced video - will re-process with current settings)
+        if (videoUrl && typeof videoUrl === 'string' && videoUrl.trim()) {
+          console.log(`  ✓ Will speed up video for scene ${scene.id}`);
+          setSpeedingUpVideo(scene.id);
+          try {
+            await handleSpeedUpVideo(scene.id, scene, true); // Skip refresh in batch mode
+            totalSpedUp++;
+            console.log(`  ✓ Successfully sped up video for scene ${scene.id}`);
+            await wait(5000); // 5 seconds delay between speed ups
+          } catch (error) {
+            console.error(
+              `  ✗ Failed to speed up video for scene ${scene.id}:`,
+              error
+            );
+            // Continue with next scene even if one fails
+          } finally {
+            setSpeedingUpVideo(null);
+          }
+        } else {
+          console.log(`  ✗ Skipping scene ${scene.id} (no video URL)`);
+        }
+        totalProcessed++;
+      }
+
+      console.log(`--- Completed video #${videoId} ---`);
+    }
+
+    console.log('\n=== Batch Speed Up Summary ===');
+    console.log(`Total scenes processed: ${totalProcessed}`);
+    console.log(`Total videos sped up: ${totalSpedUp}`);
+    console.log('==============================\n');
+
+    // Play success sound when batch operation completes
+    playSuccessSound();
+  } catch (error) {
+    console.error('Error in batch speed up for all videos:', error);
+    throw error;
+  } finally {
+    setCurrentlyProcessingVideo(null);
+    setSpeedingUpAllVideos(false);
+  }
+};
