@@ -30,6 +30,7 @@ import {
   Mic,
   Upload,
   Zap,
+  Workflow,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
@@ -109,6 +110,8 @@ export default function OriginalVideosList({
   const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
   const [generatingAllVideos, setGeneratingAllVideos] = useState(false);
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
+  const [runningFullPipeline, setRunningFullPipeline] = useState(false);
+  const [pipelineStep, setPipelineStep] = useState<string>('');
 
   // Get clip generation state from global store
   const {
@@ -1600,6 +1603,138 @@ export default function OriginalVideosList({
     }
   };
 
+  // Run Full Pipeline: Transcribe All -> Generate Scenes -> Gen Clips All -> Speed Up All -> Improve All
+  const handleRunFullPipeline = async () => {
+    if (!sceneHandlers) {
+      alert(
+        'Scene handlers are not available yet. Please wait a moment and try again.'
+      );
+      return;
+    }
+
+    try {
+      setRunningFullPipeline(true);
+      setError(null);
+
+      console.log('========================================');
+      console.log('Starting Full Pipeline Processing');
+      console.log('========================================');
+
+      // Step 1: Transcribe All
+      setPipelineStep('Transcribing all videos...');
+      console.log('Step 1: Transcribing all videos');
+      try {
+        await handleTranscribeAll();
+        console.log('✓ Step 1 Complete: Transcription finished');
+      } catch (error) {
+        console.error('✗ Step 1 Failed: Transcription error', error);
+        throw new Error(
+          `Transcription failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
+      // Step 2: Generate Scenes
+      setPipelineStep('Generating scenes for all videos...');
+      console.log('Step 2: Generating scenes for all videos');
+      try {
+        await handleGenerateScenesAll();
+        console.log('✓ Step 2 Complete: Scene generation finished');
+      } catch (error) {
+        console.error('✗ Step 2 Failed: Scene generation error', error);
+        throw new Error(
+          `Scene generation failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
+      // Step 3: Generate Clips All
+      setPipelineStep('Generating clips for all videos...');
+      console.log('Step 3: Generating clips for all videos');
+      try {
+        await handleGenerateClipsAll();
+        console.log('✓ Step 3 Complete: Clip generation finished');
+      } catch (error) {
+        console.error('✗ Step 3 Failed: Clip generation error', error);
+        throw new Error(
+          `Clip generation failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
+      // Step 4: Speed Up All
+      setPipelineStep('Speeding up all videos...');
+      console.log('Step 4: Speeding up all videos');
+      try {
+        await handleSpeedUpAllVideos();
+        console.log('✓ Step 4 Complete: Speed up finished');
+      } catch (error) {
+        console.error('✗ Step 4 Failed: Speed up error', error);
+        throw new Error(
+          `Speed up failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
+      // Step 5: Improve All
+      setPipelineStep('Improving all scenes...');
+      console.log('Step 5: Improving all scenes');
+      try {
+        await handleImproveAllVideosScenes();
+        console.log('✓ Step 5 Complete: AI improvement finished');
+      } catch (error) {
+        console.error('✗ Step 5 Failed: AI improvement error', error);
+        throw new Error(
+          `AI improvement failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+
+      console.log('========================================');
+      console.log('✓ Full Pipeline Complete!');
+      console.log('========================================');
+
+      // Final refresh
+      await handleRefresh();
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
+
+      // Play success sound
+      playSuccessSound();
+
+      setPipelineStep('Pipeline completed successfully!');
+
+      // Clear pipeline step after 3 seconds
+      setTimeout(() => {
+        setPipelineStep('');
+      }, 3000);
+    } catch (error) {
+      console.error('========================================');
+      console.error('✗ Full Pipeline Failed');
+      console.error('========================================');
+      console.error('Pipeline error:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Full pipeline failed: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+
+      setPipelineStep('');
+    } finally {
+      setRunningFullPipeline(false);
+    }
+  };
+
   // Internal clip generation function (without UI state management)
   const handleGenerateClipsInternal = async (videoId: number) => {
     setGeneratingClipsGlobal(videoId);
@@ -1872,7 +2007,7 @@ export default function OriginalVideosList({
                 uploading
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-green-500 hover:bg-green-600'
-              } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]`}
+              } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
               title={
                 uploading
                   ? `Uploading... ${uploadProgress}%`
@@ -1907,7 +2042,7 @@ export default function OriginalVideosList({
             <button
               onClick={handleRefresh}
               disabled={refreshing || uploading || reordering}
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title='Refresh the videos list'
             >
               <RefreshCw
@@ -1933,7 +2068,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 transcribing !== null || transcribingAll
                   ? 'Transcription in progress...'
@@ -1961,7 +2096,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 generatingScenes !== null || generatingScenesAll
                   ? 'Scene generation in progress...'
@@ -1993,7 +2128,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -2028,7 +2163,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -2063,7 +2198,38 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-black text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              style={
+                speedingUpAllVideos ||
+                sceneLoading.speedingUpVideo !== null ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+                  ? { backgroundColor: '#fde047' }
+                  : { backgroundColor: '#eab308' }
+              }
+              onMouseEnter={(e) => {
+                if (
+                  !speedingUpAllVideos &&
+                  sceneLoading.speedingUpVideo === null &&
+                  sceneHandlers &&
+                  !uploading &&
+                  !reordering
+                ) {
+                  e.currentTarget.style.backgroundColor = '#ca8a04';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (
+                  !speedingUpAllVideos &&
+                  sceneLoading.speedingUpVideo === null &&
+                  sceneHandlers &&
+                  !uploading &&
+                  !reordering
+                ) {
+                  e.currentTarget.style.backgroundColor = '#eab308';
+                }
+              }}
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -2098,7 +2264,7 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 !sceneHandlers
                   ? 'Scene handlers not ready. Please wait...'
@@ -2130,7 +2296,35 @@ export default function OriginalVideosList({
                 uploading ||
                 reordering
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-cyan-500 hover:bg-cyan-600 disabled:bg-cyan-300 text-black text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              style={
+                generatingClipsAll ||
+                clipGeneration.generatingClips !== null ||
+                uploading ||
+                reordering
+                  ? { backgroundColor: '#67e8f9' }
+                  : { backgroundColor: '#06b6d4' }
+              }
+              onMouseEnter={(e) => {
+                if (
+                  !generatingClipsAll &&
+                  clipGeneration.generatingClips === null &&
+                  !uploading &&
+                  !reordering
+                ) {
+                  e.currentTarget.style.backgroundColor = '#0891b2';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (
+                  !generatingClipsAll &&
+                  clipGeneration.generatingClips === null &&
+                  !uploading &&
+                  !reordering
+                ) {
+                  e.currentTarget.style.backgroundColor = '#06b6d4';
+                }
+              }}
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 generatingClipsAll
                   ? 'Generating clips for all videos...'
@@ -2167,7 +2361,7 @@ export default function OriginalVideosList({
                 generatingScenes !== null ||
                 generatingScenesAll
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 mergingFinalVideos
                   ? 'Merging final videos...'
@@ -2196,7 +2390,7 @@ export default function OriginalVideosList({
                 generatingScenesAll ||
                 mergingFinalVideos
               }
-              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px]'
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
               title={
                 generatingTimestamps
                   ? 'Generating timestamps...'
@@ -2210,6 +2404,100 @@ export default function OriginalVideosList({
               />
               <span>
                 {generatingTimestamps ? 'Generating...' : 'Timestamps'}
+              </span>
+            </button>
+
+            {/* Full Pipeline Button */}
+            <button
+              onClick={handleRunFullPipeline}
+              disabled={
+                runningFullPipeline ||
+                transcribing !== null ||
+                transcribingAll ||
+                generatingScenes !== null ||
+                generatingScenesAll ||
+                improvingAllVideosScenes ||
+                generatingAllTTSForAllVideos ||
+                speedingUpAllVideos ||
+                generatingAllVideos ||
+                generatingClipsAll ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+              }
+              style={
+                runningFullPipeline ||
+                transcribing !== null ||
+                transcribingAll ||
+                generatingScenes !== null ||
+                generatingScenesAll ||
+                improvingAllVideosScenes ||
+                generatingAllTTSForAllVideos ||
+                speedingUpAllVideos ||
+                generatingAllVideos ||
+                generatingClipsAll ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+                  ? { backgroundColor: '#d8b4fe' }
+                  : { backgroundColor: '#9333ea' }
+              }
+              onMouseEnter={(e) => {
+                if (
+                  !runningFullPipeline &&
+                  transcribing === null &&
+                  !transcribingAll &&
+                  generatingScenes === null &&
+                  !generatingScenesAll &&
+                  !improvingAllVideosScenes &&
+                  !generatingAllTTSForAllVideos &&
+                  !speedingUpAllVideos &&
+                  !generatingAllVideos &&
+                  !generatingClipsAll &&
+                  sceneHandlers &&
+                  !uploading &&
+                  !reordering
+                ) {
+                  e.currentTarget.style.backgroundColor = '#7c3aed';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (
+                  !runningFullPipeline &&
+                  transcribing === null &&
+                  !transcribingAll &&
+                  generatingScenes === null &&
+                  !generatingScenesAll &&
+                  !improvingAllVideosScenes &&
+                  !generatingAllTTSForAllVideos &&
+                  !speedingUpAllVideos &&
+                  !generatingAllVideos &&
+                  !generatingClipsAll &&
+                  sceneHandlers &&
+                  !uploading &&
+                  !reordering
+                ) {
+                  e.currentTarget.style.backgroundColor = '#9333ea';
+                }
+              }}
+              className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate text-white text-sm font-bold rounded-md transition-all shadow-md hover:shadow-lg disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+              title={
+                !sceneHandlers
+                  ? 'Scene handlers not ready. Please wait...'
+                  : runningFullPipeline
+                  ? pipelineStep
+                  : 'Run full pipeline: Transcribe → Scenes → Clips → Speed Up → Improve'
+              }
+            >
+              <Workflow
+                className={`w-4 h-4 ${
+                  runningFullPipeline ? 'animate-pulse' : ''
+                }`}
+              />
+              <span className='truncate'>
+                {runningFullPipeline
+                  ? pipelineStep.split('...')[0] || 'Processing...'
+                  : 'Full Pipeline'}
               </span>
             </button>
           </div>
