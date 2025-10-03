@@ -952,9 +952,9 @@ export default function SceneCard({
   return (
     <div className='w-full'>
       {/* Filter Controls */}
-      <div className='grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6'>
-        <div className='grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6'>
-          <div className='flex items-center space-x-2'>
+      <div className='mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 justify-center items-center'>
+        <div className='flex flex-col sm:flex-row sm:items-center sm:space-x-4 gap-4'>
+          <div className='flex items-center space-x-2 justify-center'>
             <label className='text-sm font-medium text-gray-700'>
               Sort by Duration:
             </label>
@@ -984,7 +984,7 @@ export default function SceneCard({
             </button>
           </div>
 
-          <div className='flex items-center space-x-2'>
+          <div className='flex items-center space-x-2 justify-center'>
             <label className='text-sm font-medium text-gray-700'>
               Sort by Last Modified:
             </label>
@@ -1018,7 +1018,7 @@ export default function SceneCard({
             </button>
           </div>
 
-          <div className='flex items-center space-x-2'>
+          <div className='flex items-center space-x-2 justify-center'>
             <label className='text-sm font-medium text-gray-700'>Filter:</label>
             <button
               onClick={() => setShowOnlyEmptyText(!showOnlyEmptyText)}
@@ -1091,32 +1091,10 @@ export default function SceneCard({
             }}
             className='bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200'
           >
-            <div className='space-y-4'>
+            <div className='flex w-full justify-between'>
               {/* Top row - ID and Order */}
-              <div className='flex items-center space-x-8'>
-                {/* ID */}
-                <div>
-                  <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    ID ({String(scene.field_6884 || 'N/A')})
-                  </label>
-                  <div className='text-2xl font-bold text-blue-600 mt-1'>
-                    #{scene.id || 'N/A'}
-                  </div>
-                </div>
-
-                {/* Order */}
-                <div>
-                  <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    Order
-                  </label>
-                  <div className='text-lg font-semibold text-gray-800 mt-1'>
-                    {scene.order ? Math.round(Number(scene.order)) : 'Not set'}
-                  </div>
-                </div>
-              </div>
-
               {/* Bottom row - Sentence and buttons */}
-              <div className='grid grid-cols-1'>
+              <div className='grid grid-cols-1 flex-1 gap-4 md:gap-6'>
                 {/* Media Controls Group - Auto-fill Grid Layout */}
                 <div
                   className='grid auto-cols-max right-justify gap-2'
@@ -1543,62 +1521,82 @@ export default function SceneCard({
                       </button>
                     )}
                 </div>
-                {editingId === scene.id ? (
-                  <div className='mt-1'>
-                    <textarea
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, scene.id)}
-                      onBlur={() => {
-                        // Only save on blur if we're not canceling
-                        if (!isCanceling) {
-                          handleEditSave(scene.id);
-                        }
-                      }}
-                      className='w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none'
-                      rows={3}
-                      autoFocus
-                      disabled={isUpdating}
-                      placeholder='Enter sentence...'
-                    />
-                    <div className='flex justify-end space-x-2 mt-2'>
-                      <button
-                        onClick={handleEditCancel}
-                        className='px-3 py-1 text-xs text-gray-600 hover:text-gray-800'
-                        disabled={isUpdating}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleEditSave(scene.id)}
-                        className='px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50'
-                        disabled={isUpdating}
-                      >
-                        Save
-                      </button>
-                    </div>
+              </div>
+              <div>
+                {/* ID */}
+                <div className='flex justify-center items-center flex-col'>
+                  <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
+                    ID ({String(scene.field_6884 || 'N/A')})
+                  </label>
+                  <div className='text-lg font-bold text-blue-600 mt-1'>
+                    #{scene.id || 'N/A'}
                   </div>
-                ) : (
-                  <div
-                    className='text-gray-700 mt-1 leading-relaxed cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors line-clamp-1'
-                    onClick={() =>
-                      handleEditStart(
-                        scene.id,
-                        String(scene['field_6890'] || scene.field_6890 || '')
-                      )
-                    }
-                    title='Click to edit'
-                  >
-                    {String(
-                      scene['field_6890'] ||
-                        scene.field_6890 ||
-                        'No sentence - Click to add'
-                    )}
+                </div>
+
+                {/* Order */}
+                {/* <div>
+                  <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
+                    Order
+                  </label>
+                  <div className='text-lg font-semibold text-gray-800'>
+                    {scene.order ? Math.round(Number(scene.order)) : 'Not set'}
                   </div>
-                )}
+                </div> */}
               </div>
             </div>
-
+            {editingId === scene.id ? (
+              <div className='mt-1'>
+                <textarea
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, scene.id)}
+                  onBlur={() => {
+                    // Only save on blur if we're not canceling
+                    if (!isCanceling) {
+                      handleEditSave(scene.id);
+                    }
+                  }}
+                  className='w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none'
+                  rows={3}
+                  autoFocus
+                  disabled={isUpdating}
+                  placeholder='Enter sentence...'
+                />
+                <div className='flex justify-end space-x-2 mt-2'>
+                  <button
+                    onClick={handleEditCancel}
+                    className='px-3 py-1 text-xs text-gray-600 hover:text-gray-800'
+                    disabled={isUpdating}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleEditSave(scene.id)}
+                    className='px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50'
+                    disabled={isUpdating}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                className='text-gray-700 mt-1 leading-relaxed cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors line-clamp-1'
+                onClick={() =>
+                  handleEditStart(
+                    scene.id,
+                    String(scene['field_6890'] || scene.field_6890 || '')
+                  )
+                }
+                title='Click to edit'
+              >
+                {String(
+                  scene['field_6890'] ||
+                    scene.field_6890 ||
+                    'No sentence - Click to add'
+                )}
+              </div>
+            )}
             {/* Video Player - Only show when video is playing for this scene */}
             {mediaPlayer.playingVideoId === scene.id && (
               <div className='mt-4 bg-black rounded-lg overflow-hidden'>
