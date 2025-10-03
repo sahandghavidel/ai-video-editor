@@ -1111,17 +1111,6 @@ export default function SceneCard({
                 >
                   Your browser does not support the video tag.
                 </video>
-                <div className='flex justify-between items-center p-2 bg-gray-900'>
-                  <span className='text-xs text-gray-300'>
-                    Duration: {String(scene.field_6884 || 'N/A')}
-                  </span>
-                  <button
-                    onClick={() => handleVideoStop(scene.id)}
-                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
-                  >
-                    Close Video
-                  </button>
-                </div>
               </div>
             )}
 
@@ -1149,22 +1138,6 @@ export default function SceneCard({
                 >
                   Your browser does not support the video tag.
                 </video>
-                <div className='flex justify-between items-center p-2 bg-gray-900'>
-                  <div className='flex items-center space-x-4'>
-                    <span className='text-xs text-gray-300'>
-                      Produced Video
-                    </span>
-                    <span className='text-xs text-gray-300'>
-                      Duration: {String(scene.field_6884 || 'N/A')}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleProducedVideoStop(scene.id)}
-                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
-                  >
-                    Close Video
-                  </button>
-                </div>
               </div>
             )}
 
