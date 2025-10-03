@@ -973,8 +973,8 @@ export default function SceneCard({
   return (
     <div className='w-full'>
       {/* Filter Controls */}
-      <div className='mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 justify-center items-center'>
-        <div className='flex flex-col sm:flex-row sm:items-center sm:space-x-4 gap-4'>
+      <div className='mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 justify-center items-center'>
+        <div className='flex flex-col lg:flex-row lg:items-center lg:space-x-4 gap-4'>
           <div className='flex items-center space-x-2 justify-center'>
             <label className='text-sm font-medium text-gray-700'>
               Sort by Duration:
