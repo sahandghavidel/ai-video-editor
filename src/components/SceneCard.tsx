@@ -973,133 +973,159 @@ export default function SceneCard({
   return (
     <div className='w-full'>
       {/* Filter Controls */}
-      <div className='mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 justify-center items-center'>
-        <div className='flex flex-col lg:flex-row lg:items-center lg:space-x-4 gap-4'>
-          <div className='flex items-center space-x-2 justify-center'>
-            <label className='text-sm font-medium text-gray-700'>
-              Sort by Duration:
-            </label>
-            <button
-              onClick={() =>
-                setSortByDuration(sortByDuration === 'asc' ? null : 'asc')
-              }
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                sortByDuration === 'asc'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              ↑ Ascending
-            </button>
-            <button
-              onClick={() =>
-                setSortByDuration(sortByDuration === 'desc' ? null : 'desc')
-              }
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                sortByDuration === 'desc'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              ↓ Descending
-            </button>
+      <div className='mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200'>
+        <div className='flex flex-col gap-3'>
+          {/* Sort Controls Row */}
+          <div className='flex flex-col sm:flex-row sm:flex-wrap sm:justify-between gap-2 sm:gap-3'>
+            <div className='flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3'>
+              {/* Duration Sort */}
+              <div className='flex items-center gap-2'>
+                <label className='text-xs font-medium text-gray-600 whitespace-nowrap'>
+                  Duration:
+                </label>
+                <div className='flex gap-1'>
+                  <button
+                    onClick={() =>
+                      setSortByDuration(sortByDuration === 'asc' ? null : 'asc')
+                    }
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      sortByDuration === 'asc'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSortByDuration(
+                        sortByDuration === 'desc' ? null : 'desc'
+                      )
+                    }
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      sortByDuration === 'desc'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
+
+              {/* Last Modified Sort */}
+              <div className='flex items-center gap-2'>
+                <label className='text-xs font-medium text-gray-600 whitespace-nowrap'>
+                  Modified:
+                </label>
+                <div className='flex gap-1'>
+                  <button
+                    onClick={() =>
+                      setSortByLastModified(
+                        sortByLastModified === 'asc' ? null : 'asc'
+                      )
+                    }
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      sortByLastModified === 'asc'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSortByLastModified(
+                        sortByLastModified === 'desc' ? null : 'desc'
+                      )
+                    }
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      sortByLastModified === 'desc'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
+
+              {/* Divider - hidden on mobile */}
+              <div className='hidden sm:block w-px bg-gray-300 self-stretch'></div>
+
+              {/* Filter Buttons */}
+              <div className='flex flex-wrap items-center gap-2'>
+                <button
+                  onClick={() => setShowOnlyEmptyText(!showOnlyEmptyText)}
+                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                    showOnlyEmptyText
+                      ? 'bg-green-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  }`}
+                >
+                  {showOnlyEmptyText ? '✓ ' : ''}Empty
+                </button>
+                <button
+                  onClick={() =>
+                    setShowRecentlyModifiedTTS(!showRecentlyModifiedTTS)
+                  }
+                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                    showRecentlyModifiedTTS
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  }`}
+                >
+                  {showRecentlyModifiedTTS ? '✓ ' : ''}TTS
+                </button>
+                <button
+                  onClick={() => {
+                    // Find the most recently modified scene
+                    const mostRecentScene = data.reduce((latest, current) => {
+                      const currentTime =
+                        current.field_6905 || current['field_6905'];
+                      const latestTime =
+                        latest.field_6905 || latest['field_6905'];
+
+                      if (!currentTime) return latest;
+                      if (!latestTime) return current;
+
+                      const currentDate =
+                        typeof currentTime === 'string'
+                          ? new Date(currentTime)
+                          : new Date(currentTime as number);
+                      const latestDate =
+                        typeof latestTime === 'string'
+                          ? new Date(latestTime)
+                          : new Date(latestTime as number);
+
+                      return currentDate > latestDate ? current : latest;
+                    });
+
+                    if (mostRecentScene) {
+                      scrollCardToTop(mostRecentScene.id);
+                    }
+                  }}
+                  className='px-2.5 py-1 text-xs rounded-full transition-colors bg-orange-500 text-white hover:bg-orange-600 whitespace-nowrap'
+                  title='Scroll to most recently modified scene'
+                >
+                  📍 Recent
+                </button>
+              </div>
+            </div>
+
+            {/* Results Count - Right Side on Desktop */}
+            <div className='text-xs text-gray-500 flex items-center'>
+              Showing{' '}
+              <span className='font-semibold text-gray-700 mx-1'>
+                {filteredAndSortedData.length}
+              </span>{' '}
+              of{' '}
+              <span className='font-semibold text-gray-700 mx-1'>
+                {data.length}
+              </span>{' '}
+              scenes
+            </div>
           </div>
-
-          <div className='flex items-center space-x-2 justify-center'>
-            <label className='text-sm font-medium text-gray-700'>
-              Sort by Last Modified:
-            </label>
-            <button
-              onClick={() =>
-                setSortByLastModified(
-                  sortByLastModified === 'asc' ? null : 'asc'
-                )
-              }
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                sortByLastModified === 'asc'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              ↑ Ascending
-            </button>
-            <button
-              onClick={() =>
-                setSortByLastModified(
-                  sortByLastModified === 'desc' ? null : 'desc'
-                )
-              }
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                sortByLastModified === 'desc'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              ↓ Descending
-            </button>
-          </div>
-
-          <div className='flex items-center space-x-2 justify-center'>
-            <label className='text-sm font-medium text-gray-700'>Filter:</label>
-            <button
-              onClick={() => setShowOnlyEmptyText(!showOnlyEmptyText)}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                showOnlyEmptyText
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {showOnlyEmptyText ? '✓' : ''} Empty Text Only
-            </button>
-            <button
-              onClick={() =>
-                setShowRecentlyModifiedTTS(!showRecentlyModifiedTTS)
-              }
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                showRecentlyModifiedTTS
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {showRecentlyModifiedTTS ? '✓' : ''} TTS Only
-            </button>
-            <button
-              onClick={() => {
-                // Find the most recently modified scene
-                const mostRecentScene = data.reduce((latest, current) => {
-                  const currentTime =
-                    current.field_6905 || current['field_6905'];
-                  const latestTime = latest.field_6905 || latest['field_6905'];
-
-                  if (!currentTime) return latest;
-                  if (!latestTime) return current;
-
-                  const currentDate =
-                    typeof currentTime === 'string'
-                      ? new Date(currentTime)
-                      : new Date(currentTime as number);
-                  const latestDate =
-                    typeof latestTime === 'string'
-                      ? new Date(latestTime)
-                      : new Date(latestTime as number);
-
-                  return currentDate > latestDate ? current : latest;
-                });
-
-                if (mostRecentScene) {
-                  scrollCardToTop(mostRecentScene.id);
-                }
-              }}
-              className='px-3 py-1 text-xs rounded-full transition-colors bg-orange-100 text-orange-700 hover:bg-orange-200'
-              title='Scroll to most recently modified scene'
-            >
-              📍 Recent
-            </button>
-          </div>
-        </div>
-
-        <div className='text-sm text-gray-500'>
-          Showing {filteredAndSortedData.length} of {data.length} scenes
         </div>
       </div>
 
