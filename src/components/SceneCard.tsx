@@ -1091,6 +1091,83 @@ export default function SceneCard({
             }}
             className='bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200'
           >
+            {/* Video Player - Only show when video is playing for this scene */}
+            {mediaPlayer.playingVideoId === scene.id && (
+              <div className='mb-4 bg-black rounded-lg overflow-hidden'>
+                <video
+                  ref={(el) => {
+                    if (el) videoRefs.current[scene.id] = el;
+                  }}
+                  controls
+                  className='w-full h-auto max-h-96'
+                  onEnded={() => {
+                    // Video ended - no auto-close
+                  }}
+                  onError={(e) => {
+                    console.error('Video error for scene', scene.id, e);
+                    setLoadingVideo(null);
+                    setPlayingVideo(null);
+                  }}
+                >
+                  Your browser does not support the video tag.
+                </video>
+                <div className='flex justify-between items-center p-2 bg-gray-900'>
+                  <span className='text-xs text-gray-300'>
+                    Duration: {String(scene.field_6884 || 'N/A')}
+                  </span>
+                  <button
+                    onClick={() => handleVideoStop(scene.id)}
+                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
+                  >
+                    Close Video
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Produced Video Player - Only show when produced video is playing for this scene */}
+            {mediaPlayer.playingProducedVideoId === scene.id && (
+              <div className='mb-4 bg-black rounded-lg overflow-hidden'>
+                <video
+                  ref={(el) => {
+                    if (el) producedVideoRefs.current[scene.id] = el;
+                  }}
+                  controls
+                  className='w-full h-auto max-h-96'
+                  onEnded={() => {
+                    // Produced video ended - no auto-close
+                  }}
+                  onError={(e) => {
+                    console.error(
+                      'Produced video error for scene',
+                      scene.id,
+                      e
+                    );
+                    setLoadingProducedVideo(null);
+                    setPlayingProducedVideo(null);
+                  }}
+                >
+                  Your browser does not support the video tag.
+                </video>
+                <div className='flex justify-between items-center p-2 bg-gray-900'>
+                  <div className='flex items-center space-x-4'>
+                    <span className='text-xs text-gray-300'>
+                      Produced Video
+                    </span>
+                    <span className='text-xs text-gray-300'>
+                      Duration: {String(scene.field_6884 || 'N/A')}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleProducedVideoStop(scene.id)}
+                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
+                  >
+                    Close Video
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className='flex w-full justify-between'>
               {/* Top row - ID and Order */}
               {/* Bottom row - Sentence and buttons */}
@@ -1595,82 +1672,6 @@ export default function SceneCard({
                     scene.field_6890 ||
                     'No sentence - Click to add'
                 )}
-              </div>
-            )}
-            {/* Video Player - Only show when video is playing for this scene */}
-            {mediaPlayer.playingVideoId === scene.id && (
-              <div className='mt-4 bg-black rounded-lg overflow-hidden'>
-                <video
-                  ref={(el) => {
-                    if (el) videoRefs.current[scene.id] = el;
-                  }}
-                  controls
-                  className='w-full h-auto max-h-96'
-                  onEnded={() => {
-                    // Video ended - no auto-close
-                  }}
-                  onError={(e) => {
-                    console.error('Video error for scene', scene.id, e);
-                    setLoadingVideo(null);
-                    setPlayingVideo(null);
-                  }}
-                >
-                  Your browser does not support the video tag.
-                </video>
-                <div className='flex justify-between items-center p-2 bg-gray-900'>
-                  <span className='text-xs text-gray-300'>
-                    Duration: {String(scene.field_6884 || 'N/A')}
-                  </span>
-                  <button
-                    onClick={() => handleVideoStop(scene.id)}
-                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
-                  >
-                    Close Video
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Produced Video Player - Only show when produced video is playing for this scene */}
-            {mediaPlayer.playingProducedVideoId === scene.id && (
-              <div className='mt-4 bg-black rounded-lg overflow-hidden'>
-                <video
-                  ref={(el) => {
-                    if (el) producedVideoRefs.current[scene.id] = el;
-                  }}
-                  controls
-                  className='w-full h-auto max-h-96'
-                  onEnded={() => {
-                    // Produced video ended - no auto-close
-                  }}
-                  onError={(e) => {
-                    console.error(
-                      'Produced video error for scene',
-                      scene.id,
-                      e
-                    );
-                    setLoadingProducedVideo(null);
-                    setPlayingProducedVideo(null);
-                  }}
-                >
-                  Your browser does not support the video tag.
-                </video>
-                <div className='flex justify-between items-center p-2 bg-gray-900'>
-                  <div className='flex items-center space-x-4'>
-                    <span className='text-xs text-gray-300'>
-                      Produced Video
-                    </span>
-                    <span className='text-xs text-gray-300'>
-                      Duration: {String(scene.field_6884 || 'N/A')}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleProducedVideoStop(scene.id)}
-                    className='px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors'
-                  >
-                    Close Video
-                  </button>
-                </div>
               </div>
             )}
           </div>
