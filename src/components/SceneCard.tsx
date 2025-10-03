@@ -1146,7 +1146,7 @@ export default function SceneCard({
                     if (el) videoRefs.current[scene.id] = el;
                   }}
                   controls
-                  className='w-full h-auto max-h-[650px]'
+                  className='w-full h-auto max-h-[620px]'
                   onEnded={() => {
                     // Video ended - no auto-close
                   }}
@@ -1169,7 +1169,7 @@ export default function SceneCard({
                     if (el) producedVideoRefs.current[scene.id] = el;
                   }}
                   controls
-                  className='w-full h-auto max-h-[650px]'
+                  className='w-full h-auto max-h-[620px]'
                   onEnded={() => {
                     // Produced video ended - no auto-close
                   }}
@@ -1207,43 +1207,6 @@ export default function SceneCard({
               {/* Media Controls Group - Right Side with flex-1 wrapper */}
               <div className='flex-1 flex justify-end'>
                 <div className='flex flex-wrap gap-2'>
-                  {/* Produced Video Button - MOVED TO FIRST */}
-                  {typeof scene['field_6886'] === 'string' &&
-                    scene['field_6886'] && (
-                      <button
-                        onClick={() =>
-                          handleProducedVideoPlay(
-                            scene.id,
-                            scene['field_6886'] as string
-                          )
-                        }
-                        disabled={loadingProducedVideo === scene.id}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[85px] rounded-full text-xs font-medium transition-colors ${
-                          mediaPlayer.playingProducedVideoId === scene.id
-                            ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                            : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title={
-                          mediaPlayer.playingProducedVideoId === scene.id
-                            ? 'Stop'
-                            : 'Play'
-                        }
-                      >
-                        {loadingProducedVideo === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : mediaPlayer.playingProducedVideoId === scene.id ? (
-                          <Pause className='h-3 w-3' />
-                        ) : (
-                          <Monitor className='h-3 w-3' />
-                        )}
-                        <span>
-                          {mediaPlayer.playingProducedVideoId === scene.id
-                            ? 'Stop'
-                            : 'Final Vid'}
-                        </span>
-                      </button>
-                    )}
-
                   {/* Revert to Original Button */}
                   {typeof scene['field_6901'] === 'string' &&
                     scene['field_6901'] &&
@@ -1621,6 +1584,43 @@ export default function SceneCard({
                             : batchOperations.generatingAllVideos
                             ? 'Video Busy'
                             : 'Sync'}
+                        </span>
+                      </button>
+                    )}
+
+                  {/* Produced Video Button - LAST */}
+                  {typeof scene['field_6886'] === 'string' &&
+                    scene['field_6886'] && (
+                      <button
+                        onClick={() =>
+                          handleProducedVideoPlay(
+                            scene.id,
+                            scene['field_6886'] as string
+                          )
+                        }
+                        disabled={loadingProducedVideo === scene.id}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[85px] rounded-full text-xs font-medium transition-colors ${
+                          mediaPlayer.playingProducedVideoId === scene.id
+                            ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                            : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          mediaPlayer.playingProducedVideoId === scene.id
+                            ? 'Stop'
+                            : 'Play'
+                        }
+                      >
+                        {loadingProducedVideo === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : mediaPlayer.playingProducedVideoId === scene.id ? (
+                          <Pause className='h-3 w-3' />
+                        ) : (
+                          <Monitor className='h-3 w-3' />
+                        )}
+                        <span>
+                          {mediaPlayer.playingProducedVideoId === scene.id
+                            ? 'Stop'
+                            : 'Final Vid'}
                         </span>
                       </button>
                     )}
