@@ -1193,13 +1193,7 @@ export default function SceneCard({
               {/* Bottom row - Sentence and buttons */}
               <div className='grid grid-cols-1 flex-1 gap-4 md:gap-6'>
                 {/* Media Controls Group - Auto-fill Grid Layout */}
-                <div
-                  className='grid auto-cols-max right-justify gap-2'
-                  style={{
-                    gridTemplateColumns:
-                      'repeat(auto-fill, minmax(110px, max-content))',
-                  }}
-                >
+                <div className='grid auto-cols-max right-justify gap-2 grid-cols-[repeat(auto-fill,minmax(110px,max-content))]'>
                   {/* Produced Video Button - MOVED TO FIRST */}
                   {typeof scene['field_6886'] === 'string' &&
                     scene['field_6886'] && (
@@ -1724,13 +1718,7 @@ export default function SceneCard({
             }
           }
         }}
-        style={{
-          position: 'fixed',
-          bottom: '2rem',
-          right: '2rem',
-          zIndex: 99999,
-        }}
-        className='w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl hover:bg-blue-700 hover:shadow-3xl transition-all duration-300 flex items-center justify-center border-2 border-white'
+        className='fixed bottom-8 right-8 z-[99999] w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl hover:bg-blue-700 hover:shadow-3xl transition-all duration-300 flex items-center justify-center border-2 border-white'
         title='Scroll to first scene'
       >
         <svg
