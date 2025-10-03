@@ -1121,7 +1121,7 @@ export default function SceneCard({
                   }}
                   controls
                   className='w-full h-auto'
-                  style={{ maxHeight: '600px' }}
+                  style={{ maxHeight: '650px' }}
                   onEnded={() => {
                     // Video ended - no auto-close
                   }}
@@ -1145,7 +1145,7 @@ export default function SceneCard({
                   }}
                   controls
                   className='w-full h-auto'
-                  style={{ maxHeight: '600px' }}
+                  style={{ maxHeight: '650px' }}
                   onEnded={() => {
                     // Produced video ended - no auto-close
                   }}
