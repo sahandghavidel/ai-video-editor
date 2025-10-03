@@ -491,12 +491,21 @@ export default function SceneCard({
 
   const handleVideoPlay = async (sceneId: number, videoUrl: string) => {
     try {
-      // Stop any currently playing video
+      // Stop any currently playing original video
       if (
         mediaPlayer.playingVideoId &&
         videoRefs.current[mediaPlayer.playingVideoId]
       ) {
         videoRefs.current[mediaPlayer.playingVideoId].pause();
+      }
+
+      // Stop any currently playing produced video
+      if (
+        mediaPlayer.playingProducedVideoId &&
+        producedVideoRefs.current[mediaPlayer.playingProducedVideoId]
+      ) {
+        producedVideoRefs.current[mediaPlayer.playingProducedVideoId].pause();
+        setPlayingProducedVideo(null);
       }
 
       // If clicking the same video that's playing, just pause it
@@ -508,8 +517,11 @@ export default function SceneCard({
       setPlayingVideo(sceneId);
       setLoadingVideo(sceneId);
 
-      // Wait a moment for the video element to be rendered
+      // Wait a moment for the video element to be rendered, then scroll
       setTimeout(() => {
+        // Scroll the card to the top of the screen
+        scrollCardToTop(sceneId);
+
         const video = videoRefs.current[sceneId];
         if (video) {
           video.src = videoUrl;
@@ -548,6 +560,15 @@ export default function SceneCard({
         producedVideoRefs.current[mediaPlayer.playingProducedVideoId]
       ) {
         producedVideoRefs.current[mediaPlayer.playingProducedVideoId].pause();
+      }
+
+      // Stop any currently playing original video
+      if (
+        mediaPlayer.playingVideoId &&
+        videoRefs.current[mediaPlayer.playingVideoId]
+      ) {
+        videoRefs.current[mediaPlayer.playingVideoId].pause();
+        setPlayingVideo(null);
       }
 
       // If clicking the same video that's playing, just pause it
