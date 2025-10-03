@@ -9,6 +9,8 @@ const openai = new OpenAI({
   },
 });
 
+// 11. instead single words at the begginning of the sentence like so, next, then, after that, finally, etc. use alternatives with at least 3 words like "in the next step", 'moving on to the next part', 'after completing this section', 'to wrap things up', etc.
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -56,7 +58,6 @@ Please improve this sentence by:
 8. Never use code snippets like html or css tags
 9. The sentences must have at least 5 words
 10. Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", etc.
-11. instead single words at the begginning of the sentence like so, next, then, after that, finally, etc. use alternatives with at least 3 words like "in the next step", 'moving on to the next part', 'after completing this section', 'to wrap things up', etc.
 
 Return only the improved sentence, nothing else.`;
 
