@@ -1120,8 +1120,7 @@ export default function SceneCard({
                     if (el) videoRefs.current[scene.id] = el;
                   }}
                   controls
-                  className='w-full h-auto'
-                  style={{ maxHeight: '650px' }}
+                  className='w-full h-auto max-h-[650px]'
                   onEnded={() => {
                     // Video ended - no auto-close
                   }}
@@ -1144,8 +1143,7 @@ export default function SceneCard({
                     if (el) producedVideoRefs.current[scene.id] = el;
                   }}
                   controls
-                  className='w-full h-auto'
-                  style={{ maxHeight: '650px' }}
+                  className='w-full h-auto max-h-[650px]'
                   onEnded={() => {
                     // Produced video ended - no auto-close
                   }}
@@ -1595,26 +1593,19 @@ export default function SceneCard({
                     )}
                 </div>
               </div>
-              <div>
-                {/* ID */}
-                <div className='flex justify-center items-center flex-col'>
-                  <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    ID ({String(scene.field_6884 || 'N/A')})
-                  </label>
-                  <div className='text-lg font-bold text-blue-600 mt-1'>
-                    #{scene.id || 'N/A'}
-                  </div>
+              {/* ID and Duration - Desktop only, horizontal layout */}
+              <div className='hidden sm:flex flex-row items-center gap-4'>
+                <div className='flex items-center gap-2'>
+                  <span className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
+                    ID:
+                  </span>
+                  <span className='text-lg font-bold text-blue-600'>
+                    #{scene.id || 'N/A'}{' '}
+                    <span className='text-gray-400'>
+                      ({String(scene.field_6884 || 'N/A')})
+                    </span>
+                  </span>
                 </div>
-
-                {/* Order */}
-                {/* <div>
-                  <label className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    Order
-                  </label>
-                  <div className='text-lg font-semibold text-gray-800'>
-                    {scene.order ? Math.round(Number(scene.order)) : 'Not set'}
-                  </div>
-                </div> */}
               </div>
             </div>
             {editingId === scene.id ? (
