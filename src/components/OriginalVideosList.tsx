@@ -963,9 +963,19 @@ export default function OriginalVideosList({
     try {
       setGeneratingScenesAll(true);
 
+      // Fetch fresh data directly to ensure we have latest captions URLs
+      console.log('Fetching fresh data before scene generation...');
+      const freshData = await getOriginalVideosData();
+      console.log('Fresh data fetched:', freshData.length, 'videos');
+
       // Filter videos that have captions URLs but no scenes
-      const videosToProcess = originalVideos.filter((video) => {
+      const videosToProcess = freshData.filter((video) => {
         const captionsUrl = extractUrl(video.field_6861);
+        const hasCaptions = !!captionsUrl;
+        const scenesExist = hasScenes(video);
+        console.log(
+          `Video ${video.id}: captions=${hasCaptions}, scenes=${scenesExist}`
+        );
         return captionsUrl && !hasScenes(video); // Has captions but no scenes
       });
 
@@ -1637,6 +1647,11 @@ export default function OriginalVideosList({
         try {
           await handleTranscribeAll();
           console.log(`✓ Step ${stepNumber} Complete: Transcription finished`);
+
+          // Refresh data to get updated captions URLs
+          console.log('Refreshing original videos data after transcription...');
+          await handleRefresh();
+          console.log('Data refreshed successfully');
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Transcription error`,
