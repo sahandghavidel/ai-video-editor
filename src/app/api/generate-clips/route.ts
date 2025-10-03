@@ -62,12 +62,59 @@ export async function POST(request: NextRequest) {
 
           // Step 3: Process each scene using direct FFmpeg (much faster!)
           const processedClips = [];
+          let skippedCount = 0;
+
           for (let i = 0; i < scenes.length; i++) {
             const scene = scenes[i];
             const sceneNumber = i + 1;
             const progressPercentage = Math.round(
               (sceneNumber / scenes.length) * 100
             );
+
+            // Check if scene already has a clip in field_6888 (Video Clip URL)
+            if (scene.field_6888) {
+              const clipValue = scene.field_6888;
+
+              // More careful checking - only skip if there's actually a URL
+              let hasClip = false;
+
+              if (typeof clipValue === 'string') {
+                // String: check if it's not empty and not just whitespace
+                hasClip = clipValue.trim() !== '';
+              } else if (Array.isArray(clipValue)) {
+                // Array: check if it has items with actual URLs
+                hasClip =
+                  clipValue.length > 0 &&
+                  clipValue.some(
+                    (item) =>
+                      item &&
+                      (typeof item === 'string' ? item.trim() !== '' : item.url)
+                  );
+              } else if (typeof clipValue === 'object' && clipValue !== null) {
+                // Object: check if it has url property
+                hasClip = clipValue.url && String(clipValue.url).trim() !== '';
+              }
+
+              if (hasClip) {
+                skippedCount++;
+
+                // Send skip notification
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      type: 'scene_skipped',
+                      sceneId: scene.id,
+                      sceneNumber,
+                      current: sceneNumber,
+                      total: scenes.length,
+                      percentage: progressPercentage,
+                      message: `Scene ${sceneNumber} already has clip, skipping...`,
+                    })}\n\n`
+                  )
+                );
+                continue; // Skip this scene
+              }
+            }
 
             // Send progress update
             controller.enqueue(
@@ -140,7 +187,9 @@ export async function POST(request: NextRequest) {
                 type: 'complete',
                 totalScenes: scenes.length,
                 processedScenes: processedClips.length,
-                failedScenes: scenes.length - processedClips.length,
+                skippedScenes: skippedCount,
+                failedScenes:
+                  scenes.length - processedClips.length - skippedCount,
                 clips: processedClips,
               })}\n\n`
             )
