@@ -1188,12 +1188,25 @@ export default function SceneCard({
               </div>
             )}
 
-            <div className='flex w-full justify-between'>
-              {/* Top row - ID and Order */}
-              {/* Bottom row - Sentence and buttons */}
-              <div className='grid grid-cols-1 flex-1 gap-4 md:gap-6'>
-                {/* Media Controls Group - Auto-fill Grid Layout */}
-                <div className='grid auto-cols-max right-justify gap-2 grid-cols-[repeat(auto-fill,minmax(110px,max-content))]'>
+            <div className='flex w-full gap-4'>
+              {/* ID and Duration - Left Side, Desktop only */}
+              <div className='hidden sm:flex flex-row items-center gap-4'>
+                <div className='flex items-center gap-2'>
+                  <span className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
+                    ID:
+                  </span>
+                  <span className='text-lg font-bold text-blue-600'>
+                    #{scene.id || 'N/A'}{' '}
+                    <span className='text-gray-400'>
+                      ({String(scene.field_6884 || 'N/A')})
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Media Controls Group - Right Side with flex-1 wrapper */}
+              <div className='flex-1 flex justify-end'>
+                <div className='flex flex-wrap gap-2'>
                   {/* Produced Video Button - MOVED TO FIRST */}
                   {typeof scene['field_6886'] === 'string' &&
                     scene['field_6886'] && (
@@ -1611,20 +1624,6 @@ export default function SceneCard({
                         </span>
                       </button>
                     )}
-                </div>
-              </div>
-              {/* ID and Duration - Desktop only, horizontal layout */}
-              <div className='hidden sm:flex flex-row items-center gap-4'>
-                <div className='flex items-center gap-2'>
-                  <span className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    ID:
-                  </span>
-                  <span className='text-lg font-bold text-blue-600'>
-                    #{scene.id || 'N/A'}{' '}
-                    <span className='text-gray-400'>
-                      ({String(scene.field_6884 || 'N/A')})
-                    </span>
-                  </span>
                 </div>
               </div>
             </div>
