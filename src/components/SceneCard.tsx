@@ -1120,7 +1120,8 @@ export default function SceneCard({
                     if (el) videoRefs.current[scene.id] = el;
                   }}
                   controls
-                  className='w-full h-auto max-h-96'
+                  className='w-full h-auto'
+                  style={{ maxHeight: '600px' }}
                   onEnded={() => {
                     // Video ended - no auto-close
                   }}
@@ -1143,7 +1144,8 @@ export default function SceneCard({
                     if (el) producedVideoRefs.current[scene.id] = el;
                   }}
                   controls
-                  className='w-full h-auto max-h-96'
+                  className='w-full h-auto'
+                  style={{ maxHeight: '600px' }}
                   onEnded={() => {
                     // Produced video ended - no auto-close
                   }}
