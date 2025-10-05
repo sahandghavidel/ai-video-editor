@@ -57,7 +57,8 @@ Please improve this sentence by:
 7. Ensuring the improved sentence is concise and to the point
 8. Never use code snippets like html or css tags
 9. The sentences must have at least 5 words
-10. Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", etc.
+10. Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", "so", "then", "finally", etc.
+11. instead single words at the begginning of the sentence like "so", use alternatives with at least 3 words.
 
 Return only the improved sentence, nothing else.`;
 

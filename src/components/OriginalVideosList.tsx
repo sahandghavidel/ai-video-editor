@@ -1649,9 +1649,17 @@ export default function OriginalVideosList({
           console.log(`✓ Step ${stepNumber} Complete: Transcription finished`);
 
           // Refresh data to get updated captions URLs
-          console.log('Refreshing original videos data after transcription...');
+          console.log('Refreshing data after transcription...');
           await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
           console.log('Data refreshed successfully');
+
+          // Wait 1 minute before next step
+          console.log('Waiting 1 minute before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 60000));
+          console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Transcription error`,
@@ -1679,6 +1687,19 @@ export default function OriginalVideosList({
           console.log(
             `✓ Step ${stepNumber} Complete: Scene generation finished`
           );
+
+          // Refresh data to get updated scenes
+          console.log('Refreshing data after scene generation...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          // Wait 1 minute before next step
+          console.log('Waiting 1 minute before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 60000));
+          console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Scene generation error`,
@@ -1706,6 +1727,19 @@ export default function OriginalVideosList({
           console.log(
             `✓ Step ${stepNumber} Complete: Clip generation finished`
           );
+
+          // Refresh data to get updated clips
+          console.log('Refreshing data after clip generation...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          // Wait 1 minute before next step
+          console.log('Waiting 1 minute before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 60000));
+          console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Clip generation error`,
@@ -1729,6 +1763,19 @@ export default function OriginalVideosList({
         try {
           await handleSpeedUpAllVideos();
           console.log(`✓ Step ${stepNumber} Complete: Speed up finished`);
+
+          // Refresh data to get updated sped up videos
+          console.log('Refreshing data after speed up...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          // Wait 1 minute before next step
+          console.log('Waiting 1 minute before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 60000));
+          console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(`✗ Step ${stepNumber} Failed: Speed up error`, error);
           throw new Error(
@@ -1749,6 +1796,19 @@ export default function OriginalVideosList({
         try {
           await handleImproveAllVideosScenes();
           console.log(`✓ Step ${stepNumber} Complete: AI improvement finished`);
+
+          // Refresh data to get updated improved sentences
+          console.log('Refreshing data after AI improvement...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          // Wait 1 minute before next step
+          console.log('Waiting 1 minute before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 60000));
+          console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: AI improvement error`,
@@ -1772,6 +1832,19 @@ export default function OriginalVideosList({
         try {
           await handleGenerateAllTTSForAllVideos();
           console.log(`✓ Step ${stepNumber} Complete: TTS generation finished`);
+
+          // Refresh data to get updated TTS audio
+          console.log('Refreshing data after TTS generation...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          // Wait 1 minute before next step
+          console.log('Waiting 1 minute before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 60000));
+          console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: TTS generation error`,
@@ -1795,6 +1868,14 @@ export default function OriginalVideosList({
         try {
           await handleGenerateAllVideosForAllScenes();
           console.log(`✓ Step ${stepNumber} Complete: Video sync finished`);
+
+          // Refresh data to get updated synced videos
+          console.log('Refreshing data after video sync...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
         } catch (error) {
           console.error(`✗ Step ${stepNumber} Failed: Video sync error`, error);
           throw new Error(
