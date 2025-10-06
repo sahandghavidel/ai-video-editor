@@ -785,8 +785,11 @@ export default function OriginalVideosList({
     try {
       setTranscribingAll(true);
 
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
       // Filter videos that have video URLs but no captions URLs
-      const videosToTranscribe = originalVideos.filter((video) => {
+      const videosToTranscribe = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const captionsUrl = extractUrl(video.field_6861);
         return videoUrl && !captionsUrl; // Has video but no captions
@@ -1059,19 +1062,22 @@ export default function OriginalVideosList({
     try {
       setImprovingAllVideosScenes(true);
 
-      // Get all scenes from the store
-      if (!allScenesData || allScenesData.length === 0) {
+      // Fetch fresh scenes data directly from API
+      const freshScenesData = await getBaserowData();
+
+      // Get all scenes from fresh data
+      if (!freshScenesData || freshScenesData.length === 0) {
         console.log('No scenes found to improve');
         return;
       }
 
       console.log(
-        `Starting AI improvement for all videos with ${allScenesData.length} scenes...`
+        `Starting AI improvement for all videos with ${freshScenesData.length} scenes...`
       );
-      console.log('All scenes data:', allScenesData);
+      console.log('All scenes data:', freshScenesData);
 
       await handleImproveAllSentencesForAllVideos(
-        allScenesData,
+        freshScenesData,
         sceneHandlers.handleSentenceImprovement,
         modelSelection.selectedModel,
         setImprovingAllVideosScenes,
@@ -1114,19 +1120,22 @@ export default function OriginalVideosList({
     try {
       setGeneratingAllTTSForAllVideos(true);
 
-      // Get all scenes from the store
-      if (!allScenesData || allScenesData.length === 0) {
+      // Fetch fresh scenes data directly from API
+      const freshScenesData = await getBaserowData();
+
+      // Get all scenes from fresh data
+      if (!freshScenesData || freshScenesData.length === 0) {
         console.log('No scenes found to generate TTS');
         return;
       }
 
       console.log(
-        `Starting TTS generation for all videos with ${allScenesData.length} scenes...`
+        `Starting TTS generation for all videos with ${freshScenesData.length} scenes...`
       );
-      console.log('All scenes data:', allScenesData);
+      console.log('All scenes data:', freshScenesData);
 
       await generateAllTTSForAllVideosUtil(
-        allScenesData,
+        freshScenesData,
         sceneHandlers.handleTTSProduce,
         setGeneratingAllTTSForAllVideos,
         setCurrentProcessingVideoId,
@@ -1168,18 +1177,21 @@ export default function OriginalVideosList({
     try {
       setGeneratingAllVideos(true);
 
-      // Get all scenes from the store
-      if (!allScenesData || allScenesData.length === 0) {
+      // Fetch fresh scenes data directly from API
+      const freshScenesData = await getBaserowData();
+
+      // Get all scenes from fresh data
+      if (!freshScenesData || freshScenesData.length === 0) {
         console.log('No scenes found to generate videos');
         return;
       }
 
       console.log(
-        `Starting video generation for all scenes with ${allScenesData.length} scenes...`
+        `Starting video generation for all scenes with ${freshScenesData.length} scenes...`
       );
 
       await handleGenerateAllVideos(
-        allScenesData,
+        freshScenesData,
         sceneHandlers.handleVideoGenerate,
         () => {}, // startBatchOperation (not used in OriginalVideosList)
         () => {}, // completeBatchOperation (not used in OriginalVideosList)
@@ -1217,19 +1229,22 @@ export default function OriginalVideosList({
     try {
       setSpeedingUpAllVideos(true);
 
-      // Get all scenes from the store
-      if (!allScenesData || allScenesData.length === 0) {
+      // Fetch fresh scenes data directly from API
+      const freshScenesData = await getBaserowData();
+
+      // Get all scenes from fresh data
+      if (!freshScenesData || freshScenesData.length === 0) {
         console.log('No scenes found to speed up videos');
         return;
       }
 
       console.log(
-        `Starting speed up for all videos with ${allScenesData.length} scenes...`
+        `Starting speed up for all videos with ${freshScenesData.length} scenes...`
       );
-      console.log('All scenes data:', allScenesData);
+      console.log('All scenes data:', freshScenesData);
 
       await handleSpeedUpAllVideosForAllScenes(
-        allScenesData,
+        freshScenesData,
         videoSettings,
         setSpeedingUpAllVideos,
         setCurrentProcessingVideoId,
@@ -1269,8 +1284,11 @@ export default function OriginalVideosList({
       setMergingFinalVideos(true);
       setError(null);
 
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
       // Filter videos that have Final Merged Video URLs and Order values
-      const videosWithFinalVideos = originalVideos.filter((video) => {
+      const videosWithFinalVideos = freshVideosData.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
         const order = video.field_6902; // Order field
         console.log(
@@ -1417,8 +1435,11 @@ export default function OriginalVideosList({
       setGeneratingTimestamps(true);
       setError(null);
 
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
       // Filter videos that have Final Merged Video URLs, Titles, and Order values
-      const videosWithTimestamps = originalVideos.filter((video) => {
+      const videosWithTimestamps = freshVideosData.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
         const title = video.field_6852; // Title field
         const order = video.field_6902; // Order field
@@ -1563,8 +1584,11 @@ export default function OriginalVideosList({
       setGeneratingClipsAll(true);
       setError(null);
 
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
       // Filter videos that have scenes
-      const videosWithScenes = originalVideos.filter((video) =>
+      const videosWithScenes = freshVideosData.filter((video) =>
         hasScenes(video)
       );
 
