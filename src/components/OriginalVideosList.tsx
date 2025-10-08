@@ -1197,8 +1197,7 @@ export default function OriginalVideosList({
         () => {}, // completeBatchOperation (not used in OriginalVideosList)
         setGeneratingVideo,
         async () => {
-          // Refresh both original videos and scenes data
-          await handleRefresh();
+          // Refresh only scenes data, not the entire page
           if (refreshScenesData) {
             refreshScenesData();
           }
@@ -1250,8 +1249,7 @@ export default function OriginalVideosList({
         setCurrentProcessingVideoId,
         setSpeedingUpVideo,
         async () => {
-          // Refresh both original videos and scenes data
-          await handleRefresh();
+          // Refresh only scenes data, not the entire page
           if (refreshScenesData) {
             refreshScenesData();
           }
