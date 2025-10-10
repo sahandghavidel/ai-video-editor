@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         process.cwd(),
         'whisper-small-transcribe.py'
       );
-      const venvPath = 'python3'; // Use system python3
+      const venvPath = path.join(process.cwd(), 'whisper-env', 'bin', 'python');
 
       // Run the Whisper small transcription script
       transcriptionPromise = new Promise((resolve, reject) => {
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
     } else if (model === 'tiny') {
       // Path to the Whisper tiny transcription script
       const scriptPath = path.join(process.cwd(), 'whisper-tiny-transcribe.py');
-      const venvPath = 'python3'; // Use system python3
+      const venvPath = path.join(process.cwd(), 'whisper-env', 'bin', 'python');
 
       // Run the Whisper tiny transcription script
       transcriptionPromise = new Promise((resolve, reject) => {
