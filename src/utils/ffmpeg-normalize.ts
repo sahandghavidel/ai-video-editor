@@ -48,6 +48,7 @@ export async function normalizeAudioLoudness(
       '-y',
       '-i',
       `"${inputUrl}"`,
+      '-vn', // Skip video decoding for faster analysis
       '-af',
       `loudnorm=I=${targetLoudness}:LRA=${loudnessRange}:tp=${truePeak}:print_format=json`,
       '-f',
@@ -61,7 +62,7 @@ export async function normalizeAudioLoudness(
     const { stdout: analyzeStdout, stderr: analyzeStderr } = await execAsync(
       analyzeCommandString,
       {
-        timeout: 60000, // 1 minute timeout for analysis
+        timeout: 300000, // 5 minute timeout for analysis (increased for long videos)
       }
     );
 
