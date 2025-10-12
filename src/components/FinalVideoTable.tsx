@@ -287,16 +287,14 @@ const FinalVideoTable: React.FC = () => {
         transcriptionText.substring(0, 100) + '...'
       );
 
-      // Call the sentence improvement API with title generation prompt
-      const response = await fetch('/api/improve-sentence', {
+      // Call the new title generation API
+      const response = await fetch('/api/generate-title', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentSentence: `Generate a YouTube title for this video transcription: ${transcriptionText}`,
-          allSentences: [''],
-          sceneId: 'title_generation',
+          transcriptionText: transcriptionText,
           model: modelSelection.selectedModel,
         }),
       });
@@ -306,8 +304,7 @@ const FinalVideoTable: React.FC = () => {
       }
 
       const result = await response.json();
-      const generatedTitle =
-        result.improvedSentence || result.title || 'Generated Title';
+      const generatedTitle = result.title || 'Generated Title';
 
       // Save the generated title to localStorage
       const existingData = localStorage.getItem('final-video-data');
@@ -376,16 +373,14 @@ const FinalVideoTable: React.FC = () => {
         transcriptionText.substring(0, 100) + '...'
       );
 
-      // Call the sentence improvement API with description generation prompt
-      const response = await fetch('/api/improve-sentence', {
+      // Call the new description generation API
+      const response = await fetch('/api/generate-description', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentSentence: `Write a YouTube description for this video. Use this EXACT format (minimum 3 paragraphs and each paragraph should be at least 5 sentences long and add only 3 hashtags at the end) This is the video transcription: ${transcriptionText} `,
-          allSentences: [''],
-          sceneId: 'description_generation',
+          transcriptionText: transcriptionText,
           model: modelSelection.selectedModel,
         }),
       });
@@ -397,12 +392,7 @@ const FinalVideoTable: React.FC = () => {
       const result = await response.json();
       console.log('AI Response:', result);
 
-      let generatedDescription =
-        result.improvedSentence ||
-        result.description ||
-        result.response ||
-        result.text ||
-        'Generated Description';
+      let generatedDescription = result.description || 'Generated Description';
 
       console.log('Raw generated description:', generatedDescription);
       console.log('Formatted description:', generatedDescription);
