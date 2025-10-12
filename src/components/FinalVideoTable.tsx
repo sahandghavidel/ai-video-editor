@@ -7,6 +7,7 @@ const FinalVideoTable: React.FC = () => {
   const [transcribing, setTranscribing] = useState(false);
   const [generatingTitle, setGeneratingTitle] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [generatingTags, setGeneratingTags] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [videoData, setVideoData] = useState<any>(null);
   const [timestampData, setTimestampData] = useState<string>('');
@@ -480,6 +481,91 @@ const FinalVideoTable: React.FC = () => {
     }
   };
 
+  const handleGenerateTags = async () => {
+    if (!parsedData?.captionsUrl) {
+      alert('No transcription available. Please transcribe the video first.');
+      return;
+    }
+
+    try {
+      setGeneratingTags(true);
+
+      // Fetch the transcription from the captions URL
+      const transcriptionResponse = await fetch(parsedData.captionsUrl);
+      if (!transcriptionResponse.ok) {
+        throw new Error('Failed to fetch transcription');
+      }
+
+      const transcriptionData = await transcriptionResponse.json();
+
+      // Extract text from word timestamps
+      const transcriptionText = transcriptionData
+        .map((word: any) => word.word)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      console.log(
+        'Generating tags for transcription:',
+        transcriptionText.substring(0, 100) + '...'
+      );
+
+      // Call the new tags generation API
+      const response = await fetch('/api/generate-tags', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transcriptionText: transcriptionText,
+          model: modelSelection.selectedModel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Tags generation failed');
+      }
+
+      const result = await response.json();
+      const generatedTags = result.tags || 'Generated Tags';
+
+      console.log('Generated tags:', generatedTags);
+
+      // Save the generated tags to localStorage
+      const existingData = localStorage.getItem('final-video-data');
+      let dataObject: any = {};
+
+      if (existingData) {
+        try {
+          dataObject = JSON.parse(existingData);
+        } catch (parseError) {
+          dataObject = {};
+        }
+      }
+
+      // Update with generated tags
+      const updatedData = {
+        ...dataObject,
+        tags: generatedTags,
+        tagsGeneratedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+      };
+
+      localStorage.setItem('final-video-data', JSON.stringify(updatedData));
+      setVideoData(updatedData);
+
+      console.log('Tags saved to localStorage:', generatedTags);
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error generating tags:', error);
+      alert('Failed to generate tags. Please try again.');
+    } finally {
+      setGeneratingTags(false);
+    }
+  };
+
   if (!parsedData || !parsedData.finalVideoUrl) {
     return null;
   }
@@ -621,6 +707,23 @@ const FinalVideoTable: React.FC = () => {
                       : 'Generate Description'}
                   </button>
                   <button
+                    onClick={handleGenerateTags}
+                    disabled={generatingTags || !parsedData.captionsUrl}
+                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                    title={
+                      parsedData.captionsUrl
+                        ? 'Generate YouTube tags from transcription'
+                        : 'Transcription required for tags generation'
+                    }
+                  >
+                    <Sparkles
+                      className={`w-3 h-3 ${
+                        generatingTags ? 'animate-pulse' : ''
+                      }`}
+                    />
+                    {generatingTags ? 'Generating...' : 'Generate Tags'}
+                  </button>
+                  <button
                     onClick={handleResetData}
                     className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors'
                     title='Reset all data except final video URL and timestamps'
@@ -647,20 +750,22 @@ const FinalVideoTable: React.FC = () => {
                 const finalVideoData = localStorage.getItem('final-video-data');
                 let description = '';
                 let title = parsedData.title || 'Final Merged Video';
+                let tags = '';
                 if (finalVideoData) {
                   try {
                     const parsed = JSON.parse(finalVideoData);
                     description = parsed.description || '';
+                    tags = parsed.tags || '';
                   } catch (error) {
                     console.warn('Failed to parse final video data:', error);
                   }
                 }
-                const fullContent = `${title}\n\n${description}\n\ntimestamp:\n${timestampData}`;
+                const fullContent = `${title}\n\n${description}\n\ntimestamp:\n${timestampData}\n\n${tags}`;
                 navigator.clipboard.writeText(fullContent);
                 // Could add a toast notification here
               }}
               className='px-3 py-1 text-sm bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors'
-              title='Copy description and timestamps to clipboard'
+              title='Copy title, description, timestamps and tags to clipboard'
             >
               Copy All
             </button>
@@ -703,6 +808,30 @@ const FinalVideoTable: React.FC = () => {
                 <pre className='text-sm text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-md'>
                   {timestampData}
                 </pre>
+              </div>
+
+              {/* Tags Section */}
+              <div>
+                <h4 className='text-sm font-medium text-gray-900 mb-2'>Tags</h4>
+                <div className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                  {(() => {
+                    const finalVideoData =
+                      localStorage.getItem('final-video-data');
+                    if (finalVideoData) {
+                      try {
+                        const parsed = JSON.parse(finalVideoData);
+                        return parsed.tags || 'No tags generated yet';
+                      } catch (error) {
+                        console.warn(
+                          'Failed to parse final video data:',
+                          error
+                        );
+                        return 'No tags generated yet';
+                      }
+                    }
+                    return 'No tags generated yet';
+                  })()}
+                </div>
               </div>
             </div>
           </div>
