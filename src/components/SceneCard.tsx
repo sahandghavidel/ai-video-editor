@@ -759,7 +759,7 @@ export default function SceneCard({
 
         // Get all sentences for context
         const allSentences = dataRef.current
-          .map((scene) => String(scene['field_6890'] || scene.field_6890 || ''))
+          .map((scene) => String(scene['field_6901'] || scene.field_6891 || ''))
           .filter((sentence) => sentence.trim());
 
         console.log(
