@@ -19,8 +19,6 @@ export const metadata: Metadata = {
   keywords:
     'video editor, AI transcription, video processing, YouTube content, video merging, scene generation',
   authors: [{ name: 'Ultimate Video Editor' }],
-  viewport: 'width=device-width, initial-scale=1',
-  themeColor: '#2563eb',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
@@ -28,6 +26,12 @@ export const metadata: Metadata = {
     ],
     shortcut: '/favicon.ico',
   },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#2563eb',
 };
 
 export default function RootLayout({

@@ -14,7 +14,8 @@ const openai = new OpenAI({
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { currentSentence, allSentences, sceneId, model } = body;
+    const { currentSentence, allSentences, sceneId, sentenceNumber, model } =
+      body;
 
     if (!currentSentence) {
       return Response.json(
@@ -40,29 +41,33 @@ export async function POST(request: Request) {
       .map((sentence, index) => `${index + 1}. ${sentence}`)
       .join('\n');
 
-    const prompt = `You are an expert script writer improving a video tutorial script. Here is the full script context:
+    const prompt = `This is a standalone, independent request. Do not reference or remember any previous conversations, requests, or context from other calls.
+
+Request ID: ${Date.now()}-${Math.random().toString(36).substr(2, 9)}
+
+You are an expert script writer improving a single sentence from a video tutorial script. Here is the full script context for reference:
 
 FULL SCRIPT:
 ${scriptContext}
 
-CURRENT SENTENCE TO IMPROVE: "${currentSentence}"
+CURRENT SENTENCE TO IMPROVE (Sentence #${sentenceNumber}): "${currentSentence}"
 
-Please improve this sentence by:
-1. Making it more engaging and natural for text-to-speech
-2. Ensuring it flows well with the surrounding sentences
-3. Maintaining consistency with the tutorial's tone and style
-4. Keeping the technical accuracy intact
-5. Keeping the improved sentence simple English and easy to understand
-6. Avoiding unnecessary jargon and complex vocabulary
-7. Ensuring the improved sentence is concise and to the point
-8. Never use code snippets like html or css tags
-9. The sentences must have at least 5 words
-10. Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", "so", "then", "finally", etc.
-11. instead single words at the begginning of the sentence like "so", use alternatives with at least 3 words.
+Please improve this sentence by following these guidelines:
+• Make it more engaging and natural for text-to-speech
+• Ensure it flows well with the surrounding sentences
+• Maintain consistency with the tutorial's tone and style
+• Keep the technical accuracy intact
+• Use simple English that's easy to understand
+• Avoid unnecessary jargon and complex vocabulary
+• Ensure the improved sentence is concise and to the point
+• Never use code snippets like html or css tags
+• The sentences must have at least 5 words
+• Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", "so", "then", "finally", etc.
+• Instead of single words at the beginning of sentences like "so", use alternatives with at least 3 words.
 
 Return only the improved sentence, nothing else.`;
 
-    console.log('Prompt length:', prompt.length);
+    console.log('Prompt length:', prompt);
 
     // Use the original DeepSeek model that was working
     const completion = await openai.chat.completions.create({

@@ -757,10 +757,46 @@ export default function SceneCard({
       try {
         setImprovingSentence(sceneId);
 
-        // Get all sentences for context
-        const allSentences = dataRef.current
+        // Get all sentences for context - but only from the same video
+        const currentScene = dataRef.current.find(
+          (scene) => scene.id === sceneId
+        );
+        const currentVideoId = currentScene?.field_6889;
+
+        // Filter sentences to only include those from the same video
+        const filteredScenes = dataRef.current.filter((scene) => {
+          const sceneVideoId = scene.field_6889;
+          // Handle different data types that might come from Baserow
+          if (
+            typeof sceneVideoId === 'number' &&
+            typeof currentVideoId === 'number'
+          ) {
+            return sceneVideoId === currentVideoId;
+          }
+          if (
+            typeof sceneVideoId === 'string' &&
+            typeof currentVideoId === 'string'
+          ) {
+            return sceneVideoId === currentVideoId;
+          }
+          if (Array.isArray(sceneVideoId) && Array.isArray(currentVideoId)) {
+            return sceneVideoId[0] === currentVideoId[0];
+          }
+          return sceneVideoId === currentVideoId;
+        });
+
+        const allSentences = filteredScenes
           .map((scene) => String(scene['field_6901'] || scene.field_6891 || ''))
           .filter((sentence) => sentence.trim());
+
+        // Find the sentence number based on the current sentence's position in the filtered sentences
+        const currentSceneSentence = String(
+          currentScene?.['field_6901'] || currentScene?.field_6891 || ''
+        ).trim();
+        const sentenceNumber =
+          allSentences.findIndex(
+            (sentence) => sentence === currentSceneSentence
+          ) + 1;
 
         console.log(
           `Improving sentence for scene ${sceneId}: "${currentSentence}"`
@@ -776,6 +812,7 @@ export default function SceneCard({
             currentSentence,
             allSentences,
             sceneId,
+            sentenceNumber,
             model: modelOverride || modelSelection.selectedModel,
           }),
         });
