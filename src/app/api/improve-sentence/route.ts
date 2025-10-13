@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getBaserowData } from '@/lib/baserow-actions';
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -9,13 +10,25 @@ const openai = new OpenAI({
   },
 });
 
+// Helper function to fetch scenes from Baserow table 714
+async function getScenesFromTable(): Promise<any[]> {
+  try {
+    // Use the existing getBaserowData function which handles authentication and pagination
+    const scenes = await getBaserowData();
+    console.log(`Fetched ${scenes.length} scenes from Baserow`);
+    return scenes;
+  } catch (error) {
+    console.error('Error fetching scenes from Baserow:', error);
+    return [];
+  }
+}
+
 // 11. instead single words at the begginning of the sentence like so, next, then, after that, finally, etc. use alternatives with at least 3 words like "in the next step", 'moving on to the next part', 'after completing this section', 'to wrap things up', etc.
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { currentSentence, allSentences, sceneId, sentenceNumber, model } =
-      body;
+    const { currentSentence, sceneId, model } = body;
 
     if (!currentSentence) {
       return Response.json(
@@ -24,11 +37,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!allSentences || !Array.isArray(allSentences)) {
-      return Response.json(
-        { error: 'All sentences array is required' },
-        { status: 400 }
-      );
+    if (!sceneId) {
+      return Response.json({ error: 'Scene ID is required' }, { status: 400 });
     }
 
     console.log(
@@ -36,21 +46,99 @@ export async function POST(request: Request) {
     );
     console.log('Making OpenAI API call to OpenRouter...');
 
-    // Create context from all sentences
-    const scriptContext = allSentences
-      .map((sentence, index) => `${index + 1}. ${sentence}`)
-      .join('\n');
+    // Fetch all scenes from table 714
+    const allScenes = await getScenesFromTable();
+    console.log(`Fetched ${allScenes.length} scenes from table 714`);
+
+    // Find the current scene to get its video ID
+    const currentScene = allScenes.find((scene) => scene.id === sceneId);
+    if (!currentScene) {
+      console.log(`Scene ${sceneId} not found in table 714`);
+      // Fall back to independent operation
+    }
+
+    const videoId = currentScene?.field_6889;
+    console.log(`Video ID for scene ${sceneId}: ${videoId}`);
+
+    // Filter scenes by video ID and extract sentences
+    let allSentences: string[] = [];
+    let sentenceNumber = 1;
+    let videoScenes: any[] = [];
+
+    if (videoId && allScenes.length > 0) {
+      videoScenes = allScenes.filter((scene) => {
+        const sceneVideoId = scene.field_6889;
+        return String(sceneVideoId) === String(videoId);
+      });
+
+      console.log(`Found ${videoScenes.length} scenes for video ${videoId}`);
+
+      allSentences = videoScenes
+        .map((scene) => String(scene.field_6901 || scene.field_6891 || ''))
+        .filter((sentence) => sentence.trim())
+        .sort((a, b) => {
+          // Try to sort by some ordering field if available
+          const sceneA = videoScenes.find(
+            (s) => String(s.field_6901 || s.field_6891) === a
+          );
+          const sceneB = videoScenes.find(
+            (s) => String(s.field_6901 || s.field_6891) === b
+          );
+          return (sceneA?.id || 0) - (sceneB?.id || 0);
+        });
+
+      // Find the current sentence's position
+      const currentSentenceIndex = allSentences.findIndex(
+        (sentence) => sentence.trim() === currentSentence.trim()
+      );
+      sentenceNumber = currentSentenceIndex + 1;
+
+      console.log(
+        `Extracted ${allSentences.length} sentences, current is #${sentenceNumber}`
+      );
+    }
+
+    // Create context from all sentences if available
+    let scriptContext = '';
+    let hasContext = allSentences.length > 1; // Need at least 2 sentences for meaningful context
+
+    if (hasContext) {
+      // Create scene-sentence mapping for context
+      const sceneSentenceMap = videoScenes
+        .filter((scene) => {
+          const sentence = String(
+            scene.field_6901 || scene.field_6891 || ''
+          ).trim();
+          return sentence && allSentences.includes(sentence);
+        })
+        .map((scene) => ({
+          sceneId: scene.id,
+          sentence: String(scene.field_6901 || scene.field_6891 || '').trim(),
+        }))
+        .sort((a, b) => a.sceneId - b.sceneId);
+
+      scriptContext = sceneSentenceMap
+        .map((item) => `Scene ${item.sceneId}: ${item.sentence}`)
+        .join('\n');
+      console.log(
+        `Using script context: YES (${sceneSentenceMap.length} sentences)`
+      );
+    } else {
+      console.log('Insufficient context - operating independently');
+    }
 
     const prompt = `This is a standalone, independent request. Do not reference or remember any previous conversations, requests, or context from other calls.
 
 Request ID: ${Date.now()}-${Math.random().toString(36).substr(2, 9)}
 
-You are an expert script writer improving a single sentence from a video tutorial script. Here is the full script context for reference:
+You are an expert script writer improving a single sentence from a video tutorial script.${
+      hasContext
+        ? ` Here is the full script context for reference:
 
 FULL SCRIPT:
 ${scriptContext}
 
-CURRENT SENTENCE TO IMPROVE (Sentence #${sentenceNumber}): "${currentSentence}"
+CURRENT SENTENCE TO IMPROVE (Scene #${sceneId}): ${currentSentence}
 
 Please improve this sentence by following these guidelines:
 • Make it more engaging and natural for text-to-speech
@@ -63,7 +151,22 @@ Please improve this sentence by following these guidelines:
 • Never use code snippets like html or css tags
 • The sentences must have at least 5 words
 • Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", "so", "then", "finally", etc.
-• Instead of single words at the beginning of sentences like "so", use alternatives with at least 3 words.
+• Instead of single words at the beginning of sentences like "so", use alternatives with at least 3 words.`
+        : `
+
+SENTENCE TO IMPROVE: ${currentSentence}
+
+Please improve this sentence by following these guidelines:
+• Make it more engaging and natural for text-to-speech
+• Keep the technical accuracy intact
+• Use simple English that's easy to understand
+• Avoid unnecessary jargon and complex vocabulary
+• Ensure the improved sentence is concise and to the point
+• Never use code snippets like html or css tags
+• The sentences must have at least 5 words
+• Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", "so", "then", "finally", etc.
+• Instead of single words at the beginning of sentences like "so", use alternatives with at least 3 words.`
+    }
 
 Return only the improved sentence, nothing else.`;
 
