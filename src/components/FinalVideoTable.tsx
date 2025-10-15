@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Video, ExternalLink, Check, Mic, Sparkles, Clock } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { playSuccessSound } from '@/utils/soundManager';
+import { sendTelegramNotification } from '@/utils/telegram';
 
 const FinalVideoTable: React.FC = () => {
   const [transcribing, setTranscribing] = useState(false);
@@ -9,6 +10,7 @@ const FinalVideoTable: React.FC = () => {
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [generatingTags, setGeneratingTags] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
+  const [doingEverything, setDoingEverything] = useState(false);
   const [videoData, setVideoData] = useState<any>(null);
   const [timestampData, setTimestampData] = useState<string>('');
 
@@ -566,6 +568,53 @@ const FinalVideoTable: React.FC = () => {
     }
   };
 
+  const handleDoEverything = async () => {
+    if (!parsedData?.finalVideoUrl) {
+      return;
+    }
+
+    setDoingEverything(true);
+
+    try {
+      // Step 1: Transcribe video
+      console.log('🚀 Starting transcription...');
+      await handleTranscribeVideo();
+
+      // Wait 1 minute
+      console.log('⏳ Waiting 1 minute before generating title...');
+      await new Promise((resolve) => setTimeout(resolve, 60000));
+
+      // Step 2: Generate title
+      console.log('🎯 Generating title...');
+      await handleGenerateTitle();
+
+      // Wait 1 minute
+      console.log('⏳ Waiting 1 minute before generating description...');
+      await new Promise((resolve) => setTimeout(resolve, 60000));
+
+      // Step 3: Generate description
+      console.log('📝 Generating description...');
+      await handleGenerateDescription();
+
+      // Wait 1 minute
+      console.log('⏳ Waiting 1 minute before generating tags...');
+      await new Promise((resolve) => setTimeout(resolve, 60000));
+
+      // Step 4: Generate tags
+      console.log('🏷️ Generating tags...');
+      await handleGenerateTags();
+
+      console.log('✅ All tasks completed successfully!');
+      await sendTelegramNotification(
+        '🎉 All tasks completed! Your video is fully processed with transcription, title, description, and tags.'
+      );
+    } catch (error) {
+      console.error('Error in do everything process:', error);
+    } finally {
+      setDoingEverything(false);
+    }
+  };
+
   if (!parsedData || !parsedData.finalVideoUrl) {
     return null;
   }
@@ -636,6 +685,25 @@ const FinalVideoTable: React.FC = () => {
               </td>
               <td className='px-6 py-4 whitespace-nowrap'>
                 <div className='flex items-center gap-2'>
+                  <button
+                    onClick={handleDoEverything}
+                    disabled={
+                      doingEverything ||
+                      transcribing ||
+                      generatingTitle ||
+                      generatingDescription ||
+                      generatingTags
+                    }
+                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-blue-300 disabled:to-purple-400 text-white rounded-md transition-all disabled:cursor-not-allowed font-medium'
+                    title='Automatically transcribe, generate title, description, and tags with 1-minute gaps between each step'
+                  >
+                    <Sparkles
+                      className={`w-3 h-3 ${
+                        doingEverything ? 'animate-pulse' : ''
+                      }`}
+                    />
+                    {doingEverything ? 'Processing...' : 'Do Everything'}
+                  </button>
                   <button
                     onClick={() =>
                       window.open(parsedData.finalVideoUrl, '_blank')
