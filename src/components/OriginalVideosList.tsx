@@ -37,6 +37,7 @@ import MergedVideoDisplay from './MergedVideoDisplay';
 import FinalVideoTable from './FinalVideoTable';
 import PipelineConfig from './PipelineConfig';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
+import { sendTelegramNotification } from '@/utils/telegram';
 import {
   handleImproveAllSentencesForAllVideos,
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
@@ -1678,9 +1679,9 @@ export default function OriginalVideosList({
           }
           console.log('Data refreshed successfully');
 
-          // Wait 1 minute before next step
-          console.log('Waiting 1 minute before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 60000));
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -1718,9 +1719,9 @@ export default function OriginalVideosList({
           }
           console.log('Data refreshed successfully');
 
-          // Wait 1 minute before next step
-          console.log('Waiting 1 minute before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 60000));
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -1758,9 +1759,9 @@ export default function OriginalVideosList({
           }
           console.log('Data refreshed successfully');
 
-          // Wait 1 minute before next step
-          console.log('Waiting 1 minute before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 60000));
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -1794,9 +1795,9 @@ export default function OriginalVideosList({
           }
           console.log('Data refreshed successfully');
 
-          // Wait 1 minute before next step
-          console.log('Waiting 1 minute before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 60000));
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(`✗ Step ${stepNumber} Failed: Speed up error`, error);
@@ -1827,9 +1828,9 @@ export default function OriginalVideosList({
           }
           console.log('Data refreshed successfully');
 
-          // Wait 1 minute before next step
-          console.log('Waiting 1 minute before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 60000));
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -1863,9 +1864,9 @@ export default function OriginalVideosList({
           }
           console.log('Data refreshed successfully');
 
-          // Wait 1 minute before next step
-          console.log('Waiting 1 minute before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 60000));
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -1914,6 +1915,11 @@ export default function OriginalVideosList({
       console.log('✓ Full Pipeline Complete!');
       console.log(`Total steps executed: ${stepNumber}`);
       console.log('========================================');
+
+      // Send Telegram notification for successful completion
+      await sendTelegramNotification(
+        `🎉 Full Pipeline Complete! Successfully executed ${stepNumber} processing steps.`
+      );
 
       // Final refresh
       await handleRefresh();
