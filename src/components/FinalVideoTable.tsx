@@ -16,6 +16,14 @@ const FinalVideoTable: React.FC = () => {
 
   const { transcriptionSettings, modelSelection } = useAppStore();
 
+  // Helper function to check if captions are available
+  const hasCaptions = () => {
+    const currentData = JSON.parse(
+      localStorage.getItem('final-video-data') || '{}'
+    );
+    return !!currentData?.captionsUrl;
+  };
+
   // Load data from localStorage on mount and when it changes
   React.useEffect(() => {
     const loadData = () => {
@@ -156,11 +164,10 @@ const FinalVideoTable: React.FC = () => {
       }
     } catch (error) {
       console.error('Error resetting data:', error);
-      alert('Failed to reset data. Please try again.');
     }
   };
 
-  const handleTranscribeVideo = async () => {
+  const handleTranscribeVideo = async (playSound = true) => {
     if (!parsedData?.finalVideoUrl) return;
 
     try {
@@ -252,18 +259,23 @@ const FinalVideoTable: React.FC = () => {
       // Update local state to trigger re-render
       setVideoData(updatedData);
 
-      playSuccessSound();
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error transcribing video:', error);
-      alert('Failed to transcribe video. Please try again.');
     } finally {
       setTranscribing(false);
     }
   };
 
-  const handleGenerateTitle = async () => {
-    if (!parsedData?.captionsUrl) {
-      alert('No transcription available. Please transcribe the video first.');
+  const handleGenerateTitle = async (playSound = true) => {
+    // Check localStorage directly for captionsUrl since state might not be updated yet
+    const currentData = JSON.parse(
+      localStorage.getItem('final-video-data') || '{}'
+    );
+    if (!currentData?.captionsUrl) {
+      console.log('❌ No captions URL found for title generation');
       return;
     }
 
@@ -271,7 +283,7 @@ const FinalVideoTable: React.FC = () => {
       setGeneratingTitle(true);
 
       // Fetch the transcription from the captions URL
-      const transcriptionResponse = await fetch(parsedData.captionsUrl);
+      const transcriptionResponse = await fetch(currentData.captionsUrl);
       if (!transcriptionResponse.ok) {
         throw new Error('Failed to fetch transcription');
       }
@@ -309,6 +321,9 @@ const FinalVideoTable: React.FC = () => {
       const result = await response.json();
       const generatedTitle = result.title || 'Generated Title';
 
+      console.log('🎯 Title generation result:', result);
+      console.log('🎯 Generated title:', generatedTitle);
+
       // Save the generated title to localStorage
       const existingData = localStorage.getItem('final-video-data');
       let dataObject: any = {};
@@ -331,25 +346,32 @@ const FinalVideoTable: React.FC = () => {
 
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
       console.log('Title saved to localStorage:', generatedTitle);
+      console.log('Updated data object:', updatedData);
 
       // Dispatch custom event to notify other components of localStorage update
       window.dispatchEvent(new CustomEvent('localStorageUpdate'));
 
       // Update local state to trigger re-render
       setVideoData(updatedData);
+      console.log('Local state updated with title:', updatedData.title);
 
-      playSuccessSound();
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error generating title:', error);
-      alert('Failed to generate title. Please try again.');
     } finally {
       setGeneratingTitle(false);
     }
   };
 
-  const handleGenerateDescription = async () => {
-    if (!parsedData?.captionsUrl) {
-      alert('No transcription available. Please transcribe the video first.');
+  const handleGenerateDescription = async (playSound = true) => {
+    // Check localStorage directly for captionsUrl since state might not be updated yet
+    const currentData = JSON.parse(
+      localStorage.getItem('final-video-data') || '{}'
+    );
+    if (!currentData?.captionsUrl) {
+      console.log('❌ No captions URL found for description generation');
       return;
     }
 
@@ -357,7 +379,7 @@ const FinalVideoTable: React.FC = () => {
       setGeneratingDescription(true);
 
       // Fetch the transcription from the captions URL
-      const transcriptionResponse = await fetch(parsedData.captionsUrl);
+      const transcriptionResponse = await fetch(currentData.captionsUrl);
       if (!transcriptionResponse.ok) {
         throw new Error('Failed to fetch transcription');
       }
@@ -462,30 +484,35 @@ const FinalVideoTable: React.FC = () => {
 
       localStorage.setItem('final-video-data', JSON.stringify(updatedData));
       console.log('Description saved to localStorage:', generatedDescription);
-      console.log(
-        'Description with line breaks visible:',
-        JSON.stringify(generatedDescription)
-      );
-      console.log('Raw description in updatedData:', updatedData.description);
+      console.log('Updated data object:', updatedData);
 
       // Dispatch custom event to notify other components of localStorage update
       window.dispatchEvent(new CustomEvent('localStorageUpdate'));
 
       // Update local state to trigger re-render
       setVideoData(updatedData);
+      console.log(
+        'Local state updated with description:',
+        updatedData.description
+      );
 
-      playSuccessSound();
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error generating description:', error);
-      alert('Failed to generate description. Please try again.');
     } finally {
       setGeneratingDescription(false);
     }
   };
 
-  const handleGenerateTags = async () => {
-    if (!parsedData?.captionsUrl) {
-      alert('No transcription available. Please transcribe the video first.');
+  const handleGenerateTags = async (playSound = true) => {
+    // Check localStorage directly for captionsUrl since state might not be updated yet
+    const currentData = JSON.parse(
+      localStorage.getItem('final-video-data') || '{}'
+    );
+    if (!currentData?.captionsUrl) {
+      console.log('❌ No captions URL found for tags generation');
       return;
     }
 
@@ -493,7 +520,7 @@ const FinalVideoTable: React.FC = () => {
       setGeneratingTags(true);
 
       // Fetch the transcription from the captions URL
-      const transcriptionResponse = await fetch(parsedData.captionsUrl);
+      const transcriptionResponse = await fetch(currentData.captionsUrl);
       if (!transcriptionResponse.ok) {
         throw new Error('Failed to fetch transcription');
       }
@@ -531,6 +558,7 @@ const FinalVideoTable: React.FC = () => {
       const result = await response.json();
       const generatedTags = result.tags || 'Generated Tags';
 
+      console.log('Generated tags result:', result);
       console.log('Generated tags:', generatedTags);
 
       // Save the generated tags to localStorage
@@ -557,12 +585,16 @@ const FinalVideoTable: React.FC = () => {
       setVideoData(updatedData);
 
       console.log('Tags saved to localStorage:', generatedTags);
+      console.log('Updated data object:', updatedData);
 
-      // Play success sound
-      playSuccessSound();
+      // Dispatch custom event to notify other components of localStorage update
+      window.dispatchEvent(new CustomEvent('localStorageUpdate'));
+
+      // Update local state to trigger re-render
+      setVideoData(updatedData);
+      console.log('Local state updated with tags:', updatedData.tags);
     } catch (error) {
       console.error('Error generating tags:', error);
-      alert('Failed to generate tags. Please try again.');
     } finally {
       setGeneratingTags(false);
     }
@@ -578,33 +610,52 @@ const FinalVideoTable: React.FC = () => {
     try {
       // Step 1: Transcribe video
       console.log('🚀 Starting transcription...');
-      await handleTranscribeVideo();
+      await handleTranscribeVideo(false);
+
+      // Small delay to ensure state is updated
+      console.log('⏳ Waiting 2 seconds for state update...');
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Check if transcription was successful
+      const currentData = JSON.parse(
+        localStorage.getItem('final-video-data') || '{}'
+      );
+      console.log('📋 Current data after transcription:', {
+        hasCaptionsUrl: !!currentData.captionsUrl,
+        captionsUrl: currentData.captionsUrl,
+        caption: currentData.caption,
+      });
+
+      if (!currentData.captionsUrl) {
+        throw new Error('Transcription failed - no captions URL found');
+      }
 
       // Wait 1 minute
       console.log('⏳ Waiting 1 minute before generating title...');
-      await new Promise((resolve) => setTimeout(resolve, 60000));
+      await new Promise((resolve) => setTimeout(resolve, 10000));
 
       // Step 2: Generate title
       console.log('🎯 Generating title...');
-      await handleGenerateTitle();
+      await handleGenerateTitle(false);
 
       // Wait 1 minute
       console.log('⏳ Waiting 1 minute before generating description...');
-      await new Promise((resolve) => setTimeout(resolve, 60000));
+      await new Promise((resolve) => setTimeout(resolve, 10000));
 
       // Step 3: Generate description
       console.log('📝 Generating description...');
-      await handleGenerateDescription();
+      await handleGenerateDescription(false);
 
       // Wait 1 minute
       console.log('⏳ Waiting 1 minute before generating tags...');
-      await new Promise((resolve) => setTimeout(resolve, 60000));
+      await new Promise((resolve) => setTimeout(resolve, 10000));
 
       // Step 4: Generate tags
       console.log('🏷️ Generating tags...');
-      await handleGenerateTags();
+      await handleGenerateTags(false);
 
       console.log('✅ All tasks completed successfully!');
+      playSuccessSound(); // Play success sound only when everything is completed
       await sendTelegramNotification(
         '🎉 All tasks completed! Your video is fully processed with transcription, title, description, and tags.'
       );
@@ -726,7 +777,7 @@ const FinalVideoTable: React.FC = () => {
                     Copy
                   </button>
                   <button
-                    onClick={handleTranscribeVideo}
+                    onClick={() => handleTranscribeVideo()}
                     disabled={transcribing}
                     className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
                     title='Transcribe video'
@@ -739,11 +790,11 @@ const FinalVideoTable: React.FC = () => {
                     {transcribing ? 'Transcribing...' : 'Transcribe'}
                   </button>
                   <button
-                    onClick={handleGenerateTitle}
-                    disabled={generatingTitle || !parsedData.captionsUrl}
+                    onClick={() => handleGenerateTitle()}
+                    disabled={generatingTitle || !hasCaptions()}
                     className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
                     title={
-                      parsedData.captionsUrl
+                      hasCaptions()
                         ? 'Generate YouTube title from transcription'
                         : 'Transcription required for title generation'
                     }
@@ -756,11 +807,11 @@ const FinalVideoTable: React.FC = () => {
                     {generatingTitle ? 'Generating...' : 'Generate Title'}
                   </button>
                   <button
-                    onClick={handleGenerateDescription}
-                    disabled={generatingDescription || !parsedData.captionsUrl}
+                    onClick={() => handleGenerateDescription()}
+                    disabled={generatingDescription || !hasCaptions()}
                     className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
                     title={
-                      parsedData.captionsUrl
+                      hasCaptions()
                         ? 'Generate YouTube description from transcription'
                         : 'Transcription required for description generation'
                     }
@@ -775,11 +826,11 @@ const FinalVideoTable: React.FC = () => {
                       : 'Generate Description'}
                   </button>
                   <button
-                    onClick={handleGenerateTags}
-                    disabled={generatingTags || !parsedData.captionsUrl}
+                    onClick={() => handleGenerateTags()}
+                    disabled={generatingTags || !hasCaptions()}
                     className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
                     title={
-                      parsedData.captionsUrl
+                      hasCaptions()
                         ? 'Generate YouTube tags from transcription'
                         : 'Transcription required for tags generation'
                     }
