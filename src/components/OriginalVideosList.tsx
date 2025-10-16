@@ -782,7 +782,7 @@ export default function OriginalVideosList({
   };
 
   // Transcribe all videos that don't have captions
-  const handleTranscribeAll = async () => {
+  const handleTranscribeAll = async (playSound = true) => {
     try {
       setTranscribingAll(true);
 
@@ -825,8 +825,10 @@ export default function OriginalVideosList({
       console.log('Batch transcription completed');
       await handleRefresh();
 
-      // Play success sound for batch transcription completion
-      playSuccessSound();
+      // Play success sound for batch transcription completion (if enabled)
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error in batch transcription:', error);
 
@@ -1578,7 +1580,7 @@ export default function OriginalVideosList({
   };
 
   // Generate Clips for all videos
-  const handleGenerateClipsAll = async () => {
+  const handleGenerateClipsAll = async (playSound = true) => {
     try {
       setGeneratingClipsAll(true);
       setError(null);
@@ -1623,8 +1625,10 @@ export default function OriginalVideosList({
 
       console.log('Batch clip generation completed');
 
-      // Play success sound
-      playSuccessSound();
+      // Play success sound (if enabled)
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error in batch clip generation:', error);
 
@@ -1668,7 +1672,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Transcribing all videos...`);
         console.log(`Step ${stepNumber}: Transcribing all videos`);
         try {
-          await handleTranscribeAll();
+          await handleTranscribeAll(false);
           console.log(`✓ Step ${stepNumber} Complete: Transcription finished`);
 
           // Refresh data to get updated captions URLs
@@ -1746,7 +1750,7 @@ export default function OriginalVideosList({
         );
         console.log(`Step ${stepNumber}: Generating clips for all videos`);
         try {
-          await handleGenerateClipsAll();
+          await handleGenerateClipsAll(false);
           console.log(
             `✓ Step ${stepNumber} Complete: Clip generation finished`
           );
@@ -2357,7 +2361,7 @@ export default function OriginalVideosList({
 
                     {/* Transcribe All Button */}
                     <button
-                      onClick={handleTranscribeAll}
+                      onClick={() => handleTranscribeAll()}
                       disabled={
                         transcribing !== null ||
                         transcribingAll ||
@@ -2587,7 +2591,7 @@ export default function OriginalVideosList({
 
                     {/* Generate Clips All Button */}
                     <button
-                      onClick={handleGenerateClipsAll}
+                      onClick={() => handleGenerateClipsAll()}
                       disabled={
                         generatingClipsAll ||
                         clipGeneration.generatingClips !== null ||
