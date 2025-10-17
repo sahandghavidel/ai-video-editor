@@ -20,6 +20,7 @@ export interface VideoSettings {
   autoGenerateVideo: boolean;
   autoGenerateTTS: boolean;
   speedUpMode: SpeedUpMode;
+  playerSpeed: number;
 }
 
 // Transcription settings interface
@@ -244,6 +245,7 @@ const defaultVideoSettings: VideoSettings = {
   autoGenerateVideo: true,
   autoGenerateTTS: false,
   speedUpMode: 'emptyOnly',
+  playerSpeed: 1,
 };
 
 // Default transcription settings

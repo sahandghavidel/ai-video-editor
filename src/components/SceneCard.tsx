@@ -524,6 +524,7 @@ export default function SceneCard({
         const video = videoRefs.current[sceneId];
         if (video) {
           video.src = videoUrl;
+          video.playbackRate = videoSettings.playerSpeed;
           video
             .play()
             .then(() => {
@@ -587,6 +588,7 @@ export default function SceneCard({
         const video = producedVideoRefs.current[sceneId];
         if (video) {
           video.src = videoUrl;
+          video.playbackRate = videoSettings.playerSpeed;
           video
             .play()
             .then(() => {

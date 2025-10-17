@@ -1,7 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { RotateCcw, Zap, Volume2, VolumeX, Filter } from 'lucide-react';
+import { RotateCcw, Zap, Volume2, VolumeX, Filter, Play } from 'lucide-react';
 
 interface VideoSpeedSettingsProps {
   className?: string;
@@ -12,6 +12,7 @@ const defaultVideoSpeedSettings = {
   selectedSpeed: 4,
   muteAudio: true,
   speedUpMode: 'emptyOnly' as const,
+  playerSpeed: 1,
 };
 
 export default function VideoSpeedSettings({
@@ -80,6 +81,14 @@ export default function VideoSpeedSettings({
       label: 'With Text Only (Final)',
       description: 'Only videos with text content',
     },
+  ];
+
+  const playerSpeedOptions = [
+    { value: 1, label: '1x (Normal)', description: 'Normal playback speed' },
+    { value: 1.25, label: '1.25x', description: '25% faster playback' },
+    { value: 1.5, label: '1.5x', description: '50% faster playback' },
+    { value: 1.75, label: '1.75x', description: '75% faster playback' },
+    { value: 2, label: '2x (Double)', description: 'Double speed playback' },
   ];
 
   return (
@@ -198,6 +207,34 @@ export default function VideoSpeedSettings({
           </p>
         </div>
 
+        {/* Player Speed */}
+        <div className='space-y-2'>
+          <label className='text-xs font-medium text-gray-700 flex items-center'>
+            <Play className='w-3.5 h-3.5 mr-1.5 text-green-500' />
+            Player Speed
+          </label>
+          <select
+            value={videoSettings.playerSpeed}
+            onChange={(e) =>
+              updateVideoSettings({ playerSpeed: Number(e.target.value) })
+            }
+            className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-colors duration-200 text-xs bg-white appearance-none cursor-pointer'
+          >
+            {playerSpeedOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className='text-xs text-gray-500'>
+            {
+              playerSpeedOptions.find(
+                (opt) => opt.value === videoSettings.playerSpeed
+              )?.description
+            }
+          </p>
+        </div>
+
         {/* Current Configuration Summary */}
         <div className='space-y-2'>
           <label className='text-xs font-medium text-gray-700'>
@@ -228,6 +265,12 @@ export default function VideoSpeedSettings({
                 {speedUpModeOptions.find(
                   (opt) => opt.value === videoSettings.speedUpMode
                 )?.label || 'All'}
+              </span>
+            </div>
+            <div className='flex items-center justify-between'>
+              <span className='text-xs text-gray-600'>Player:</span>
+              <span className='text-xs font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded'>
+                {videoSettings.playerSpeed}x
               </span>
             </div>
           </div>
