@@ -130,11 +130,73 @@ export default function SceneCard({
     setGeneratingSingleClip,
   } = useAppStore();
 
-  // Fetch models from API - using global action
+  // Keyboard shortcuts for player speed
   useEffect(() => {
-    fetchModels();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle shortcuts when not typing in input fields
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      let newSpeed: number | null = null;
+
+      // Handle player speed shortcuts
+      if (
+        event.key === '1' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        newSpeed = 1;
+      } else if (
+        event.key === '2' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        newSpeed = 2;
+      }
+
+      if (newSpeed !== null) {
+        // Restart currently playing video with new speed (temporary change)
+        const restartVideo = (
+          video: HTMLVideoElement | null,
+          sceneId: number
+        ) => {
+          if (video) {
+            video.currentTime = 0;
+            video.playbackRate = newSpeed;
+            video.play().catch((error) => {
+              console.error('Error restarting video:', error);
+            });
+          }
+        };
+
+        // Check if there's a video currently playing and restart it
+        if (mediaPlayer.playingVideoId) {
+          const video = videoRefs.current[mediaPlayer.playingVideoId];
+          restartVideo(video, mediaPlayer.playingVideoId);
+        } else if (mediaPlayer.playingProducedVideoId) {
+          const video =
+            producedVideoRefs.current[mediaPlayer.playingProducedVideoId];
+          restartVideo(video, mediaPlayer.playingProducedVideoId);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    updateVideoSettings,
+    mediaPlayer.playingVideoId,
+    mediaPlayer.playingProducedVideoId,
+  ]);
 
   // Local wrapper for cycling through speeds
   const cycleSpeed = () => {
