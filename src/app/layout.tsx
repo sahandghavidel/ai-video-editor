@@ -45,6 +45,22 @@ export default function RootLayout({
         <link rel='icon' href='/favicon.ico?v=1' sizes='any' />
         <link rel='icon' href='/favicon.svg?v=1' type='image/svg+xml' />
         <link rel='shortcut icon' href='/favicon.ico?v=1' />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Global error handler to prevent browser alerts
+              window.addEventListener('error', function(e) {
+                console.error('Global error caught:', e.error);
+                e.preventDefault();
+              });
+
+              window.addEventListener('unhandledrejection', function(e) {
+                console.error('Unhandled promise rejection:', e.reason);
+                e.preventDefault();
+              });
+            `,
+          }}
+        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

@@ -630,7 +630,6 @@ export default function OriginalVideosList({
       console.log(`Successfully deleted video ${videoId} and related scenes`);
     } catch (error) {
       console.error('Failed to delete video:', error);
-      alert('Failed to delete video. Please try again.');
     } finally {
       setDeleting(null);
       // add sound effect

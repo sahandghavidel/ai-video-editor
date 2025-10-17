@@ -100,7 +100,9 @@ export const handleGenerateAllVideos = async (
     });
 
     if (scenesToGenerate.length === 0) {
-      alert('No scenes found with both video and TTS audio to generate videos');
+      console.log(
+        'No scenes found with both video and TTS audio to generate videos'
+      );
       return;
     }
 
@@ -129,7 +131,7 @@ export const handleGenerateAllVideos = async (
     if (error instanceof Error) {
       errorMessage = error.message;
     }
-    alert(`Error: ${errorMessage}`);
+    console.log(`Error: ${errorMessage}`);
   } finally {
     completeBatchOperation('generatingAllVideos');
     // Play success sound when batch operation completes
@@ -159,7 +161,7 @@ export const handleConcatenateAllVideos = async (
       });
 
     if (scenesWithVideos.length === 0) {
-      alert('No videos found to concatenate');
+      console.log('No videos found to concatenate');
       return;
     }
 
@@ -214,7 +216,7 @@ export const handleConcatenateAllVideos = async (
     if (error instanceof Error) {
       errorMessage = error.message;
     }
-    alert(`Error: ${errorMessage}`);
+    console.log(`Error: ${errorMessage}`);
   } finally {
     completeBatchOperation('concatenatingVideos');
     // Play success sound when batch operation completes
@@ -266,7 +268,7 @@ export const handleSpeedUpAllVideos = async (
         withTextOnly: 'No videos with text content found to speed up',
         all: 'No videos found to speed up',
       };
-      alert(messages[speedUpMode]);
+      console.log(messages[speedUpMode]);
       return;
     }
 
@@ -337,7 +339,7 @@ export const handleSpeedUpAllVideos = async (
     if (error instanceof Error) {
       errorMessage = error.message;
     }
-    alert(`Error: ${errorMessage}`);
+    console.log(`Error: ${errorMessage}`);
   } finally {
     completeBatchOperation('speedingUpAllVideos');
     // Play success sound when batch operation completes
@@ -448,22 +450,15 @@ export const handleImproveAllSentencesForAllVideos = async (
         if (currentSentence === originalSentence && currentSentence.trim()) {
           console.log(`  ✓ Will improve scene ${scene.id}`);
           setImprovingSentence(scene.id);
-          try {
-            await handleSentenceImprovement(
-              scene.id,
-              currentSentence,
-              selectedModel || undefined,
-              scene
-            );
-            totalImproved++;
-            console.log(`  ✓ Successfully improved scene ${scene.id}`);
-            await wait(10000); // 10 seconds delay
-          } catch (error) {
-            console.error(`  ✗ Failed to improve scene ${scene.id}:`, error);
-            // Continue with next scene even if one fails
-          } finally {
-            setImprovingSentence(null);
-          }
+          await handleSentenceImprovement(
+            scene.id,
+            currentSentence,
+            selectedModel || undefined,
+            scene
+          );
+          totalImproved++;
+          console.log(`  ✓ Successfully improved scene ${scene.id}`);
+          await wait(10000); // 10 seconds delay
         } else {
           console.log(
             `  ✗ Skipping scene ${scene.id} (already improved or empty)`

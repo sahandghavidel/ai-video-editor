@@ -205,8 +205,7 @@ export default function SceneCard({
 
       const videoUrl = currentScene.field_6888 as string;
       if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
-        alert('No video found in field 6888 to speed up');
-        return;
+        console.log('No video found in field 6888 to speed up');
       }
 
       setSpeedingUpVideo(sceneId);
@@ -264,7 +263,7 @@ export default function SceneCard({
         if (error instanceof Error) {
           errorMessage = error.message;
         }
-        alert(`Error: ${errorMessage}`);
+        console.log(`Error: ${errorMessage}`);
       } finally {
         setSpeedingUpVideo(null);
       }
@@ -332,7 +331,7 @@ export default function SceneCard({
       if (error instanceof Error) {
         errorMessage = error.message;
       }
-      alert(`Error: ${errorMessage}`);
+      console.log(`Error: ${errorMessage}`);
     } finally {
       setGeneratingSingleClip(null);
     }
@@ -754,80 +753,80 @@ export default function SceneCard({
       modelOverride?: string,
       sceneData?: BaserowRow
     ) => {
-      try {
-        setImprovingSentence(sceneId);
+      setImprovingSentence(sceneId);
 
-        console.log(
-          `Improving sentence for scene ${sceneId}: "${currentSentence}"`
-        );
+      console.log(
+        `Improving sentence for scene ${sceneId}: "${currentSentence}"`
+      );
 
-        // Call our sentence improvement API route
-        const response = await fetch('/api/improve-sentence', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            currentSentence,
-            sceneId,
-            model: modelOverride || modelSelection.selectedModel,
-          }),
-        });
+      // Call our sentence improvement API route
+      const response = await fetch('/api/improve-sentence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentSentence,
+          sceneId,
+          model: modelOverride || modelSelection.selectedModel,
+        }),
+      });
 
-        if (!response.ok) {
-          let errorMessage = `Sentence improvement error: ${response.status}`;
-          try {
-            const errorData = await response.json();
-            errorMessage = errorData.error || errorMessage;
-          } catch (parseError) {
-            errorMessage = `Sentence improvement error: ${response.status} - ${response.statusText}`;
-          }
-          throw new Error(errorMessage);
+      if (!response.ok) {
+        let errorMessage = `Sentence improvement error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          errorMessage = `Sentence improvement error: ${response.status} - ${response.statusText}`;
         }
+        console.error(`API Error for scene ${sceneId}:`, errorMessage);
+        // Don't throw error - just log it and continue
+        setImprovingSentence(null);
+        return;
+      }
 
-        const result = await response.json();
-        const improvedSentence = result.improvedSentence;
+      const result = await response.json();
+      const improvedSentence = result.improvedSentence;
 
-        console.log(`Improved sentence: "${improvedSentence}"`);
+      console.log(`Improved sentence: "${improvedSentence}"`);
 
-        // Update the Baserow field with the improved sentence
-        const updatedRow = await updateBaserowRow(sceneId, {
+      // Update the Baserow field with the improved sentence
+      try {
+        await updateBaserowRow(sceneId, {
           field_6890: improvedSentence,
         });
-
-        // Update the local data optimistically
-        const updatedData = dataRef.current.map((scene) => {
-          if (scene.id === sceneId) {
-            return { ...scene, field_6890: improvedSentence };
-          }
-          return scene;
-        });
-        onDataUpdateRef.current?.(updatedData);
-
-        // Refresh data from server to ensure consistency
-        refreshDataRef.current?.();
-
-        // Auto-generate TTS if option is enabled
-        if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
-          // Wait a moment to ensure the text is properly updated
-          setTimeout(() => {
-            handleTTSProduce(sceneId, improvedSentence, sceneData);
-          }, 1000);
-        }
-      } catch (error) {
-        console.error('Error improving sentence:', error);
-
-        // Show user-friendly error message
-        let errorMessage = 'Failed to improve sentence';
-        if (error instanceof Error) {
-          errorMessage = error.message;
-        }
-
-        // You could implement a toast notification or alert here
-        alert(`Error: ${errorMessage}`);
-      } finally {
+      } catch (updateError) {
+        console.error(
+          `Failed to update Baserow for scene ${sceneId}:`,
+          updateError
+        );
+        // Don't throw error - just log it and continue
         setImprovingSentence(null);
+        return;
       }
+
+      // Update the local data optimistically
+      const updatedData = dataRef.current.map((scene) => {
+        if (scene.id === sceneId) {
+          return { ...scene, field_6890: improvedSentence };
+        }
+        return scene;
+      });
+      onDataUpdateRef.current?.(updatedData);
+
+      // Refresh data from server to ensure consistency
+      refreshDataRef.current?.();
+
+      // Auto-generate TTS if option is enabled
+      if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
+        // Wait a moment to ensure the text is properly updated
+        setTimeout(() => {
+          handleTTSProduce(sceneId, improvedSentence, sceneData);
+        }, 1000);
+      }
+
+      setImprovingSentence(null);
     },
     [
       setImprovingSentence,
