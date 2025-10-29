@@ -142,12 +142,12 @@ CURRENT SENTENCE TO IMPROVE (Scene #${sceneId}): ${currentSentence}
 
 Please improve this sentence by following these guidelines:
 • Make it more engaging and natural for text-to-speech
-• Ensure it flows well with the surrounding sentences
-• Maintain consistency with the tutorial's tone and style
 • Keep the technical accuracy intact
 • Use simple English that's easy to understand
 • Avoid unnecessary jargon and complex vocabulary
-• Ensure the improved sentence is concise and to the point
+• Ensure the improved sentence must be longer than the original with more detail and clarity.
+• if your improvement includes a sentence
+more than 10 words), make it into smaller sentences (a sentence ends with a period), but keep the meaning and length similar.
 • Never use code snippets like html or css tags
 • The sentences must have at least 5 words
 • Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", "so", "then", "finally", etc.
@@ -161,7 +161,9 @@ Please improve this sentence by following these guidelines:
 • Keep the technical accuracy intact
 • Use simple English that's easy to understand
 • Avoid unnecessary jargon and complex vocabulary
-• Ensure the improved sentence is concise and to the point
+• Ensure the improved sentence must be longer than the original with more detail and clarity.
+• if your improvement includes a sentence
+more than 10 words), make it into smaller sentences (a sentence ends with a period), but keep the meaning and length similar.
 • Never use code snippets like html or css tags
 • The sentences must have at least 5 words
 • Never use single words like "yes", "no", "maybe", "okay", "great", "alright", "now", "so", "then", "finally", etc.
