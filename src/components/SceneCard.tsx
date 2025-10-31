@@ -164,12 +164,33 @@ export default function SceneCard({
       }
 
       if (newSpeed !== null) {
+        // For speed 1x, refresh data first to get the newest created content
+        if (newSpeed === 1 && refreshDataRef.current) {
+          refreshDataRef.current();
+        }
+
         // Restart currently playing video with new speed (temporary change)
         const restartVideo = (
           video: HTMLVideoElement | null,
           sceneId: number
         ) => {
           if (video) {
+            // Find the current scene data to get the latest URL
+            const currentScene = dataRef.current.find(
+              (scene) => scene.id === sceneId
+            );
+            if (currentScene) {
+              // Update video source with the latest URL
+              const videoUrl =
+                mediaPlayer.playingProducedVideoId === sceneId
+                  ? currentScene['field_6886'] || currentScene.field_6886
+                  : currentScene['field_6888'] || currentScene.field_6888;
+
+              if (videoUrl && typeof videoUrl === 'string') {
+                video.src = videoUrl;
+              }
+            }
+
             video.currentTime = 0;
             video.playbackRate = newSpeed;
             video.play().catch((error) => {
