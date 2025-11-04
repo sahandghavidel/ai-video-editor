@@ -187,17 +187,25 @@ Return only the improved sentence, nothing else.`;
       let totalDeviation = 0;
 
       sentences.forEach((sentence, index) => {
-        const wordCount = sentence.split(/\s+/).length;
+        // Split by whitespace and filter out empty strings
+        const words = sentence.split(/\s+/).filter((w) => w.length > 0);
+        const wordCount = words.length;
         let deviation = 0;
 
         if (wordCount < 5) {
           deviation = 5 - wordCount;
           issues.push(
-            `Sentence ${index + 1} has only ${wordCount} words (min: 5)`
+            `Sentence ${
+              index + 1
+            } has only ${wordCount} words (min: 5): "${sentence}"`
           );
         } else if (wordCount > 12) {
           deviation = wordCount - 12;
-          issues.push(`Sentence ${index + 1} has ${wordCount} words (max: 12)`);
+          issues.push(
+            `Sentence ${
+              index + 1
+            } has ${wordCount} words (max: 12): "${sentence}"`
+          );
         }
 
         totalDeviation += deviation;
