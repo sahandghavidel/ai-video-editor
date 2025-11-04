@@ -175,7 +175,9 @@ Return only the improved sentence, nothing else.`;
     console.log('Prompt length:', prompt);
 
     // Helper function to check if sentences meet word count requirements (5-12 words)
-    const checkWordCount = (text: string): { valid: boolean; issues: string[]; score: number } => {
+    const checkWordCount = (
+      text: string
+    ): { valid: boolean; issues: string[]; score: number } => {
       const sentences = text
         .split(/[.!?]+/)
         .map((s) => s.trim())
@@ -187,15 +189,17 @@ Return only the improved sentence, nothing else.`;
       sentences.forEach((sentence, index) => {
         const wordCount = sentence.split(/\s+/).length;
         let deviation = 0;
-        
+
         if (wordCount < 5) {
           deviation = 5 - wordCount;
-          issues.push(`Sentence ${index + 1} has only ${wordCount} words (min: 5)`);
+          issues.push(
+            `Sentence ${index + 1} has only ${wordCount} words (min: 5)`
+          );
         } else if (wordCount > 12) {
           deviation = wordCount - 12;
           issues.push(`Sentence ${index + 1} has ${wordCount} words (max: 12)`);
         }
-        
+
         totalDeviation += deviation;
       });
 
@@ -207,7 +211,10 @@ Return only the improved sentence, nothing else.`;
     };
 
     // Track all attempts and their scores
-    const attempts: Array<{ sentence: string; validation: { valid: boolean; issues: string[]; score: number } }> = [];
+    const attempts: Array<{
+      sentence: string;
+      validation: { valid: boolean; issues: string[]; score: number };
+    }> = [];
 
     // Retry logic: up to 3 attempts to get valid word counts
     let improvedSentence = '';
@@ -226,7 +233,11 @@ Return only the improved sentence, nothing else.`;
         messages: [
           {
             role: 'user',
-            content: prompt + (attempt > 1 ? `\n\nIMPORTANT: Each sentence MUST have between 5 and 12 words. Previous attempt failed this requirement.` : ''),
+            content:
+              prompt +
+              (attempt > 1
+                ? `\n\nIMPORTANT: Each sentence MUST have between 5 and 12 words. Previous attempt failed this requirement.`
+                : ''),
           },
         ],
       });
@@ -305,7 +316,10 @@ Return only the improved sentence, nothing else.`;
                   ) {
                     currentImprovedSentence += '.';
                   }
-                  console.log('Extracted improved sentence:', currentImprovedSentence);
+                  console.log(
+                    'Extracted improved sentence:',
+                    currentImprovedSentence
+                  );
                   break;
                 }
               }
@@ -360,46 +374,62 @@ Return only the improved sentence, nothing else.`;
       // Check word count for this attempt
       if (currentImprovedSentence) {
         const validation = checkWordCount(currentImprovedSentence);
-        
+
         // Store this attempt
         attempts.push({
           sentence: currentImprovedSentence,
           validation,
         });
-        
-        console.log(`Attempt ${attempt}: Score = ${validation.score} (lower is better)`);
-        
+
+        console.log(
+          `Attempt ${attempt}: Score = ${validation.score} (lower is better)`
+        );
+
         if (validation.valid) {
           improvedSentence = currentImprovedSentence;
-          console.log(`✅ Attempt ${attempt} successful! Word count valid (perfect score: 0).`);
+          console.log(
+            `✅ Attempt ${attempt} successful! Word count valid (perfect score: 0).`
+          );
           break; // Exit the retry loop - found a perfect match
         } else {
           console.log(`❌ Attempt ${attempt} failed word count validation:`);
-          validation.issues.forEach(issue => console.log(`  - ${issue}`));
+          validation.issues.forEach((issue) => console.log(`  - ${issue}`));
         }
       }
-      
+
       // If this was the last attempt, choose the best one
       if (attempt === maxAttempts) {
         if (attempts.length > 0) {
           // Sort attempts by score (lower is better)
           attempts.sort((a, b) => a.validation.score - b.validation.score);
-          
+
           const bestAttempt = attempts[0];
           improvedSentence = bestAttempt.sentence;
-          
-          console.log(`\n📊 Choosing best attempt from ${attempts.length} attempts:`);
+
+          console.log(
+            `\n📊 Choosing best attempt from ${attempts.length} attempts:`
+          );
           attempts.forEach((att, idx) => {
-            console.log(`  ${idx === 0 ? '✅' : '  '} Attempt ${idx + 1}: Score ${att.validation.score}`);
+            console.log(
+              `  ${idx === 0 ? '✅' : '  '} Attempt ${idx + 1}: Score ${
+                att.validation.score
+              }`
+            );
           });
-          console.log(`\n⭐ Selected: "${improvedSentence}" (Score: ${bestAttempt.validation.score})`);
-          
+          console.log(
+            `\n⭐ Selected: "${improvedSentence}" (Score: ${bestAttempt.validation.score})`
+          );
+
           if (!bestAttempt.validation.valid) {
-            console.log('⚠️ Note: Best attempt still has validation issues, but it\'s the closest to requirements.');
+            console.log(
+              "⚠️ Note: Best attempt still has validation issues, but it's the closest to requirements."
+            );
           }
         } else {
           // No sentence extracted after max attempts
-          console.log('No content from LLM after max attempts, using fallback improvement');
+          console.log(
+            'No content from LLM after max attempts, using fallback improvement'
+          );
           improvedSentence = currentSentence
             .replace(/^(Alright|Ok|Okay),?\s*/i, 'Great! ')
             .replace(/\bwe have\b/g, "we've")
