@@ -178,8 +178,10 @@ Return only the improved sentence, nothing else.`;
     const checkWordCount = (
       text: string
     ): { valid: boolean; issues: string[]; score: number } => {
+      // Split by sentence-ending punctuation followed by space or end of string
+      // This prevents splitting on periods in code like "JSON.stringify"
       const sentences = text
-        .split(/[.!?]+/)
+        .split(/[.!?]+\s+|[.!?]+$/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
