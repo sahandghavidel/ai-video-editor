@@ -185,19 +185,31 @@ export async function optimizeSilence(
     if (processedIntervals.length === 0) {
       console.log('No silence intervals to process, copying video...');
 
-      // No silence to process, just copy the video
-      const copyCommand = [
+      // No silence to process, just re-encode with edit-friendly settings
+      const reencodeCommand = [
         'ffmpeg',
         '-y',
         '-i',
         `"${inputUrl}"`,
-        '-c',
-        'copy',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'medium',
+        '-crf',
+        '18',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-movflags',
+        '+faststart',
         `"${fullOutputPath}"`,
       ];
 
-      const copyCommandString = copyCommand.join(' ');
-      await execAsync(copyCommandString, { timeout: 300000 });
+      const reencodeCommandString = reencodeCommand.join(' ');
+      await execAsync(reencodeCommandString, { timeout: 300000 });
 
       return {
         outputPath: fullOutputPath,
@@ -208,26 +220,17 @@ export async function optimizeSilence(
       };
     }
 
-    // Step 4: Use a single-pass approach with proper re-encoding to maintain sync
-    // This ensures consistent frame rates and no freezing
-    console.log('Step 2: Processing video with single-pass encoding...');
+    // Step 4: Use single-pass filter_complex for better sync
+    console.log('Step 2: Building filter_complex for speed adjustments...');
 
     // Get total duration
     const durationCommand = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputUrl}"`;
     const { stdout: durationOutput } = await execAsync(durationCommand);
     const totalDuration = parseFloat(durationOutput.trim());
 
-    // Get video properties for proper encoding
-    const videoInfoCommand = `ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate,width,height -of default=noprint_wrappers=1 "${inputUrl}"`;
-    const { stdout: videoInfo } = await execAsync(videoInfoCommand);
-
-    // Extract frame rate
-    const fpsMatch = videoInfo.match(/r_frame_rate=(\d+)\/(\d+)/);
-    const fps = fpsMatch ? parseInt(fpsMatch[1]) / parseInt(fpsMatch[2]) : 30;
-
-    // Create segments with proper encoding
-    const segmentFiles: string[] = [];
-    const segmentTsFiles: string[] = [];
+    // Simpler approach: use MP4 segments instead of TS
+    const tempDir = '/tmp';
+    const segmentPaths: string[] = [];
     let currentTime = 0;
     let segmentIndex = 0;
 
@@ -235,8 +238,8 @@ export async function optimizeSilence(
       // Process normal speed segment before silence
       if (currentTime < interval.start) {
         const segmentPath = path.resolve(
-          '/tmp',
-          `segment_${Date.now()}_${segmentIndex++}.ts`
+          tempDir,
+          `normal_${Date.now()}_${segmentIndex++}.mp4`
         );
 
         const duration = interval.start - currentTime;
@@ -252,32 +255,28 @@ export async function optimizeSilence(
           '-c:v',
           'libx264',
           '-preset',
-          'ultrafast',
+          'veryslow',
           '-crf',
-          '23',
-          '-r',
-          fps.toString(),
+          '18',
+          '-pix_fmt',
+          'yuv420p',
           '-c:a',
           'aac',
           '-b:a',
-          '128k',
+          '192k',
           '-ar',
           '48000',
-          '-avoid_negative_ts',
-          'make_zero',
-          '-fflags',
-          '+genpts',
           `"${segmentPath}"`,
         ];
 
         await execAsync(normalSegmentCommand.join(' '), { timeout: 300000 });
-        segmentTsFiles.push(segmentPath);
+        segmentPaths.push(segmentPath);
       }
 
       // Process silence segment with speed adjustment
       const silenceSegmentPath = path.resolve(
-        '/tmp',
-        `segment_${Date.now()}_${segmentIndex++}.ts`
+        tempDir,
+        `silence_${Date.now()}_${segmentIndex++}.mp4`
       );
 
       const silenceDuration = interval.end - interval.start;
@@ -307,26 +306,22 @@ export async function optimizeSilence(
         '-c:v',
         'libx264',
         '-preset',
-        'ultrafast',
+        'veryslow',
         '-crf',
-        '23',
-        '-r',
-        fps.toString(),
+        '18',
+        '-pix_fmt',
+        'yuv420p',
         '-c:a',
         'aac',
         '-b:a',
-        '128k',
+        '192k',
         '-ar',
         '48000',
-        '-avoid_negative_ts',
-        'make_zero',
-        '-fflags',
-        '+genpts',
         `"${silenceSegmentPath}"`,
       ];
 
       await execAsync(silenceSegmentCommand.join(' '), { timeout: 300000 });
-      segmentTsFiles.push(silenceSegmentPath);
+      segmentPaths.push(silenceSegmentPath);
 
       currentTime = interval.end;
     }
@@ -334,8 +329,8 @@ export async function optimizeSilence(
     // Process final normal segment
     if (currentTime < totalDuration) {
       const segmentPath = path.resolve(
-        '/tmp',
-        `segment_${Date.now()}_${segmentIndex++}.ts`
+        tempDir,
+        `final_${Date.now()}_${segmentIndex++}.mp4`
       );
 
       const duration = totalDuration - currentTime;
@@ -351,26 +346,22 @@ export async function optimizeSilence(
         '-c:v',
         'libx264',
         '-preset',
-        'ultrafast',
+        'veryslow',
         '-crf',
-        '23',
-        '-r',
-        fps.toString(),
+        '18',
+        '-pix_fmt',
+        'yuv420p',
         '-c:a',
         'aac',
         '-b:a',
-        '128k',
+        '192k',
         '-ar',
         '48000',
-        '-avoid_negative_ts',
-        'make_zero',
-        '-fflags',
-        '+genpts',
         `"${segmentPath}"`,
       ];
 
       await execAsync(finalSegmentCommand.join(' '), { timeout: 300000 });
-      segmentTsFiles.push(segmentPath);
+      segmentPaths.push(segmentPath);
     }
 
     // Step 5: Concatenate all segments using concat demuxer
@@ -378,7 +369,7 @@ export async function optimizeSilence(
 
     // Create concat file list
     const concatListPath = path.resolve('/tmp', `concat_${Date.now()}.txt`);
-    const concatContent = segmentTsFiles
+    const concatContent = segmentPaths
       .map((file) => `file '${file}'`)
       .join('\n');
     await writeFile(concatListPath, concatContent);
@@ -392,20 +383,8 @@ export async function optimizeSilence(
       '0',
       '-i',
       `"${concatListPath}"`,
-      '-c:v',
-      'libx264',
-      '-preset',
-      'medium',
-      '-crf',
-      '23',
-      '-r',
-      fps.toString(),
-      '-c:a',
-      'aac',
-      '-b:a',
-      '128k',
-      '-ar',
-      '48000',
+      '-c',
+      'copy',
       '-movflags',
       '+faststart',
       `"${fullOutputPath}"`,
@@ -414,7 +393,7 @@ export async function optimizeSilence(
     await execAsync(concatCommand.join(' '), { timeout: 600000 });
 
     // Cleanup segment files
-    for (const segmentFile of segmentTsFiles) {
+    for (const segmentFile of segmentPaths) {
       try {
         await unlink(segmentFile);
       } catch (e) {
