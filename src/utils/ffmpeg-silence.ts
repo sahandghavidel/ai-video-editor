@@ -9,18 +9,16 @@ export interface OptimizeSilenceOptions {
   inputUrl: string;
   outputPath?: string;
 
-  // FastForward options
-  minCutLength?: number; // FastForward cuts longer than (seconds)
-  maxCutLength?: number; // FastForward cuts shorter than (seconds)
+  // Speed options
   speedRate?: number; // Speed rate for silent parts (e.g., 4 = 4x)
   mute?: boolean; // Mute the sped-up parts
 
   // Silence Detection options
   soundLevel?: number; // Filter below sound level (dB)
-  minSilenceLength?: number; // Remove silences longer than (seconds)
-  minDetectionLength?: number; // Ignore detections shorter than (seconds)
-  leftPadding?: number; // Left padding (seconds)
-  rightPadding?: number; // Right padding (seconds)
+  minSilenceLength?: number; // Minimum silence duration for FFmpeg detection (seconds)
+  minSilenceDurationToSpeedUp?: number; // Only speed up silences >= this (after padding, seconds)
+  leftPadding?: number; // Left padding - preserve speech BEFORE silence (seconds)
+  rightPadding?: number; // Right padding - preserve speech AFTER silence (seconds)
 }
 
 /**
@@ -32,13 +30,11 @@ export async function optimizeSilence(
   const {
     inputUrl,
     outputPath,
-    minCutLength = 0,
-    maxCutLength = 90,
     speedRate = 4,
     mute = true,
     soundLevel = -43,
     minSilenceLength = 0.3,
-    minDetectionLength = 0.2,
+    minSilenceDurationToSpeedUp = 0.3,
     leftPadding = 0.14,
     rightPadding = 0.26,
   } = options;
@@ -54,7 +50,7 @@ export async function optimizeSilence(
     console.log('Options:', {
       soundLevel,
       minSilenceLength,
-      minDetectionLength,
+      minSilenceDurationToSpeedUp,
       leftPadding,
       rightPadding,
       speedRate,
@@ -99,44 +95,91 @@ export async function optimizeSilence(
 
     console.log(`Found ${silenceStarts.length} silence intervals`);
 
+    // Log first 10 raw intervals for debugging
+    console.log('First 10 raw silence intervals:');
+    for (let i = 0; i < Math.min(10, silenceStarts.length); i++) {
+      const duration = (silenceEnds[i] || 0) - silenceStarts[i];
+      console.log(
+        `  [${i}] ${silenceStarts[i].toFixed(3)}s - ${(
+          silenceEnds[i] || 0
+        ).toFixed(3)}s (duration: ${duration.toFixed(3)}s)`
+      );
+    }
+
     // Step 2: Process silence intervals with padding and filtering
-    const processedIntervals: Array<{ start: number; end: number }> = [];
+    console.log('Step 2: Processing intervals with padding...');
+    const processedIntervals: Array<{
+      start: number;
+      end: number;
+      rawStart: number;
+      rawEnd: number;
+    }> = [];
+    let ignoredCount = 0;
 
     for (
       let i = 0;
       i < Math.min(silenceStarts.length, silenceEnds.length);
       i++
     ) {
-      let start = silenceStarts[i];
-      let end = silenceEnds[i];
-      const duration = end - start;
+      const rawStart = silenceStarts[i];
+      const rawEnd = silenceEnds[i];
+      const rawDuration = rawEnd - rawStart;
 
-      // Apply min detection length filter
-      if (duration < minDetectionLength) {
+      // Apply padding: shrink the silence interval to preserve voice around it
+      // Left padding: start silence LATER (skip first part to keep voice)
+      // Right padding: end silence EARLIER (skip last part to keep voice)
+      const paddedStart = rawStart + leftPadding;
+      const paddedEnd = rawEnd - rightPadding;
+      const paddedDuration = paddedEnd - paddedStart;
+
+      // Only process if there's still silence left after padding
+      if (paddedDuration <= 0) {
+        ignoredCount++;
         console.log(
-          `Skipping short silence interval: ${start}-${end} (${duration}s < ${minDetectionLength}s)`
+          `Ignoring - no silence left after padding: ${rawStart.toFixed(
+            3
+          )}-${rawEnd.toFixed(3)} (padded: ${paddedDuration.toFixed(3)}s)`
         );
         continue;
       }
 
-      // Apply padding
-      start = Math.max(0, start - leftPadding);
-      end = end + rightPadding;
-
-      const paddedDuration = end - start;
-
-      // Apply length filters
-      if (paddedDuration < minCutLength || paddedDuration > maxCutLength) {
+      // Check: Ignore silences shorter than threshold (based on PADDED duration)
+      if (paddedDuration < minSilenceDurationToSpeedUp) {
+        ignoredCount++;
         console.log(
-          `Skipping filtered silence interval: ${start}-${end} (${paddedDuration}s not in range ${minCutLength}-${maxCutLength}s)`
+          `Ignoring short silence: raw ${rawStart.toFixed(3)}-${rawEnd.toFixed(
+            3
+          )} | padded: ${paddedDuration.toFixed(
+            3
+          )}s < ${minSilenceDurationToSpeedUp}s`
         );
         continue;
       }
 
-      processedIntervals.push({ start, end });
+      // This interval passes all filters - it will be sped up 4x
+      processedIntervals.push({
+        start: paddedStart,
+        end: paddedEnd,
+        rawStart: rawStart,
+        rawEnd: rawEnd,
+      });
     }
 
-    console.log(`Processing ${processedIntervals.length} silence intervals`);
+    console.log(
+      `Result: ${processedIntervals.length} intervals will be sped up 4x, ${ignoredCount} intervals ignored`
+    );
+
+    // Log first 10 processed intervals
+    console.log('First 10 processed intervals (after padding and filtering):');
+    for (let i = 0; i < Math.min(10, processedIntervals.length); i++) {
+      const interval = processedIntervals[i];
+      const duration = interval.end - interval.start;
+      console.log(
+        `  [${i}] ${interval.start.toFixed(3)}s - ${interval.end.toFixed(
+          3
+        )}s (duration: ${duration.toFixed(3)}s)`
+      );
+    }
 
     // Step 3: Build complex filter for speeding up and optionally muting silence
     if (processedIntervals.length === 0) {
