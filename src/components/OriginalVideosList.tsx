@@ -31,6 +31,7 @@ import {
   Upload,
   Zap,
   Workflow,
+  Film,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
@@ -99,6 +100,7 @@ export default function OriginalVideosList({
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
+  const [convertingToCFR, setConvertingToCFR] = useState<number | null>(null);
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [timestampData, setTimestampData] = useState<string>('');
@@ -777,6 +779,59 @@ export default function OriginalVideosList({
       );
     } finally {
       setNormalizing(null);
+    }
+  };
+
+  const handleConvertToCFR = async (videoId: number, videoUrl: string) => {
+    try {
+      setConvertingToCFR(videoId);
+
+      // Call the convert to CFR API
+      const cfrResponse = await fetch('/api/convert-to-cfr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: videoId,
+          videoUrl: videoUrl,
+          framerate: 30, // Target framerate of 30 fps
+        }),
+      });
+
+      if (!cfrResponse.ok) {
+        const errorData = await cfrResponse.json();
+        throw new Error(errorData.error || 'Failed to convert to CFR');
+      }
+
+      const cfrData = await cfrResponse.json();
+      console.log('Video converted to CFR successfully:', cfrData);
+
+      // Update the original video record with the CFR video URL
+      if (cfrData.data?.cfrUrl) {
+        await updateOriginalVideoRow(videoId, {
+          field_6881: cfrData.data.cfrUrl, // Replace the main video URL field with CFR version
+        });
+      }
+
+      // Refresh the table to show any updates
+      await handleRefresh();
+
+      // Play success sound for CFR conversion completion
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error converting to CFR:', error);
+
+      // Play error sound for CFR conversion failure
+      playErrorSound();
+
+      setError(
+        `Failed to convert to CFR: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setConvertingToCFR(null);
     }
   };
 
@@ -3253,6 +3308,40 @@ export default function OriginalVideosList({
                                   <Loader2 className='w-4 h-4 animate-spin' />
                                 ) : (
                                   <Volume2 className='w-4 h-4' />
+                                )}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const videoUrl = extractUrl(video.field_6881);
+                                  if (videoUrl) {
+                                    handleConvertToCFR(video.id, videoUrl);
+                                  } else {
+                                    setError(
+                                      'No video URL found for CFR conversion'
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  convertingToCFR !== null ||
+                                  !extractUrl(video.field_6881)
+                                }
+                                className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                title={
+                                  convertingToCFR !== null
+                                    ? convertingToCFR === video.id
+                                      ? 'Converting to CFR 30fps...'
+                                      : 'Another CFR conversion in progress'
+                                    : !extractUrl(video.field_6881)
+                                    ? 'No video URL available'
+                                    : 'Convert to Constant Frame Rate (30fps)'
+                                }
+                              >
+                                {convertingToCFR === video.id ? (
+                                  <Loader2 className='w-4 h-4 animate-spin' />
+                                ) : (
+                                  <Film className='w-4 h-4' />
                                 )}
                               </button>
                             </div>
