@@ -32,6 +32,7 @@ import {
   Zap,
   Workflow,
   Film,
+  FastForward,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
@@ -101,6 +102,9 @@ export default function OriginalVideosList({
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
   const [convertingToCFR, setConvertingToCFR] = useState<number | null>(null);
+  const [optimizingSilence, setOptimizingSilence] = useState<number | null>(
+    null
+  );
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [timestampData, setTimestampData] = useState<string>('');
@@ -832,6 +836,72 @@ export default function OriginalVideosList({
       );
     } finally {
       setConvertingToCFR(null);
+    }
+  };
+
+  const handleOptimizeSilence = async (videoId: number, videoUrl: string) => {
+    try {
+      setOptimizingSilence(videoId);
+
+      // Call the optimize silence API
+      const silenceResponse = await fetch('/api/optimize-silence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: videoId,
+          videoUrl: videoUrl,
+          options: {
+            // FastForward options
+            minCutLength: 0, // FastForward cuts longer than 0 sec
+            maxCutLength: 90, // FastForward cuts shorter than 90 sec
+            speedRate: 4, // Speed Rate: 4x
+            mute: true, // Mute enabled
+
+            // Silence Detection options
+            soundLevel: -43, // Filter below -43 dB
+            minSilenceLength: 0.3, // Remove silences longer than 0.3 sec
+            minDetectionLength: 0.2, // Ignore detections shorter than 0.2 sec
+            leftPadding: 0.14, // Left padding: 0.14 sec
+            rightPadding: 0.26, // Right padding: 0.26 sec
+          },
+        }),
+      });
+
+      if (!silenceResponse.ok) {
+        const errorData = await silenceResponse.json();
+        throw new Error(errorData.error || 'Failed to optimize silence');
+      }
+
+      const silenceData = await silenceResponse.json();
+      console.log('Silence optimized successfully:', silenceData);
+
+      // Update the original video record with the optimized video URL
+      if (silenceData.data?.optimizedUrl) {
+        await updateOriginalVideoRow(videoId, {
+          field_6881: silenceData.data.optimizedUrl, // Replace the main video URL field
+        });
+      }
+
+      // Refresh the table to show any updates
+      await handleRefresh();
+
+      // Play success sound for silence optimization completion
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error optimizing silence:', error);
+
+      // Play error sound for silence optimization failure
+      playErrorSound();
+
+      setError(
+        `Failed to optimize silence: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setOptimizingSilence(null);
     }
   };
 
@@ -3342,6 +3412,40 @@ export default function OriginalVideosList({
                                   <Loader2 className='w-4 h-4 animate-spin' />
                                 ) : (
                                   <Film className='w-4 h-4' />
+                                )}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const videoUrl = extractUrl(video.field_6881);
+                                  if (videoUrl) {
+                                    handleOptimizeSilence(video.id, videoUrl);
+                                  } else {
+                                    setError(
+                                      'No video URL found for silence optimization'
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  optimizingSilence !== null ||
+                                  !extractUrl(video.field_6881)
+                                }
+                                className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                title={
+                                  optimizingSilence !== null
+                                    ? optimizingSilence === video.id
+                                      ? 'Optimizing silence (4x speed + mute)...'
+                                      : 'Another silence optimization in progress'
+                                    : !extractUrl(video.field_6881)
+                                    ? 'No video URL available'
+                                    : 'Speed up & mute silent parts (4x)'
+                                }
+                              >
+                                {optimizingSilence === video.id ? (
+                                  <Loader2 className='w-4 h-4 animate-spin' />
+                                ) : (
+                                  <FastForward className='w-4 h-4' />
                                 )}
                               </button>
                             </div>
