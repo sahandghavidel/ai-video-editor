@@ -82,7 +82,8 @@ export const handleGenerateAllVideos = async (
   startBatchOperation: (operation: 'generatingAllVideos') => void,
   completeBatchOperation: (operation: 'generatingAllVideos') => void,
   setGeneratingVideo: (sceneId: number | null) => void,
-  onRefresh?: () => void
+  onRefresh?: () => void,
+  playSound = true
 ) => {
   startBatchOperation('generatingAllVideos');
 
@@ -135,7 +136,9 @@ export const handleGenerateAllVideos = async (
   } finally {
     completeBatchOperation('generatingAllVideos');
     // Play success sound when batch operation completes
-    playSuccessSound();
+    if (playSound) {
+      playSuccessSound();
+    }
   }
 };
 
@@ -370,7 +373,8 @@ export const handleImproveAllSentencesForAllVideos = async (
   selectedModel: string | null,
   setImprovingAllVideos: (isImproving: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
-  setImprovingSentence: (sceneId: number | null) => void
+  setImprovingSentence: (sceneId: number | null) => void,
+  playSound = true
 ) => {
   setImprovingAllVideos(true);
 
@@ -476,7 +480,9 @@ export const handleImproveAllSentencesForAllVideos = async (
     console.log('=================================\n');
 
     // Play success sound when batch operation completes
-    playSuccessSound();
+    if (playSound) {
+      playSuccessSound();
+    }
   } catch (error) {
     console.error('Error in batch improvement for all videos:', error);
     throw error;
@@ -496,7 +502,8 @@ export const handleGenerateAllTTSForAllVideos = async (
   ) => Promise<void>,
   setGeneratingAllVideos: (isGenerating: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
-  setProducingTTS: (sceneId: number | null) => void
+  setProducingTTS: (sceneId: number | null) => void,
+  playSound = true
 ) => {
   setGeneratingAllVideos(true);
 
@@ -606,7 +613,9 @@ export const handleGenerateAllTTSForAllVideos = async (
     console.log('====================================\n');
 
     // Play success sound when batch operation completes
-    playSuccessSound();
+    if (playSound) {
+      playSuccessSound();
+    }
   } catch (error) {
     console.error('Error in batch TTS generation for all videos:', error);
     throw error;
@@ -627,7 +636,8 @@ export const handleSpeedUpAllVideosForAllScenes = async (
   setSpeedingUpAllVideos: (isSpeedingUp: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
   setSpeedingUpVideo: (sceneId: number | null) => void,
-  onRefresh?: () => void
+  onRefresh?: () => void,
+  playSound = true
 ) => {
   setSpeedingUpAllVideos(true);
 
@@ -786,7 +796,9 @@ export const handleSpeedUpAllVideosForAllScenes = async (
     // Note: Data is refreshed after each scene, no need for final refresh
 
     // Play success sound when batch operation completes
-    playSuccessSound();
+    if (playSound) {
+      playSuccessSound();
+    }
   } catch (error) {
     console.error('Error in batch speed up for all videos:', error);
     throw error;

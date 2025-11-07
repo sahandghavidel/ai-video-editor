@@ -1095,7 +1095,7 @@ export default function OriginalVideosList({
   };
 
   // Generate Scenes for all videos
-  const handleGenerateScenesAll = async () => {
+  const handleGenerateScenesAll = async (playSound = true) => {
     try {
       setGeneratingScenesAll(true);
 
@@ -1184,7 +1184,7 @@ export default function OriginalVideosList({
   };
 
   // Improve All Scenes for All Videos
-  const handleImproveAllVideosScenes = async () => {
+  const handleImproveAllVideosScenes = async (playSound = true) => {
     if (!sceneHandlers) {
       console.log(
         'Scene handlers are not available yet. Please wait a moment and try again.'
@@ -1215,7 +1215,8 @@ export default function OriginalVideosList({
         modelSelection.selectedModel,
         setImprovingAllVideosScenes,
         setCurrentProcessingVideoId,
-        setImprovingSentence
+        setImprovingSentence,
+        playSound
       );
 
       console.log('Batch improvement completed for all videos');
@@ -1228,7 +1229,9 @@ export default function OriginalVideosList({
       console.error('Error improving all videos scenes:', error);
 
       // Play error sound
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to improve all videos scenes: ${
@@ -1242,7 +1245,7 @@ export default function OriginalVideosList({
   };
 
   // Generate TTS for All Scenes in All Videos
-  const handleGenerateAllTTSForAllVideos = async () => {
+  const handleGenerateAllTTSForAllVideos = async (playSound = true) => {
     if (!sceneHandlers) {
       console.log(
         'Scene handlers are not available yet. Please wait a moment and try again.'
@@ -1272,7 +1275,8 @@ export default function OriginalVideosList({
         sceneHandlers.handleTTSProduce,
         setGeneratingAllTTSForAllVideos,
         setCurrentProcessingVideoId,
-        setProducingTTS
+        setProducingTTS,
+        playSound
       );
 
       console.log('Batch TTS generation completed for all videos');
@@ -1285,7 +1289,9 @@ export default function OriginalVideosList({
       console.error('Error generating TTS for all videos scenes:', error);
 
       // Play error sound
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to generate TTS for all videos scenes: ${
@@ -1299,7 +1305,7 @@ export default function OriginalVideosList({
   };
 
   // Generate Video for All Scenes in All Videos
-  const handleGenerateAllVideosForAllScenes = async () => {
+  const handleGenerateAllVideosForAllScenes = async (playSound = true) => {
     if (!sceneHandlers) {
       console.log(
         'Scene handlers are not available yet. Please wait a moment and try again.'
@@ -1334,7 +1340,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) {
             refreshScenesData();
           }
-        }
+        },
+        playSound
       );
 
       console.log('Batch video generation completed for all videos');
@@ -1344,7 +1351,9 @@ export default function OriginalVideosList({
       console.error('Error generating videos for all scenes:', error);
 
       // Play error sound
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to generate videos for all scenes: ${
@@ -1357,7 +1366,7 @@ export default function OriginalVideosList({
   };
 
   // Speed Up All Videos for All Scenes
-  const handleSpeedUpAllVideos = async () => {
+  const handleSpeedUpAllVideos = async (playSound = true) => {
     try {
       setSpeedingUpAllVideos(true);
 
@@ -1386,7 +1395,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) {
             refreshScenesData();
           }
-        }
+        },
+        playSound
       );
 
       console.log('Batch speed up completed for all videos');
@@ -1396,7 +1406,9 @@ export default function OriginalVideosList({
       console.error('Error speeding up all videos:', error);
 
       // Play error sound
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to speed up all videos: ${
@@ -1410,7 +1422,7 @@ export default function OriginalVideosList({
   };
 
   // Optimize Silence for All Original Videos
-  const handleOptimizeSilenceAll = async () => {
+  const handleOptimizeSilenceAll = async (playSound = true) => {
     try {
       setOptimizingSilenceVideo(null);
       startBatchOperation('optimizingAllSilence');
@@ -1513,13 +1525,17 @@ export default function OriginalVideosList({
       console.log('Batch silence optimization completed');
       await handleRefresh();
 
-      // Play success sound
-      playSuccessSound();
+      // Play success sound (if enabled)
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error in batch silence optimization:', error);
 
-      // Play error sound
-      playErrorSound();
+      // Play error sound (if enabled)
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to optimize silence for all videos: ${
@@ -1533,7 +1549,7 @@ export default function OriginalVideosList({
   };
 
   // Normalize Audio Loudness for All Original Videos
-  const handleNormalizeAudioAll = async () => {
+  const handleNormalizeAudioAll = async (playSound = true) => {
     try {
       setNormalizingAudioVideo(null);
       startBatchOperation('normalizingAllAudio');
@@ -1622,13 +1638,17 @@ export default function OriginalVideosList({
       console.log('Batch audio normalization completed');
       await handleRefresh();
 
-      // Play success sound
-      playSuccessSound();
+      // Play success sound (if enabled)
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error in batch audio normalization:', error);
 
-      // Play error sound
-      playErrorSound();
+      // Play error sound (if enabled)
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to normalize audio for all videos: ${
@@ -1642,7 +1662,7 @@ export default function OriginalVideosList({
   };
 
   // Convert to CFR for All Original Videos
-  const handleConvertToCFRAll = async () => {
+  const handleConvertToCFRAll = async (playSound = true) => {
     try {
       setConvertingToCFRVideo(null);
       startBatchOperation('convertingAllToCFR');
@@ -1727,13 +1747,17 @@ export default function OriginalVideosList({
       console.log('Batch CFR conversion completed');
       await handleRefresh();
 
-      // Play success sound
-      playSuccessSound();
+      // Play success sound (if enabled)
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error in batch CFR conversion:', error);
 
-      // Play error sound
-      playErrorSound();
+      // Play error sound (if enabled)
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to convert videos to CFR: ${
@@ -2141,7 +2165,7 @@ export default function OriginalVideosList({
         );
         console.log(`Step ${stepNumber}: Normalizing audio for all videos`);
         try {
-          await handleNormalizeAudioAll();
+          await handleNormalizeAudioAll(false);
           console.log(
             `✓ Step ${stepNumber} Complete: Audio normalization finished`
           );
@@ -2176,7 +2200,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Converting all videos to CFR...`);
         console.log(`Step ${stepNumber}: Converting all videos to CFR`);
         try {
-          await handleConvertToCFRAll();
+          await handleConvertToCFRAll(false);
           console.log(`✓ Step ${stepNumber} Complete: CFR conversion finished`);
 
           // Refresh data to get updated videos
@@ -2211,7 +2235,7 @@ export default function OriginalVideosList({
         );
         console.log(`Step ${stepNumber}: Optimizing silence for all videos`);
         try {
-          await handleOptimizeSilenceAll();
+          await handleOptimizeSilenceAll(false);
           console.log(
             `✓ Step ${stepNumber} Complete: Silence optimization finished`
           );
@@ -2284,7 +2308,7 @@ export default function OriginalVideosList({
         );
         console.log(`Step ${stepNumber}: Generating scenes for all videos`);
         try {
-          await handleGenerateScenesAll();
+          await handleGenerateScenesAll(false);
           console.log(
             `✓ Step ${stepNumber} Complete: Scene generation finished`
           );
@@ -2362,7 +2386,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Speeding up all videos...`);
         console.log(`Step ${stepNumber}: Speeding up all videos`);
         try {
-          await handleSpeedUpAllVideos();
+          await handleSpeedUpAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: Speed up finished`);
 
           // Refresh data to get updated sped up videos
@@ -2395,7 +2419,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Improving all scenes...`);
         console.log(`Step ${stepNumber}: Improving all scenes`);
         try {
-          await handleImproveAllVideosScenes();
+          await handleImproveAllVideosScenes(false);
           console.log(`✓ Step ${stepNumber} Complete: AI improvement finished`);
 
           // Refresh data to get updated improved sentences
@@ -2431,7 +2455,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Generating TTS for all scenes...`);
         console.log(`Step ${stepNumber}: Generating TTS for all scenes`);
         try {
-          await handleGenerateAllTTSForAllVideos();
+          await handleGenerateAllTTSForAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: TTS generation finished`);
 
           // Refresh data to get updated TTS audio
@@ -2467,7 +2491,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Syncing all videos...`);
         console.log(`Step ${stepNumber}: Syncing all videos`);
         try {
-          await handleGenerateAllVideosForAllScenes();
+          await handleGenerateAllVideosForAllScenes(false);
           console.log(`✓ Step ${stepNumber} Complete: Video sync finished`);
 
           // Refresh data to get updated synced videos
@@ -2965,7 +2989,7 @@ export default function OriginalVideosList({
 
                     {/* Generate All Scenes Button */}
                     <button
-                      onClick={handleGenerateScenesAll}
+                      onClick={() => handleGenerateScenesAll()}
                       disabled={
                         generatingScenes !== null ||
                         generatingScenesAll ||
@@ -2996,7 +3020,7 @@ export default function OriginalVideosList({
                     {/* Processing Actions */}
                     {/* Improve All Videos Button */}
                     <button
-                      onClick={handleImproveAllVideosScenes}
+                      onClick={() => handleImproveAllVideosScenes()}
                       disabled={
                         improvingAllVideosScenes ||
                         sceneLoading.improvingSentence !== null ||
@@ -3031,7 +3055,7 @@ export default function OriginalVideosList({
 
                     {/* Generate TTS All Videos Button */}
                     <button
-                      onClick={handleGenerateAllTTSForAllVideos}
+                      onClick={() => handleGenerateAllTTSForAllVideos()}
                       disabled={
                         generatingAllTTSForAllVideos ||
                         sceneLoading.producingTTS !== null ||
@@ -3066,7 +3090,7 @@ export default function OriginalVideosList({
 
                     {/* Speed Up All Videos Button */}
                     <button
-                      onClick={handleSpeedUpAllVideos}
+                      onClick={() => handleSpeedUpAllVideos()}
                       disabled={
                         speedingUpAllVideos ||
                         sceneLoading.speedingUpVideo !== null ||
@@ -3132,7 +3156,7 @@ export default function OriginalVideosList({
 
                     {/* Optimize Silence All Button */}
                     <button
-                      onClick={handleOptimizeSilenceAll}
+                      onClick={() => handleOptimizeSilenceAll()}
                       disabled={
                         batchOperations.optimizingAllSilence ||
                         sceneLoading.optimizingSilenceVideo !== null ||
@@ -3164,7 +3188,7 @@ export default function OriginalVideosList({
 
                     {/* Normalize Audio All Button */}
                     <button
-                      onClick={handleNormalizeAudioAll}
+                      onClick={() => handleNormalizeAudioAll()}
                       disabled={
                         batchOperations.normalizingAllAudio ||
                         sceneLoading.normalizingAudioVideo !== null ||
@@ -3196,7 +3220,7 @@ export default function OriginalVideosList({
 
                     {/* Convert to CFR All Button */}
                     <button
-                      onClick={handleConvertToCFRAll}
+                      onClick={() => handleConvertToCFRAll()}
                       disabled={
                         batchOperations.convertingAllToCFR ||
                         sceneLoading.convertingToCFRVideo !== null ||
@@ -3228,7 +3252,7 @@ export default function OriginalVideosList({
 
                     {/* Generate Video All Button */}
                     <button
-                      onClick={handleGenerateAllVideosForAllScenes}
+                      onClick={() => handleGenerateAllVideosForAllScenes()}
                       disabled={
                         generatingAllVideos ||
                         sceneLoading.generatingVideo !== null ||
