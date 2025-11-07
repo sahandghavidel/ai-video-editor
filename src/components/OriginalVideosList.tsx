@@ -884,6 +884,7 @@ export default function OriginalVideosList({
       // Update the original video record with the optimized video URL
       if (silenceData.data?.optimizedUrl) {
         await updateOriginalVideoRow(videoId, {
+          field_6907: silenceData.data.optimizedUrl, // Silenced Video URL field
           field_6881: silenceData.data.optimizedUrl, // Replace the main video URL field
         });
       }
@@ -1416,10 +1417,11 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have video URLs
+      // Filter videos that have video URLs but don't have silenced version yet
       const videosToOptimize = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
-        return videoUrl; // Has video URL
+        const silencedUrl = extractUrl(video.field_6907);
+        return videoUrl && !silencedUrl; // Has video URL but no silenced version
       });
 
       if (videosToOptimize.length === 0) {
@@ -1485,6 +1487,7 @@ export default function OriginalVideosList({
             if (result.data?.optimizedUrl) {
               console.log(`Updating video ${video.id} with optimized URL...`);
               await updateOriginalVideoRow(video.id, {
+                field_6907: result.data.optimizedUrl, // Silenced Video URL field
                 field_6881: result.data.optimizedUrl, // Replace the main video URL field
               });
               console.log(`Video ${video.id} updated successfully`);
@@ -3983,7 +3986,8 @@ export default function OriginalVideosList({
                                   optimizingSilence !== null ||
                                   sceneLoading.optimizingSilenceVideo !==
                                     null ||
-                                  !extractUrl(video.field_6881)
+                                  !extractUrl(video.field_6881) ||
+                                  !!extractUrl(video.field_6907) // Already silenced
                                 }
                                 className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                 title={
@@ -3999,6 +4003,8 @@ export default function OriginalVideosList({
                                       : 'Batch silence optimization in progress'
                                     : !extractUrl(video.field_6881)
                                     ? 'No video URL available'
+                                    : !!extractUrl(video.field_6907)
+                                    ? 'Video already optimized for silence'
                                     : 'Speed up & mute silent parts (4x)'
                                 }
                               >
