@@ -795,3 +795,113 @@ export const handleSpeedUpAllVideosForAllScenes = async (
     setSpeedingUpAllVideos(false);
   }
 };
+
+// Batch operation: Optimize silence for all original videos
+export const handleOptimizeSilenceForAllVideos = async (
+  originalVideos: any[],
+  setOptimizingSilenceVideo: (videoId: number | null) => void,
+  setOptimizingAllSilence: (isOptimizing: boolean) => void,
+  onRefresh?: () => void
+) => {
+  setOptimizingAllSilence(true);
+
+  try {
+    console.log('=== Starting Silence Optimization for All Videos ===');
+    console.log('Total videos to process:', originalVideos.length);
+
+    if (originalVideos.length === 0) {
+      console.warn('No videos provided!');
+      return;
+    }
+
+    console.log(`Processing ${originalVideos.length} videos...`);
+
+    let totalProcessed = 0;
+    let totalOptimized = 0;
+
+    // Process each video sequentially
+    for (const video of originalVideos) {
+      const videoId = video.id;
+      const videoUrl = video.videoUrl; // URL is already extracted in the component
+
+      setOptimizingSilenceVideo(videoId);
+      console.log(`\n--- Processing video #${videoId} ---`);
+      console.log('Video object:', video);
+      console.log('Video URL:', videoUrl);
+      console.log('Video URL type:', typeof videoUrl);
+
+      if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
+        console.error(
+          `Skipping video ${videoId}: Invalid or missing video URL`
+        );
+        totalProcessed++;
+        continue;
+      }
+
+      try {
+        // Call the optimize silence API
+        const response = await fetch('/api/optimize-silence', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            videoId: videoId,
+            inputUrl: videoUrl,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Silence optimization error for video ${videoId}: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = `Silence optimization error for video ${videoId}: ${response.status} - ${response.statusText}`;
+          }
+          console.error(errorMessage);
+          // Continue with next video instead of stopping
+          totalProcessed++;
+          continue;
+        }
+
+        const result = await response.json();
+        console.log(`✓ Successfully optimized silence for video ${videoId}`);
+        console.log('Result:', result);
+        totalOptimized++;
+
+        // Refresh data after each successful optimization to show updates
+        if (onRefresh) {
+          await onRefresh();
+        }
+
+        // Small delay between requests to be nice to the server
+        await wait(2000);
+      } catch (error) {
+        console.error(
+          `✗ Failed to optimize silence for video ${videoId}:`,
+          error
+        );
+        // Continue with next video
+      } finally {
+        setOptimizingSilenceVideo(null);
+      }
+
+      totalProcessed++;
+    }
+
+    console.log('\n=== Batch Silence Optimization Summary ===');
+    console.log(`Total videos processed: ${totalProcessed}`);
+    console.log(`Total videos optimized: ${totalOptimized}`);
+    console.log('==========================================\n');
+
+    // Play success sound when batch operation completes
+    playSuccessSound();
+  } catch (error) {
+    console.error('Error in batch silence optimization:', error);
+    throw error;
+  } finally {
+    setOptimizingSilenceVideo(null);
+    setOptimizingAllSilence(false);
+  }
+};

@@ -45,6 +45,7 @@ import {
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
   handleSpeedUpAllVideosForAllScenes,
   handleGenerateAllVideos,
+  handleOptimizeSilenceForAllVideos,
 } from '@/utils/batchOperations';
 import { Sparkles, Mic2 } from 'lucide-react';
 
@@ -156,6 +157,7 @@ export default function OriginalVideosList({
     setProducingTTS,
     setSpeedingUpVideo,
     setGeneratingVideo,
+    setOptimizingSilenceVideo,
     videoSettings,
     pipelineConfig,
   } = useAppStore();
@@ -1400,6 +1402,97 @@ export default function OriginalVideosList({
     } finally {
       setSpeedingUpAllVideos(false);
       setCurrentProcessingVideoId(null);
+    }
+  };
+
+  // Optimize Silence for All Original Videos
+  const handleOptimizeSilenceAll = async () => {
+    try {
+      setOptimizingSilenceVideo(null);
+      startBatchOperation('optimizingAllSilence');
+
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
+      // Filter videos that have video URLs
+      const videosToOptimize = freshVideosData.filter((video) => {
+        const videoUrl = extractUrl(video.field_6881);
+        return videoUrl; // Has video URL
+      });
+
+      if (videosToOptimize.length === 0) {
+        console.log('No videos found that need silence optimization');
+        alert('No videos found with video URLs to optimize!');
+        return;
+      }
+
+      console.log(
+        `Starting silence optimization for ${videosToOptimize.length} videos...`
+      );
+
+      // Process videos one by one to avoid overwhelming the API
+      for (const video of videosToOptimize) {
+        const videoUrl = extractUrl(video.field_6881);
+        if (videoUrl) {
+          console.log(`Optimizing silence for video ${video.id}...`);
+          setOptimizingSilenceVideo(video.id);
+
+          try {
+            const response = await fetch('/api/optimize-silence', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                videoId: video.id,
+                videoUrl: videoUrl,
+              }),
+            });
+
+            if (!response.ok) {
+              let errorMessage = `Silence optimization failed: ${response.status}`;
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+                console.error('API Error:', errorData);
+              } catch (parseError) {
+                console.error('Could not parse error response');
+              }
+              throw new Error(errorMessage);
+            }
+
+            const result = await response.json();
+            console.log(`Successfully optimized silence for video ${video.id}`);
+            console.log('Result:', result);
+          } catch (error) {
+            console.error(
+              `Failed to optimize silence for video ${video.id}:`,
+              error
+            );
+            // Continue with next video even if one fails
+          }
+        }
+      }
+
+      console.log('Batch silence optimization completed');
+      await handleRefresh();
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error in batch silence optimization:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to optimize silence for all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setOptimizingSilenceVideo(null);
+      completeBatchOperation('optimizingAllSilence');
     }
   };
 
@@ -2680,6 +2773,38 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
+                    {/* Optimize Silence All Button */}
+                    <button
+                      onClick={handleOptimizeSilenceAll}
+                      disabled={
+                        batchOperations.optimizingAllSilence ||
+                        sceneLoading.optimizingSilenceVideo !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        batchOperations.optimizingAllSilence
+                          ? 'Optimizing silence for all videos...'
+                          : 'Detect and optimize silence in all original videos'
+                      }
+                    >
+                      <FastForward
+                        className={`w-4 h-4 ${
+                          batchOperations.optimizingAllSilence
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {batchOperations.optimizingAllSilence
+                          ? sceneLoading.optimizingSilenceVideo !== null
+                            ? `V${sceneLoading.optimizingSilenceVideo}`
+                            : 'Processing...'
+                          : 'Silence Opt All'}
+                      </span>
+                    </button>
+
                     {/* Generate Video All Button */}
                     <button
                       onClick={handleGenerateAllVideosForAllScenes}
@@ -3429,6 +3554,8 @@ export default function OriginalVideosList({
                                 }}
                                 disabled={
                                   optimizingSilence !== null ||
+                                  sceneLoading.optimizingSilenceVideo !==
+                                    null ||
                                   !extractUrl(video.field_6881)
                                 }
                                 className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
@@ -3437,12 +3564,20 @@ export default function OriginalVideosList({
                                     ? optimizingSilence === video.id
                                       ? 'Optimizing silence (4x speed + mute)...'
                                       : 'Another silence optimization in progress'
+                                    : sceneLoading.optimizingSilenceVideo !==
+                                      null
+                                    ? sceneLoading.optimizingSilenceVideo ===
+                                      video.id
+                                      ? 'Optimizing silence in batch mode...'
+                                      : 'Batch silence optimization in progress'
                                     : !extractUrl(video.field_6881)
                                     ? 'No video URL available'
                                     : 'Speed up & mute silent parts (4x)'
                                 }
                               >
-                                {optimizingSilence === video.id ? (
+                                {optimizingSilence === video.id ||
+                                sceneLoading.optimizingSilenceVideo ===
+                                  video.id ? (
                                   <Loader2 className='w-4 h-4 animate-spin' />
                                 ) : (
                                   <FastForward className='w-4 h-4' />
