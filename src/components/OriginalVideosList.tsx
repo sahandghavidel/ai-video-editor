@@ -1446,6 +1446,20 @@ export default function OriginalVideosList({
               body: JSON.stringify({
                 videoId: video.id,
                 videoUrl: videoUrl,
+                options: {
+                  // FastForward options
+                  minCutLength: 0, // FastForward cuts longer than 0 sec
+                  maxCutLength: 90, // FastForward cuts shorter than 90 sec
+                  speedRate: 4, // Speed Rate: 4x
+                  mute: true, // Mute enabled
+
+                  // Silence Detection options
+                  soundLevel: -43, // Filter below -43 dB
+                  minSilenceLength: 0.3, // Remove silences longer than 0.3 sec
+                  minDetectionLength: 0.2, // Ignore detections shorter than 0.2 sec
+                  leftPadding: 0.14, // Left padding: 0.14 sec
+                  rightPadding: 0.26, // Right padding: 0.26 sec
+                },
               }),
             });
 
@@ -1464,6 +1478,23 @@ export default function OriginalVideosList({
             const result = await response.json();
             console.log(`Successfully optimized silence for video ${video.id}`);
             console.log('Result:', result);
+            console.log('Optimized URL:', result.data?.optimizedUrl);
+
+            // Update the original video record with the optimized video URL
+            if (result.data?.optimizedUrl) {
+              console.log(`Updating video ${video.id} with optimized URL...`);
+              await updateOriginalVideoRow(video.id, {
+                field_6881: result.data.optimizedUrl, // Replace the main video URL field
+              });
+              console.log(`Video ${video.id} updated successfully`);
+
+              // Refresh after each video to show updates immediately
+              await handleRefresh();
+            } else {
+              console.warn(
+                `No optimized URL found in result for video ${video.id}`
+              );
+            }
           } catch (error) {
             console.error(
               `Failed to optimize silence for video ${video.id}:`,
