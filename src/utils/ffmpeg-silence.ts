@@ -521,7 +521,7 @@ export async function optimizeSilence(
     console.log(
       'Concatenating segments with high precision encoding for editing compatibility...'
     );
-    await execAsync(concatCommand.join(' '), { timeout: 1800000 }); // 30 minutes timeout
+    await execAsync(concatCommand.join(' '), { timeout: 3600000 }); // 1 hour timeout
 
     // Cleanup segment files
     for (const segmentFile of segmentPaths) {
