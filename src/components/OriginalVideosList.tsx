@@ -159,6 +159,7 @@ export default function OriginalVideosList({
     setGeneratingVideo,
     setOptimizingSilenceVideo,
     setNormalizingAudioVideo,
+    setConvertingToCFRVideo,
     videoSettings,
     pipelineConfig,
   } = useAppStore();
@@ -1637,6 +1638,110 @@ export default function OriginalVideosList({
     }
   };
 
+  // Convert to CFR for All Original Videos
+  const handleConvertToCFRAll = async () => {
+    try {
+      setConvertingToCFRVideo(null);
+      startBatchOperation('convertingAllToCFR');
+
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
+      // Filter videos that have video URLs
+      const videosToConvert = freshVideosData.filter((video) => {
+        const videoUrl = extractUrl(video.field_6881);
+        return videoUrl; // Has video URL
+      });
+
+      if (videosToConvert.length === 0) {
+        console.log('No videos found that need CFR conversion');
+        alert('No videos found with video URLs to convert!');
+        return;
+      }
+
+      console.log(
+        `Starting CFR conversion for ${videosToConvert.length} videos...`
+      );
+
+      // Process videos one by one to avoid overwhelming the API
+      for (const video of videosToConvert) {
+        const videoUrl = extractUrl(video.field_6881);
+        if (videoUrl) {
+          console.log(`Converting video ${video.id} to CFR...`);
+          setConvertingToCFRVideo(video.id);
+
+          try {
+            const response = await fetch('/api/convert-to-cfr', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                videoId: video.id,
+                videoUrl: videoUrl,
+                framerate: 30, // Target framerate of 30 fps
+              }),
+            });
+
+            if (!response.ok) {
+              let errorMessage = `CFR conversion failed: ${response.status}`;
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+                console.error('API Error:', errorData);
+              } catch (parseError) {
+                console.error('Could not parse error response');
+              }
+              throw new Error(errorMessage);
+            }
+
+            const result = await response.json();
+            console.log(`Successfully converted video ${video.id} to CFR`);
+            console.log('Result:', result);
+            console.log('CFR URL:', result.data?.cfrUrl);
+
+            // Update the original video record with the CFR video URL
+            if (result.data?.cfrUrl) {
+              console.log(`Updating video ${video.id} with CFR URL...`);
+              await updateOriginalVideoRow(video.id, {
+                field_6881: result.data.cfrUrl, // Replace the main video URL field
+              });
+              console.log(`Video ${video.id} updated successfully`);
+
+              // Refresh after each video to show updates immediately
+              await handleRefresh();
+            } else {
+              console.warn(`No CFR URL found in result for video ${video.id}`);
+            }
+          } catch (error) {
+            console.error(`Failed to convert video ${video.id} to CFR:`, error);
+            // Continue with next video even if one fails
+          }
+        }
+      }
+
+      console.log('Batch CFR conversion completed');
+      await handleRefresh();
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error in batch CFR conversion:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to convert videos to CFR: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setConvertingToCFRVideo(null);
+      completeBatchOperation('convertingAllToCFR');
+    }
+  };
+
   // Merge All Final Videos
   const handleMergeAllFinalVideos = async () => {
     try {
@@ -2978,6 +3083,38 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
+                    {/* Convert to CFR All Button */}
+                    <button
+                      onClick={handleConvertToCFRAll}
+                      disabled={
+                        batchOperations.convertingAllToCFR ||
+                        sceneLoading.convertingToCFRVideo !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        batchOperations.convertingAllToCFR
+                          ? 'Converting all videos to CFR...'
+                          : 'Convert all videos to constant frame rate (30 fps)'
+                      }
+                    >
+                      <Film
+                        className={`w-4 h-4 ${
+                          batchOperations.convertingAllToCFR
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {batchOperations.convertingAllToCFR
+                          ? sceneLoading.convertingToCFRVideo !== null
+                            ? `V${sceneLoading.convertingToCFRVideo}`
+                            : 'Processing...'
+                          : 'CFR All'}
+                      </span>
+                    </button>
+
                     {/* Generate Video All Button */}
                     <button
                       onClick={handleGenerateAllVideosForAllScenes}
@@ -3699,12 +3836,16 @@ export default function OriginalVideosList({
                                 }}
                                 disabled={
                                   convertingToCFR !== null ||
+                                  sceneLoading.convertingToCFRVideo !== null ||
                                   !extractUrl(video.field_6881)
                                 }
                                 className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                 title={
-                                  convertingToCFR !== null
-                                    ? convertingToCFR === video.id
+                                  convertingToCFR !== null ||
+                                  sceneLoading.convertingToCFRVideo !== null
+                                    ? convertingToCFR === video.id ||
+                                      sceneLoading.convertingToCFRVideo ===
+                                        video.id
                                       ? 'Converting to CFR 30fps...'
                                       : 'Another CFR conversion in progress'
                                     : !extractUrl(video.field_6881)
@@ -3712,7 +3853,9 @@ export default function OriginalVideosList({
                                     : 'Convert to Constant Frame Rate (30fps)'
                                 }
                               >
-                                {convertingToCFR === video.id ? (
+                                {convertingToCFR === video.id ||
+                                sceneLoading.convertingToCFRVideo ===
+                                  video.id ? (
                                   <Loader2 className='w-4 h-4 animate-spin' />
                                 ) : (
                                   <Film className='w-4 h-4' />
