@@ -158,6 +158,7 @@ export default function OriginalVideosList({
     setSpeedingUpVideo,
     setGeneratingVideo,
     setOptimizingSilenceVideo,
+    setNormalizingAudioVideo,
     videoSettings,
     pipelineConfig,
   } = useAppStore();
@@ -1527,6 +1528,115 @@ export default function OriginalVideosList({
     }
   };
 
+  // Normalize Audio Loudness for All Original Videos
+  const handleNormalizeAudioAll = async () => {
+    try {
+      setNormalizingAudioVideo(null);
+      startBatchOperation('normalizingAllAudio');
+
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
+      // Filter videos that have video URLs
+      const videosToNormalize = freshVideosData.filter((video) => {
+        const videoUrl = extractUrl(video.field_6881);
+        return videoUrl; // Has video URL
+      });
+
+      if (videosToNormalize.length === 0) {
+        console.log('No videos found that need audio normalization');
+        alert('No videos found with video URLs to normalize!');
+        return;
+      }
+
+      console.log(
+        `Starting audio normalization for ${videosToNormalize.length} videos...`
+      );
+
+      // Process videos one by one to avoid overwhelming the API
+      for (const video of videosToNormalize) {
+        const videoUrl = extractUrl(video.field_6881);
+        if (videoUrl) {
+          console.log(`Normalizing audio for video ${video.id}...`);
+          setNormalizingAudioVideo(video.id);
+
+          try {
+            const response = await fetch('/api/normalize-audio', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                sceneId: video.id,
+                videoUrl: videoUrl,
+              }),
+            });
+
+            if (!response.ok) {
+              let errorMessage = `Audio normalization failed: ${response.status}`;
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+                console.error('API Error:', errorData);
+              } catch (parseError) {
+                console.error('Could not parse error response');
+              }
+              throw new Error(errorMessage);
+            }
+
+            const result = await response.json();
+            console.log(`Successfully normalized audio for video ${video.id}`);
+            console.log('Result:', result);
+            console.log('Normalized URL:', result.data?.normalizedUrl);
+
+            // Update the original video record with the normalized video URL
+            if (result.data?.normalizedUrl) {
+              console.log(`Updating video ${video.id} with normalized URL...`);
+              await updateOriginalVideoRow(video.id, {
+                field_6903: result.data.normalizedUrl, // Normalized Video URL field
+                field_6881: result.data.normalizedUrl, // Replace the main video URL field
+              });
+              console.log(`Video ${video.id} updated successfully`);
+
+              // Refresh after each video to show updates immediately
+              await handleRefresh();
+            } else {
+              console.warn(
+                `No normalized URL found in result for video ${video.id}`
+              );
+            }
+          } catch (error) {
+            console.error(
+              `Failed to normalize audio for video ${video.id}:`,
+              error
+            );
+            // Continue with next video even if one fails
+          }
+        }
+      }
+
+      console.log('Batch audio normalization completed');
+      await handleRefresh();
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error in batch audio normalization:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to normalize audio for all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setNormalizingAudioVideo(null);
+      completeBatchOperation('normalizingAllAudio');
+    }
+  };
+
   // Merge All Final Videos
   const handleMergeAllFinalVideos = async () => {
     try {
@@ -2836,6 +2946,38 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
+                    {/* Normalize Audio All Button */}
+                    <button
+                      onClick={handleNormalizeAudioAll}
+                      disabled={
+                        batchOperations.normalizingAllAudio ||
+                        sceneLoading.normalizingAudioVideo !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        batchOperations.normalizingAllAudio
+                          ? 'Normalizing audio for all videos...'
+                          : 'Normalize audio loudness for all original videos'
+                      }
+                    >
+                      <Volume2
+                        className={`w-4 h-4 ${
+                          batchOperations.normalizingAllAudio
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {batchOperations.normalizingAllAudio
+                          ? sceneLoading.normalizingAudioVideo !== null
+                            ? `V${sceneLoading.normalizingAudioVideo}`
+                            : 'Processing...'
+                          : 'Normalize All'}
+                      </span>
+                    </button>
+
                     {/* Generate Video All Button */}
                     <button
                       onClick={handleGenerateAllVideosForAllScenes}
@@ -3514,13 +3656,17 @@ export default function OriginalVideosList({
                                 }}
                                 disabled={
                                   normalizing !== null ||
+                                  sceneLoading.normalizingAudioVideo !== null ||
                                   !extractUrl(video.field_6881) ||
                                   !!extractUrl(video.field_6903) // Already normalized
                                 }
                                 className='p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                 title={
-                                  normalizing !== null
-                                    ? normalizing === video.id
+                                  normalizing !== null ||
+                                  sceneLoading.normalizingAudioVideo !== null
+                                    ? normalizing === video.id ||
+                                      sceneLoading.normalizingAudioVideo ===
+                                        video.id
                                       ? 'Normalizing audio...'
                                       : 'Another normalization in progress'
                                     : !extractUrl(video.field_6881)
@@ -3530,7 +3676,9 @@ export default function OriginalVideosList({
                                     : 'Normalize audio loudness'
                                 }
                               >
-                                {normalizing === video.id ? (
+                                {normalizing === video.id ||
+                                sceneLoading.normalizingAudioVideo ===
+                                  video.id ? (
                                   <Loader2 className='w-4 h-4 animate-spin' />
                                 ) : (
                                   <Volume2 className='w-4 h-4' />
