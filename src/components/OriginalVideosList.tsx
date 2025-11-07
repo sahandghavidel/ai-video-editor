@@ -1424,7 +1424,6 @@ export default function OriginalVideosList({
 
       if (videosToOptimize.length === 0) {
         console.log('No videos found that need silence optimization');
-        alert('No videos found with video URLs to optimize!');
         return;
       }
 
@@ -1538,15 +1537,15 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have video URLs
+      // Filter videos that have video URLs but don't have normalized version yet
       const videosToNormalize = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
-        return videoUrl; // Has video URL
+        const normalizedUrl = extractUrl(video.field_6903);
+        return videoUrl && !normalizedUrl; // Has video URL but no normalized version
       });
 
       if (videosToNormalize.length === 0) {
         console.log('No videos found that need audio normalization');
-        alert('No videos found with video URLs to normalize!');
         return;
       }
 
@@ -1655,7 +1654,6 @@ export default function OriginalVideosList({
 
       if (videosToConvert.length === 0) {
         console.log('No videos found that need CFR conversion');
-        alert('No videos found with video URLs to convert!');
         return;
       }
 
