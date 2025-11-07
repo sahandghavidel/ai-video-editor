@@ -368,7 +368,8 @@ export const handleImproveAllSentencesForAllVideos = async (
     sceneId: number,
     sentence: string,
     model?: string,
-    sceneData?: BaserowRow
+    sceneData?: BaserowRow,
+    skipRefresh?: boolean
   ) => Promise<void>,
   selectedModel: string | null,
   setImprovingAllVideos: (isImproving: boolean) => void,
@@ -458,7 +459,8 @@ export const handleImproveAllSentencesForAllVideos = async (
             scene.id,
             currentSentence,
             selectedModel || undefined,
-            scene
+            scene,
+            true // Skip refresh during batch operation
           );
           totalImproved++;
           console.log(`  ✓ Successfully improved scene ${scene.id}`);

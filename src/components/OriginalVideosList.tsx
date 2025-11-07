@@ -54,7 +54,8 @@ interface SceneHandlers {
     sceneId: number,
     sentence: string,
     model?: string,
-    sceneData?: BaserowRow
+    sceneData?: BaserowRow,
+    skipRefresh?: boolean
   ) => Promise<void>;
   handleTTSProduce: (
     sceneId: number,

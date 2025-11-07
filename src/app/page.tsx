@@ -35,7 +35,8 @@ export default function Home() {
       sceneId: number,
       sentence: string,
       model?: string,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
+      skipRefresh?: boolean
     ) => Promise<void>;
     handleTTSProduce: (
       sceneId: number,
@@ -96,7 +97,8 @@ export default function Home() {
         sceneId: number,
         sentence: string,
         model?: string,
-        sceneData?: BaserowRow
+        sceneData?: BaserowRow,
+        skipRefresh?: boolean
       ) => Promise<void>;
       handleTTSProduce: (
         sceneId: number,

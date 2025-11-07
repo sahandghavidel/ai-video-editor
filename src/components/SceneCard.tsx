@@ -836,7 +836,8 @@ export default function SceneCard({
       sceneId: number,
       currentSentence: string,
       modelOverride?: string,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
+      skipRefresh = false
     ) => {
       setImprovingSentence(sceneId);
 
@@ -900,8 +901,10 @@ export default function SceneCard({
       });
       onDataUpdateRef.current?.(updatedData);
 
-      // Refresh data from server to ensure consistency
-      refreshDataRef.current?.();
+      // Refresh data from server to ensure consistency (skip if requested)
+      if (!skipRefresh) {
+        refreshDataRef.current?.();
+      }
 
       // Auto-generate TTS if option is enabled
       if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
