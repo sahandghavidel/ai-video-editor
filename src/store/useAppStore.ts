@@ -243,26 +243,26 @@ interface AppState {
 
 // Default TTS settings
 const defaultTTSSettings: TTSSettings = {
-  temperature: 0.2,
-  exaggeration: 0.8,
-  cfg_weight: 0.2,
+  temperature: 0.8,
+  exaggeration: 0.6,
+  cfg_weight: 0.5,
   seed: 1212,
   reference_audio_filename: 'calmS5wave.wav',
 };
 
 // Default video settings
 const defaultVideoSettings: VideoSettings = {
-  selectedSpeed: 4,
+  selectedSpeed: 1,
   muteAudio: true,
   autoGenerateVideo: true,
-  autoGenerateTTS: false,
-  speedUpMode: 'emptyOnly',
-  playerSpeed: 1,
+  autoGenerateTTS: true,
+  speedUpMode: 'all',
+  playerSpeed: 2,
 };
 
 // Default transcription settings
 const defaultTranscriptionSettings: TranscriptionSettings = {
-  selectedModel: 'small', // Default to small model for better punctuation
+  selectedModel: 'parakeet', // Default to Parakeet model
 };
 
 // Default batch operations settings
@@ -288,7 +288,7 @@ const defaultMediaPlayer: MediaPlayerState = {
 
 // Default model selection state
 const defaultModelSelection: ModelSelectionState = {
-  selectedModel: 'deepseek/deepseek-r1:free',
+  selectedModel: 'deepseek/deepseek-v3.2-exp',
   models: [],
   modelsLoading: false,
   modelsError: null,
