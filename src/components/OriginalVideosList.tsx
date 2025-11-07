@@ -818,6 +818,7 @@ export default function OriginalVideosList({
       // Update the original video record with the CFR video URL
       if (cfrData.data?.cfrUrl) {
         await updateOriginalVideoRow(videoId, {
+          field_6908: cfrData.data.cfrUrl, // CFR Video URL field
           field_6881: cfrData.data.cfrUrl, // Replace the main video URL field with CFR version
         });
       }
@@ -1649,10 +1650,11 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have video URLs
+      // Filter videos that have video URLs but don't have CFR version yet
       const videosToConvert = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
-        return videoUrl; // Has video URL
+        const cfrUrl = extractUrl(video.field_6908);
+        return videoUrl && !cfrUrl; // Has video URL but no CFR version
       });
 
       if (videosToConvert.length === 0) {
@@ -1705,6 +1707,7 @@ export default function OriginalVideosList({
             if (result.data?.cfrUrl) {
               console.log(`Updating video ${video.id} with CFR URL...`);
               await updateOriginalVideoRow(video.id, {
+                field_6908: result.data.cfrUrl, // CFR Video URL field
                 field_6881: result.data.cfrUrl, // Replace the main video URL field
               });
               console.log(`Video ${video.id} updated successfully`);
@@ -3945,7 +3948,8 @@ export default function OriginalVideosList({
                                 disabled={
                                   convertingToCFR !== null ||
                                   sceneLoading.convertingToCFRVideo !== null ||
-                                  !extractUrl(video.field_6881)
+                                  !extractUrl(video.field_6881) ||
+                                  !!extractUrl(video.field_6908) // Already converted to CFR
                                 }
                                 className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                 title={
@@ -3958,6 +3962,8 @@ export default function OriginalVideosList({
                                       : 'Another CFR conversion in progress'
                                     : !extractUrl(video.field_6881)
                                     ? 'No video URL available'
+                                    : !!extractUrl(video.field_6908)
+                                    ? 'Video already converted to CFR'
                                     : 'Convert to Constant Frame Rate (30fps)'
                                 }
                               >
