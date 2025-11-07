@@ -10,6 +10,21 @@ export default function PipelineConfig() {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const steps = [
+    {
+      key: 'normalizeAudio' as const,
+      label: 'Normalize Audio',
+      color: 'text-orange-500',
+    },
+    {
+      key: 'convertToCFR' as const,
+      label: 'Convert to CFR',
+      color: 'text-indigo-500',
+    },
+    {
+      key: 'optimizeSilence' as const,
+      label: 'Optimize Silence',
+      color: 'text-emerald-500',
+    },
     { key: 'transcribe' as const, label: 'Transcribe', color: 'text-blue-500' },
     {
       key: 'generateScenes' as const,
@@ -90,7 +105,7 @@ export default function PipelineConfig() {
           </div>
 
           {/* Pipeline Steps Grid */}
-          <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3'>
+          <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3'>
             {steps.map((step) => {
               const isEnabled = pipelineConfig[step.key];
               return (

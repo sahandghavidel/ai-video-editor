@@ -2109,7 +2109,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: Transcribe All -> Generate Scenes -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All
+  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -2129,7 +2129,114 @@ export default function OriginalVideosList({
 
       let stepNumber = 0;
 
-      // Step 1: Transcribe All
+      // Step 1: Normalize Audio All
+      if (pipelineConfig.normalizeAudio) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Normalizing audio for all videos...`
+        );
+        console.log(`Step ${stepNumber}: Normalizing audio for all videos`);
+        try {
+          await handleNormalizeAudioAll();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Audio normalization finished`
+          );
+
+          // Refresh data to get updated videos
+          console.log('Refreshing data after audio normalization...');
+          await handleRefresh();
+          console.log('Data refreshed successfully');
+
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Audio normalization error`,
+            error
+          );
+          throw new Error(
+            `Audio normalization failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Normalize Audio (disabled in config)');
+      }
+
+      // Step 2: Convert to CFR All
+      if (pipelineConfig.convertToCFR) {
+        stepNumber++;
+        setPipelineStep(`Step ${stepNumber}: Converting all videos to CFR...`);
+        console.log(`Step ${stepNumber}: Converting all videos to CFR`);
+        try {
+          await handleConvertToCFRAll();
+          console.log(`✓ Step ${stepNumber} Complete: CFR conversion finished`);
+
+          // Refresh data to get updated videos
+          console.log('Refreshing data after CFR conversion...');
+          await handleRefresh();
+          console.log('Data refreshed successfully');
+
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: CFR conversion error`,
+            error
+          );
+          throw new Error(
+            `CFR conversion failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Convert to CFR (disabled in config)');
+      }
+
+      // Step 3: Optimize Silence All
+      if (pipelineConfig.optimizeSilence) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Optimizing silence for all videos...`
+        );
+        console.log(`Step ${stepNumber}: Optimizing silence for all videos`);
+        try {
+          await handleOptimizeSilenceAll();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Silence optimization finished`
+          );
+
+          // Refresh data to get updated videos
+          console.log('Refreshing data after silence optimization...');
+          await handleRefresh();
+          console.log('Data refreshed successfully');
+
+          // Wait 20 seconds before next step
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Silence optimization error`,
+            error
+          );
+          throw new Error(
+            `Silence optimization failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Optimize Silence (disabled in config)');
+      }
+
+      // Step 4: Transcribe All
       if (pipelineConfig.transcribe) {
         stepNumber++;
         setPipelineStep(`Step ${stepNumber}: Transcribing all videos...`);
@@ -3350,7 +3457,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                           ? pipelineStep
-                          : 'Run full pipeline: Transcribe → Scenes → Clips → Speed Up → Improve → TTS → Sync'
+                          : 'Run full pipeline: Normalize → CFR → Silence → Transcribe → Scenes → Clips → Speed Up → Improve → TTS → Sync'
                       }
                     >
                       <Workflow
