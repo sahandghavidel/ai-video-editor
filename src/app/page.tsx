@@ -235,7 +235,7 @@ export default function Home() {
             )}
 
             {/* Global Settings - Collapsible */}
-            {!initialLoading && data.length > 0 && (
+            {!initialLoading && (
               <div className='bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 overflow-hidden mb-6'>
                 {/* Settings Header */}
                 <button
