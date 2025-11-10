@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     // Create new row in Baserow table 713
     const newRowData = {
       field_6881: uploadUrl, // Video Uploaded URL
-      field_6864: 'Pending', // Status
+      field_6864: 'Processing', // Status - default to Processing on upload
       field_6902: nextOrder, // Order - automatically set to next number
       field_6852: uniqueTitle, // Title - auto-generated from filename
       // field_6866: scenes will be empty initially
