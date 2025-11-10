@@ -1226,6 +1226,9 @@ export default function OriginalVideosList({
     try {
       setImprovingAllVideosScenes(true);
 
+      // Fetch fresh original videos data to check status
+      const freshVideosData = await getOriginalVideosData();
+
       // Fetch fresh scenes data directly from API
       const freshScenesData = await getBaserowData();
 
@@ -1235,13 +1238,50 @@ export default function OriginalVideosList({
         return;
       }
 
+      // Filter videos by Processing status
+      const videosToProcess = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
+
+      // Filter scenes to only process those whose parent video has status === 'Processing'
+      const scenesToProcess = freshScenesData.filter((scene) => {
+        const videoIdField = scene['field_6889'];
+        let videoId: number | null = null;
+
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        return videoId && !isNaN(videoId) && videoIdsToProcess.has(videoId);
+      });
+
+      console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Starting AI improvement for all videos with ${freshScenesData.length} scenes...`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
       );
-      console.log('All scenes data:', freshScenesData);
+
+      if (scenesToProcess.length === 0) {
+        console.log('No scenes to process for videos with Processing status');
+        return;
+      }
+
+      console.log(
+        `Starting AI improvement for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
+      );
 
       await handleImproveAllSentencesForAllVideos(
-        freshScenesData,
+        scenesToProcess,
         sceneHandlers.handleSentenceImprovement,
         modelSelection.selectedModel,
         setImprovingAllVideosScenes,
@@ -1287,6 +1327,9 @@ export default function OriginalVideosList({
     try {
       setGeneratingAllTTSForAllVideos(true);
 
+      // Fetch fresh original videos data to check status
+      const freshVideosData = await getOriginalVideosData();
+
       // Fetch fresh scenes data directly from API
       const freshScenesData = await getBaserowData();
 
@@ -1296,13 +1339,50 @@ export default function OriginalVideosList({
         return;
       }
 
+      // Filter videos by Processing status
+      const videosToProcess = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
+
+      // Filter scenes to only process those whose parent video has status === 'Processing'
+      const scenesToProcess = freshScenesData.filter((scene) => {
+        const videoIdField = scene['field_6889'];
+        let videoId: number | null = null;
+
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        return videoId && !isNaN(videoId) && videoIdsToProcess.has(videoId);
+      });
+
+      console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Starting TTS generation for all videos with ${freshScenesData.length} scenes...`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
       );
-      console.log('All scenes data:', freshScenesData);
+
+      if (scenesToProcess.length === 0) {
+        console.log('No scenes to process for videos with Processing status');
+        return;
+      }
+
+      console.log(
+        `Starting TTS generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
+      );
 
       await generateAllTTSForAllVideosUtil(
-        freshScenesData,
+        scenesToProcess,
         sceneHandlers.handleTTSProduce,
         setGeneratingAllTTSForAllVideos,
         setCurrentProcessingVideoId,
@@ -1347,6 +1427,9 @@ export default function OriginalVideosList({
     try {
       setGeneratingAllVideos(true);
 
+      // Fetch fresh original videos data to check status
+      const freshVideosData = await getOriginalVideosData();
+
       // Fetch fresh scenes data directly from API
       const freshScenesData = await getBaserowData();
 
@@ -1356,12 +1439,50 @@ export default function OriginalVideosList({
         return;
       }
 
+      // Filter videos by Processing status
+      const videosToProcess = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
+
+      // Filter scenes to only process those whose parent video has status === 'Processing'
+      const scenesToProcess = freshScenesData.filter((scene) => {
+        const videoIdField = scene['field_6889'];
+        let videoId: number | null = null;
+
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        return videoId && !isNaN(videoId) && videoIdsToProcess.has(videoId);
+      });
+
+      console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Starting video generation for all scenes with ${freshScenesData.length} scenes...`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
+      );
+
+      if (scenesToProcess.length === 0) {
+        console.log('No scenes to process for videos with Processing status');
+        return;
+      }
+
+      console.log(
+        `Starting video generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
       );
 
       await handleGenerateAllVideos(
-        freshScenesData,
+        scenesToProcess,
         sceneHandlers.handleVideoGenerate,
         () => {}, // startBatchOperation (not used in OriginalVideosList)
         () => {}, // completeBatchOperation (not used in OriginalVideosList)
@@ -1401,6 +1522,9 @@ export default function OriginalVideosList({
     try {
       setSpeedingUpAllVideos(true);
 
+      // Fetch fresh original videos data to check status
+      const freshVideosData = await getOriginalVideosData();
+
       // Fetch fresh scenes data directly from API
       const freshScenesData = await getBaserowData();
 
@@ -1410,13 +1534,50 @@ export default function OriginalVideosList({
         return;
       }
 
+      // Filter videos by Processing status
+      const videosToProcess = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
+
+      // Filter scenes to only process those whose parent video has status === 'Processing'
+      const scenesToProcess = freshScenesData.filter((scene) => {
+        const videoIdField = scene['field_6889'];
+        let videoId: number | null = null;
+
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        return videoId && !isNaN(videoId) && videoIdsToProcess.has(videoId);
+      });
+
+      console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Starting speed up for all videos with ${freshScenesData.length} scenes...`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
       );
-      console.log('All scenes data:', freshScenesData);
+
+      if (scenesToProcess.length === 0) {
+        console.log('No scenes to process for videos with Processing status');
+        return;
+      }
+
+      console.log(
+        `Starting speed up for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
+      );
 
       await handleSpeedUpAllVideosForAllScenes(
-        freshScenesData,
+        scenesToProcess,
         videoSettings,
         setSpeedingUpAllVideos,
         setCurrentProcessingVideoId,
