@@ -948,11 +948,12 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have video URLs but no captions URLs
+      // Filter videos that have video URLs but no captions URLs AND status is "Processing"
       const videosToTranscribe = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const captionsUrl = extractUrl(video.field_6861);
-        return videoUrl && !captionsUrl; // Has video but no captions
+        const status = extractFieldValue(video.field_6864);
+        return videoUrl && !captionsUrl && status === 'Processing'; // Has video, no captions, and Processing status
       });
 
       if (videosToTranscribe.length === 0) {
@@ -1133,15 +1134,16 @@ export default function OriginalVideosList({
       const freshData = await getOriginalVideosData();
       console.log('Fresh data fetched:', freshData.length, 'videos');
 
-      // Filter videos that have captions URLs but no scenes
+      // Filter videos that have captions URLs but no scenes AND status is "Processing"
       const videosToProcess = freshData.filter((video) => {
         const captionsUrl = extractUrl(video.field_6861);
         const hasCaptions = !!captionsUrl;
         const scenesExist = hasScenes(video);
+        const status = extractFieldValue(video.field_6864);
         console.log(
-          `Video ${video.id}: captions=${hasCaptions}, scenes=${scenesExist}`
+          `Video ${video.id}: captions=${hasCaptions}, scenes=${scenesExist}, status=${status}`
         );
-        return captionsUrl && !hasScenes(video); // Has captions but no scenes
+        return captionsUrl && !hasScenes(video) && status === 'Processing'; // Has captions, no scenes, and Processing status
       });
 
       if (videosToProcess.length === 0) {
@@ -1459,11 +1461,12 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have video URLs but don't have silenced version yet
+      // Filter videos that have video URLs but don't have silenced version yet AND status is "Processing"
       const videosToOptimize = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const silencedUrl = extractUrl(video.field_6907);
-        return videoUrl && !silencedUrl; // Has video URL but no silenced version
+        const status = extractFieldValue(video.field_6864);
+        return videoUrl && !silencedUrl && status === 'Processing'; // Has video URL, no silenced version, and Processing status
       });
 
       if (videosToOptimize.length === 0) {
@@ -1586,11 +1589,12 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have video URLs but don't have normalized version yet
+      // Filter videos that have video URLs but don't have normalized version yet AND status is "Processing"
       const videosToNormalize = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const normalizedUrl = extractUrl(video.field_6903);
-        return videoUrl && !normalizedUrl; // Has video URL but no normalized version
+        const status = extractFieldValue(video.field_6864);
+        return videoUrl && !normalizedUrl && status === 'Processing'; // Has video URL, no normalized version, and Processing status
       });
 
       if (videosToNormalize.length === 0) {
@@ -1699,11 +1703,12 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have video URLs but don't have CFR version yet
+      // Filter videos that have video URLs but don't have CFR version yet AND status is "Processing"
       const videosToConvert = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const cfrUrl = extractUrl(video.field_6908);
-        return videoUrl && !cfrUrl; // Has video URL but no CFR version
+        const status = extractFieldValue(video.field_6864);
+        return videoUrl && !cfrUrl && status === 'Processing'; // Has video URL, no CFR version, and Processing status
       });
 
       if (videosToConvert.length === 0) {
@@ -2108,10 +2113,11 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have scenes
-      const videosWithScenes = freshVideosData.filter((video) =>
-        hasScenes(video)
-      );
+      // Filter videos that have scenes AND status is "Processing"
+      const videosWithScenes = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return hasScenes(video) && status === 'Processing';
+      });
 
       if (videosWithScenes.length === 0) {
         console.log('No videos found with scenes to generate clips');
