@@ -8,6 +8,7 @@ import TranscriptionModelSelection from '@/components/TranscriptionModelSelectio
 import TTSSettings from '@/components/TTSSettings';
 import VideoSpeedSettings from '@/components/VideoSpeedSettings';
 import AutoGenerateSettings from '@/components/AutoGenerateSettings';
+import SilenceSpeedSettings from '@/components/SilenceSpeedSettings';
 import OriginalVideosList from '@/components/OriginalVideosList';
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
@@ -251,7 +252,7 @@ export default function Home() {
                         Global Settings
                       </h2>
                       <p className='text-sm text-gray-600'>
-                        AI Models, Transcription, TTS, Video Speed &
+                        AI Models, Transcription, TTS, Video Speed, Silence Speed &
                         Auto-Generation
                       </p>
                     </div>
@@ -294,6 +295,7 @@ export default function Home() {
                       <TranscriptionModelSelection />
                       <TTSSettings />
                       <VideoSpeedSettings />
+                      <SilenceSpeedSettings />
                       <AutoGenerateSettings />
                     </div>
                   </div>

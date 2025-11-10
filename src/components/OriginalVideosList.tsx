@@ -164,6 +164,7 @@ export default function OriginalVideosList({
     setConvertingToCFRVideo,
     videoSettings,
     pipelineConfig,
+    silenceSpeedRate,
   } = useAppStore();
 
   useEffect(() => {
@@ -890,7 +891,7 @@ export default function OriginalVideosList({
             // FastForward options
             minCutLength: 0, // FastForward cuts longer than 0 sec
             maxCutLength: 90, // FastForward cuts shorter than 90 sec
-            speedRate: 4, // Speed Rate: 4x
+            speedRate: silenceSpeedRate, // Speed Rate: configurable (1x, 2x, 4x, 8x)
             mute: true, // Mute enabled
 
             // Silence Detection options
@@ -1659,7 +1660,7 @@ export default function OriginalVideosList({
                   // FastForward options
                   minCutLength: 0, // FastForward cuts longer than 0 sec
                   maxCutLength: 90, // FastForward cuts shorter than 90 sec
-                  speedRate: 4, // Speed Rate: 4x
+                  speedRate: silenceSpeedRate, // Speed Rate: configurable (1x, 2x, 4x, 8x)
                   mute: true, // Mute enabled
 
                   // Silence Detection options
@@ -4267,7 +4268,7 @@ export default function OriginalVideosList({
                                 title={
                                   optimizingSilence !== null
                                     ? optimizingSilence === video.id
-                                      ? 'Optimizing silence (4x speed + mute)...'
+                                      ? `Optimizing silence (${silenceSpeedRate}x speed + mute)...`
                                       : 'Another silence optimization in progress'
                                     : sceneLoading.optimizingSilenceVideo !==
                                       null
@@ -4279,7 +4280,7 @@ export default function OriginalVideosList({
                                     ? 'No video URL available'
                                     : !!extractUrl(video.field_6907)
                                     ? 'Video already optimized for silence'
-                                    : 'Speed up & mute silent parts (4x)'
+                                    : `Speed up & mute silent parts (${silenceSpeedRate}x)`
                                 }
                               >
                                 {optimizingSilence === video.id ||

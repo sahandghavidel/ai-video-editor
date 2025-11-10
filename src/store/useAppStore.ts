@@ -149,6 +149,9 @@ interface AppState {
   // Pipeline Configuration
   pipelineConfig: PipelineConfig;
 
+  // Silence Speed Rate
+  silenceSpeedRate: number;
+
   // Computed properties
   getFilteredData: () => BaserowRow[];
 
@@ -230,6 +233,9 @@ interface AppState {
   updatePipelineConfig: (updates: Partial<PipelineConfig>) => void;
   togglePipelineStep: (step: keyof PipelineConfig) => void;
   resetPipelineConfig: () => void;
+
+  // Silence Speed Rate Actions
+  setSilenceSpeedRate: (rate: number) => void;
 
   // Settings Persistence Actions
   saveSettingsToLocalStorage: () => void;
@@ -380,6 +386,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Pipeline Configuration
   pipelineConfig: defaultPipelineConfig,
+
+  // Silence Speed Rate
+  silenceSpeedRate: 4, // Default to 4x speed
 
   // Computed properties
   getFilteredData: () => {
@@ -726,6 +735,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { pipelineConfig: defaultPipelineConfig };
     }),
 
+  // Silence Speed Rate Actions
+  setSilenceSpeedRate: (rate) =>
+    set(() => {
+      // Save to localStorage whenever updated
+      localStorage.setItem('silenceSpeedRate', rate.toString());
+      return { silenceSpeedRate: rate };
+    }),
+
   // Data operations
   updateRow: (id, updates) =>
     set((state) => ({
@@ -806,6 +823,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedPipelineConfig) {
         const config = JSON.parse(savedPipelineConfig);
         set({ pipelineConfig: { ...defaultPipelineConfig, ...config } });
+      }
+
+      // Load silenceSpeedRate from localStorage
+      const savedSilenceSpeedRate = localStorage.getItem('silenceSpeedRate');
+      if (savedSilenceSpeedRate) {
+        const rate = parseInt(savedSilenceSpeedRate, 10);
+        if (!isNaN(rate) && [1, 2, 4, 8].includes(rate)) {
+          set({ silenceSpeedRate: rate });
+        }
       }
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);
