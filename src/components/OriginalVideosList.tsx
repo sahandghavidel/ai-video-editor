@@ -94,6 +94,7 @@ export default function OriginalVideosList({
     value: string;
     saving: boolean;
   } | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
   const [draggedRow, setDraggedRow] = useState<number | null>(null);
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
@@ -618,6 +619,33 @@ export default function OriginalVideosList({
     } else if (e.key === 'Escape') {
       e.preventDefault();
       cancelTitleEdit();
+    }
+  };
+
+  // Update status function
+  const handleStatusChange = async (
+    videoId: number,
+    newStatus: string,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    setUpdatingStatus(videoId);
+
+    try {
+      await updateOriginalVideoRow(videoId, {
+        field_6864: newStatus,
+      });
+
+      // Update local state
+      setOriginalVideos((prevVideos) =>
+        prevVideos.map((video) =>
+          video.id === videoId ? { ...video, field_6864: newStatus } : video
+        )
+      );
+    } catch (error) {
+      console.error('Failed to update status:', error);
+    } finally {
+      setUpdatingStatus(null);
     }
   };
 
@@ -3604,6 +3632,9 @@ export default function OriginalVideosList({
                         Title
                       </th>
                       <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                        Status
+                      </th>
+                      <th className='text-left py-3 px-4 font-semibold text-gray-700'>
                         Video URL
                       </th>
                       <th className='text-left py-3 px-4 font-semibold text-gray-700'>
@@ -3742,6 +3773,51 @@ export default function OriginalVideosList({
                                 <Edit3 className='w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity' />
                               </div>
                             )}
+                          </td>
+
+                          {/* Status (6864) - Dropdown */}
+                          <td className='py-3 px-4'>
+                            <div
+                              className='relative'
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {updatingStatus === video.id ? (
+                                <div className='flex items-center gap-2 px-3 py-1.5'>
+                                  <Loader2 className='w-4 h-4 animate-spin text-blue-500' />
+                                  <span className='text-sm text-gray-600'>
+                                    Updating...
+                                  </span>
+                                </div>
+                              ) : (
+                                <select
+                                  value={
+                                    extractFieldValue(video.field_6864) ||
+                                    'Pending'
+                                  }
+                                  onChange={(e) =>
+                                    handleStatusChange(
+                                      video.id,
+                                      e.target.value,
+                                      e as any
+                                    )
+                                  }
+                                  className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                                    extractFieldValue(video.field_6864) ===
+                                    'Done'
+                                      ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200 focus:ring-green-500'
+                                      : extractFieldValue(video.field_6864) ===
+                                        'Processing'
+                                      ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 focus:ring-blue-500'
+                                      : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200 focus:ring-gray-500'
+                                  }`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value='Pending'>Pending</option>
+                                  <option value='Processing'>Processing</option>
+                                  <option value='Done'>Done</option>
+                                </select>
+                              )}
+                            </div>
                           </td>
 
                           {/* Video Uploaded URL (6881) */}
