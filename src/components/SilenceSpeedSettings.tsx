@@ -42,7 +42,8 @@ export default function SilenceSpeedSettings() {
         ))}
       </div>
       <div className='mt-3 text-xs text-gray-500'>
-        Selected: <span className='font-semibold'>{silenceSpeedRate}x</span> - Silence sections will be played at this speed
+        Selected: <span className='font-semibold'>{silenceSpeedRate}x</span> -
+        Silence sections will be played at this speed
       </div>
     </div>
   );

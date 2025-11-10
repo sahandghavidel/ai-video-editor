@@ -252,8 +252,8 @@ export default function Home() {
                         Global Settings
                       </h2>
                       <p className='text-sm text-gray-600'>
-                        AI Models, Transcription, TTS, Video Speed, Silence Speed &
-                        Auto-Generation
+                        AI Models, Transcription, TTS, Video Speed, Silence
+                        Speed & Auto-Generation
                       </p>
                     </div>
                   </div>
