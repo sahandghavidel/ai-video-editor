@@ -165,6 +165,7 @@ export default function OriginalVideosList({
     videoSettings,
     pipelineConfig,
     silenceSpeedRate,
+    silenceMuted,
   } = useAppStore();
 
   useEffect(() => {
@@ -892,7 +893,7 @@ export default function OriginalVideosList({
             minCutLength: 0, // FastForward cuts longer than 0 sec
             maxCutLength: 90, // FastForward cuts shorter than 90 sec
             speedRate: silenceSpeedRate, // Speed Rate: configurable (1x, 2x, 4x, 8x)
-            mute: true, // Mute enabled
+            mute: silenceMuted, // Mute: configurable (muted or original audio)
 
             // Silence Detection options
             soundLevel: -43, // Filter below -43 dB
@@ -1661,7 +1662,7 @@ export default function OriginalVideosList({
                   minCutLength: 0, // FastForward cuts longer than 0 sec
                   maxCutLength: 90, // FastForward cuts shorter than 90 sec
                   speedRate: silenceSpeedRate, // Speed Rate: configurable (1x, 2x, 4x, 8x)
-                  mute: true, // Mute enabled
+                  mute: silenceMuted, // Mute: configurable (muted or original audio)
 
                   // Silence Detection options
                   soundLevel: -43, // Filter below -43 dB
@@ -3363,8 +3364,12 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         batchOperations.optimizingAllSilence
-                          ? 'Optimizing silence for all videos...'
-                          : 'Detect and optimize silence in all original videos'
+                          ? `Optimizing silence for all videos (${silenceSpeedRate}x speed ${
+                              silenceMuted ? '+ mute' : '+ audio'
+                            })...`
+                          : `Detect and optimize silence in all original videos (${silenceSpeedRate}x speed ${
+                              silenceMuted ? '+ mute' : '+ audio'
+                            })`
                       }
                     >
                       <FastForward
@@ -4268,7 +4273,9 @@ export default function OriginalVideosList({
                                 title={
                                   optimizingSilence !== null
                                     ? optimizingSilence === video.id
-                                      ? `Optimizing silence (${silenceSpeedRate}x speed + mute)...`
+                                      ? `Optimizing silence (${silenceSpeedRate}x speed ${
+                                          silenceMuted ? '+ mute' : '+ audio'
+                                        })...`
                                       : 'Another silence optimization in progress'
                                     : sceneLoading.optimizingSilenceVideo !==
                                       null

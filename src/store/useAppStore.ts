@@ -151,6 +151,7 @@ interface AppState {
 
   // Silence Speed Rate
   silenceSpeedRate: number;
+  silenceMuted: boolean;
 
   // Computed properties
   getFilteredData: () => BaserowRow[];
@@ -236,6 +237,7 @@ interface AppState {
 
   // Silence Speed Rate Actions
   setSilenceSpeedRate: (rate: number) => void;
+  setSilenceMuted: (muted: boolean) => void;
 
   // Settings Persistence Actions
   saveSettingsToLocalStorage: () => void;
@@ -389,6 +391,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Silence Speed Rate
   silenceSpeedRate: 4, // Default to 4x speed
+  silenceMuted: true, // Default to muted
 
   // Computed properties
   getFilteredData: () => {
@@ -743,6 +746,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { silenceSpeedRate: rate };
     }),
 
+  setSilenceMuted: (muted) =>
+    set(() => {
+      // Save to localStorage whenever updated
+      localStorage.setItem('silenceMuted', muted.toString());
+      return { silenceMuted: muted };
+    }),
+
   // Data operations
   updateRow: (id, updates) =>
     set((state) => ({
@@ -832,6 +842,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (!isNaN(rate) && [1, 2, 4, 8].includes(rate)) {
           set({ silenceSpeedRate: rate });
         }
+      }
+
+      // Load silenceMuted from localStorage
+      const savedSilenceMuted = localStorage.getItem('silenceMuted');
+      if (savedSilenceMuted !== null) {
+        set({ silenceMuted: savedSilenceMuted === 'true' });
       }
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);

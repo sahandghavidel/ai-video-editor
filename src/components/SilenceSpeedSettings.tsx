@@ -1,10 +1,15 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { FastForward } from 'lucide-react';
+import { FastForward, Volume2, VolumeX } from 'lucide-react';
 
 export default function SilenceSpeedSettings() {
-  const { silenceSpeedRate, setSilenceSpeedRate } = useAppStore();
+  const {
+    silenceSpeedRate,
+    setSilenceSpeedRate,
+    silenceMuted,
+    setSilenceMuted,
+  } = useAppStore();
 
   const speedOptions = [
     { value: 1, label: '1x', description: 'Normal speed' },
@@ -41,9 +46,47 @@ export default function SilenceSpeedSettings() {
           </button>
         ))}
       </div>
+
+      {/* Mute Toggle */}
+      <div className='mt-4 pt-4 border-t border-gray-200'>
+        <p className='text-sm text-gray-600 mb-3'>
+          Audio during sped-up silence sections
+        </p>
+        <div className='grid grid-cols-2 gap-2'>
+          <button
+            onClick={() => setSilenceMuted(true)}
+            className={`px-4 py-3 rounded-lg border-2 transition-all flex items-center justify-center gap-2 ${
+              silenceMuted
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-semibold'
+                : 'border-gray-200 hover:border-gray-300 text-gray-700'
+            }`}
+            title='Mute audio during sped-up silence'
+          >
+            <VolumeX className='w-4 h-4' />
+            <span>Muted</span>
+          </button>
+          <button
+            onClick={() => setSilenceMuted(false)}
+            className={`px-4 py-3 rounded-lg border-2 transition-all flex items-center justify-center gap-2 ${
+              !silenceMuted
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-semibold'
+                : 'border-gray-200 hover:border-gray-300 text-gray-700'
+            }`}
+            title='Keep original audio during sped-up silence'
+          >
+            <Volume2 className='w-4 h-4' />
+            <span>Original Audio</span>
+          </button>
+        </div>
+      </div>
+
       <div className='mt-3 text-xs text-gray-500'>
-        Selected: <span className='font-semibold'>{silenceSpeedRate}x</span> -
-        Silence sections will be played at this speed
+        Selected:{' '}
+        <span className='font-semibold'>{silenceSpeedRate}x speed</span> +
+        <span className='font-semibold'>
+          {' '}
+          {silenceMuted ? 'muted' : 'original audio'}
+        </span>
       </div>
     </div>
   );
