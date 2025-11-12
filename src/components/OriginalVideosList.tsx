@@ -1976,22 +1976,30 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have Final Merged Video URLs and Order values
+      // Filter videos that have Final Merged Video URLs, Order values, and "Processing" status
       const videosWithFinalVideos = freshVideosData.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
         const order = video.field_6902; // Order field
+        const status = extractFieldValue(video.field_6864); // Status field
         console.log(
-          `Video ${video.id}: field_6858=${video.field_6858}, extracted URL=${finalVideoUrl}, order=${order}`
+          `Video ${video.id}: field_6858=${video.field_6858}, extracted URL=${finalVideoUrl}, order=${order}, status=${status}`
         );
-        return finalVideoUrl && order !== null && order !== undefined;
+        return (
+          finalVideoUrl &&
+          order !== null &&
+          order !== undefined &&
+          status === 'Processing'
+        );
       });
 
       console.log(
-        `Found ${videosWithFinalVideos.length} videos with final merged videos`
+        `Found ${videosWithFinalVideos.length} videos with final merged videos and "Processing" status`
       );
 
       if (videosWithFinalVideos.length === 0) {
-        console.log('No videos found with final merged videos to merge');
+        console.log(
+          'No videos found with final merged videos and "Processing" status to merge'
+        );
         return;
       }
 
@@ -2127,17 +2135,24 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have Final Merged Video URLs, Titles, and Order values
+      // Filter videos that have Final Merged Video URLs, Titles, Order values, and "Processing" status
       const videosWithTimestamps = freshVideosData.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
         const title = video.field_6852; // Title field
         const order = video.field_6902; // Order field
-        return finalVideoUrl && title && order !== null && order !== undefined;
+        const status = extractFieldValue(video.field_6864); // Status field
+        return (
+          finalVideoUrl &&
+          title &&
+          order !== null &&
+          order !== undefined &&
+          status === 'Processing'
+        );
       });
 
       if (videosWithTimestamps.length === 0) {
         console.log(
-          'No videos found with final merged videos, titles, and order values'
+          'No videos found with final merged videos, titles, order values, and "Processing" status'
         );
         return;
       }
