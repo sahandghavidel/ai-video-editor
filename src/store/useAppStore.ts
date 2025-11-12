@@ -110,6 +110,23 @@ export interface PipelineConfig {
   sync: boolean;
 }
 
+// Audio enhancement mode type
+export type AudioEnhancementMode =
+  | 'normalize'
+  | 'enhance'
+  | 'enhance-denoise-only';
+
+// Audio enhancement solver type
+export type AudioEnhancementSolver = 'midpoint' | 'rk4' | 'euler';
+
+// Advanced audio enhancement settings
+export interface AdvancedAudioSettings {
+  solver: AudioEnhancementSolver;
+  nfe: number; // Number of function evaluations (32-128)
+  tau: number; // CFM prior temperature (0.0-1.0)
+  lambd: number; // Denoise strength (0.0-1.0)
+}
+
 interface AppState {
   // Core data state
   data: BaserowRow[];
@@ -152,6 +169,12 @@ interface AppState {
   // Silence Speed Rate
   silenceSpeedRate: number;
   silenceMuted: boolean;
+
+  // Audio Enhancement Mode
+  audioEnhancementMode: AudioEnhancementMode;
+
+  // Advanced Audio Enhancement Settings
+  advancedAudioSettings: AdvancedAudioSettings;
 
   // Computed properties
   getFilteredData: () => BaserowRow[];
@@ -238,6 +261,12 @@ interface AppState {
   // Silence Speed Rate Actions
   setSilenceSpeedRate: (rate: number) => void;
   setSilenceMuted: (muted: boolean) => void;
+
+  // Audio Enhancement Actions
+  setAudioEnhancementMode: (mode: AudioEnhancementMode) => void;
+  updateAdvancedAudioSettings: (
+    updates: Partial<AdvancedAudioSettings>
+  ) => void;
 
   // Settings Persistence Actions
   saveSettingsToLocalStorage: () => void;
@@ -392,6 +421,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Silence Speed Rate
   silenceSpeedRate: 4, // Default to 4x speed
   silenceMuted: true, // Default to muted
+
+  // Audio Enhancement Mode
+  audioEnhancementMode: 'enhance' as AudioEnhancementMode, // Default to Resemble Enhance
+
+  // Advanced Audio Enhancement Settings
+  advancedAudioSettings: {
+    solver: 'midpoint' as AudioEnhancementSolver,
+    nfe: 64,
+    tau: 0.5,
+    lambd: 1.0,
+  },
 
   // Computed properties
   getFilteredData: () => {
@@ -753,6 +793,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { silenceMuted: muted };
     }),
 
+  setAudioEnhancementMode: (mode) =>
+    set(() => {
+      // Save to localStorage whenever updated
+      localStorage.setItem('audioEnhancementMode', mode);
+      return { audioEnhancementMode: mode };
+    }),
+
+  updateAdvancedAudioSettings: (updates) =>
+    set((state) => {
+      const newSettings = { ...state.advancedAudioSettings, ...updates };
+      // Save to localStorage whenever updated
+      localStorage.setItem(
+        'advancedAudioSettings',
+        JSON.stringify(newSettings)
+      );
+      return { advancedAudioSettings: newSettings };
+    }),
+
   // Data operations
   updateRow: (id, updates) =>
     set((state) => ({
@@ -848,6 +906,43 @@ export const useAppStore = create<AppState>((set, get) => ({
       const savedSilenceMuted = localStorage.getItem('silenceMuted');
       if (savedSilenceMuted !== null) {
         set({ silenceMuted: savedSilenceMuted === 'true' });
+      }
+
+      // Load audioEnhancementMode from localStorage
+      const savedAudioMode = localStorage.getItem('audioEnhancementMode');
+      if (
+        savedAudioMode &&
+        ['normalize', 'enhance', 'enhance-denoise-only'].includes(
+          savedAudioMode
+        )
+      ) {
+        set({ audioEnhancementMode: savedAudioMode as AudioEnhancementMode });
+      }
+
+      // Load advancedAudioSettings from localStorage
+      const savedAdvancedAudio = localStorage.getItem('advancedAudioSettings');
+      if (savedAdvancedAudio) {
+        try {
+          const settings = JSON.parse(savedAdvancedAudio);
+          // Validate settings
+          if (
+            settings.solver &&
+            ['midpoint', 'rk4', 'euler'].includes(settings.solver) &&
+            typeof settings.nfe === 'number' &&
+            settings.nfe >= 32 &&
+            settings.nfe <= 128 &&
+            typeof settings.tau === 'number' &&
+            settings.tau >= 0 &&
+            settings.tau <= 1 &&
+            typeof settings.lambd === 'number' &&
+            settings.lambd >= 0 &&
+            settings.lambd <= 1
+          ) {
+            set({ advancedAudioSettings: settings });
+          }
+        } catch (e) {
+          console.error('Failed to parse advancedAudioSettings:', e);
+        }
       }
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);

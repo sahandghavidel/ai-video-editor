@@ -166,6 +166,8 @@ export default function OriginalVideosList({
     pipelineConfig,
     silenceSpeedRate,
     silenceMuted,
+    audioEnhancementMode,
+    advancedAudioSettings,
   } = useAppStore();
 
   useEffect(() => {
@@ -772,8 +774,16 @@ export default function OriginalVideosList({
     try {
       setNormalizing(videoId);
 
-      // Call the normalize audio API
-      const normalizeResponse = await fetch('/api/normalize-audio', {
+      // Choose API endpoint based on audio enhancement mode
+      const apiEndpoint =
+        audioEnhancementMode === 'normalize'
+          ? '/api/normalize-audio'
+          : '/api/enhance-audio';
+
+      const denoiseOnly = audioEnhancementMode === 'enhance-denoise-only';
+
+      // Call the appropriate audio processing API
+      const normalizeResponse = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -781,22 +791,32 @@ export default function OriginalVideosList({
         body: JSON.stringify({
           sceneId: videoId, // Use videoId as sceneId for original video normalization
           videoUrl: videoUrl,
+          ...(audioEnhancementMode !== 'normalize' && {
+            denoiseOnly,
+            // Pass advanced audio settings for AI enhancement
+            solver: advancedAudioSettings.solver,
+            nfe: advancedAudioSettings.nfe,
+            tau: advancedAudioSettings.tau,
+            lambd: advancedAudioSettings.lambd,
+          }),
         }),
       });
 
       if (!normalizeResponse.ok) {
         const errorData = await normalizeResponse.json();
-        throw new Error(errorData.error || 'Failed to normalize audio');
+        throw new Error(errorData.error || 'Failed to process audio');
       }
 
       const normalizeData = await normalizeResponse.json();
-      console.log('Audio normalized successfully:', normalizeData);
+      console.log('Audio processed successfully:', normalizeData);
 
-      // Update the original video record with the normalized video URL
-      if (normalizeData.data?.normalizedUrl) {
+      // Update the original video record with the processed video URL
+      const processedUrl =
+        normalizeData.data?.normalizedUrl || normalizeData.data?.enhancedUrl;
+      if (processedUrl) {
         await updateOriginalVideoRow(videoId, {
-          field_6903: normalizeData.data.normalizedUrl, // Normalized Video URL field
-          field_6881: normalizeData.data.normalizedUrl, // Normalized Video URL field
+          field_6903: processedUrl, // Normalized/Enhanced Video URL field
+          field_6881: processedUrl, // Normalized/Enhanced Video URL field
         });
       }
 
@@ -812,7 +832,7 @@ export default function OriginalVideosList({
       playErrorSound();
 
       setError(
-        `Failed to normalize video: ${
+        `Failed to process audio: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`
       );
