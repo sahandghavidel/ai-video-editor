@@ -359,6 +359,66 @@ export async function deleteOriginalVideoRow(rowId: number): Promise<void> {
   }
 }
 
+/**
+ * Helper function to delete a file from MinIO
+ */
+async function deleteFileFromMinio(fileUrl: string): Promise<boolean> {
+  if (!fileUrl || typeof fileUrl !== 'string') {
+    return false;
+  }
+
+  try {
+    const response = await fetch(fileUrl, { method: 'DELETE' });
+    if (response.ok) {
+      console.log(`[MINIO] Deleted: ${fileUrl}`);
+      return true;
+    } else {
+      console.warn(`[MINIO] Delete failed (${response.status}): ${fileUrl}`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`[MINIO] Error deleting ${fileUrl}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Extract URL from field value (handles both strings and array formats)
+ * Only returns valid HTTP/HTTPS URLs
+ */
+function extractUrlFromField(fieldValue: unknown): string | null {
+  if (!fieldValue) return null;
+
+  if (typeof fieldValue === 'string') {
+    const trimmed = fieldValue.trim();
+    // Only return if it's a valid URL starting with http:// or https://
+    if (
+      trimmed &&
+      (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+    ) {
+      return trimmed;
+    }
+    return null;
+  }
+
+  if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+    const firstItem = fieldValue[0];
+    if (
+      typeof firstItem === 'object' &&
+      firstItem !== null &&
+      'url' in firstItem
+    ) {
+      const url = (firstItem as { url: string }).url;
+      // Validate URL
+      if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+        return url;
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function deleteRelatedScenes(
   originalVideoId: number
 ): Promise<void> {
@@ -431,8 +491,43 @@ export async function deleteRelatedScenes(
     for (const scene of allRelatedScenes) {
       try {
         console.log(
-          `Attempting to delete scene ${scene.id} from table ${scenesTableId}`
+          `Attempting to delete scene ${scene.id} and its MinIO files`
         );
+
+        // Delete all MinIO files associated with this scene
+        const minioUrls: string[] = [];
+
+        // Field 6888: Original video clip URL
+        const videoUrl = extractUrlFromField(scene.field_6888);
+        if (videoUrl) minioUrls.push(videoUrl);
+
+        // Field 6891: TTS audio URL
+        const ttsUrl = extractUrlFromField(scene.field_6891);
+        if (ttsUrl) minioUrls.push(ttsUrl);
+
+        // Field 6886: Synced/processed video URL
+        const syncedUrl = extractUrlFromField(scene.field_6886);
+        if (syncedUrl) minioUrls.push(syncedUrl);
+
+        // Field 6897: Generated clip URL
+        const clipUrl = extractUrlFromField(scene.field_6897);
+        if (clipUrl) minioUrls.push(clipUrl);
+
+        if (minioUrls.length > 0) {
+          console.log(
+            `[SCENE ${scene.id}] Deleting ${minioUrls.length} MinIO files`
+          );
+
+          // Delete all MinIO files (don't wait for all, do sequentially)
+          for (const url of minioUrls) {
+            await deleteFileFromMinio(url);
+            // Small delay between deletes
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+        }
+
+        // Now delete the scene from Baserow
+        console.log(`Deleting scene ${scene.id} from table ${scenesTableId}`);
         const response = await makeAuthenticatedRequest(
           `${baserowUrl}/database/rows/table/${scenesTableId}/${scene.id}/`,
           {
@@ -502,15 +597,114 @@ export async function deleteRelatedScenes(
 export async function deleteOriginalVideoWithScenes(
   originalVideoId: number
 ): Promise<void> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const originalVideosTableId = '713';
+
   try {
-    // First delete all related scenes
+    // First, fetch the original video data to get its MinIO URLs
+    console.log(`[VIDEO ${originalVideoId}] Fetching data for MinIO cleanup`);
+
+    let originalVideo: BaserowRow | null = null;
+
+    if (baserowUrl) {
+      try {
+        const response = await makeAuthenticatedRequest(
+          `${baserowUrl}/database/rows/table/${originalVideosTableId}/${originalVideoId}/`,
+          {
+            method: 'GET',
+            cache: 'no-store',
+          }
+        );
+
+        if (response.ok) {
+          originalVideo = await response.json();
+          console.log(
+            `[VIDEO ${originalVideoId}] Successfully fetched video data`
+          );
+        } else {
+          console.warn(
+            `[VIDEO ${originalVideoId}] Failed to fetch video data: ${response.status}`
+          );
+        }
+      } catch (fetchError) {
+        console.warn(
+          `[VIDEO ${originalVideoId}] Error fetching video data:`,
+          fetchError
+        );
+      }
+    }
+
+    // Delete MinIO files from the original video
+    if (originalVideo) {
+      const minioUrls: string[] = [];
+
+      // Field 6858: Final Merged Video URL
+      const mergedVideoUrl = extractUrlFromField(originalVideo.field_6858);
+      if (mergedVideoUrl) {
+        minioUrls.push(mergedVideoUrl);
+        console.log(
+          `[VIDEO ${originalVideoId}] Found Final Merged Video (6858)`
+        );
+      }
+
+      // Field 6881: Video Uploaded URL
+      const uploadedVideoUrl = extractUrlFromField(originalVideo.field_6881);
+      if (uploadedVideoUrl) {
+        minioUrls.push(uploadedVideoUrl);
+        console.log(
+          `[VIDEO ${originalVideoId}] Found Video Uploaded URL (6881)`
+        );
+      }
+
+      // Field 6903: Normalized Video
+      const normalizedVideoUrl = extractUrlFromField(originalVideo.field_6903);
+      if (normalizedVideoUrl) {
+        minioUrls.push(normalizedVideoUrl);
+        console.log(`[VIDEO ${originalVideoId}] Found Normalized Video (6903)`);
+      }
+
+      // Field 6907: Silenced Video
+      const silencedVideoUrl = extractUrlFromField(originalVideo.field_6907);
+      if (silencedVideoUrl) {
+        minioUrls.push(silencedVideoUrl);
+        console.log(`[VIDEO ${originalVideoId}] Found Silenced Video (6907)`);
+      }
+
+      // Field 6908: CFR Video
+      const cfrVideoUrl = extractUrlFromField(originalVideo.field_6908);
+      if (cfrVideoUrl) {
+        minioUrls.push(cfrVideoUrl);
+        console.log(`[VIDEO ${originalVideoId}] Found CFR Video (6908)`);
+      }
+
+      if (minioUrls.length > 0) {
+        console.log(
+          `[VIDEO ${originalVideoId}] Deleting ${minioUrls.length} MinIO file(s)`
+        );
+
+        for (const url of minioUrls) {
+          await deleteFileFromMinio(url);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      } else {
+        console.log(
+          `[VIDEO ${originalVideoId}] No MinIO files to delete from video`
+        );
+      }
+    } else {
+      console.warn(
+        `[VIDEO ${originalVideoId}] Could not fetch video data, skipping MinIO cleanup for video files`
+      );
+    }
+
+    // Delete all related scenes (this will also delete their MinIO files)
     await deleteRelatedScenes(originalVideoId);
 
-    // Then delete the original video
+    // Finally, delete the original video row from Baserow
     await deleteOriginalVideoRow(originalVideoId);
 
     console.log(
-      `Successfully deleted original video ${originalVideoId} and all related scenes`
+      `Successfully deleted original video ${originalVideoId} and all related scenes from Baserow and MinIO`
     );
   } catch (error) {
     console.error('Error deleting original video with scenes:', error);

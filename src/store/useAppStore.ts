@@ -423,7 +423,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   silenceMuted: true, // Default to muted
 
   // Audio Enhancement Mode
-  audioEnhancementMode: 'enhance' as AudioEnhancementMode, // Default to Resemble Enhance
+  audioEnhancementMode: 'normalize' as AudioEnhancementMode, // Default to Resemble Enhance
 
   // Advanced Audio Enhancement Settings
   advancedAudioSettings: {
