@@ -77,7 +77,8 @@ export const handleGenerateAllVideos = async (
   handleVideoGenerate: (
     sceneId: number,
     videoUrl: string,
-    audioUrl: string
+    audioUrl: string,
+    sceneData?: BaserowRow
   ) => Promise<void>,
   startBatchOperation: (operation: 'generatingAllVideos') => void,
   completeBatchOperation: (operation: 'generatingAllVideos') => void,
@@ -113,7 +114,8 @@ export const handleGenerateAllVideos = async (
         await handleVideoGenerate(
           scene.id,
           scene['field_6888'] as string,
-          scene['field_6891'] as string
+          scene['field_6891'] as string,
+          scene
         );
         await wait(2000); // 2 seconds delay between generations
       } catch (error) {
