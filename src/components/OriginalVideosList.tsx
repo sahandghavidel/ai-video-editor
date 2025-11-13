@@ -724,7 +724,8 @@ export default function OriginalVideosList({
 
       // Step 3: Upload the captions file to Baserow
       const captionsData = JSON.stringify(wordTimestamps);
-      const filename = `captions_${videoId}.json`;
+      const timestamp = Date.now();
+      const filename = `video_${videoId}_captions_${timestamp}.json`;
 
       const formData = new FormData();
       const blob = new Blob([captionsData], { type: 'application/json' });
@@ -1177,7 +1178,8 @@ export default function OriginalVideosList({
 
     // Step 3: Upload the captions file to MinIO
     const captionsData = JSON.stringify(wordTimestamps);
-    const filename = `captions_${videoId}.json`;
+    const timestamp = Date.now();
+    const filename = `video_${videoId}_captions_${timestamp}.json`;
 
     const formData = new FormData();
     const blob = new Blob([captionsData], { type: 'application/json' });
