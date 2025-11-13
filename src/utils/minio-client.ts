@@ -36,3 +36,62 @@ export async function deleteFromMinio(fileUrl: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Delete all files from MinIO that match a specific prefix
+ * Safely deletes files matching video_XXX_* pattern
+ * @param prefix - The prefix to match (e.g., "video_820_")
+ * @returns Promise<{success: boolean, deletedCount: number, message: string}>
+ */
+export async function deleteByPrefixFromMinio(prefix: string): Promise<{
+  success: boolean;
+  deletedCount: number;
+  failedCount: number;
+  message: string;
+}> {
+  try {
+    console.log(
+      `[MINIO CLIENT] Requesting bulk deletion for prefix: ${prefix}`
+    );
+
+    const response = await fetch('/api/delete-by-prefix', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ prefix }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      console.log(
+        `[MINIO CLIENT] Successfully deleted ${result.deletedCount} files with prefix: ${prefix}`
+      );
+      return {
+        success: true,
+        deletedCount: result.deletedCount || 0,
+        failedCount: result.failedCount || 0,
+        message: result.message || 'Files deleted successfully',
+      };
+    } else {
+      console.warn(
+        `[MINIO CLIENT] Bulk delete failed: ${result.error || 'Unknown error'}`
+      );
+      return {
+        success: false,
+        deletedCount: 0,
+        failedCount: 0,
+        message: result.error || 'Unknown error',
+      };
+    }
+  } catch (error) {
+    console.error('[MINIO CLIENT] Error in bulk delete:', error);
+    return {
+      success: false,
+      deletedCount: 0,
+      failedCount: 0,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}

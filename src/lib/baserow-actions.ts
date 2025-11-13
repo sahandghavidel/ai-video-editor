@@ -601,8 +601,79 @@ export async function deleteOriginalVideoWithScenes(
   const originalVideosTableId = '713';
 
   try {
-    // First, fetch the original video data to get its MinIO URLs
-    console.log(`[VIDEO ${originalVideoId}] Fetching data for MinIO cleanup`);
+    // STEP 1: Collect all scene MinIO URLs BEFORE deleting scenes
+    // This ensures we capture all files that need deletion
+    console.log(
+      `[VIDEO ${originalVideoId}] Collecting all MinIO files from scenes`
+    );
+
+    const sceneMinioUrls: string[] = [];
+    const scenesTableId = '714';
+
+    // Fetch all scenes for this video to collect their MinIO URLs
+    let allRelatedScenes: BaserowRow[] = [];
+    let page = 1;
+    let hasMore = true;
+    const pageSize = 200;
+
+    while (hasMore) {
+      const url = `${baserowUrl}/database/rows/table/${scenesTableId}/?filter__field_6889__equal=${originalVideoId}&size=${pageSize}&page=${page}`;
+
+      try {
+        const response = await makeAuthenticatedRequest(url, {
+          method: 'GET',
+          cache: 'no-store',
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const results = data.results || [];
+          allRelatedScenes = allRelatedScenes.concat(results);
+          hasMore = data.next !== null;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      } catch (error) {
+        console.warn(
+          `[VIDEO ${originalVideoId}] Error fetching scenes page ${page}:`,
+          error
+        );
+        hasMore = false;
+      }
+    }
+
+    console.log(
+      `[VIDEO ${originalVideoId}] Found ${allRelatedScenes.length} scenes to process`
+    );
+
+    // Collect all MinIO URLs from scenes
+    for (const scene of allRelatedScenes) {
+      // Field 6888: Original video clip URL
+      const videoUrl = extractUrlFromField(scene.field_6888);
+      if (videoUrl) sceneMinioUrls.push(videoUrl);
+
+      // Field 6891: TTS audio URL
+      const ttsUrl = extractUrlFromField(scene.field_6891);
+      if (ttsUrl) sceneMinioUrls.push(ttsUrl);
+
+      // Field 6886: Synced/processed video URL
+      const syncedUrl = extractUrlFromField(scene.field_6886);
+      if (syncedUrl) sceneMinioUrls.push(syncedUrl);
+
+      // Field 6897: Generated clip URL
+      const clipUrl = extractUrlFromField(scene.field_6897);
+      if (clipUrl) sceneMinioUrls.push(clipUrl);
+    }
+
+    console.log(
+      `[VIDEO ${originalVideoId}] Collected ${sceneMinioUrls.length} MinIO URLs from scenes`
+    );
+
+    // STEP 2: Fetch the original video data to collect main video MinIO URLs
+    console.log(
+      `[VIDEO ${originalVideoId}] Fetching video data for MinIO cleanup`
+    );
 
     let originalVideo: BaserowRow | null = null;
 
@@ -634,23 +705,30 @@ export async function deleteOriginalVideoWithScenes(
       }
     }
 
-    // Delete MinIO files from the original video
-    if (originalVideo) {
-      const minioUrls: string[] = [];
+    // STEP 3: Collect MinIO URLs from the original video record
+    const videoMinioUrls: string[] = [];
 
+    if (originalVideo) {
       // Field 6858: Final Merged Video URL
       const mergedVideoUrl = extractUrlFromField(originalVideo.field_6858);
       if (mergedVideoUrl) {
-        minioUrls.push(mergedVideoUrl);
+        videoMinioUrls.push(mergedVideoUrl);
         console.log(
           `[VIDEO ${originalVideoId}] Found Final Merged Video (6858)`
         );
       }
 
+      // Field 6861: Captions URL
+      const captionsUrl = extractUrlFromField(originalVideo.field_6861);
+      if (captionsUrl) {
+        videoMinioUrls.push(captionsUrl);
+        console.log(`[VIDEO ${originalVideoId}] Found Captions (6861)`);
+      }
+
       // Field 6881: Video Uploaded URL
       const uploadedVideoUrl = extractUrlFromField(originalVideo.field_6881);
       if (uploadedVideoUrl) {
-        minioUrls.push(uploadedVideoUrl);
+        videoMinioUrls.push(uploadedVideoUrl);
         console.log(
           `[VIDEO ${originalVideoId}] Found Video Uploaded URL (6881)`
         );
@@ -659,52 +737,69 @@ export async function deleteOriginalVideoWithScenes(
       // Field 6903: Normalized Video
       const normalizedVideoUrl = extractUrlFromField(originalVideo.field_6903);
       if (normalizedVideoUrl) {
-        minioUrls.push(normalizedVideoUrl);
+        videoMinioUrls.push(normalizedVideoUrl);
         console.log(`[VIDEO ${originalVideoId}] Found Normalized Video (6903)`);
       }
 
       // Field 6907: Silenced Video
       const silencedVideoUrl = extractUrlFromField(originalVideo.field_6907);
       if (silencedVideoUrl) {
-        minioUrls.push(silencedVideoUrl);
+        videoMinioUrls.push(silencedVideoUrl);
         console.log(`[VIDEO ${originalVideoId}] Found Silenced Video (6907)`);
       }
 
       // Field 6908: CFR Video
       const cfrVideoUrl = extractUrlFromField(originalVideo.field_6908);
       if (cfrVideoUrl) {
-        minioUrls.push(cfrVideoUrl);
+        videoMinioUrls.push(cfrVideoUrl);
         console.log(`[VIDEO ${originalVideoId}] Found CFR Video (6908)`);
       }
+    }
 
-      if (minioUrls.length > 0) {
-        console.log(
-          `[VIDEO ${originalVideoId}] Deleting ${minioUrls.length} MinIO file(s)`
-        );
+    // STEP 4: Delete ALL collected MinIO files (from scenes + from video)
+    const allMinioUrls = [...sceneMinioUrls, ...videoMinioUrls];
+    const uniqueMinioUrls = [...new Set(allMinioUrls)]; // Remove duplicates
 
-        for (const url of minioUrls) {
-          await deleteFileFromMinio(url);
+    console.log(
+      `[VIDEO ${originalVideoId}] Total MinIO files to delete: ${uniqueMinioUrls.length}`
+    );
+
+    if (uniqueMinioUrls.length > 0) {
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const url of uniqueMinioUrls) {
+        try {
+          const deleted = await deleteFileFromMinio(url);
+          if (deleted) {
+            successCount++;
+          } else {
+            failCount++;
+          }
           await new Promise((resolve) => setTimeout(resolve, 50));
+        } catch (error) {
+          failCount++;
+          console.warn(
+            `[VIDEO ${originalVideoId}] Failed to delete ${url}:`,
+            error
+          );
         }
-      } else {
-        console.log(
-          `[VIDEO ${originalVideoId}] No MinIO files to delete from video`
-        );
       }
-    } else {
-      console.warn(
-        `[VIDEO ${originalVideoId}] Could not fetch video data, skipping MinIO cleanup for video files`
+
+      console.log(
+        `[VIDEO ${originalVideoId}] MinIO deletion complete: ${successCount} succeeded, ${failCount} failed`
       );
     }
 
-    // Delete all related scenes (this will also delete their MinIO files)
+    // STEP 5: Delete all related scenes from Baserow
+    // (MinIO files already deleted above, so pass skipMinioDelete flag if available)
     await deleteRelatedScenes(originalVideoId);
 
-    // Finally, delete the original video row from Baserow
+    // STEP 6: Finally, delete the original video row from Baserow
     await deleteOriginalVideoRow(originalVideoId);
 
     console.log(
-      `Successfully deleted original video ${originalVideoId} and all related scenes from Baserow and MinIO`
+      `Successfully deleted original video ${originalVideoId} and all related data from Baserow and MinIO (${uniqueMinioUrls.length} files)`
     );
   } catch (error) {
     console.error('Error deleting original video with scenes:', error);
