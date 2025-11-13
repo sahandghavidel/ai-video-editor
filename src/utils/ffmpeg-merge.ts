@@ -169,11 +169,20 @@ export async function concatenateVideosWithUpload(
 
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
-    const filename = videoId
-      ? `video_${videoId}_merged_${timestamp}.mp4`
-      : sceneIds && sceneIds.length > 0
-      ? `merged_scenes_${sceneIds.join('_')}_${timestamp}.mp4`
-      : `merged_video_${timestamp}.mp4`;
+    let filename: string;
+
+    if (videoId) {
+      // Special case for final merged videos
+      if (videoId === 'final_merged') {
+        filename = `final_merged_video_${timestamp}.mp4`;
+      } else {
+        filename = `video_${videoId}_merged_${timestamp}.mp4`;
+      }
+    } else if (sceneIds && sceneIds.length > 0) {
+      filename = `merged_scenes_${sceneIds.join('_')}_${timestamp}.mp4`;
+    } else {
+      filename = `merged_video_${timestamp}.mp4`;
+    }
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');

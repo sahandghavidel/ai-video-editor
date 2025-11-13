@@ -2309,6 +2309,7 @@ export default function OriginalVideosList({
         },
         body: JSON.stringify({
           video_urls: videoUrls,
+          id: 'final_merged', // Will generate filename: final_merged_video_timestamp.mp4
           fast_mode: true, // Use fast merging without re-encoding
           old_merged_url: oldMergedVideoUrl, // Pass old URL to delete it
         }),
