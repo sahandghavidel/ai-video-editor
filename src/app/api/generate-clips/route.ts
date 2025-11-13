@@ -365,8 +365,23 @@ async function createVideoClipDirect(
   const endTime = parseFloat(scene.field_6897);
   const duration = endTime - startTime;
 
+  // Extract video ID from scene data
+  let videoId: number | null = null;
+  const videoIdField = scene.field_6889;
+  if (typeof videoIdField === 'number') {
+    videoId = videoIdField;
+  } else if (typeof videoIdField === 'string') {
+    videoId = parseInt(videoIdField, 10);
+  } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+    const firstId =
+      typeof videoIdField[0] === 'object'
+        ? videoIdField[0].id || videoIdField[0].value
+        : videoIdField[0];
+    videoId = parseInt(String(firstId), 10);
+  }
+
   console.log(
-    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s`
+    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s, videoId=${videoId}`
   );
   const ffmpegStartTime = Date.now();
 
@@ -379,6 +394,7 @@ async function createVideoClipDirect(
       useHardwareAcceleration: true,
       videoBitrate: '6000k', // High quality for good results
       sceneId: scene.id.toString(),
+      videoId: videoId || undefined,
       cleanup: true, // Clean up local files after upload
     });
 
