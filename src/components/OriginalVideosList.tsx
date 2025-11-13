@@ -1820,11 +1820,49 @@ export default function OriginalVideosList({
             // Update the original video record with the optimized video URL
             if (result.data?.optimizedUrl) {
               console.log(`Updating video ${video.id} with optimized URL...`);
+
+              // Store the old video URL before updating
+              const oldVideoUrl = videoUrl;
+
+              console.log(`[SILENCE BATCH] Old URL: ${oldVideoUrl}`);
+              console.log(
+                `[SILENCE BATCH] New URL: ${result.data.optimizedUrl}`
+              );
+
               await updateOriginalVideoRow(video.id, {
                 field_6907: result.data.optimizedUrl, // Silenced Video URL field
                 field_6881: result.data.optimizedUrl, // Replace the main video URL field
               });
               console.log(`Video ${video.id} updated successfully`);
+
+              // Delete the old video from MinIO to save space
+              if (oldVideoUrl && oldVideoUrl !== result.data.optimizedUrl) {
+                console.log(
+                  `[SILENCE BATCH] Deleting original video from MinIO: ${oldVideoUrl}`
+                );
+                try {
+                  const deleted = await deleteFromMinio(oldVideoUrl);
+                  if (deleted) {
+                    console.log(
+                      `[SILENCE BATCH] Successfully deleted original video from MinIO`
+                    );
+                  } else {
+                    console.warn(
+                      `[SILENCE BATCH] Failed to delete original video from MinIO, but continuing`
+                    );
+                  }
+                } catch (deleteError) {
+                  console.error(
+                    `[SILENCE BATCH] Error deleting original video from MinIO:`,
+                    deleteError
+                  );
+                  // Don't throw - silence optimization was successful
+                }
+              } else {
+                console.log(
+                  `[SILENCE BATCH] Skipping deletion - URLs are the same or old URL is missing`
+                );
+              }
 
               // Refresh after each video to show updates immediately
               await handleRefresh();
@@ -2101,11 +2139,47 @@ export default function OriginalVideosList({
             // Update the original video record with the CFR video URL
             if (result.data?.cfrUrl) {
               console.log(`Updating video ${video.id} with CFR URL...`);
+
+              // Store the old video URL before updating
+              const oldVideoUrl = videoUrl;
+
+              console.log(`[CFR BATCH] Old URL: ${oldVideoUrl}`);
+              console.log(`[CFR BATCH] New URL: ${result.data.cfrUrl}`);
+
               await updateOriginalVideoRow(video.id, {
                 field_6908: result.data.cfrUrl, // CFR Video URL field
                 field_6881: result.data.cfrUrl, // Replace the main video URL field
               });
               console.log(`Video ${video.id} updated successfully`);
+
+              // Delete the old video from MinIO to save space
+              if (oldVideoUrl && oldVideoUrl !== result.data.cfrUrl) {
+                console.log(
+                  `[CFR BATCH] Deleting original video from MinIO: ${oldVideoUrl}`
+                );
+                try {
+                  const deleted = await deleteFromMinio(oldVideoUrl);
+                  if (deleted) {
+                    console.log(
+                      `[CFR BATCH] Successfully deleted original video from MinIO`
+                    );
+                  } else {
+                    console.warn(
+                      `[CFR BATCH] Failed to delete original video from MinIO, but continuing`
+                    );
+                  }
+                } catch (deleteError) {
+                  console.error(
+                    `[CFR BATCH] Error deleting original video from MinIO:`,
+                    deleteError
+                  );
+                  // Don't throw - CFR conversion was successful
+                }
+              } else {
+                console.log(
+                  `[CFR BATCH] Skipping deletion - URLs are the same or old URL is missing`
+                );
+              }
 
               // Refresh after each video to show updates immediately
               await handleRefresh();
