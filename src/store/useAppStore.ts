@@ -762,10 +762,42 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     try {
-      // Import the update function (this will be available at runtime)
-      const { updateOriginalVideoRow } = await import('@/lib/baserow-actions');
+      // Import the required functions (this will be available at runtime)
+      const { updateOriginalVideoRow, getOriginalVideoRow } = await import(
+        '@/lib/baserow-actions'
+      );
 
-      // Update the original video with the merged video URL
+      // Step 1: Fetch the current original video row to get the old merged video URL
+      const currentVideoRow = await getOriginalVideoRow(
+        selectedOriginalVideo.id
+      );
+      const oldMergedVideoUrl = currentVideoRow.field_6858 as string | null; // Final Merged Video URL field
+
+      // Step 2: Delete the old merged video from MinIO if it exists
+      if (oldMergedVideoUrl && typeof oldMergedVideoUrl === 'string') {
+        console.log(
+          `Deleting old merged video from MinIO: ${oldMergedVideoUrl}`
+        );
+        try {
+          // Dynamic import of the minio-client module
+          const { deleteFromMinio } = await import('@/utils/minio-client');
+          const deleted = await deleteFromMinio(oldMergedVideoUrl);
+          if (deleted) {
+            console.log('Successfully deleted old merged video from MinIO');
+          } else {
+            console.warn(
+              'Failed to delete old merged video from MinIO (continuing anyway)'
+            );
+          }
+        } catch (deleteError) {
+          console.warn(
+            'Error deleting old merged video from MinIO (continuing anyway):',
+            deleteError
+          );
+        }
+      }
+
+      // Step 3: Update the original video with the new merged video URL
       await updateOriginalVideoRow(selectedOriginalVideo.id, {
         field_6858: mergedVideo.url, // Final Merged Video URL field
       });
