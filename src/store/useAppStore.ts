@@ -473,11 +473,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // TTS Settings Actions
   updateTTSSettings: (updates) =>
-    set((state) => ({
-      ttsSettings: { ...state.ttsSettings, ...updates },
-    })),
+    set((state) => {
+      const newSettings = { ...state.ttsSettings, ...updates };
+      // Save to localStorage whenever updated
+      localStorage.setItem('ttsSettings', JSON.stringify(newSettings));
+      return { ttsSettings: newSettings };
+    }),
 
-  resetTTSSettings: () => set({ ttsSettings: defaultTTSSettings }),
+  resetTTSSettings: () =>
+    set(() => {
+      // Save to localStorage when reset
+      localStorage.setItem('ttsSettings', JSON.stringify(defaultTTSSettings));
+      return { ttsSettings: defaultTTSSettings };
+    }),
 
   // Video Settings Actions
   updateVideoSettings: (updates) =>
@@ -500,12 +508,25 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Transcription Settings Actions
   updateTranscriptionSettings: (updates) =>
-    set((state) => ({
-      transcriptionSettings: { ...state.transcriptionSettings, ...updates },
-    })),
+    set((state) => {
+      const newSettings = { ...state.transcriptionSettings, ...updates };
+      // Save to localStorage whenever updated
+      localStorage.setItem(
+        'transcriptionSettings',
+        JSON.stringify(newSettings)
+      );
+      return { transcriptionSettings: newSettings };
+    }),
 
   resetTranscriptionSettings: () =>
-    set({ transcriptionSettings: defaultTranscriptionSettings }),
+    set(() => {
+      // Save to localStorage when reset
+      localStorage.setItem(
+        'transcriptionSettings',
+        JSON.stringify(defaultTranscriptionSettings)
+      );
+      return { transcriptionSettings: defaultTranscriptionSettings };
+    }),
 
   // Batch Operations Actions
   startBatchOperation: (operation) =>
@@ -547,9 +568,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Model Selection Actions
   setSelectedModel: (modelId) =>
-    set((state) => ({
-      modelSelection: { ...state.modelSelection, selectedModel: modelId },
-    })),
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        selectedModel: modelId,
+      };
+      // Save to localStorage whenever updated
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
 
   setModels: (models) =>
     set((state) => ({
@@ -567,9 +594,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   setModelSearch: (search) =>
-    set((state) => ({
-      modelSelection: { ...state.modelSelection, modelSearch: search },
-    })),
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        modelSearch: search,
+      };
+      // Save to localStorage whenever updated
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
 
   fetchModels: async () => {
     const { setModelsLoading, setModelsError, setModels, setSelectedModel } =
@@ -938,6 +971,48 @@ export const useAppStore = create<AppState>((set, get) => ({
           set({ videoSettings: { ...defaultVideoSettings, ...settings } });
         } catch (e) {
           console.error('Failed to parse videoSettings:', e);
+        }
+      }
+
+      // Load transcriptionSettings from localStorage
+      const savedTranscriptionSettings = localStorage.getItem(
+        'transcriptionSettings'
+      );
+      if (savedTranscriptionSettings) {
+        try {
+          const settings = JSON.parse(savedTranscriptionSettings);
+          set({
+            transcriptionSettings: {
+              ...defaultTranscriptionSettings,
+              ...settings,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to parse transcriptionSettings:', e);
+        }
+      }
+
+      // Load ttsSettings from localStorage
+      const savedTTSSettings = localStorage.getItem('ttsSettings');
+      if (savedTTSSettings) {
+        try {
+          const settings = JSON.parse(savedTTSSettings);
+          set({ ttsSettings: { ...defaultTTSSettings, ...settings } });
+        } catch (e) {
+          console.error('Failed to parse ttsSettings:', e);
+        }
+      }
+
+      // Load modelSelection from localStorage
+      const savedModelSelection = localStorage.getItem('modelSelection');
+      if (savedModelSelection) {
+        try {
+          const settings = JSON.parse(savedModelSelection);
+          set((state) => ({
+            modelSelection: { ...state.modelSelection, ...settings },
+          }));
+        } catch (e) {
+          console.error('Failed to parse modelSelection:', e);
         }
       }
 

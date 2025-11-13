@@ -9,9 +9,9 @@ interface TTSSettingsProps {
 
 // Default TTS settings
 const defaultTTSSettings = {
-  temperature: 0.2,
-  exaggeration: 0.8,
-  cfg_weight: 0.2,
+  temperature: 0.8,
+  exaggeration: 0.6,
+  cfg_weight: 0.5,
   seed: 1212,
   reference_audio_filename: 'calmS5wave.wav',
 };

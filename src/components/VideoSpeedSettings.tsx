@@ -9,9 +9,9 @@ interface VideoSpeedSettingsProps {
 
 // Default video speed settings (only for speed and audio, not auto-generation)
 const defaultVideoSpeedSettings = {
-  selectedSpeed: 4,
+  selectedSpeed: 1,
   muteAudio: true,
-  speedUpMode: 'emptyOnly' as const,
+  speedUpMode: 'all' as const,
   playerSpeed: 1,
 };
 
