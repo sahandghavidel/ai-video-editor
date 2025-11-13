@@ -382,8 +382,12 @@ export default function SceneCard({
   );
 
   // Generate single clip handler
-  const handleGenerateSingleClip = async (sceneId: number) => {
-    const currentScene = data.find((scene) => scene.id === sceneId);
+  const handleGenerateSingleClip = async (
+    sceneId: number,
+    sceneData?: BaserowRow
+  ) => {
+    const currentScene =
+      sceneData || data.find((scene) => scene.id === sceneId);
     if (!currentScene) return;
 
     const { generatingSingleClip } = clipGeneration;
@@ -395,6 +399,23 @@ export default function SceneCard({
 
     setGeneratingSingleClip(sceneId);
 
+    // Extract video ID from scene data
+    let videoId: number | null = null;
+    if (currentScene) {
+      const videoIdField = currentScene['field_6889'];
+      if (typeof videoIdField === 'number') {
+        videoId = videoIdField;
+      } else if (typeof videoIdField === 'string') {
+        videoId = parseInt(videoIdField, 10);
+      } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+        const firstId =
+          typeof videoIdField[0] === 'object'
+            ? videoIdField[0].id || videoIdField[0].value
+            : videoIdField[0];
+        videoId = parseInt(String(firstId), 10);
+      }
+    }
+
     try {
       const response = await fetch('/api/generate-single-clip', {
         method: 'POST',
@@ -403,6 +424,7 @@ export default function SceneCard({
         },
         body: JSON.stringify({
           sceneId,
+          videoId: videoId || undefined,
         }),
       });
 
@@ -1378,7 +1400,8 @@ export default function SceneCard({
                     onClick={() =>
                       handleTTSProduce(
                         scene.id,
-                        String(scene['field_6890'] || scene.field_6890 || '')
+                        String(scene['field_6890'] || scene.field_6890 || ''),
+                        scene
                       )
                     }
                     disabled={
@@ -1643,7 +1666,9 @@ export default function SceneCard({
                   {typeof scene['field_6889'] === 'string' &&
                     scene['field_6889'] && (
                       <button
-                        onClick={() => handleGenerateSingleClip(scene.id)}
+                        onClick={() =>
+                          handleGenerateSingleClip(scene.id, scene)
+                        }
                         disabled={
                           clipGeneration.generatingSingleClip !== null ||
                           clipGeneration.generatingClips !== null
@@ -1692,7 +1717,8 @@ export default function SceneCard({
                           handleVideoGenerate(
                             scene.id,
                             scene['field_6888'] as string,
-                            scene['field_6891'] as string
+                            scene['field_6891'] as string,
+                            scene
                           )
                         }
                         disabled={
