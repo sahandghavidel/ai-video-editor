@@ -149,7 +149,8 @@ export const handleConcatenateAllVideos = async (
   data: BaserowRow[],
   startBatchOperation: (operation: 'concatenatingVideos') => void,
   completeBatchOperation: (operation: 'concatenatingVideos') => void,
-  setMergedVideo: (url: string, fileName?: string) => void
+  setMergedVideo: (url: string, fileName?: string) => void,
+  videoId: number | null = null
 ) => {
   startBatchOperation('concatenatingVideos');
   try {
@@ -177,6 +178,10 @@ export const handleConcatenateAllVideos = async (
 
     console.log('Concatenating videos:', videoUrls);
 
+    // Build id with video ID prefix if available
+    const timestamp = Date.now();
+    const id = videoId ? `${videoId}` : `concatenate_${timestamp}`;
+
     // Call the video concatenation API
     const response = await fetch('/api/concatenate-videos', {
       method: 'POST',
@@ -185,7 +190,7 @@ export const handleConcatenateAllVideos = async (
       },
       body: JSON.stringify({
         video_urls: videoUrls,
-        id: `concatenate_${Date.now()}`,
+        id: id,
       }),
     });
 
@@ -206,9 +211,11 @@ export const handleConcatenateAllVideos = async (
     console.log('Concatenated video URL:', concatenatedVideoUrl);
 
     // Save the merged video URL to global state
-    const fileName = `merged-video-${
-      new Date().toISOString().split('T')[0]
-    }.mp4`;
+    // Include video ID in the filename if available
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileName = videoId
+      ? `video_${videoId}_merged_${dateStr}.mp4`
+      : `merged-video-${dateStr}.mp4`;
     setMergedVideo(concatenatedVideoUrl, fileName);
 
     console.log('Videos concatenated successfully! URL saved to global state.');

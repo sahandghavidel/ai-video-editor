@@ -270,7 +270,8 @@ export default function BatchOperations({
       data,
       startBatchOperation,
       completeBatchOperation,
-      setMergedVideo
+      setMergedVideo,
+      selectedOriginalVideo.id
     );
   };
 
