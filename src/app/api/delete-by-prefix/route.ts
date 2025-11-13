@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
+      `[API DELETE BY PREFIX] ========================================`
+    );
+    console.log(
       `[API DELETE BY PREFIX] Starting deletion for prefix: ${prefix}`
     );
 
@@ -35,28 +38,37 @@ export async function POST(request: NextRequest) {
     const minioHost = 'http://host.docker.internal:9000';
 
     // Step 1: List all objects in the bucket
-    // MinIO's S3-compatible API doesn't have a simple list endpoint via HTTP
-    // We'll use a workaround: try to list files using AWS SDK patterns
-    // For now, we'll use the bucket listing endpoint with prefix parameter
-
     const listUrl = `${minioHost}/${bucket}/?prefix=${encodeURIComponent(
       prefix
     )}&max-keys=1000`;
 
-    console.log(`[API DELETE BY PREFIX] Listing files with URL: ${listUrl}`);
+    console.log(`[API DELETE BY PREFIX] MinIO host: ${minioHost}`);
+    console.log(`[API DELETE BY PREFIX] Bucket: ${bucket}`);
+    console.log(`[API DELETE BY PREFIX] List URL: ${listUrl}`);
+    console.log(`[API DELETE BY PREFIX] Fetching file list...`);
 
     const listResponse = await fetch(listUrl, {
       method: 'GET',
     });
 
+    console.log(
+      `[API DELETE BY PREFIX] List response status: ${listResponse.status}`
+    );
+    console.log(
+      `[API DELETE BY PREFIX] List response headers:`,
+      Object.fromEntries(listResponse.headers.entries())
+    );
+
     if (!listResponse.ok) {
-      console.warn(
-        `[API DELETE BY PREFIX] Failed to list files: ${listResponse.status}`
+      const errorText = await listResponse.text();
+      console.error(
+        `[API DELETE BY PREFIX] ❌ Failed to list files: ${listResponse.status}`
       );
+      console.error(`[API DELETE BY PREFIX] Error response: ${errorText}`);
       return NextResponse.json(
         {
           success: false,
-          error: `Failed to list files: ${listResponse.status}`,
+          error: `Failed to list files: ${listResponse.status} - ${errorText}`,
         },
         { status: listResponse.status }
       );
@@ -64,11 +76,19 @@ export async function POST(request: NextRequest) {
 
     const xmlText = await listResponse.text();
     console.log(
-      `[API DELETE BY PREFIX] Received XML response (${xmlText.length} bytes)`
+      `[API DELETE BY PREFIX] ✓ Received XML response (${xmlText.length} bytes)`
     );
+
+    // Log first 500 characters of XML for debugging
+    if (xmlText.length > 0) {
+      console.log(
+        `[API DELETE BY PREFIX] XML preview: ${xmlText.substring(0, 500)}...`
+      );
+    }
 
     // Parse XML to extract file keys
     // Simple regex-based parsing (for production, use a proper XML parser)
+    console.log(`[API DELETE BY PREFIX] Parsing XML for file keys...`);
     const keyMatches = xmlText.matchAll(/<Key>([^<]+)<\/Key>/g);
     const fileKeys: string[] = [];
 
@@ -77,17 +97,33 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[API DELETE BY PREFIX] Found ${fileKeys.length} files to delete`
+      `[API DELETE BY PREFIX] ✓ Found ${fileKeys.length} files matching prefix`
     );
 
+    if (fileKeys.length > 0) {
+      console.log(`[API DELETE BY PREFIX] Files to delete:`);
+      fileKeys.forEach((key, index) => {
+        console.log(`[API DELETE BY PREFIX]   ${index + 1}. ${key}`);
+      });
+    }
+
     if (fileKeys.length === 0) {
+      console.log(
+        `[API DELETE BY PREFIX] ⚠️  No files found matching prefix: ${prefix}`
+      );
       return NextResponse.json({
         success: true,
         message: 'No files found matching prefix',
         deletedCount: 0,
+        failedCount: 0,
+        totalFiles: 0,
         fileKeys: [],
       });
     }
+
+    console.log(
+      `[API DELETE BY PREFIX] Starting deletion of ${fileKeys.length} files...`
+    );
 
     // Step 2: Delete each file
     const deletionResults = [];

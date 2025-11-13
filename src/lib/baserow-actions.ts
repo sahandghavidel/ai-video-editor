@@ -791,15 +791,116 @@ export async function deleteOriginalVideoWithScenes(
       );
     }
 
-    // STEP 5: Delete all related scenes from Baserow
-    // (MinIO files already deleted above, so pass skipMinioDelete flag if available)
+    // STEP 5: Extra safety - Delete by prefix to catch any orphaned files
+    console.log(
+      `[VIDEO ${originalVideoId}] ========================================`
+    );
+    console.log(
+      `[VIDEO ${originalVideoId}] Starting PREFIX-based cleanup for: video_${originalVideoId}_`
+    );
+    console.log(
+      `[VIDEO ${originalVideoId}] ========================================`
+    );
+
+    try {
+      const prefix = `video_${originalVideoId}_`;
+      const bucket = 'nca-toolkit';
+      const minioHost = 'http://host.docker.internal:9000';
+
+      // List all files with the prefix (same as individual deletion - direct to MinIO)
+      const listUrl = `${minioHost}/${bucket}/?prefix=${encodeURIComponent(
+        prefix
+      )}&max-keys=1000`;
+
+      console.log(
+        `[VIDEO ${originalVideoId}] Listing files from MinIO: ${listUrl}`
+      );
+
+      const listResponse = await fetch(listUrl, { method: 'GET' });
+
+      console.log(
+        `[VIDEO ${originalVideoId}] List response status: ${listResponse.status}`
+      );
+
+      if (!listResponse.ok) {
+        console.warn(
+          `[VIDEO ${originalVideoId}] ⚠️  Failed to list files: ${listResponse.status}`
+        );
+      } else {
+        const xmlText = await listResponse.text();
+        console.log(
+          `[VIDEO ${originalVideoId}] Received XML (${xmlText.length} bytes)`
+        );
+
+        // Parse XML to extract file keys
+        const keyMatches = xmlText.matchAll(/<Key>([^<]+)<\/Key>/g);
+        const fileKeys: string[] = [];
+
+        for (const match of keyMatches) {
+          fileKeys.push(match[1]);
+        }
+
+        console.log(
+          `[VIDEO ${originalVideoId}] Found ${fileKeys.length} files with prefix`
+        );
+
+        if (fileKeys.length > 0) {
+          console.log(`[VIDEO ${originalVideoId}] Files to delete:`);
+          fileKeys.forEach((key, index) => {
+            console.log(`[VIDEO ${originalVideoId}]   ${index + 1}. ${key}`);
+          });
+
+          // Delete each file directly (same method as individual file deletion)
+          let prefixSuccessCount = 0;
+          let prefixFailCount = 0;
+
+          for (const key of fileKeys) {
+            const fileUrl = `${minioHost}/${bucket}/${key}`;
+            try {
+              const deleted = await deleteFileFromMinio(fileUrl);
+              if (deleted) {
+                prefixSuccessCount++;
+              } else {
+                prefixFailCount++;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            } catch (error) {
+              prefixFailCount++;
+              console.warn(
+                `[VIDEO ${originalVideoId}] Failed to delete ${key}:`,
+                error
+              );
+            }
+          }
+
+          console.log(
+            `[VIDEO ${originalVideoId}] ✅ Prefix cleanup complete: ${prefixSuccessCount} deleted, ${prefixFailCount} failed`
+          );
+        } else {
+          console.log(
+            `[VIDEO ${originalVideoId}] No additional files found with prefix`
+          );
+        }
+      }
+    } catch (prefixError) {
+      console.error(
+        `[VIDEO ${originalVideoId}] ❌ EXCEPTION during prefix cleanup:`,
+        prefixError
+      );
+    }
+
+    console.log(
+      `[VIDEO ${originalVideoId}] ======================================== END PREFIX CLEANUP`
+    );
+
+    // STEP 6: Delete all related scenes from Baserow
     await deleteRelatedScenes(originalVideoId);
 
-    // STEP 6: Finally, delete the original video row from Baserow
+    // STEP 7: Finally, delete the original video row from Baserow
     await deleteOriginalVideoRow(originalVideoId);
 
     console.log(
-      `Successfully deleted original video ${originalVideoId} and all related data from Baserow and MinIO (${uniqueMinioUrls.length} files)`
+      `Successfully deleted original video ${originalVideoId} and all related data from Baserow and MinIO (${uniqueMinioUrls.length} files deleted via fields + prefix cleanup)`
     );
   } catch (error) {
     console.error('Error deleting original video with scenes:', error);
