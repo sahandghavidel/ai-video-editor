@@ -12,7 +12,7 @@ const defaultVideoSpeedSettings = {
   selectedSpeed: 1,
   muteAudio: true,
   speedUpMode: 'all' as const,
-  playerSpeed: 1,
+  playerSpeed: 1.5,
 };
 
 export default function VideoSpeedSettings({
