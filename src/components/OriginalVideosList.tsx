@@ -2054,6 +2054,14 @@ export default function OriginalVideosList({
         videoUrls
       );
 
+      // Get the old merged video URL from store to delete it
+      const oldMergedVideoUrl = mergedVideo?.url || null;
+      if (oldMergedVideoUrl) {
+        console.log(
+          `[MERGE] Will delete old merged video: ${oldMergedVideoUrl}`
+        );
+      }
+
       // Call the concatenate API with fast mode
       const response = await fetch('/api/concatenate-videos', {
         method: 'POST',
@@ -2063,6 +2071,7 @@ export default function OriginalVideosList({
         body: JSON.stringify({
           video_urls: videoUrls,
           fast_mode: true, // Use fast merging without re-encoding
+          old_merged_url: oldMergedVideoUrl, // Pass old URL to delete it
         }),
       });
 

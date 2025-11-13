@@ -3,12 +3,18 @@ import {
   concatenateVideosWithUpload,
   concatenateVideosFast,
 } from '@/utils/ffmpeg-merge';
+import { deleteFromMinio } from '@/utils/ffmpeg-direct';
 
 type VideoUrlInput = string | { video_url: string };
 
 export async function POST(request: NextRequest) {
   try {
-    const { video_urls, id, fast_mode = true } = await request.json();
+    const {
+      video_urls,
+      id,
+      fast_mode = true,
+      old_merged_url,
+    } = await request.json();
 
     if (!video_urls || !Array.isArray(video_urls) || video_urls.length === 0) {
       return NextResponse.json(
@@ -35,6 +41,20 @@ export async function POST(request: NextRequest) {
         videoUrls.length
       } videos`
     );
+
+    // Delete old merged video from MinIO if provided
+    if (old_merged_url && typeof old_merged_url === 'string') {
+      console.log(`[MERGE] Deleting old merged video: ${old_merged_url}`);
+      const deleted = await deleteFromMinio(old_merged_url);
+      if (deleted) {
+        console.log(`[MERGE] Successfully deleted old merged video`);
+      } else {
+        console.warn(
+          `[MERGE] Failed to delete old merged video (continuing anyway)`
+        );
+      }
+    }
+
     const mergeStartTime = Date.now();
 
     let result;
