@@ -18,6 +18,32 @@ export async function POST(request: NextRequest) {
     console.log(`[SYNC] Video URL: ${videoUrl}`);
     console.log(`[SYNC] Audio URL: ${audioUrl}`);
 
+    // Extract timestamp from TTS URL (format: tts_ID_TIMESTAMP.wav)
+    let ttsTimestamp: string | null = null;
+    const ttsMatch = audioUrl.match(/tts_\d+_(\d+)\.wav/);
+    if (ttsMatch && ttsMatch[1]) {
+      ttsTimestamp = ttsMatch[1];
+      console.log(`[SYNC] Extracted TTS timestamp: ${ttsTimestamp}`);
+      
+      // Check if sync with this timestamp already exists
+      const expectedSyncUrl = `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}.mp4`;
+      try {
+        const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
+        if (checkResponse.ok) {
+          console.log(`[SYNC] Found existing synced video with same TTS timestamp: ${expectedSyncUrl}`);
+          console.log(`[SYNC] Skipping regeneration - returning cached sync`);
+          return NextResponse.json({
+            videoUrl: expectedSyncUrl,
+            message: `Using cached synchronized video (TTS timestamp: ${ttsTimestamp})`,
+            cached: true,
+            method: 'cache_hit',
+          });
+        }
+      } catch (checkError) {
+        console.log(`[SYNC] No existing sync found, will generate new one`);
+      }
+    }
+
     const syncStartTime = Date.now();
 
     try {
@@ -26,6 +52,7 @@ export async function POST(request: NextRequest) {
         videoUrl: videoUrl,
         audioUrl: audioUrl,
         sceneId: sceneId?.toString(),
+        ttsTimestamp: ttsTimestamp || undefined, // Pass the TTS timestamp to preserve it
         useHardwareAcceleration: true,
         videoBitrate: '6000k', // Same bitrate as speed-up function for consistent format
         cleanup: true, // Clean up local files after upload

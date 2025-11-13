@@ -434,12 +434,14 @@ export async function syncVideoWithAudioAdvanced(
 export async function syncVideoWithUpload(
   options: SyncOptions & {
     sceneId?: string;
+    ttsTimestamp?: string;
     cleanup?: boolean;
     useAdvancedSync?: boolean;
   }
 ): Promise<{ localPath: string; uploadUrl: string }> {
   const {
     sceneId,
+    ttsTimestamp,
     cleanup = true,
     useAdvancedSync = true,
     ...syncOptions
@@ -454,10 +456,14 @@ export async function syncVideoWithUpload(
       : await syncVideoWithAudio(syncOptions);
 
     // Step 2: Generate filename for upload
-    const timestamp = Date.now();
+    // If ttsTimestamp is provided, use it to maintain the link between TTS and sync
+    // Otherwise, generate a new timestamp
+    const timestamp = ttsTimestamp || Date.now().toString();
     const filename = sceneId
       ? `scene_${sceneId}_synced_${timestamp}.mp4`
       : `synced_video_${timestamp}.mp4`;
+    
+    console.log(`[SYNC] Generating filename with ${ttsTimestamp ? 'TTS' : 'new'} timestamp: ${filename}`);
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
