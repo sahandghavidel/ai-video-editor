@@ -481,11 +481,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Video Settings Actions
   updateVideoSettings: (updates) =>
-    set((state) => ({
-      videoSettings: { ...state.videoSettings, ...updates },
-    })),
+    set((state) => {
+      const newSettings = { ...state.videoSettings, ...updates };
+      // Save to localStorage whenever updated
+      localStorage.setItem('videoSettings', JSON.stringify(newSettings));
+      return { videoSettings: newSettings };
+    }),
 
-  resetVideoSettings: () => set({ videoSettings: defaultVideoSettings }),
+  resetVideoSettings: () =>
+    set(() => {
+      // Save to localStorage when reset
+      localStorage.setItem(
+        'videoSettings',
+        JSON.stringify(defaultVideoSettings)
+      );
+      return { videoSettings: defaultVideoSettings };
+    }),
 
   // Transcription Settings Actions
   updateTranscriptionSettings: (updates) =>
@@ -917,6 +928,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         )
       ) {
         set({ audioEnhancementMode: savedAudioMode as AudioEnhancementMode });
+      }
+
+      // Load videoSettings from its own key (takes precedence over video-editor-settings)
+      const savedVideoSettings = localStorage.getItem('videoSettings');
+      if (savedVideoSettings) {
+        try {
+          const settings = JSON.parse(savedVideoSettings);
+          set({ videoSettings: { ...defaultVideoSettings, ...settings } });
+        } catch (e) {
+          console.error('Failed to parse videoSettings:', e);
+        }
       }
 
       // Load advancedAudioSettings from localStorage
