@@ -101,13 +101,13 @@ function extractVideoUrl(field: any): string | null {
 }
 
 // Function to create video clip using direct FFmpeg + MinIO upload
-async function createVideoClip(videoUrl: string, scene: any) {
+async function createVideoClip(videoUrl: string, scene: any, videoId?: number) {
   const startTime = parseFloat(scene.field_6898);
   const endTime = parseFloat(scene.field_6897);
   const duration = endTime - startTime;
 
   console.log(
-    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s`
+    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s, videoId=${videoId}`
   );
   console.log(
     `[TIMING] Scene ${
@@ -125,6 +125,7 @@ async function createVideoClip(videoUrl: string, scene: any) {
       useHardwareAcceleration: true,
       videoBitrate: '6000k', // High quality for good results
       sceneId: scene.id.toString(),
+      videoId: videoId,
       cleanup: true, // Clean up local files after upload
     });
 
@@ -183,7 +184,7 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { sceneId } = await request.json();
+    const { sceneId, videoId: requestVideoId } = await request.json();
 
     if (!sceneId) {
       return NextResponse.json(
@@ -192,7 +193,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('Generating clip for scene:', sceneId);
+    console.log(
+      'Generating clip for scene:',
+      sceneId,
+      'videoId:',
+      requestVideoId
+    );
 
     // Step 1: Get the scene data
     const scene = await getSceneData(sceneId);
@@ -210,8 +216,8 @@ export async function POST(request: NextRequest) {
       throw new Error('No video URL found for this scene');
     }
 
-    // Step 3: Create the video clip
-    const clipUrl = await createVideoClip(videoUrl, scene);
+    // Step 3: Create the video clip with videoId for proper naming
+    const clipUrl = await createVideoClip(videoUrl, scene, requestVideoId);
 
     // Step 4: Update the scene with the clip URL
     await updateSceneWithClipUrl(scene.id, clipUrl);
