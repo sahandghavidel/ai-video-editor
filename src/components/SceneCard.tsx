@@ -294,9 +294,28 @@ export default function SceneCard({
       setSpeedingUpVideo(sceneId);
 
       try {
+        // Extract videoId from sceneData
+        let videoId = null;
+        if (sceneData) {
+          const videoIdField = sceneData['field_6889'];
+          if (typeof videoIdField === 'number') {
+            videoId = videoIdField;
+          } else if (typeof videoIdField === 'string') {
+            videoId = parseInt(videoIdField, 10);
+          } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+            const firstId =
+              typeof videoIdField[0] === 'object'
+                ? videoIdField[0].id || videoIdField[0].value
+                : videoIdField[0];
+            videoId = parseInt(String(firstId), 10);
+          }
+        }
+
         console.log(
           'Starting speed-up for scene:',
           sceneId,
+          'videoId:',
+          videoId,
           'with video:',
           videoUrl
         );
@@ -311,6 +330,7 @@ export default function SceneCard({
             videoUrl,
             speed: videoSettings.selectedSpeed,
             muteAudio: videoSettings.muteAudio,
+            videoId: videoId || undefined,
           }),
         });
 
@@ -485,8 +505,9 @@ export default function SceneCard({
       // Auto-generate TTS if option is enabled and text was actually changed
       if (videoSettings.autoGenerateTTS && editingText.trim()) {
         // Wait a moment to ensure the text is properly updated
+        const sceneData = data.find((s) => s.id === sceneId);
         setTimeout(() => {
-          handleTTSProduce(sceneId, editingText);
+          handleTTSProduce(sceneId, editingText, sceneData);
         }, 500);
       }
     } catch (error) {
@@ -777,7 +798,7 @@ export default function SceneCard({
           if (typeof videoUrl === 'string' && videoUrl) {
             // Wait a moment to ensure the TTS URL is properly updated
             setTimeout(() => {
-              handleVideoGenerate(sceneId, videoUrl, audioUrl);
+              handleVideoGenerate(sceneId, videoUrl, audioUrl, currentScene);
             }, 1000);
           }
         }
@@ -1546,7 +1567,7 @@ export default function SceneCard({
                   {typeof scene['field_6888'] === 'string' &&
                     scene['field_6888'] && (
                       <button
-                        onClick={() => handleSpeedUpVideo(scene.id)}
+                        onClick={() => handleSpeedUpVideo(scene.id, scene)}
                         disabled={
                           sceneLoading.speedingUpVideo !== null ||
                           batchOperations.speedingUpAllVideos
