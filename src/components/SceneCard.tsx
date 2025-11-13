@@ -704,6 +704,23 @@ export default function SceneCard({
       try {
         setProducingTTS(sceneId);
 
+        // Extract video ID from scene data
+        let videoId: number | null = null;
+        if (sceneData) {
+          const videoIdField = sceneData['field_6889'];
+          if (typeof videoIdField === 'number') {
+            videoId = videoIdField;
+          } else if (typeof videoIdField === 'string') {
+            videoId = parseInt(videoIdField, 10);
+          } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+            const firstId =
+              typeof videoIdField[0] === 'object'
+                ? videoIdField[0].id || videoIdField[0].value
+                : videoIdField[0];
+            videoId = parseInt(String(firstId), 10);
+          }
+        }
+
         // Call our TTS API route that handles generation and MinIO upload
         const response = await fetch('/api/generate-tts', {
           method: 'POST',
@@ -713,6 +730,7 @@ export default function SceneCard({
           body: JSON.stringify({
             text,
             sceneId,
+            videoId: videoId || undefined,
             ttsSettings,
           }),
         });
@@ -774,9 +792,31 @@ export default function SceneCard({
   );
 
   const handleVideoGenerate = useCallback(
-    async (sceneId: number, videoUrl: string, audioUrl: string) => {
+    async (
+      sceneId: number,
+      videoUrl: string,
+      audioUrl: string,
+      sceneData?: BaserowRow
+    ) => {
       try {
         setGeneratingVideo(sceneId);
+
+        // Extract video ID from scene data
+        let videoId: number | null = null;
+        if (sceneData) {
+          const videoIdField = sceneData['field_6889'];
+          if (typeof videoIdField === 'number') {
+            videoId = videoIdField;
+          } else if (typeof videoIdField === 'string') {
+            videoId = parseInt(videoIdField, 10);
+          } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+            const firstId =
+              typeof videoIdField[0] === 'object'
+                ? videoIdField[0].id || videoIdField[0].value
+                : videoIdField[0];
+            videoId = parseInt(String(firstId), 10);
+          }
+        }
 
         // Call our API route instead of directly calling NCA service
         const response = await fetch('/api/generate-video', {
@@ -788,6 +828,7 @@ export default function SceneCard({
             videoUrl,
             audioUrl,
             sceneId, // Pass sceneId for better tracking
+            videoId: videoId || undefined,
           }),
         });
 

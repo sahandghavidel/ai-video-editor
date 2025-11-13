@@ -753,6 +753,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
               },
               body: JSON.stringify({
                 sceneId: scene.id,
+                videoId: videoId, // Include video ID in API call
                 videoUrl,
                 speed: videoSettings.selectedSpeed,
                 muteAudio: videoSettings.muteAudio,

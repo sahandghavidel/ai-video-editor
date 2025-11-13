@@ -5,6 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const {
       sceneId,
+      videoId,
       videoUrl,
       speed = 4,
       muteAudio = true,
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
         useHardwareAcceleration: true,
         videoBitrate: '6000k', // Same bitrate as clip generation for consistent format
         sceneId: sceneId.toString(),
+        videoId: videoId,
         cleanup: true, // Clean up local files after upload
       });
 

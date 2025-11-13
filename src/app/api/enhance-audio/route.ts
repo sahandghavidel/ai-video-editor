@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       console.log(`[ENHANCE] Uploading enhanced video to MinIO...`);
       const uploadUrl = await uploadToMinio(
         result.output_path,
-        `enhanced_${sceneId}_${Date.now()}.mp4`
+        `video_${sceneId}_enhanced_${Date.now()}.mp4`
       );
 
       // Cleanup local file

@@ -434,6 +434,7 @@ export async function syncVideoWithAudioAdvanced(
 export async function syncVideoWithUpload(
   options: SyncOptions & {
     sceneId?: string;
+    videoId?: number | string;
     ttsTimestamp?: string;
     cleanup?: boolean;
     useAdvancedSync?: boolean;
@@ -441,6 +442,7 @@ export async function syncVideoWithUpload(
 ): Promise<{ localPath: string; uploadUrl: string }> {
   const {
     sceneId,
+    videoId,
     ttsTimestamp,
     cleanup = true,
     useAdvancedSync = true,
@@ -459,9 +461,12 @@ export async function syncVideoWithUpload(
     // If ttsTimestamp is provided, use it to maintain the link between TTS and sync
     // Otherwise, generate a new timestamp
     const timestamp = ttsTimestamp || Date.now().toString();
-    const filename = sceneId
-      ? `scene_${sceneId}_synced_${timestamp}.mp4`
-      : `synced_video_${timestamp}.mp4`;
+    const filename =
+      videoId && sceneId
+        ? `video_${videoId}_scene_${sceneId}_synced_${timestamp}.mp4`
+        : sceneId
+        ? `scene_${sceneId}_synced_${timestamp}.mp4`
+        : `synced_video_${timestamp}.mp4`;
 
     console.log(
       `[SYNC] Generating filename with ${

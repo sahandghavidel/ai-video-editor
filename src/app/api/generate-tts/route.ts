@@ -74,12 +74,16 @@ async function startTTSServer(): Promise<void> {
       console.log('✅ Found virtual environment, activating...');
 
       // Use bash to source the virtual environment and run the server
-      ttsServerProcess = spawn('bash', ['-c', `source ${venvPath} && python3 server_api_only.py`], {
-        cwd: serverPath,
-        stdio: 'ignore', // Don't inherit stdio for independent operation
-        detached: true, // Keep server alive independently
-        env: { ...process.env, PYTHONUNBUFFERED: '1' }, // Ensure Python output is not buffered
-      });
+      ttsServerProcess = spawn(
+        'bash',
+        ['-c', `source ${venvPath} && python3 server_api_only.py`],
+        {
+          cwd: serverPath,
+          stdio: 'ignore', // Don't inherit stdio for independent operation
+          detached: true, // Keep server alive independently
+          env: { ...process.env, PYTHONUNBUFFERED: '1' }, // Ensure Python output is not buffered
+        }
+      );
 
       // Store PID for reliable process management
       ttsServerPid = ttsServerProcess.pid || null;
@@ -220,12 +224,16 @@ function scheduleServerStop(): void {
                 ) {
                   try {
                     process.kill(parseInt(pid), 'SIGTERM');
-                    console.log(`✅ Sent SIGTERM to TTS server process ${pid} (${command})`);
+                    console.log(
+                      `✅ Sent SIGTERM to TTS server process ${pid} (${command})`
+                    );
                   } catch (error) {
                     console.error(`❌ Failed to kill process ${pid}:`, error);
                   }
                 } else {
-                  console.log(`⚠️ Skipping non-TTS process ${pid} (${command})`);
+                  console.log(
+                    `⚠️ Skipping non-TTS process ${pid} (${command})`
+                  );
                 }
               });
             });
@@ -250,7 +258,9 @@ function scheduleServerStop(): void {
                   ) {
                     try {
                       process.kill(parseInt(pid), 'SIGKILL');
-                      console.log(`💀 Force killed TTS server process ${pid} (${command})`);
+                      console.log(
+                        `💀 Force killed TTS server process ${pid} (${command})`
+                      );
                     } catch (error) {
                       // Process might already be dead
                     }
@@ -259,7 +269,9 @@ function scheduleServerStop(): void {
               });
             }, 3000);
           } else {
-            console.log(`ℹ️ No processes found listening on port ${SERVER_PORT}`);
+            console.log(
+              `ℹ️ No processes found listening on port ${SERVER_PORT}`
+            );
           }
         });
       } catch (error) {
@@ -462,7 +474,7 @@ async function waitForServerShutdown(): Promise<void> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, sceneId, ttsSettings } = await request.json();
+    const { text, sceneId, videoId, ttsSettings } = await request.json();
 
     if (!text || !sceneId) {
       return NextResponse.json(
@@ -621,7 +633,9 @@ export async function POST(request: NextRequest) {
 
     // Step 2: Upload to MinIO
     const timestamp = Date.now();
-    const filename = `tts_${sceneId}_${timestamp}.wav`;
+    const filename = videoId
+      ? `video_${videoId}_scene_${sceneId}_tts_${timestamp}.wav`
+      : `scene_${sceneId}_tts_${timestamp}.wav`;
     const bucket = 'nca-toolkit';
     const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
 

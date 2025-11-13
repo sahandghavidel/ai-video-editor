@@ -3,7 +3,7 @@ import { syncVideoWithUpload } from '@/utils/ffmpeg-sync';
 
 export async function POST(request: NextRequest) {
   try {
-    const { videoUrl, audioUrl, sceneId } = await request.json();
+    const { videoUrl, audioUrl, sceneId, videoId } = await request.json();
 
     if (!videoUrl || !audioUrl) {
       return NextResponse.json(
@@ -18,15 +18,18 @@ export async function POST(request: NextRequest) {
     console.log(`[SYNC] Video URL: ${videoUrl}`);
     console.log(`[SYNC] Audio URL: ${audioUrl}`);
 
-    // Extract timestamp from TTS URL (format: tts_ID_TIMESTAMP.wav)
+    // Extract timestamp from TTS URL (format: video_123_scene_456_tts_TIMESTAMP.wav or tts_ID_TIMESTAMP.wav)
     let ttsTimestamp: string | null = null;
-    const ttsMatch = audioUrl.match(/tts_\d+_(\d+)\.wav/);
+    const ttsMatch = audioUrl.match(/tts_(\d+)\.wav$/);
     if (ttsMatch && ttsMatch[1]) {
       ttsTimestamp = ttsMatch[1];
       console.log(`[SYNC] Extracted TTS timestamp: ${ttsTimestamp}`);
 
       // Check if sync with this timestamp already exists
-      const expectedSyncUrl = `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}.mp4`;
+      const expectedSyncUrl =
+        videoId && sceneId
+          ? `http://host.docker.internal:9000/nca-toolkit/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}.mp4`
+          : `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}.mp4`;
       try {
         const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
         if (checkResponse.ok) {
@@ -54,6 +57,7 @@ export async function POST(request: NextRequest) {
         videoUrl: videoUrl,
         audioUrl: audioUrl,
         sceneId: sceneId?.toString(),
+        videoId: videoId,
         ttsTimestamp: ttsTimestamp || undefined, // Pass the TTS timestamp to preserve it
         useHardwareAcceleration: true,
         videoBitrate: '6000k', // Same bitrate as speed-up function for consistent format

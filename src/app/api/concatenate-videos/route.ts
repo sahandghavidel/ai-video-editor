@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         // Upload to MinIO
         const { uploadUrl } = await concatenateVideosWithUpload({
           videoUrls: [localPath], // Just upload the already merged file
+          videoId: id,
           cleanup: true,
         });
 
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
         // Fallback to standard concatenation with re-encoding
         const { uploadUrl } = await concatenateVideosWithUpload({
           videoUrls,
+          videoId: id,
           useHardwareAcceleration: true,
           videoBitrate: '6000k',
           cleanup: true,
@@ -91,6 +93,7 @@ export async function POST(request: NextRequest) {
       // Standard concatenation with re-encoding
       const { uploadUrl } = await concatenateVideosWithUpload({
         videoUrls,
+        videoId: id,
         useHardwareAcceleration: true,
         videoBitrate: '6000k',
         cleanup: true,

@@ -155,10 +155,11 @@ export async function concatenateVideosWithFFmpeg(
 export async function concatenateVideosWithUpload(
   options: ConcatenateOptions & {
     sceneIds?: string[];
+    videoId?: number | string;
     cleanup?: boolean;
   }
 ): Promise<{ localPath: string; uploadUrl: string }> {
-  const { sceneIds, cleanup = true, ...concatOptions } = options;
+  const { sceneIds, videoId, cleanup = true, ...concatOptions } = options;
 
   let localPath: string | null = null;
 
@@ -168,10 +169,11 @@ export async function concatenateVideosWithUpload(
 
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
-    const filename =
-      sceneIds && sceneIds.length > 0
-        ? `merged_scenes_${sceneIds.join('_')}_${timestamp}.mp4`
-        : `merged_video_${timestamp}.mp4`;
+    const filename = videoId
+      ? `video_${videoId}_merged_${timestamp}.mp4`
+      : sceneIds && sceneIds.length > 0
+      ? `merged_scenes_${sceneIds.join('_')}_${timestamp}.mp4`
+      : `merged_video_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');

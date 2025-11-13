@@ -205,7 +205,7 @@ export async function normalizeAudioWithUpload(
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
     const filename = sceneId
-      ? `scene_${sceneId}_normalized_${timestamp}.mp4`
+      ? `video_${sceneId}_normalized_${timestamp}.mp4`
       : `normalized_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO

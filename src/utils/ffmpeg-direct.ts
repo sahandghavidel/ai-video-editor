@@ -456,10 +456,11 @@ export async function uploadToMinio(
 export async function createVideoClipWithUpload(
   options: TrimOptions & {
     sceneId?: string;
+    videoId?: number | string;
     cleanup?: boolean;
   }
 ): Promise<{ localPath: string; uploadUrl: string }> {
-  const { sceneId, cleanup = true, ...trimOptions } = options;
+  const { sceneId, videoId, cleanup = true, ...trimOptions } = options;
 
   let localPath: string | null = null;
 
@@ -469,9 +470,12 @@ export async function createVideoClipWithUpload(
 
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
-    const filename = sceneId
-      ? `scene_${sceneId}_${timestamp}.mp4`
-      : `clip_${timestamp}.mp4`;
+    const filename =
+      videoId && sceneId
+        ? `video_${videoId}_scene_${sceneId}_clip_${timestamp}.mp4`
+        : sceneId
+        ? `scene_${sceneId}_clip_${timestamp}.mp4`
+        : `clip_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
@@ -509,10 +513,11 @@ export async function createVideoClipWithUpload(
 export async function speedUpVideoWithUpload(
   options: SpeedUpOptions & {
     sceneId?: string;
+    videoId?: number | string;
     cleanup?: boolean;
   }
 ): Promise<{ localPath: string; uploadUrl: string }> {
-  const { sceneId, cleanup = true, ...speedUpOptions } = options;
+  const { sceneId, videoId, cleanup = true, ...speedUpOptions } = options;
 
   let localPath: string | null = null;
 
@@ -523,9 +528,12 @@ export async function speedUpVideoWithUpload(
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
     const speedSuffix = `${speedUpOptions.speed}x`;
-    const filename = sceneId
-      ? `scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
-      : `speedup_${speedSuffix}_${timestamp}.mp4`;
+    const filename =
+      videoId && sceneId
+        ? `video_${videoId}_scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
+        : sceneId
+        ? `scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
+        : `spedup_${speedSuffix}_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
