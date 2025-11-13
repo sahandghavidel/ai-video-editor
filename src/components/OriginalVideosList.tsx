@@ -149,6 +149,7 @@ export default function OriginalVideosList({
     mergedVideo,
     clearMergedVideo,
     transcriptionSettings,
+    deletionSettings,
     data: allScenesData,
     modelSelection,
     sceneLoading,
@@ -660,7 +661,11 @@ export default function OriginalVideosList({
 
     try {
       // Delete the video and all related scenes
-      await deleteOriginalVideoWithScenes(videoId);
+      // Pass the prefix cleanup setting from global state
+      await deleteOriginalVideoWithScenes(
+        videoId,
+        deletionSettings.enablePrefixCleanup
+      );
 
       // Remove from local state
       setOriginalVideos((prev) => prev.filter((v) => v.id !== videoId));

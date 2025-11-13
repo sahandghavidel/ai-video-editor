@@ -28,6 +28,11 @@ export interface TranscriptionSettings {
   selectedModel: string;
 }
 
+// Deletion settings interface
+export interface DeletionSettings {
+  enablePrefixCleanup: boolean; // Enable extra prefix-based cleanup when deleting videos
+}
+
 // Batch operations state interface
 export interface BatchOperationsState {
   improvingAll: boolean;
@@ -142,6 +147,9 @@ interface AppState {
   // Transcription Settings
   transcriptionSettings: TranscriptionSettings;
 
+  // Deletion Settings
+  deletionSettings: DeletionSettings;
+
   // Batch Operations State
   batchOperations: BatchOperationsState;
 
@@ -197,6 +205,10 @@ interface AppState {
     updates: Partial<TranscriptionSettings>
   ) => void;
   resetTranscriptionSettings: () => void;
+
+  // Deletion Settings Actions
+  updateDeletionSettings: (updates: Partial<DeletionSettings>) => void;
+  resetDeletionSettings: () => void;
 
   // Batch Operations Actions
   startBatchOperation: (operation: keyof BatchOperationsState) => void;
@@ -302,6 +314,11 @@ const defaultTranscriptionSettings: TranscriptionSettings = {
   selectedModel: 'parakeet', // Default to Parakeet model
 };
 
+// Default deletion settings
+const defaultDeletionSettings: DeletionSettings = {
+  enablePrefixCleanup: false, // Disabled by default - enable for extra safety
+};
+
 // Default batch operations settings
 const defaultBatchOperations: BatchOperationsState = {
   improvingAll: false,
@@ -393,6 +410,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Transcription Settings
   transcriptionSettings: defaultTranscriptionSettings,
+
+  // Deletion Settings
+  deletionSettings: defaultDeletionSettings,
 
   // Batch Operations State
   batchOperations: defaultBatchOperations,
@@ -526,6 +546,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         JSON.stringify(defaultTranscriptionSettings)
       );
       return { transcriptionSettings: defaultTranscriptionSettings };
+    }),
+
+  // Deletion Settings Actions
+  updateDeletionSettings: (updates) =>
+    set((state) => {
+      const newSettings = { ...state.deletionSettings, ...updates };
+      // Save to localStorage whenever updated
+      localStorage.setItem('deletionSettings', JSON.stringify(newSettings));
+      return { deletionSettings: newSettings };
+    }),
+
+  resetDeletionSettings: () =>
+    set(() => {
+      // Save to localStorage when reset
+      localStorage.setItem(
+        'deletionSettings',
+        JSON.stringify(defaultDeletionSettings)
+      );
+      return { deletionSettings: defaultDeletionSettings };
     }),
 
   // Batch Operations Actions
@@ -875,6 +914,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ttsSettings: state.ttsSettings,
       videoSettings: state.videoSettings,
       transcriptionSettings: state.transcriptionSettings,
+      deletionSettings: state.deletionSettings,
       modelSelection: {
         selectedModel: state.modelSelection.selectedModel,
         modelSearch: state.modelSelection.modelSearch,
@@ -905,6 +945,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           transcriptionSettings: {
             ...defaultTranscriptionSettings,
             ...settings.transcriptionSettings,
+          },
+          deletionSettings: {
+            ...defaultDeletionSettings,
+            ...settings.deletionSettings,
           },
           modelSelection: {
             ...state.modelSelection,
@@ -989,6 +1033,22 @@ export const useAppStore = create<AppState>((set, get) => ({
           });
         } catch (e) {
           console.error('Failed to parse transcriptionSettings:', e);
+        }
+      }
+
+      // Load deletionSettings from localStorage
+      const savedDeletionSettings = localStorage.getItem('deletionSettings');
+      if (savedDeletionSettings) {
+        try {
+          const settings = JSON.parse(savedDeletionSettings);
+          set({
+            deletionSettings: {
+              ...defaultDeletionSettings,
+              ...settings,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to parse deletionSettings:', e);
         }
       }
 

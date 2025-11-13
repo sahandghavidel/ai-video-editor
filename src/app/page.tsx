@@ -11,6 +11,7 @@ import AutoGenerateSettings from '@/components/AutoGenerateSettings';
 import SilenceSpeedSettings from '@/components/SilenceSpeedSettings';
 import AudioEnhancementSettings from '@/components/AudioEnhancementSettings';
 import AdvancedAudioSettings from '@/components/AdvancedAudioSettings';
+import DeletionSettings from '@/components/DeletionSettings';
 import OriginalVideosList from '@/components/OriginalVideosList';
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
@@ -301,6 +302,7 @@ export default function Home() {
                       <AudioEnhancementSettings />
                       <AdvancedAudioSettings />
                       <AutoGenerateSettings />
+                      <DeletionSettings />
                     </div>
                   </div>
                 )}
