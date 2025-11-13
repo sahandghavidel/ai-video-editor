@@ -1006,10 +1006,45 @@ export default function OriginalVideosList({
 
       // Update the original video record with the optimized video URL
       if (silenceData.data?.optimizedUrl) {
+        // Store the old video URL before updating
+        const oldVideoUrl = videoUrl;
+
+        console.log(`[SILENCE] Old URL: ${oldVideoUrl}`);
+        console.log(`[SILENCE] New URL: ${silenceData.data.optimizedUrl}`);
+
         await updateOriginalVideoRow(videoId, {
           field_6907: silenceData.data.optimizedUrl, // Silenced Video URL field
           field_6881: silenceData.data.optimizedUrl, // Replace the main video URL field
         });
+
+        // Delete the old video from MinIO to save space
+        if (oldVideoUrl && oldVideoUrl !== silenceData.data.optimizedUrl) {
+          console.log(
+            `[SILENCE] Deleting original video from MinIO: ${oldVideoUrl}`
+          );
+          try {
+            const deleted = await deleteFromMinio(oldVideoUrl);
+            if (deleted) {
+              console.log(
+                `[SILENCE] Successfully deleted original video from MinIO`
+              );
+            } else {
+              console.warn(
+                `[SILENCE] Failed to delete original video from MinIO, but continuing`
+              );
+            }
+          } catch (deleteError) {
+            console.error(
+              `[SILENCE] Error deleting original video from MinIO:`,
+              deleteError
+            );
+            // Don't throw - silence optimization was successful
+          }
+        } else {
+          console.log(
+            `[SILENCE] Skipping deletion - URLs are the same or old URL is missing`
+          );
+        }
       }
 
       // Refresh the table to show any updates
