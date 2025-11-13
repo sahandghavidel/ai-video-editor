@@ -3,7 +3,29 @@ import {
   concatenateVideosWithUpload,
   concatenateVideosFast,
 } from '@/utils/ffmpeg-merge';
-import { deleteFromMinio } from '@/utils/minio-client';
+
+/**
+ * Delete a file directly from MinIO storage
+ */
+async function deleteFileFromMinio(fileUrl: string): Promise<boolean> {
+  if (!fileUrl || typeof fileUrl !== 'string') {
+    return false;
+  }
+
+  try {
+    const response = await fetch(fileUrl, { method: 'DELETE' });
+    if (response.ok) {
+      console.log(`[MINIO] Deleted: ${fileUrl}`);
+      return true;
+    } else {
+      console.warn(`[MINIO] Delete failed (${response.status}): ${fileUrl}`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`[MINIO] Error deleting ${fileUrl}:`, error);
+    return false;
+  }
+}
 
 type VideoUrlInput = string | { video_url: string };
 
@@ -45,7 +67,7 @@ export async function POST(request: NextRequest) {
     // Delete old merged video from MinIO if provided
     if (old_merged_url && typeof old_merged_url === 'string') {
       console.log(`[MERGE] Deleting old merged video: ${old_merged_url}`);
-      const deleted = await deleteFromMinio(old_merged_url);
+      const deleted = await deleteFileFromMinio(old_merged_url);
       if (deleted) {
         console.log(`[MERGE] Successfully deleted old merged video`);
       } else {

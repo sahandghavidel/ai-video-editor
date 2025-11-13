@@ -2293,11 +2293,23 @@ export default function OriginalVideosList({
         videoUrls
       );
 
-      // Get the old merged video URL from store to delete it
-      const oldMergedVideoUrl = mergedVideo?.url || null;
-      if (oldMergedVideoUrl) {
-        console.log(
-          `[MERGE] Will delete old merged video: ${oldMergedVideoUrl}`
+      // Get the old final merged video URL from localStorage to delete it
+      let oldFinalMergedUrl: string | null = null;
+      try {
+        const existingData = localStorage.getItem('final-video-data');
+        if (existingData) {
+          const dataObject = JSON.parse(existingData);
+          oldFinalMergedUrl = dataObject.finalVideoUrl || null;
+          if (oldFinalMergedUrl) {
+            console.log(
+              `[MERGE] Found old final merged video in localStorage: ${oldFinalMergedUrl}`
+            );
+          }
+        }
+      } catch (error) {
+        console.warn(
+          'Failed to read old final merged video from localStorage:',
+          error
         );
       }
 
@@ -2311,7 +2323,7 @@ export default function OriginalVideosList({
           video_urls: videoUrls,
           id: 'final_merged', // Will generate filename: final_merged_video_timestamp.mp4
           fast_mode: true, // Use fast merging without re-encoding
-          old_merged_url: oldMergedVideoUrl, // Pass old URL to delete it
+          old_merged_url: oldFinalMergedUrl, // Pass old final merged URL from localStorage to delete it
         }),
       });
 
