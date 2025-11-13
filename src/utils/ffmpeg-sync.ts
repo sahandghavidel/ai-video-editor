@@ -436,6 +436,7 @@ export async function syncVideoWithUpload(
     sceneId?: string;
     videoId?: number | string;
     ttsTimestamp?: string;
+    clipTimestamp?: string;
     cleanup?: boolean;
     useAdvancedSync?: boolean;
   }
@@ -444,6 +445,7 @@ export async function syncVideoWithUpload(
     sceneId,
     videoId,
     ttsTimestamp,
+    clipTimestamp,
     cleanup = true,
     useAdvancedSync = true,
     ...syncOptions
@@ -458,21 +460,43 @@ export async function syncVideoWithUpload(
       : await syncVideoWithAudio(syncOptions);
 
     // Step 2: Generate filename for upload
-    // If ttsTimestamp is provided, use it to maintain the link between TTS and sync
-    // Otherwise, generate a new timestamp
-    const timestamp = ttsTimestamp || Date.now().toString();
-    const filename =
-      videoId && sceneId
-        ? `video_${videoId}_scene_${sceneId}_synced_${timestamp}.mp4`
-        : sceneId
-        ? `scene_${sceneId}_synced_${timestamp}.mp4`
-        : `synced_video_${timestamp}.mp4`;
+    // Format: video_ID_scene_ID_synced_TTS_TIMESTAMP_CLIP_TIMESTAMP.mp4
+    // This allows us to regenerate sync if either TTS or clip changes
+    let filename: string;
 
-    console.log(
-      `[SYNC] Generating filename with ${
-        ttsTimestamp ? 'TTS' : 'new'
-      } timestamp: ${filename}`
-    );
+    if (ttsTimestamp && clipTimestamp) {
+      // Both timestamps available - full tracking
+      filename =
+        videoId && sceneId
+          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}.mp4`
+          : sceneId
+          ? `scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}.mp4`
+          : `synced_video_${ttsTimestamp}_${clipTimestamp}.mp4`;
+      console.log(
+        `[SYNC] Generating filename with TTS timestamp (${ttsTimestamp}) and clip timestamp (${clipTimestamp}): ${filename}`
+      );
+    } else if (ttsTimestamp) {
+      // Only TTS timestamp - backward compatibility
+      filename =
+        videoId && sceneId
+          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}.mp4`
+          : sceneId
+          ? `scene_${sceneId}_synced_${ttsTimestamp}.mp4`
+          : `synced_video_${ttsTimestamp}.mp4`;
+      console.log(
+        `[SYNC] Generating filename with TTS timestamp only: ${filename}`
+      );
+    } else {
+      // No timestamps - generate new one
+      const timestamp = Date.now().toString();
+      filename =
+        videoId && sceneId
+          ? `video_${videoId}_scene_${sceneId}_synced_${timestamp}.mp4`
+          : sceneId
+          ? `scene_${sceneId}_synced_${timestamp}.mp4`
+          : `synced_video_${timestamp}.mp4`;
+      console.log(`[SYNC] Generating filename with new timestamp: ${filename}`);
+    }
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');

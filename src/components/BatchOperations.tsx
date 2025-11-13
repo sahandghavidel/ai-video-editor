@@ -43,7 +43,8 @@ interface BatchOperationsProps {
   handleVideoGenerate: (
     sceneId: number,
     videoUrl: string,
-    audioUrl: string
+    audioUrl: string,
+    sceneData?: BaserowRow
   ) => Promise<void>;
 }
 
