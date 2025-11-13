@@ -47,6 +47,7 @@ import {
   handleGenerateAllVideos,
   handleOptimizeSilenceForAllVideos,
 } from '@/utils/batchOperations';
+import { deleteFromMinio } from '@/utils/minio-client';
 import { Sparkles, Mic2 } from 'lucide-react';
 
 interface SceneHandlers {
@@ -814,10 +815,45 @@ export default function OriginalVideosList({
       const processedUrl =
         normalizeData.data?.normalizedUrl || normalizeData.data?.enhancedUrl;
       if (processedUrl) {
+        // Store the old video URL before updating
+        const oldVideoUrl = videoUrl;
+
+        console.log(`[NORMALIZE] Old URL: ${oldVideoUrl}`);
+        console.log(`[NORMALIZE] New URL: ${processedUrl}`);
+
         await updateOriginalVideoRow(videoId, {
           field_6903: processedUrl, // Normalized/Enhanced Video URL field
           field_6881: processedUrl, // Normalized/Enhanced Video URL field
         });
+
+        // Delete the old video from MinIO to save space
+        if (oldVideoUrl && oldVideoUrl !== processedUrl) {
+          console.log(
+            `[NORMALIZE] Deleting original video from MinIO: ${oldVideoUrl}`
+          );
+          try {
+            const deleted = await deleteFromMinio(oldVideoUrl);
+            if (deleted) {
+              console.log(
+                `[NORMALIZE] Successfully deleted original video from MinIO`
+              );
+            } else {
+              console.warn(
+                `[NORMALIZE] Failed to delete original video from MinIO, but continuing`
+              );
+            }
+          } catch (deleteError) {
+            console.error(
+              `[NORMALIZE] Error deleting original video from MinIO:`,
+              deleteError
+            );
+            // Don't throw - normalization was successful
+          }
+        } else {
+          console.log(
+            `[NORMALIZE] Skipping deletion - URLs are the same or old URL is missing`
+          );
+        }
       }
 
       // Refresh the table to show any updates
@@ -868,10 +904,45 @@ export default function OriginalVideosList({
 
       // Update the original video record with the CFR video URL
       if (cfrData.data?.cfrUrl) {
+        // Store the old video URL before updating
+        const oldVideoUrl = videoUrl;
+
+        console.log(`[CFR] Old URL: ${oldVideoUrl}`);
+        console.log(`[CFR] New URL: ${cfrData.data.cfrUrl}`);
+
         await updateOriginalVideoRow(videoId, {
           field_6908: cfrData.data.cfrUrl, // CFR Video URL field
           field_6881: cfrData.data.cfrUrl, // Replace the main video URL field with CFR version
         });
+
+        // Delete the old video from MinIO to save space
+        if (oldVideoUrl && oldVideoUrl !== cfrData.data.cfrUrl) {
+          console.log(
+            `[CFR] Deleting original video from MinIO: ${oldVideoUrl}`
+          );
+          try {
+            const deleted = await deleteFromMinio(oldVideoUrl);
+            if (deleted) {
+              console.log(
+                `[CFR] Successfully deleted original video from MinIO`
+              );
+            } else {
+              console.warn(
+                `[CFR] Failed to delete original video from MinIO, but continuing`
+              );
+            }
+          } catch (deleteError) {
+            console.error(
+              `[CFR] Error deleting original video from MinIO:`,
+              deleteError
+            );
+            // Don't throw - CFR conversion was successful
+          }
+        } else {
+          console.log(
+            `[CFR] Skipping deletion - URLs are the same or old URL is missing`
+          );
+        }
       }
 
       // Refresh the table to show any updates
@@ -1821,18 +1892,70 @@ export default function OriginalVideosList({
             }
 
             const result = await response.json();
-            console.log(`Successfully normalized audio for video ${video.id}`);
-            console.log('Result:', result);
-            console.log('Normalized URL:', result.data?.normalizedUrl);
+            console.log('='.repeat(80));
+            console.log(
+              `[CLIENT] Successfully normalized audio for video ${video.id}`
+            );
+            console.log('[CLIENT] Result:', result);
+            console.log('[CLIENT] Normalized URL:', result.data?.normalizedUrl);
+            console.log('='.repeat(80));
 
             // Update the original video record with the normalized video URL
             if (result.data?.normalizedUrl) {
-              console.log(`Updating video ${video.id} with normalized URL...`);
+              console.log(
+                `[CLIENT] Updating video ${video.id} with normalized URL...`
+              );
+
+              // Store the old uploaded video URL before updating
+              const oldUploadedVideoUrl = videoUrl; // This is the original field_6881 URL we extracted earlier
+
+              console.log(`[NORMALIZE DEBUG] Old URL: ${oldUploadedVideoUrl}`);
+              console.log(
+                `[NORMALIZE DEBUG] New URL: ${result.data.normalizedUrl}`
+              );
+              console.log(
+                `[NORMALIZE DEBUG] URLs are different: ${
+                  oldUploadedVideoUrl !== result.data.normalizedUrl
+                }`
+              );
+
               await updateOriginalVideoRow(video.id, {
                 field_6903: result.data.normalizedUrl, // Normalized Video URL field
                 field_6881: result.data.normalizedUrl, // Replace the main video URL field
               });
               console.log(`Video ${video.id} updated successfully`);
+
+              // Delete the old uploaded video from MinIO to save space
+              if (
+                oldUploadedVideoUrl &&
+                oldUploadedVideoUrl !== result.data.normalizedUrl
+              ) {
+                console.log(
+                  `[NORMALIZE] Deleting original uploaded video from MinIO: ${oldUploadedVideoUrl}`
+                );
+                try {
+                  const deleted = await deleteFromMinio(oldUploadedVideoUrl);
+                  if (deleted) {
+                    console.log(
+                      `[NORMALIZE] Successfully deleted original uploaded video from MinIO`
+                    );
+                  } else {
+                    console.warn(
+                      `[NORMALIZE] Failed to delete original video from MinIO, but continuing`
+                    );
+                  }
+                } catch (deleteError) {
+                  console.error(
+                    `[NORMALIZE] Error deleting original video from MinIO:`,
+                    deleteError
+                  );
+                  // Don't throw - normalization was successful
+                }
+              } else {
+                console.log(
+                  `[NORMALIZE] Skipping deletion - URLs are the same or old URL is missing`
+                );
+              }
 
               // Refresh after each video to show updates immediately
               await handleRefresh();

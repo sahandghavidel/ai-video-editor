@@ -386,32 +386,6 @@ export async function speedUpVideoWithFFmpeg(
 }
 
 /**
- * Delete a file from MinIO storage using HTTP DELETE
- */
-export async function deleteFromMinio(fileUrl: string): Promise<boolean> {
-  try {
-    console.log(`[MINIO] Attempting to delete file: ${fileUrl}`);
-
-    const deleteResponse = await fetch(fileUrl, {
-      method: 'DELETE',
-    });
-
-    if (deleteResponse.ok) {
-      console.log(`[MINIO] Successfully deleted: ${fileUrl}`);
-      return true;
-    } else {
-      console.warn(
-        `[MINIO] Delete failed with status ${deleteResponse.status}: ${fileUrl}`
-      );
-      return false;
-    }
-  } catch (error) {
-    console.error('[MINIO] Error deleting file:', error);
-    return false;
-  }
-}
-
-/**
  * Upload a file to MinIO storage using the same pattern as other endpoints
  */
 export async function uploadToMinio(

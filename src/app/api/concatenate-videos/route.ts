@@ -3,7 +3,7 @@ import {
   concatenateVideosWithUpload,
   concatenateVideosFast,
 } from '@/utils/ffmpeg-merge';
-import { deleteFromMinio } from '@/utils/ffmpeg-direct';
+import { deleteFromMinio } from '@/utils/minio-client';
 
 type VideoUrlInput = string | { video_url: string };
 
