@@ -30,34 +30,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert file to buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Generate unique filename
-    const timestamp = Date.now();
-    const fileExtension = file.name.split('.').pop() || 'mp4';
-    const filename = `video_${timestamp}.${fileExtension}`;
-
     // Extract original filename for title (without extension)
     const originalName = file.name.replace(/\.[^/.]+$/, ''); // Remove file extension
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
-
-    // Upload to MinIO
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': file.type,
-      },
-      body: buffer,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('MinIO upload error:', errorText);
-      throw new Error(`MinIO upload error: ${uploadResponse.status}`);
-    }
 
     // Get existing videos to determine next order number and check for duplicate titles
     const existingVideos = await getOriginalVideosData();
@@ -95,17 +69,51 @@ export async function POST(request: NextRequest) {
 
     const uniqueTitle = generateUniqueTitle(originalName, existingVideos);
 
-    // Create new row in Baserow table 713
+    // Create Baserow row first to get the video ID
     const newRowData = {
-      field_6881: uploadUrl, // Video Uploaded URL
       field_6864: 'Processing', // Status - default to Processing on upload
       field_6902: nextOrder, // Order - automatically set to next number
       field_6852: uniqueTitle, // Title - auto-generated from filename
+      // field_6881 will be set after upload
       // field_6866: scenes will be empty initially
       // field_6858: final merged video will be empty initially
     };
 
     const newRow = await createOriginalVideoRow(newRowData);
+    const videoId = newRow.id;
+
+    // Convert file to buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Generate filename with video ID and "raw" indicator
+    const timestamp = Date.now();
+    const fileExtension = file.name.split('.').pop() || 'mp4';
+    const filename = `video_${videoId}_raw_${timestamp}.${fileExtension}`;
+
+    const bucket = 'nca-toolkit';
+    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
+
+    // Upload to MinIO
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type,
+      },
+      body: buffer,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error('MinIO upload error:', errorText);
+      throw new Error(`MinIO upload error: ${uploadResponse.status}`);
+    }
+
+    // Update the row with the video URL
+    const { updateOriginalVideoRow } = await import('@/lib/baserow-actions');
+    await updateOriginalVideoRow(videoId, {
+      field_6881: uploadUrl, // Video Uploaded URL
+    });
 
     return NextResponse.json({
       success: true,
