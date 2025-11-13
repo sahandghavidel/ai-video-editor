@@ -462,8 +462,12 @@ export async function syncVideoWithUpload(
     const filename = sceneId
       ? `scene_${sceneId}_synced_${timestamp}.mp4`
       : `synced_video_${timestamp}.mp4`;
-    
-    console.log(`[SYNC] Generating filename with ${ttsTimestamp ? 'TTS' : 'new'} timestamp: ${filename}`);
+
+    console.log(
+      `[SYNC] Generating filename with ${
+        ttsTimestamp ? 'TTS' : 'new'
+      } timestamp: ${filename}`
+    );
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');

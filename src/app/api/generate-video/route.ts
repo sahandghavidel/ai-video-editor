@@ -24,13 +24,15 @@ export async function POST(request: NextRequest) {
     if (ttsMatch && ttsMatch[1]) {
       ttsTimestamp = ttsMatch[1];
       console.log(`[SYNC] Extracted TTS timestamp: ${ttsTimestamp}`);
-      
+
       // Check if sync with this timestamp already exists
       const expectedSyncUrl = `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}.mp4`;
       try {
         const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
         if (checkResponse.ok) {
-          console.log(`[SYNC] Found existing synced video with same TTS timestamp: ${expectedSyncUrl}`);
+          console.log(
+            `[SYNC] Found existing synced video with same TTS timestamp: ${expectedSyncUrl}`
+          );
           console.log(`[SYNC] Skipping regeneration - returning cached sync`);
           return NextResponse.json({
             videoUrl: expectedSyncUrl,

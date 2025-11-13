@@ -804,6 +804,7 @@ export default function SceneCard({
 
         const result = await response.json();
         const generatedVideoUrl = result.videoUrl;
+        const isCached = result.cached === true;
 
         // Update the Baserow field with the generated video URL
         const updatedRow = await updateBaserowRow(sceneId, {
@@ -819,8 +820,10 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server to ensure consistency
-        refreshDataRef.current?.();
+        // Only refresh from server if it's NOT a cache hit (to avoid wasteful refetch)
+        if (!isCached) {
+          refreshDataRef.current?.();
+        }
       } catch (error) {
         console.error('Error generating synchronized video:', error);
         // You could show a user-friendly error message here
