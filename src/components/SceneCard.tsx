@@ -1437,6 +1437,20 @@ export default function SceneCard({
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
+                            handleRemoveTTS(scene.id);
+                          }}
+                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                          title='Remove TTS audio'
+                        >
+                          {removingTTSId === scene.id ? (
+                            <Loader2 className='animate-spin h-3 w-3' />
+                          ) : (
+                            <X className='h-3 w-3 text-purple-700' />
+                          )}
+                        </div>
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
                             handleAudioPlay(
                               scene.id,
                               scene['field_6891'] as string
@@ -1455,20 +1469,6 @@ export default function SceneCard({
                             <Pause className='h-3 w-3 text-purple-700' />
                           ) : (
                             <Play className='h-3 w-3 text-purple-700' />
-                          )}
-                        </div>
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveTTS(scene.id);
-                          }}
-                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
-                          title='Remove TTS audio'
-                        >
-                          {removingTTSId === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <X className='h-3 w-3 text-purple-700' />
                           )}
                         </div>
                       </div>
