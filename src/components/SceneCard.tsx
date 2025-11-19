@@ -230,6 +230,9 @@ export default function SceneCard({
   // State for removing TTS
   const [removingTTSId, setRemovingTTSId] = useState<number | null>(null);
 
+  // State for clearing video
+  const [clearingVideoId, setClearingVideoId] = useState<number | null>(null);
+
   // Revert to original sentence handler
   const handleRevertToOriginal = async (sceneId: number) => {
     const currentScene = data.find((scene) => scene.id === sceneId);
@@ -276,6 +279,30 @@ export default function SceneCard({
       onDataUpdate?.(data);
     } finally {
       setRemovingTTSId(null);
+    }
+  };
+
+  // Clear video field handler
+  const handleClearVideo = async (sceneId: number) => {
+    setClearingVideoId(sceneId);
+    // Stop video if playing
+    if (mediaPlayer.playingVideoId === sceneId) {
+      handleVideoStop(sceneId);
+    }
+    // Optimistic update
+    const optimisticData = data.map((scene) =>
+      scene.id === sceneId ? { ...scene, field_6886: '' } : scene
+    );
+    onDataUpdate?.(optimisticData);
+    try {
+      await updateBaserowRow(sceneId, { field_6886: '' });
+      refreshData?.();
+    } catch (error) {
+      console.error('Failed to clear video:', error);
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
+    } finally {
+      setClearingVideoId(null);
     }
   };
 
@@ -1683,6 +1710,25 @@ export default function SceneCard({
                       >
                         {clipGeneration.generatingSingleClip === scene.id ? (
                           <Loader2 className='animate-spin h-3 w-3' />
+                        ) : typeof scene['field_6886'] === 'string' &&
+                          scene['field_6886'] ? (
+                          <div className='flex items-center space-x-1'>
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleClearVideo(scene.id);
+                              }}
+                              className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                              title='Clear processed video (field 6886)'
+                            >
+                              {clearingVideoId === scene.id ? (
+                                <Loader2 className='animate-spin h-3 w-3' />
+                              ) : (
+                                <X className='h-3 w-3 text-purple-700' />
+                              )}
+                            </div>
+                            <Scissors className='h-3 w-3' />
+                          </div>
                         ) : (
                           <Scissors className='h-3 w-3' />
                         )}
