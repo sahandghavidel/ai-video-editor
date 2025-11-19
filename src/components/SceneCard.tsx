@@ -1431,6 +1431,47 @@ export default function SceneCard({
                   >
                     {sceneLoading.producingTTS === scene.id ? (
                       <Loader2 className='animate-spin h-3 w-3' />
+                    ) : typeof scene['field_6891'] === 'string' &&
+                      scene['field_6891'] ? (
+                      <div className='flex items-center space-x-1'>
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAudioPlay(
+                              scene.id,
+                              scene['field_6891'] as string
+                            );
+                          }}
+                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                          title={
+                            mediaPlayer.playingAudioId === scene.id
+                              ? 'Pause audio'
+                              : 'Play audio'
+                          }
+                        >
+                          {loadingAudio === scene.id ? (
+                            <Loader2 className='animate-spin h-3 w-3' />
+                          ) : mediaPlayer.playingAudioId === scene.id ? (
+                            <Pause className='h-3 w-3 text-purple-700' />
+                          ) : (
+                            <Play className='h-3 w-3 text-purple-700' />
+                          )}
+                        </div>
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveTTS(scene.id);
+                          }}
+                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                          title='Remove TTS audio'
+                        >
+                          {removingTTSId === scene.id ? (
+                            <Loader2 className='animate-spin h-3 w-3' />
+                          ) : (
+                            <X className='h-3 w-3 text-purple-700' />
+                          )}
+                        </div>
+                      </div>
                     ) : (
                       <CheckCircle className='h-3 w-3' />
                     )}
@@ -1440,6 +1481,9 @@ export default function SceneCard({
                         : sceneLoading.producingTTS !== null ||
                           batchOperations.generatingAllTTS
                         ? 'TTS Busy'
+                        : typeof scene['field_6891'] === 'string' &&
+                          scene['field_6891']
+                        ? 'TTS'
                         : 'Gen TTS'}
                     </span>
                   </button>
@@ -1494,60 +1538,6 @@ export default function SceneCard({
                         : 'AI'}
                     </span>
                   </button>
-
-                  {/* TTS Audio Button */}
-                  {typeof scene['field_6891'] === 'string' &&
-                    scene['field_6891'] && (
-                      <button
-                        onClick={() =>
-                          handleAudioPlay(
-                            scene.id,
-                            scene['field_6891'] as string
-                          )
-                        }
-                        disabled={loadingAudio === scene.id}
-                        className={`px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
-                          mediaPlayer.playingAudioId === scene.id
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title={
-                          mediaPlayer.playingAudioId === scene.id
-                            ? 'Pause audio'
-                            : 'Play audio'
-                        }
-                      >
-                        {loadingAudio === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : mediaPlayer.playingAudioId === scene.id ? (
-                          <Pause className='h-3 w-3' />
-                        ) : (
-                          <Play className='h-3 w-3' />
-                        )}
-                      </button>
-                    )}
-
-                  {/* Remove TTS Button */}
-                  {typeof scene['field_6891'] === 'string' &&
-                    scene['field_6891'] && (
-                      <button
-                        onClick={() => handleRemoveTTS(scene.id)}
-                        disabled={removingTTSId === scene.id}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title='Remove TTS audio'
-                      >
-                        {removingTTSId === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : (
-                          <X className='h-3 w-3' />
-                        )}
-                        <span>
-                          {removingTTSId === scene.id
-                            ? 'Removing...'
-                            : 'Del TTS'}
-                        </span>
-                      </button>
-                    )}
 
                   {/* Video Play Button */}
                   {typeof scene['field_6888'] === 'string' &&
