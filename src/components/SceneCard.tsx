@@ -1375,26 +1375,6 @@ export default function SceneCard({
               {/* Media Controls Group - Right Side with flex-1 wrapper */}
               <div className='flex-1 flex justify-end'>
                 <div className='flex flex-wrap gap-2'>
-                  {/* Revert to Original Button */}
-                  {typeof scene['field_6901'] === 'string' &&
-                    scene['field_6901'] &&
-                    scene['field_6901'] !== scene['field_6890'] && (
-                      <button
-                        onClick={() => handleRevertToOriginal(scene.id)}
-                        disabled={revertingId === scene.id}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title='Revert to original sentence'
-                      >
-                        {revertingId === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : (
-                          <RotateCcw className='h-3 w-3' />
-                        )}
-                        <span>
-                          {revertingId === scene.id ? 'Reverting...' : 'Text'}
-                        </span>
-                      </button>
-                    )}
                   {/* TTS Produce Button */}
                   <button
                     onClick={() =>
@@ -1526,6 +1506,26 @@ export default function SceneCard({
                   >
                     {sceneLoading.improvingSentence === scene.id ? (
                       <Loader2 className='animate-spin h-3 w-3' />
+                    ) : typeof scene['field_6901'] === 'string' &&
+                      scene['field_6901'] &&
+                      scene['field_6901'] !== scene['field_6890'] ? (
+                      <div className='flex items-center space-x-1'>
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRevertToOriginal(scene.id);
+                          }}
+                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                          title='Revert to original sentence'
+                        >
+                          {revertingId === scene.id ? (
+                            <Loader2 className='animate-spin h-3 w-3' />
+                          ) : (
+                            <RotateCcw className='h-3 w-3 text-indigo-700' />
+                          )}
+                        </div>
+                        <Sparkles className='h-3 w-3' />
+                      </div>
                     ) : (
                       <Sparkles className='h-3 w-3' />
                     )}
