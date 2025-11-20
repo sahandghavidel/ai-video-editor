@@ -26,6 +26,7 @@ export interface VideoSettings {
 // Transcription settings interface
 export interface TranscriptionSettings {
   selectedModel: string;
+  selectedVideoType: 'original' | 'final';
 }
 
 // Deletion settings interface
@@ -314,6 +315,7 @@ const defaultVideoSettings: VideoSettings = {
 // Default transcription settings
 const defaultTranscriptionSettings: TranscriptionSettings = {
   selectedModel: 'parakeet', // Default to Parakeet model
+  selectedVideoType: 'original', // Default to original video
 };
 
 // Default deletion settings

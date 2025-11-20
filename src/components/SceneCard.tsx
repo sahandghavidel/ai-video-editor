@@ -53,7 +53,8 @@ interface SceneCardProps {
     ) => Promise<void>;
     handleTranscribeScene: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
+      videoType?: 'original' | 'final'
     ) => Promise<void>;
   }) => void;
 }
@@ -112,6 +113,7 @@ export default function SceneCard({
     transcriptionSettings,
     updateTTSSettings,
     updateVideoSettings,
+    updateTranscriptionSettings,
     batchOperations,
     startBatchOperation,
     completeBatchOperation,
@@ -417,14 +419,27 @@ export default function SceneCard({
 
   // Transcribe scene handler
   const handleTranscribeScene = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      videoType: 'original' | 'final' = 'original'
+    ) => {
       const currentScene =
         sceneData || data.find((scene) => scene.id === sceneId);
       if (!currentScene) return;
 
-      const videoUrl = currentScene.field_6888 as string;
+      // Determine which video URL to use
+      const videoUrl =
+        videoType === 'final'
+          ? (currentScene.field_6886 as string)
+          : (currentScene.field_6888 as string);
+
       if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
-        console.log('No video found in field 6888 to transcribe');
+        console.log(
+          `No ${videoType} video found in field ${
+            videoType === 'final' ? '6886' : '6888'
+          } to transcribe`
+        );
         return;
       }
 
@@ -432,9 +447,7 @@ export default function SceneCard({
 
       try {
         console.log(
-          'Starting scene transcription for scene:',
-          sceneId,
-          'with video:',
+          `Starting scene transcription for scene: ${sceneId}, video type: ${videoType}, with video:`,
           videoUrl
         );
 
@@ -533,6 +546,7 @@ export default function SceneCard({
     [
       data,
       transcriptionSettings.selectedModel,
+      transcriptionSettings.selectedVideoType,
       setTranscribingScene,
       onDataUpdate,
       refreshData,
@@ -1630,51 +1644,83 @@ export default function SceneCard({
                   </button>
 
                   {/* Transcribe Scene Button */}
-                  {typeof scene['field_6888'] === 'string' &&
-                    scene['field_6888'] && (
-                      <button
-                        onClick={() => handleTranscribeScene(scene.id, scene)}
-                        disabled={sceneLoading.transcribingScene !== null}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
-                          sceneLoading.transcribingScene === scene.id
-                            ? 'bg-gray-100 text-gray-500'
-                            : sceneLoading.transcribingScene !== null
-                            ? 'bg-gray-50 text-gray-400'
-                            : typeof scene['field_6910'] === 'string' &&
-                              scene['field_6910']
-                            ? 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
-                            : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title={
-                          sceneLoading.transcribingScene === scene.id
-                            ? 'Transcribing scene audio...'
-                            : sceneLoading.transcribingScene !== null
-                            ? `Scene transcription is in progress for scene ${sceneLoading.transcribingScene}`
-                            : typeof scene['field_6910'] === 'string' &&
-                              scene['field_6910']
-                            ? 'Scene already transcribed - click to re-transcribe'
-                            : 'Transcribe scene audio and save captions'
-                        }
-                      >
-                        {sceneLoading.transcribingScene === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : (
-                          <div className='flex items-center space-x-1'>
-                            <span className='text-xs'>🎙️</span>
+                  {((typeof scene['field_6888'] === 'string' &&
+                    scene['field_6888']) ||
+                    (typeof scene['field_6886'] === 'string' &&
+                      scene['field_6886'])) && (
+                    <button
+                      onClick={() =>
+                        handleTranscribeScene(
+                          scene.id,
+                          scene,
+                          transcriptionSettings.selectedVideoType
+                        )
+                      }
+                      disabled={sceneLoading.transcribingScene !== null}
+                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
+                        sceneLoading.transcribingScene === scene.id
+                          ? 'bg-gray-100 text-gray-500'
+                          : sceneLoading.transcribingScene !== null
+                          ? 'bg-gray-50 text-gray-400'
+                          : typeof scene['field_6910'] === 'string' &&
+                            scene['field_6910']
+                          ? 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                          : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title={
+                        sceneLoading.transcribingScene === scene.id
+                          ? 'Transcribing scene audio...'
+                          : sceneLoading.transcribingScene !== null
+                          ? `Scene transcription is in progress for scene ${sceneLoading.transcribingScene}`
+                          : typeof scene['field_6910'] === 'string' &&
+                            scene['field_6910']
+                          ? 'Scene already transcribed - click to re-transcribe'
+                          : `Transcribe ${transcriptionSettings.selectedVideoType} video and save captions`
+                      }
+                    >
+                      {sceneLoading.transcribingScene === scene.id ? (
+                        <Loader2 className='animate-spin h-3 w-3' />
+                      ) : (
+                        <div className='flex items-center space-x-1'>
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateTranscriptionSettings({
+                                selectedVideoType:
+                                  transcriptionSettings.selectedVideoType ===
+                                  'original'
+                                    ? 'final'
+                                    : 'original',
+                              });
+                            }}
+                            className='px-1 py-0.5 text-xs font-bold text-cyan-700 hover:bg-cyan-600/20 rounded transition-colors duration-200 cursor-pointer'
+                            title={`Click to toggle video type (${
+                              transcriptionSettings.selectedVideoType ===
+                              'original'
+                                ? 'final'
+                                : 'original'
+                            })`}
+                          >
+                            {transcriptionSettings.selectedVideoType ===
+                            'original'
+                              ? 'Orig'
+                              : 'Final'}
                           </div>
-                        )}
-                        <span>
-                          {sceneLoading.transcribingScene === scene.id
-                            ? 'Transcribing...'
-                            : sceneLoading.transcribingScene !== null
-                            ? 'Transcribe Busy'
-                            : typeof scene['field_6910'] === 'string' &&
-                              scene['field_6910']
-                            ? 'Re-transcribe'
-                            : 'Transcribe'}
-                        </span>
-                      </button>
-                    )}
+                          <span className='text-xs'>🎙️</span>
+                        </div>
+                      )}
+                      <span>
+                        {sceneLoading.transcribingScene === scene.id
+                          ? 'Transcribing...'
+                          : sceneLoading.transcribingScene !== null
+                          ? 'Transcribe Busy'
+                          : typeof scene['field_6910'] === 'string' &&
+                            scene['field_6910']
+                          ? 'Re-transcribe'
+                          : 'Transcribe'}
+                      </span>
+                    </button>
+                  )}
 
                   {/* AI Improvement Button */}
                   <button
