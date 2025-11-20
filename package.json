@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "pkill -f 'next dev.*9540' || true && sleep 1 && next dev -p 9540",
+    "dev": "caffeinate -i bash -c 'pkill -f \"next dev.*9540\" || true && sleep 1 && next dev -p 9540'",
     "dev:restart": "pkill -f 'next dev' || true && sleep 2 && next dev -p 9540",
     "dev:nosleep": "caffeinate -i npm run dev",
     "build": "next build",
