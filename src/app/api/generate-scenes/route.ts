@@ -226,7 +226,7 @@ function generateScenesFromTranscription(
       duration: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
       startTime: 0,
       endTime: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
-      preEndTime: 0.0,
+      preEndTime: 0, // Placeholder, will be recalculated after adjustments
       type: 'gap',
       videoId,
     });
@@ -235,13 +235,7 @@ function generateScenesFromTranscription(
   for (let i = 0; i < sentenceSegments.length; i++) {
     const sentence = sentenceSegments[i];
 
-    // Calculate previous end time
-    let preEndTime = 0;
-    if (allSegments.length > 0) {
-      preEndTime = allSegments[allSegments.length - 1].endTime;
-    }
-
-    // Add the sentence segment
+    // Add the sentence segment (preEndTime will be calculated after adjustments)
     if (sentence.startTime !== null && sentence.endTime !== null) {
       allSegments.push({
         id: segmentId++,
@@ -249,7 +243,7 @@ function generateScenesFromTranscription(
         duration: parseFloat(sentence.duration.toFixed(2)),
         startTime: parseFloat(sentence.startTime.toFixed(2)),
         endTime: parseFloat(sentence.endTime.toFixed(2)),
-        preEndTime: parseFloat(preEndTime.toFixed(2)),
+        preEndTime: 0, // Placeholder, will be recalculated after adjustments
         type: 'sentence',
         videoId,
       });
@@ -271,7 +265,7 @@ function generateScenesFromTranscription(
             duration: parseFloat(gapDuration.toFixed(2)),
             startTime: parseFloat(gapStartTime.toFixed(2)),
             endTime: parseFloat(gapEndTime.toFixed(2)),
-            preEndTime: parseFloat(sentence.endTime.toFixed(2)),
+            preEndTime: 0, // Placeholder, will be recalculated after adjustments
             type: 'gap',
             videoId,
           });
@@ -387,6 +381,20 @@ function generateScenesFromTranscription(
       allSegments.length - filteredSegments.length
     } zero-duration gaps)`
   );
+
+  // Step 5: Recalculate preEndTime for all segments based on adjusted timeline
+  console.log('Recalculating preEndTime values for adjusted timeline...');
+  for (let i = 0; i < filteredSegments.length; i++) {
+    if (i === 0) {
+      // First segment always starts at 0
+      filteredSegments[i].preEndTime = 0;
+    } else {
+      // Each segment's preEndTime is the previous segment's endTime
+      filteredSegments[i].preEndTime = parseFloat(
+        filteredSegments[i - 1].endTime.toFixed(2)
+      );
+    }
+  }
 
   return filteredSegments;
 }
