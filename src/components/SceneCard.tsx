@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { updateBaserowRow, BaserowRow } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
+import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import {
   Loader2,
   Sparkles,
@@ -49,6 +50,10 @@ interface SceneCardProps {
       sceneId: number,
       sceneData?: BaserowRow,
       skipRefresh?: boolean
+    ) => Promise<void>;
+    handleTranscribeScene: (
+      sceneId: number,
+      sceneData?: BaserowRow
     ) => Promise<void>;
   }) => void;
 }
@@ -104,6 +109,7 @@ export default function SceneCard({
   const {
     ttsSettings,
     videoSettings,
+    transcriptionSettings,
     updateTTSSettings,
     updateVideoSettings,
     batchOperations,
@@ -125,6 +131,7 @@ export default function SceneCard({
     setProducingTTS,
     setImprovingSentence,
     setSpeedingUpVideo,
+    setTranscribingScene,
     setGeneratingVideo,
     clipGeneration,
     setGeneratingSingleClip,
@@ -405,6 +412,132 @@ export default function SceneCard({
       setSpeedingUpVideo,
       onDataUpdate,
       refreshData,
+    ]
+  );
+
+  // Transcribe scene handler
+  const handleTranscribeScene = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow) => {
+      const currentScene =
+        sceneData || data.find((scene) => scene.id === sceneId);
+      if (!currentScene) return;
+
+      const videoUrl = currentScene.field_6888 as string;
+      if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
+        console.log('No video found in field 6888 to transcribe');
+        return;
+      }
+
+      setTranscribingScene(sceneId);
+
+      try {
+        console.log(
+          'Starting scene transcription for scene:',
+          sceneId,
+          'with video:',
+          videoUrl
+        );
+
+        // Step 1: Transcribe the scene video using selected model
+        const transcribeResponse = await fetch('/api/transcribe-scene', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            media_url: videoUrl,
+            model: transcriptionSettings.selectedModel,
+            scene_id: sceneId,
+          }),
+        });
+
+        if (!transcribeResponse.ok) {
+          throw new Error('Failed to transcribe scene');
+        }
+
+        const transcriptionData = await transcribeResponse.json();
+
+        // Step 2: Process the response to extract word timestamps
+        const wordTimestamps = [];
+        const segments = transcriptionData.response?.segments;
+
+        if (segments && segments.length > 0) {
+          for (const segment of segments) {
+            if (segment.words) {
+              for (const wordObj of segment.words) {
+                wordTimestamps.push({
+                  word: wordObj.word.trim(),
+                  start: wordObj.start,
+                  end: wordObj.end,
+                });
+              }
+            }
+          }
+        }
+
+        // Step 3: Upload the captions file to MinIO
+        const captionsData = JSON.stringify(wordTimestamps);
+        const timestamp = Date.now();
+        const filename = `scene_${sceneId}_captions_${timestamp}.json`;
+
+        const formData = new FormData();
+        const blob = new Blob([captionsData], { type: 'application/json' });
+        formData.append('file', blob, filename);
+
+        const uploadResponse = await fetch('/api/upload-captions', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload scene captions');
+        }
+
+        const uploadResult = await uploadResponse.json();
+        console.log('Scene captions uploaded successfully:', uploadResult);
+
+        // Step 4: Update the scene record with the captions URL (field_6910)
+        const captionsUrl = uploadResult.url || uploadResult.file_url;
+        if (captionsUrl) {
+          await updateBaserowRow(sceneId, {
+            field_6910: captionsUrl, // Captions URL for Scene field
+          });
+
+          // Optimistic update
+          const optimisticData = data.map((scene) =>
+            scene.id === sceneId ? { ...scene, field_6910: captionsUrl } : scene
+          );
+          onDataUpdate?.(optimisticData);
+        }
+
+        // Refresh data from server to ensure consistency
+        refreshData?.();
+
+        // Play success sound
+        playSuccessSound();
+      } catch (error) {
+        console.error('Error transcribing scene:', error);
+
+        // Play error sound
+        playErrorSound();
+
+        let errorMessage = 'Failed to transcribe scene';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        console.log(`Error: ${errorMessage}`);
+      } finally {
+        setTranscribingScene(null);
+      }
+    },
+    [
+      data,
+      transcriptionSettings.selectedModel,
+      setTranscribingScene,
+      onDataUpdate,
+      refreshData,
+      playSuccessSound,
+      playErrorSound,
     ]
   );
 
@@ -1045,6 +1178,7 @@ export default function SceneCard({
         handleTTSProduce,
         handleVideoGenerate,
         handleSpeedUpVideo,
+        handleTranscribeScene,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1494,6 +1628,53 @@ export default function SceneCard({
                         : 'Gen TTS'}
                     </span>
                   </button>
+
+                  {/* Transcribe Scene Button */}
+                  {typeof scene['field_6888'] === 'string' &&
+                    scene['field_6888'] && (
+                      <button
+                        onClick={() => handleTranscribeScene(scene.id, scene)}
+                        disabled={sceneLoading.transcribingScene !== null}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
+                          sceneLoading.transcribingScene === scene.id
+                            ? 'bg-gray-100 text-gray-500'
+                            : sceneLoading.transcribingScene !== null
+                            ? 'bg-gray-50 text-gray-400'
+                            : typeof scene['field_6910'] === 'string' &&
+                              scene['field_6910']
+                            ? 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                            : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          sceneLoading.transcribingScene === scene.id
+                            ? 'Transcribing scene audio...'
+                            : sceneLoading.transcribingScene !== null
+                            ? `Scene transcription is in progress for scene ${sceneLoading.transcribingScene}`
+                            : typeof scene['field_6910'] === 'string' &&
+                              scene['field_6910']
+                            ? 'Scene already transcribed - click to re-transcribe'
+                            : 'Transcribe scene audio and save captions'
+                        }
+                      >
+                        {sceneLoading.transcribingScene === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <div className='flex items-center space-x-1'>
+                            <span className='text-xs'>🎙️</span>
+                          </div>
+                        )}
+                        <span>
+                          {sceneLoading.transcribingScene === scene.id
+                            ? 'Transcribing...'
+                            : sceneLoading.transcribingScene !== null
+                            ? 'Transcribe Busy'
+                            : typeof scene['field_6910'] === 'string' &&
+                              scene['field_6910']
+                            ? 'Re-transcribe'
+                            : 'Transcribe'}
+                        </span>
+                      </button>
+                    )}
 
                   {/* AI Improvement Button */}
                   <button
