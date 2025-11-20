@@ -395,8 +395,16 @@ export async function uploadToMinio(
 ): Promise<string> {
   try {
     // Check file size first
+    const statStart = Date.now();
     const stats = await stat(filePath);
     const fileSize = stats.size;
+    const statEnd = Date.now();
+    console.log(
+      `[STAT] File size check took ${statEnd - statStart}ms (${(
+        fileSize /
+        (1024 * 1024)
+      ).toFixed(2)}MB)`
+    );
 
     // Generate filename if not provided
     const finalFilename =
@@ -416,14 +424,23 @@ export async function uploadToMinio(
         )}GB), using streaming upload`
       );
 
+      const streamStart = Date.now();
       await uploadLargeFileToMinio(filePath, uploadUrl, contentType);
+      const streamEnd = Date.now();
+      console.log(
+        `[STREAM] Streaming upload took ${streamEnd - streamStart}ms`
+      );
 
       return uploadUrl;
     } else {
       // For smaller files, use the original buffer method
+      const readStart = Date.now();
       const fileBuffer = await readFile(filePath);
+      const readEnd = Date.now();
+      console.log(`[READ] File read took ${readEnd - readStart}ms`);
 
       // Upload to MinIO using direct HTTP PUT
+      const putStart = Date.now();
       const uploadResponse = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
@@ -431,6 +448,8 @@ export async function uploadToMinio(
         },
         body: new Uint8Array(fileBuffer),
       });
+      const putEnd = Date.now();
+      console.log(`[PUT] HTTP PUT request took ${putEnd - putStart}ms`);
 
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text();
@@ -523,7 +542,12 @@ export async function speedUpVideoWithUpload(
 
   try {
     // Step 1: Speed up the video using FFmpeg
+    const ffmpegStart = Date.now();
     localPath = await speedUpVideoWithFFmpeg(speedUpOptions);
+    const ffmpegEnd = Date.now();
+    console.log(
+      `[FFMPEG] Scene ${sceneId} processing took ${ffmpegEnd - ffmpegStart}ms`
+    );
 
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
@@ -536,13 +560,24 @@ export async function speedUpVideoWithUpload(
         : `spedup_${speedSuffix}_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
+    const uploadStart = Date.now();
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
+    const uploadEnd = Date.now();
+    console.log(
+      `[MINIO] Scene ${sceneId} upload took ${uploadEnd - uploadStart}ms`
+    );
 
     // Step 4: Cleanup local file if requested
     if (cleanup && localPath) {
       try {
+        const cleanupStart = Date.now();
         await unlink(localPath);
-        console.log(`Cleaned up local file: ${localPath}`);
+        const cleanupEnd = Date.now();
+        console.log(
+          `[CLEANUP] Scene ${sceneId} cleanup took ${
+            cleanupEnd - cleanupStart
+          }ms - removed: ${localPath}`
+        );
       } catch (cleanupError) {
         console.warn(`Failed to cleanup local file: ${cleanupError}`);
       }

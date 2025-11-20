@@ -63,7 +63,14 @@ export async function POST(request: NextRequest) {
       );
 
       // Update the scene with the sped-up video URL
+      const baserowUpdateStart = Date.now();
       await updateSceneWithSpeedUpUrl(sceneId, result.uploadUrl);
+      const baserowUpdateEnd = Date.now();
+      console.log(
+        `[BASEROW] Scene ${sceneId} updated in ${
+          baserowUpdateEnd - baserowUpdateStart
+        }ms`
+      );
 
       return NextResponse.json({
         videoUrl: result.uploadUrl,
