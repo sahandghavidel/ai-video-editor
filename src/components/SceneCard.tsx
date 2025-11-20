@@ -509,16 +509,34 @@ export default function SceneCard({
         const uploadResult = await uploadResponse.json();
         console.log('Scene captions uploaded successfully:', uploadResult);
 
-        // Step 4: Update the scene record with the captions URL (field_6910)
+        // Step 4: Extract full text from transcription
+        const fullText = wordTimestamps.map((word) => word.word).join(' ');
+        console.log('Extracted full text from transcription:', fullText);
+
+        // Step 5: Update the scene record with the captions URL (field_6910) and new sentence text (field_6890)
         const captionsUrl = uploadResult.url || uploadResult.file_url;
         if (captionsUrl) {
-          await updateBaserowRow(sceneId, {
+          const updateData: Record<string, any> = {
             field_6910: captionsUrl, // Captions URL for Scene field
-          });
+          };
+
+          // Only update the sentence if we have extracted text
+          if (fullText.trim()) {
+            updateData.field_6890 = fullText.trim(); // Update Sentence field with transcribed text
+            console.log('Updating scene sentence with transcribed text');
+          }
+
+          await updateBaserowRow(sceneId, updateData);
 
           // Optimistic update
           const optimisticData = data.map((scene) =>
-            scene.id === sceneId ? { ...scene, field_6910: captionsUrl } : scene
+            scene.id === sceneId
+              ? {
+                  ...scene,
+                  field_6910: captionsUrl,
+                  ...(fullText.trim() && { field_6890: fullText.trim() }),
+                }
+              : scene
           );
           onDataUpdate?.(optimisticData);
         }
