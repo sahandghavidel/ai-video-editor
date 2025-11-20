@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { videoId, captionsUrl } = await request.json();
+    const {
+      videoId,
+      captionsUrl,
+      videoDuration: rawVideoDuration,
+    } = await request.json();
 
     if (!videoId || !captionsUrl) {
       return NextResponse.json(
@@ -11,8 +15,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Convert videoDuration to number if it's a string
+    let videoDuration: number | undefined = undefined;
+    if (rawVideoDuration !== null && rawVideoDuration !== undefined) {
+      const parsed =
+        typeof rawVideoDuration === 'number'
+          ? rawVideoDuration
+          : parseFloat(rawVideoDuration);
+
+      if (!isNaN(parsed)) {
+        videoDuration = parsed;
+      }
+    }
+
     console.log('Generating scenes for video:', videoId);
     console.log('Captions URL:', captionsUrl);
+    console.log('Video Duration:', videoDuration || 'not provided');
 
     // Step 1: Fetch the captions/transcription JSON
     const captionsResponse = await fetch(captionsUrl);
@@ -29,7 +47,11 @@ export async function POST(request: NextRequest) {
     );
 
     // Step 2: Split into sentences and gaps
-    const scenes = generateScenesFromTranscription(captionsData, videoId);
+    const scenes = generateScenesFromTranscription(
+      captionsData,
+      videoId,
+      videoDuration
+    );
     console.log(`Generated ${scenes.length} scenes`);
 
     // Step 3: Create all scene records in Baserow using batch operation
@@ -66,7 +88,8 @@ export async function POST(request: NextRequest) {
 // Function to split transcription into sentences and gaps
 function generateScenesFromTranscription(
   transcriptionData: any,
-  videoId: string
+  videoId: string,
+  videoDuration?: number
 ) {
   // Handle different data structures
   let segments: any[] = [];
@@ -272,6 +295,70 @@ function generateScenesFromTranscription(
         }
       }
     }
+  }
+
+  // Check if there's silence at the end (after the last sentence)
+  console.log('Checking for trailing gap...');
+  console.log('Video duration:', videoDuration);
+  console.log('All segments count:', allSegments.length);
+
+  if (
+    videoDuration &&
+    typeof videoDuration === 'number' &&
+    allSegments.length > 0
+  ) {
+    // Find the last sentence segment (skip gaps)
+    let lastSentenceSegment = null;
+    for (let i = allSegments.length - 1; i >= 0; i--) {
+      if (allSegments[i].type === 'sentence') {
+        lastSentenceSegment = allSegments[i];
+        break;
+      }
+    }
+
+    if (lastSentenceSegment && lastSentenceSegment.endTime < videoDuration) {
+      const trailingGapDuration = videoDuration - lastSentenceSegment.endTime;
+      if (trailingGapDuration > 0.01) {
+        // Only add if gap is meaningful (> 10ms)
+        console.log(
+          `✅ Adding trailing gap: ${trailingGapDuration.toFixed(
+            2
+          )}s (video ends at ${videoDuration}s, last word at ${
+            lastSentenceSegment.endTime
+          }s)`
+        );
+        allSegments.push({
+          id: segmentId++,
+          words: '',
+          duration: parseFloat(trailingGapDuration.toFixed(2)),
+          startTime: parseFloat(lastSentenceSegment.endTime.toFixed(2)),
+          endTime: parseFloat(videoDuration.toFixed(2)),
+          preEndTime: 0, // Placeholder, will be recalculated after adjustments
+          type: 'gap',
+          videoId,
+        });
+      } else {
+        console.log(
+          `⚠️ Trailing gap too small (${trailingGapDuration.toFixed(
+            3
+          )}s), not adding`
+        );
+      }
+    } else if (!lastSentenceSegment) {
+      console.log('⚠️ No sentence segments found');
+    } else {
+      console.log(
+        `⚠️ No trailing gap (last word at ${lastSentenceSegment.endTime}s, video ends at ${videoDuration}s)`
+      );
+    }
+  } else if (!videoDuration) {
+    console.log(
+      '⚠️ Video duration not provided - trailing silence cannot be detected'
+    );
+  } else if (typeof videoDuration !== 'number') {
+    console.log(
+      `⚠️ Video duration is not a number: ${typeof videoDuration} = ${videoDuration}`
+    );
   }
 
   // Step 3: Adjust timings based on gap durations

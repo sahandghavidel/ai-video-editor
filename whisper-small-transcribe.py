@@ -111,31 +111,34 @@ def transcribe_with_whisper_small(audio_path: str) -> dict:
                 "words": segment_words
             })
 
+        # Get audio duration
+        import torchaudio
+        audio_duration = None
+        try:
+            waveform, sample_rate = torchaudio.load(audio_path)
+            audio_duration = round(waveform.shape[1] / sample_rate, 2)
+        except:
+            # If torchaudio fails, try to get from segments
+            if segments:
+                audio_duration = segments[-1]["end"]
+        
         # If no word timestamps, create fallback segments
         if not word_timestamps and segments:
-            # Get audio duration for fallback
-            import torchaudio
-            try:
-                waveform, sample_rate = torchaudio.load(audio_path)
-                audio_duration = waveform.shape[1] / sample_rate
-
-                # Create a single segment with the full transcription
-                if not segments:
-                    segments.append({
-                        "start": 0.0,
-                        "end": round(audio_duration, 2),
-                        "text": transcription,
-                        "words": []
-                    })
-            except:
-                # Fallback if torchaudio fails
-                pass
+            # Create a single segment with the full transcription
+            if not segments and audio_duration:
+                segments.append({
+                    "start": 0.0,
+                    "end": audio_duration,
+                    "text": transcription,
+                    "words": []
+                })
 
         # Create response in NCA toolkit compatible format
         response = {
             "response": {
                 "text": transcription,
-                "segments": segments
+                "segments": segments,
+                "duration": audio_duration
             }
         }
 

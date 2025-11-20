@@ -709,6 +709,10 @@ export default function OriginalVideosList({
 
       const transcriptionData = await transcribeResponse.json();
 
+      // Extract video duration from transcription
+      const videoDuration = transcriptionData.response?.duration || null;
+      console.log('Video duration:', videoDuration);
+
       // Step 2: Process the response to extract word timestamps
       const wordTimestamps = [];
       const segments = transcriptionData.response?.segments;
@@ -748,12 +752,19 @@ export default function OriginalVideosList({
       const uploadResult = await uploadResponse.json();
       console.log('Captions uploaded successfully:', uploadResult);
 
-      // Step 4: Update the original video record with the captions URL
+      // Step 4: Update the original video record with the captions URL and duration
       const captionsUrl = uploadResult.url || uploadResult.file_url;
       if (captionsUrl) {
-        await updateOriginalVideoRow(videoId, {
+        const updateData: Record<string, any> = {
           field_6861: captionsUrl, // Captions URL field
-        });
+        };
+
+        // Add duration if available
+        if (videoDuration !== null) {
+          updateData.field_6909 = videoDuration; // Duration field
+        }
+
+        await updateOriginalVideoRow(videoId, updateData);
       }
 
       // Refresh the table to show any updates
@@ -1216,15 +1227,48 @@ export default function OriginalVideosList({
       setGeneratingScenes(videoId);
       setError(null);
 
-      // Find the video to get captions URL
+      // Find the video to get captions URL and duration
       const video = originalVideos.find((v) => v.id === videoId);
       const captionsUrl = extractUrl(video?.field_6861);
+      let videoDuration = video?.field_6909 as number | undefined;
 
       if (!captionsUrl) {
         throw new Error('No captions URL found for this video');
       }
 
+      // Fallback: If duration not stored, calculate from captions
+      if (!videoDuration) {
+        console.log(
+          'Duration not found in database, calculating from captions...'
+        );
+        try {
+          const captionsResponse = await fetch(captionsUrl);
+          if (captionsResponse.ok) {
+            const captions = await captionsResponse.json();
+            if (Array.isArray(captions) && captions.length > 0) {
+              // Get the end time of the last word
+              const lastWord = captions[captions.length - 1];
+              if (lastWord && typeof lastWord.end === 'number') {
+                videoDuration = lastWord.end;
+                console.log(
+                  `Calculated duration from captions: ${videoDuration}s`
+                );
+
+                // Save duration to database for future use
+                await updateOriginalVideoRow(videoId, {
+                  field_6909: videoDuration,
+                });
+                console.log('Duration saved to database');
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to calculate duration from captions:', error);
+        }
+      }
+
       console.log('Generating scenes for video:', videoId);
+      console.log('Video duration:', videoDuration || 'not available');
 
       const response = await fetch('/api/generate-scenes', {
         method: 'POST',
@@ -1234,6 +1278,7 @@ export default function OriginalVideosList({
         body: JSON.stringify({
           videoId,
           captionsUrl,
+          videoDuration,
         }),
       });
 
@@ -1293,12 +1338,45 @@ export default function OriginalVideosList({
       // Process videos one by one
       for (const video of videosToProcess) {
         const captionsUrl = extractUrl(video.field_6861);
+        let videoDuration = video?.field_6909 as number | undefined;
+
+        // Fallback: Calculate duration from captions if not stored
+        if (captionsUrl && !videoDuration) {
+          try {
+            const captionsResponse = await fetch(captionsUrl);
+            if (captionsResponse.ok) {
+              const captions = await captionsResponse.json();
+              if (Array.isArray(captions) && captions.length > 0) {
+                const lastWord = captions[captions.length - 1];
+                if (lastWord && typeof lastWord.end === 'number') {
+                  videoDuration = lastWord.end;
+                  console.log(
+                    `Video ${video.id}: Calculated duration from captions: ${videoDuration}s`
+                  );
+                  // Save duration to database
+                  await updateOriginalVideoRow(video.id, {
+                    field_6909: videoDuration,
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            console.warn(
+              `Video ${video.id}: Failed to calculate duration from captions`
+            );
+          }
+        }
+
         if (captionsUrl) {
           console.log(`Generating scenes for video ${video.id}...`);
           setGeneratingScenes(video.id);
 
           try {
-            await handleGenerateScenesInternal(video.id, captionsUrl);
+            await handleGenerateScenesInternal(
+              video.id,
+              captionsUrl,
+              videoDuration
+            );
             console.log(`Successfully generated scenes for video ${video.id}`);
           } catch (error) {
             console.error(
@@ -1328,7 +1406,8 @@ export default function OriginalVideosList({
   // Internal scene generation function (without UI state management)
   const handleGenerateScenesInternal = async (
     videoId: number,
-    captionsUrl: string
+    captionsUrl: string,
+    videoDuration?: number
   ) => {
     const response = await fetch('/api/generate-scenes', {
       method: 'POST',
@@ -1338,6 +1417,7 @@ export default function OriginalVideosList({
       body: JSON.stringify({
         videoId,
         captionsUrl,
+        videoDuration,
       }),
     });
 

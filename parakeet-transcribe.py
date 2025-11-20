@@ -245,11 +245,17 @@ def transcribe_with_parakeet(audio_path: str) -> dict:
                     "words": []
                 })
         
+        # Get audio duration
+        import torchaudio
+        waveform, sample_rate = torchaudio.load(audio_path)
+        audio_duration = round(waveform.shape[1] / sample_rate, 2)
+        
         # Create response in NCA toolkit compatible format
         response = {
             "response": {
                 "text": transcription,
-                "segments": segments
+                "segments": segments,
+                "duration": audio_duration
             }
         }
         
