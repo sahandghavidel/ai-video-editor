@@ -119,14 +119,6 @@ function generateScenesFromTranscription(
     );
   }
 
-  const sentenceSegments = [];
-  let currentSegment = {
-    id: 0,
-    words: '',
-    startTime: null as number | null,
-    endTime: null as number | null,
-  };
-
   // Function to detect sentence endings
   function isSentenceEnd(word: string): boolean {
     const abbreviations = [
@@ -155,6 +147,14 @@ function generateScenesFromTranscription(
   }
 
   // Process words to create sentence segments
+  const processedSegments: any[] = [];
+  let currentSegment = {
+    id: 0,
+    words: '',
+    startTime: null as number | null,
+    endTime: null as number | null,
+  };
+
   for (let i = 0; i < segments.length; i++) {
     const wordObj = segments[i];
 
@@ -196,7 +196,7 @@ function generateScenesFromTranscription(
       ) {
         const exactDuration = currentSegment.endTime - currentSegment.startTime;
 
-        sentenceSegments.push({
+        processedSegments.push({
           id: currentSegment.id,
           words: currentSegment.words.trim(),
           duration: exactDuration,
@@ -207,7 +207,7 @@ function generateScenesFromTranscription(
       }
 
       currentSegment = {
-        id: sentenceSegments.length,
+        id: processedSegments.length,
         words: '',
         startTime: null,
         endTime: null,
@@ -223,7 +223,7 @@ function generateScenesFromTranscription(
   ) {
     const exactDuration = currentSegment.endTime - currentSegment.startTime;
 
-    sentenceSegments.push({
+    processedSegments.push({
       id: currentSegment.id,
       words: currentSegment.words.trim(),
       duration: exactDuration,
@@ -233,9 +233,51 @@ function generateScenesFromTranscription(
     });
   }
 
+  // Deduplicate overlapping sentences
+  const sentenceSegments: any[] = [];
+  const usedTimeRanges: Array<{ start: number; end: number }> = [];
+
+  for (const segment of processedSegments) {
+    // Check if this sentence overlaps significantly with any existing sentence
+    let isOverlapping = false;
+    for (const used of usedTimeRanges) {
+      const overlap =
+        Math.min(segment.endTime, used.end) -
+        Math.max(segment.startTime, used.start);
+      const overlapRatio = overlap / (segment.endTime - segment.startTime);
+      if (overlapRatio > 0.5) {
+        // More than 50% overlap
+        isOverlapping = true;
+        break;
+      }
+    }
+
+    if (!isOverlapping) {
+      sentenceSegments.push(segment);
+      usedTimeRanges.push({ start: segment.startTime, end: segment.endTime });
+    } else {
+      console.log(
+        `Skipping overlapping sentence: "${segment.words.substring(
+          0,
+          50
+        )}..." (${segment.startTime.toFixed(2)}-${segment.endTime.toFixed(2)})`
+      );
+    }
+  }
+
+  console.log(
+    `After deduplication: ${
+      sentenceSegments.length
+    } unique sentences (removed ${
+      processedSegments.length - sentenceSegments.length
+    } overlapping duplicates)`
+  );
+
   // Create final segments array including gaps
   const allSegments = [];
   let segmentId = 0;
+  const gapSet = new Set(); // Track unique gaps to prevent duplicates
+  const sentenceSet = new Set(); // Track unique sentences to prevent duplicates
 
   // Check if there's silence at the beginning
   if (
@@ -260,16 +302,22 @@ function generateScenesFromTranscription(
 
     // Add the sentence segment (preEndTime will be calculated after adjustments)
     if (sentence.startTime !== null && sentence.endTime !== null) {
-      allSegments.push({
-        id: segmentId++,
-        words: sentence.words,
-        duration: parseFloat(sentence.duration.toFixed(2)),
-        startTime: parseFloat(sentence.startTime.toFixed(2)),
-        endTime: parseFloat(sentence.endTime.toFixed(2)),
-        preEndTime: 0, // Placeholder, will be recalculated after adjustments
-        type: 'sentence',
-        videoId,
-      });
+      const sentenceKey = `${sentence.startTime.toFixed(
+        2
+      )}-${sentence.endTime.toFixed(2)}-${sentence.words}`;
+      if (!sentenceSet.has(sentenceKey)) {
+        sentenceSet.add(sentenceKey);
+        allSegments.push({
+          id: segmentId++,
+          words: sentence.words,
+          duration: parseFloat(sentence.duration.toFixed(2)),
+          startTime: parseFloat(sentence.startTime.toFixed(2)),
+          endTime: parseFloat(sentence.endTime.toFixed(2)),
+          preEndTime: 0, // Placeholder, will be recalculated after adjustments
+          type: 'sentence',
+          videoId,
+        });
+      }
     }
 
     // Add gap segment if there's a next sentence
@@ -280,8 +328,10 @@ function generateScenesFromTranscription(
         const gapEndTime = nextSentence.startTime;
         const gapDuration = gapEndTime - gapStartTime;
 
-        // Record all gaps (no threshold check as requested)
-        if (gapDuration > 0) {
+        // Record all gaps (including negative gaps for overlaps)
+        const gapKey = `${gapStartTime.toFixed(2)}-${gapEndTime.toFixed(2)}`;
+        if (gapDuration !== 0 && !gapSet.has(gapKey)) {
+          gapSet.add(gapKey);
           allSegments.push({
             id: segmentId++,
             words: '',
@@ -370,7 +420,59 @@ function generateScenesFromTranscription(
     if (segment.type === 'gap') {
       const gapDuration = segment.duration;
 
-      if (gapDuration > 0.2) {
+      if (gapDuration < 0) {
+        // Negative gap means overlap - trim the previous sentence and adjust next sentence
+        const overlapDuration = Math.abs(gapDuration);
+        console.log(
+          `Processing negative gap ${gapDuration.toFixed(2)}s at index ${i}`
+        );
+        console.log(
+          `Previous segment: ${allSegments[i - 1]?.type} ${allSegments[
+            i - 1
+          ]?.startTime?.toFixed(2)}-${allSegments[i - 1]?.endTime?.toFixed(2)}`
+        );
+        console.log(
+          `Next segment: ${allSegments[i + 1]?.type} ${allSegments[
+            i + 1
+          ]?.startTime?.toFixed(2)}-${allSegments[i + 1]?.endTime?.toFixed(2)}`
+        );
+
+        if (i > 0 && allSegments[i - 1].type === 'sentence') {
+          allSegments[i - 1].endTime = parseFloat(
+            (allSegments[i - 1].endTime - overlapDuration).toFixed(2)
+          );
+          allSegments[i - 1].duration = parseFloat(
+            (allSegments[i - 1].duration - overlapDuration).toFixed(2)
+          );
+          console.log(
+            `Trimmed previous sentence by ${overlapDuration.toFixed(
+              2
+            )}s to resolve overlap`
+          );
+        }
+
+        // Also adjust the next sentence's start time to eliminate overlap
+        if (
+          i < allSegments.length - 1 &&
+          allSegments[i + 1].type === 'sentence'
+        ) {
+          allSegments[i + 1].startTime = parseFloat(
+            (allSegments[i + 1].startTime + overlapDuration).toFixed(2)
+          );
+          allSegments[i + 1].duration = parseFloat(
+            (allSegments[i + 1].duration - overlapDuration).toFixed(2)
+          );
+          console.log(
+            `Adjusted next sentence start time by +${overlapDuration.toFixed(
+              2
+            )}s to resolve overlap`
+          );
+        }
+
+        // Remove the negative gap entirely
+        segment.startTime = parseFloat(segment.endTime.toFixed(2));
+        segment.duration = 0;
+      } else if (gapDuration > 0.2) {
         // Gap is larger than 0.2s - adjust adjacent segments by 0.1s
         const adjustAmount = 0.1;
 
@@ -422,30 +524,35 @@ function generateScenesFromTranscription(
           );
         }
       } else if (gapDuration > 0) {
-        // Gap is smaller than 0.2s - distribute evenly to adjacent segments
-        const halfGap = gapDuration / 2;
+        // Gap is smaller than 0.2s - absorb entirely into the previous segment
+        // This avoids creating overlaps by not pulling the next segment's start time earlier
 
         // Extend previous segment (if exists and is a sentence)
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
           allSegments[i - 1].endTime = parseFloat(
-            (allSegments[i - 1].endTime + halfGap).toFixed(2)
+            (allSegments[i - 1].endTime + gapDuration).toFixed(2)
           );
           allSegments[i - 1].duration = parseFloat(
-            (allSegments[i - 1].duration + halfGap).toFixed(2)
+            (allSegments[i - 1].duration + gapDuration).toFixed(2)
           );
-        }
-
-        // Extend next segment (if exists and is a sentence)
-        if (
-          i < allSegments.length - 1 &&
-          allSegments[i + 1].type === 'sentence'
-        ) {
-          allSegments[i + 1].startTime = parseFloat(
-            (allSegments[i + 1].startTime - halfGap).toFixed(2)
+          console.log(
+            `Absorbed ${gapDuration.toFixed(
+              2
+            )}s gap into previous sentence (extended end time)`
           );
-          allSegments[i + 1].duration = parseFloat(
-            (allSegments[i + 1].duration + halfGap).toFixed(2)
-          );
+        } else {
+          // If no previous sentence, extend the next segment's start time (but don't overlap)
+          if (
+            i < allSegments.length - 1 &&
+            allSegments[i + 1].type === 'sentence'
+          ) {
+            // Instead of subtracting, just log that we're skipping to avoid overlaps
+            console.log(
+              `Small gap ${gapDuration.toFixed(
+                2
+              )}s before sentence - leaving as is to avoid overlap`
+            );
+          }
         }
 
         // Remove the gap entirely by setting it to zero duration
@@ -468,7 +575,28 @@ function generateScenesFromTranscription(
       allSegments.length - filteredSegments.length
     } zero-duration gaps)`
   );
-  
+
+  // Step 4.5: Final pass to ensure sequential timing (fix any remaining overlaps)
+  console.log('Ensuring sequential timing...');
+  for (let i = 1; i < filteredSegments.length; i++) {
+    const currentSegment = filteredSegments[i];
+    const previousSegment = filteredSegments[i - 1];
+
+    if (currentSegment.startTime < previousSegment.endTime) {
+      // Overlap detected - adjust current segment's start time
+      const overlap = previousSegment.endTime - currentSegment.startTime;
+      currentSegment.startTime = previousSegment.endTime;
+      currentSegment.endTime = parseFloat(
+        (currentSegment.startTime + currentSegment.duration).toFixed(2)
+      );
+      console.log(
+        `Fixed overlap: adjusted segment ${i} start time by +${overlap.toFixed(
+          2
+        )}s`
+      );
+    }
+  }
+
   // Step 5: Recalculate preEndTime for all segments based on adjusted timeline
   console.log('Recalculating preEndTime values for adjusted timeline...');
   for (let i = 0; i < filteredSegments.length; i++) {
