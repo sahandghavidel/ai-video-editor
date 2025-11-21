@@ -468,7 +468,7 @@ function generateScenesFromTranscription(
       allSegments.length - filteredSegments.length
     } zero-duration gaps)`
   );
-
+  
   // Step 5: Recalculate preEndTime for all segments based on adjusted timeline
   console.log('Recalculating preEndTime values for adjusted timeline...');
   for (let i = 0; i < filteredSegments.length; i++) {
