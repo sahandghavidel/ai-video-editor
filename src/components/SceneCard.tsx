@@ -736,6 +736,54 @@ export default function SceneCard({
     }
   };
 
+  const handleEditSaveWithoutTTS = async (sceneId: number) => {
+    if (!editingText.trim()) {
+      return;
+    }
+
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (editingText === currentScene?.field_6890) {
+      setEditingId(null);
+      setEditingText('');
+      return;
+    }
+
+    setIsUpdating(true);
+
+    // Optimistic update - immediately update the UI
+    const optimisticData = data.map((scene) => {
+      if (scene.id === sceneId) {
+        return { ...scene, field_6890: editingText };
+      }
+      return scene;
+    });
+    onDataUpdate?.(optimisticData);
+
+    try {
+      // updateBaserowRow returns the updated row data directly or throws an error
+      const updatedRow = await updateBaserowRow(sceneId, {
+        field_6890: editingText,
+      });
+
+      setEditingId(null);
+      setEditingText('');
+
+      // Refresh data from server to ensure consistency
+      refreshData?.();
+
+      // Note: TTS generation is skipped for this save operation
+    } catch (error) {
+      console.error('Failed to update scene:', error);
+
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
+
+      // You could show a user-friendly error message here
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleEditCancel = () => {
     setIsCanceling(true);
     setEditingId(null);
@@ -2086,9 +2134,15 @@ export default function SceneCard({
                   value={editingText}
                   onChange={(e) => setEditingText(e.target.value)}
                   onKeyDown={(e) => handleKeyDown(e, scene.id)}
-                  onBlur={() => {
-                    // Only save on blur if we're not canceling
-                    if (!isCanceling) {
+                  onBlur={(e) => {
+                    // Only save on blur if we're not canceling and not clicking on save buttons
+                    const relatedTarget = e.relatedTarget as HTMLElement;
+                    const isClickingSaveButton =
+                      relatedTarget?.tagName === 'BUTTON' &&
+                      (relatedTarget.textContent?.includes('Save') ||
+                        relatedTarget.textContent?.includes('Cancel'));
+
+                    if (!isCanceling && !isClickingSaveButton) {
                       handleEditSave(scene.id);
                     }
                   }}
@@ -2112,6 +2166,14 @@ export default function SceneCard({
                     disabled={isUpdating}
                   >
                     Save
+                  </button>
+                  <button
+                    onClick={() => handleEditSaveWithoutTTS(scene.id)}
+                    className='px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50'
+                    disabled={isUpdating}
+                    title='Save without generating TTS'
+                  >
+                    Save (No TTS)
                   </button>
                 </div>
               </div>
