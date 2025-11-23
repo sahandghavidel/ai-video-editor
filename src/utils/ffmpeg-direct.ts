@@ -732,11 +732,8 @@ export async function createTypingEffectVideo(
     const videoHeight = videoStream.height;
 
     // Calculate appropriate font size based on video dimensions
-    // Use about 2.5% of the video height as font size, with min 24 and max 60
-    const fontSize = Math.max(
-      24,
-      Math.min(60, Math.round(videoHeight * 0.025))
-    );
+    // Use about 2% of the video height as font size, with min 20 and max 50
+    const fontSize = Math.max(20, Math.min(50, Math.round(videoHeight * 0.02)));
 
     // Split text into characters for typing effect
     const characters = text.split('');
@@ -809,6 +806,9 @@ export async function createTypingEffectVideo(
       // Need to slow down video first, then apply subtitles
       videoFilter += `setpts=${1 / speedFactor}*PTS,`;
     }
+
+    // Add brightness filter to darken the video for better text visibility
+    videoFilter += `eq=brightness=-0.3,`;
 
     videoFilter += `subtitles=${srtFilePath}:force_style='FontSize=${fontSize},PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=5,MarginV=50'[vout]`;
 
