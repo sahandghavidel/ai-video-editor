@@ -744,13 +744,13 @@ export async function createTypingEffectVideo(
 
     // Calculate required duration for full typing effect
     const typingOnlyDuration = characters.length * typingSpeed;
-    const finalDisplayDuration = 5.0; // Show final text for 5 seconds
+    const finalDisplayDuration = Math.max(2.0, typingOnlyDuration * 0.3); // 30% of typing time or minimum 2 seconds
     const requiredDuration = typingOnlyDuration + finalDisplayDuration;
 
     // Calculate speed factor to slow down video to match required duration
-    // Cap minimum speed factor at 0.5 (FFmpeg atempo minimum)
+    // This ensures typing appears at normal speed in the final video
     const rawSpeedFactor = videoDuration / requiredDuration;
-    const speedFactor = Math.max(rawSpeedFactor, 0.5);
+    const speedFactor = Math.max(0.3, rawSpeedFactor); // Allow slower minimum speed for very long text
 
     // Calculate actual duration after slowing down
     const actualDuration = videoDuration / speedFactor;
@@ -789,15 +789,15 @@ export async function createTypingEffectVideo(
     // Add final frame with full text displayed
     frames.push({
       text: text,
-      timestamp: finalDisplayStart,
-      frame_number: actualCharacters + 1,
+      timestamp: typingOnlyDuration,
+      frame_number: characters.length + 1,
     });
 
     // Create SRT format
     frames.forEach((frame, index) => {
       const startTime = index === 0 ? 0 : frames[index - 1].timestamp;
       const endTime =
-        index === frames.length - 1 ? actualDuration : frame.timestamp;
+        index === frames.length - 1 ? requiredDuration : frame.timestamp;
 
       srtContent += `${index + 1}\n`;
       srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(
@@ -819,8 +819,8 @@ export async function createTypingEffectVideo(
 
     // Build FFmpeg filter based on whether we need to slow down the video
     let videoFilter = `[0:v]`;
-    let audioFilter = `[1:a]aloop=loop=-1:size=2G,atrim=duration=${typingEndTime},apad=pad_dur=${
-      actualDuration - typingEndTime
+    let audioFilter = `[1:a]aloop=loop=-1:size=2G,atrim=duration=${typingOnlyDuration},apad=pad_dur=${
+      requiredDuration - typingOnlyDuration
     }[outa]`;
 
     if (speedFactor < 1) {
@@ -854,7 +854,7 @@ export async function createTypingEffectVideo(
       '-b:a',
       '128k',
       '-t',
-      actualDuration.toString(),
+      requiredDuration.toString(),
       fullOutputPath,
     ];
 
