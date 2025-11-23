@@ -732,8 +732,11 @@ export async function createTypingEffectVideo(
     const videoHeight = videoStream.height;
 
     // Calculate appropriate font size based on video dimensions
-    // Use about 2% of the video height as font size, with min 20 and max 50
-    const fontSize = Math.max(20, Math.min(50, Math.round(videoHeight * 0.02)));
+    // Use about 1.5% of the video height as font size, with min 16 and max 40
+    const fontSize = Math.max(
+      16,
+      Math.min(40, Math.round(videoHeight * 0.015))
+    );
 
     // Split text into characters for typing effect
     const characters = text.split('');
@@ -810,7 +813,7 @@ export async function createTypingEffectVideo(
     // Add brightness filter to darken the video for better text visibility
     videoFilter += `eq=brightness=-0.3,`;
 
-    videoFilter += `subtitles=${srtFilePath}:force_style='FontSize=${fontSize},PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=5,MarginV=50'[vout]`;
+    videoFilter += `subtitles=${srtFilePath}:force_style='FontSize=${fontSize},PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=8,MarginV=20'[vout]`;
 
     // Create FFmpeg command using subtitles filter
     const ffmpegCommand = [
