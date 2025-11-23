@@ -727,23 +727,32 @@ export async function createTypingEffectVideo(
     const characters = text.split('');
     const typingSpeed = 0.15; // seconds per character (from N8N workflow)
 
-    // Use the full video duration - we can't extend the video
-    const totalDuration = videoDuration;
+    // Calculate required duration for full typing effect
+    const typingOnlyDuration = characters.length * typingSpeed;
+    const finalDisplayDuration = 5.0; // Show final text for 5 seconds
+    const requiredDuration = typingOnlyDuration + finalDisplayDuration;
 
-    // Calculate how much time we can spend on typing vs final display
-    // Reserve at least 1 second for final display if possible
-    const minFinalDisplay = Math.min(1.0, totalDuration * 0.2); // 20% or 1 second minimum
-    const availableForTyping = totalDuration - minFinalDisplay;
+    // Calculate speed factor to slow down video to match required duration
+    // Cap minimum speed factor at 0.5 (FFmpeg atempo minimum)
+    const rawSpeedFactor = videoDuration / requiredDuration;
+    const speedFactor = Math.max(rawSpeedFactor, 0.5);
 
-    // Calculate how many characters we can fit in the available typing time
-    const maxCharactersForTyping = Math.floor(availableForTyping / typingSpeed);
+    // Calculate actual duration after slowing down
+    const actualDuration = videoDuration / speedFactor;
+
+    // Calculate how much time we can spend on typing in the slowed video
+    const availableTimeForTyping = actualDuration - 1; // Leave 1 second for final display
+    const maxCharactersForTyping = Math.floor(
+      availableTimeForTyping / typingSpeed
+    );
     const actualCharacters = Math.min(
       characters.length,
       maxCharactersForTyping
     );
 
-    const typingOnlyDuration = actualCharacters * typingSpeed;
-    const finalDisplayDuration = totalDuration - typingOnlyDuration;
+    // Calculate final display timing
+    const typingEndTime = actualCharacters * typingSpeed;
+    const finalDisplayStart = typingEndTime;
 
     // Generate SRT content for typing effect
     let srtContent = '';
@@ -753,7 +762,7 @@ export async function createTypingEffectVideo(
       frame_number: number;
     }> = [];
 
-    // Create frames for typing effect (only for characters that fit)
+    // Create frames for typing effect (full text now)
     for (let i = 1; i <= actualCharacters; i++) {
       frames.push({
         text: characters.slice(0, i).join(''),
@@ -762,28 +771,18 @@ export async function createTypingEffectVideo(
       });
     }
 
-    // Add final frame with full text displayed for the remaining time
-    if (actualCharacters < characters.length) {
-      // If we couldn't fit all characters, show partial text
-      const partialText = characters.slice(0, actualCharacters).join('');
-      frames.push({
-        text: partialText,
-        timestamp: totalDuration,
-        frame_number: actualCharacters + 1,
-      });
-    } else {
-      // Show full text for the final display duration
-      frames.push({
-        text: text,
-        timestamp: totalDuration,
-        frame_number: characters.length + 1,
-      });
-    }
+    // Add final frame with full text displayed
+    frames.push({
+      text: text,
+      timestamp: finalDisplayStart,
+      frame_number: actualCharacters + 1,
+    });
 
     // Create SRT format
     frames.forEach((frame, index) => {
       const startTime = index === 0 ? 0 : frames[index - 1].timestamp;
-      const endTime = frame.timestamp;
+      const endTime =
+        index === frames.length - 1 ? actualDuration : frame.timestamp;
 
       srtContent += `${index + 1}\n`;
       srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(
@@ -803,6 +802,19 @@ export async function createTypingEffectVideo(
       'type-sound.WAV'
     );
 
+    // Build FFmpeg filter based on whether we need to slow down the video
+    let videoFilter = `[0:v]`;
+    let audioFilter = `[1:a]aloop=loop=-1:size=2G,atrim=duration=${typingEndTime},apad=pad_dur=${
+      actualDuration - typingEndTime
+    }[outa]`;
+
+    if (speedFactor < 1) {
+      // Need to slow down video first, then apply subtitles
+      videoFilter += `setpts=${1 / speedFactor}*PTS,`;
+    }
+
+    videoFilter += `subtitles=${srtFilePath}:force_style='FontSize=80,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=2,MarginV=50'[vout]`;
+
     // Create FFmpeg command using subtitles filter
     const ffmpegCommand = [
       '-y',
@@ -811,7 +823,7 @@ export async function createTypingEffectVideo(
       '-i',
       typingSoundPath,
       '-filter_complex',
-      `[0:v]subtitles=${srtFilePath}:force_style='FontSize=80,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=2,MarginV=50'[vout];[1:a]aloop=loop=-1:size=2G,atrim=duration=${typingOnlyDuration},apad=pad_dur=${finalDisplayDuration}[outa]`,
+      `${videoFilter};${audioFilter}`,
       '-map',
       '[vout]',
       '-map',
@@ -827,7 +839,7 @@ export async function createTypingEffectVideo(
       '-b:a',
       '128k',
       '-t',
-      totalDuration.toString(),
+      actualDuration.toString(),
       fullOutputPath,
     ];
 
