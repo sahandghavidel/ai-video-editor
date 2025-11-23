@@ -801,9 +801,13 @@ export async function createTypingEffectVideo(
 
     // Build FFmpeg filter based on whether we need to slow down the video
     let videoFilter = `[0:v]`;
-    let audioFilter = `[1:a]aloop=loop=-1:size=2G,atrim=duration=${typingOnlyDuration},apad=pad_dur=${
-      requiredDuration - typingOnlyDuration
-    }[outa]`;
+    // Calculate how many times to loop the typing sound (3.18s duration)
+    const typingSoundDuration = 3.18;
+    const loopsNeeded = Math.ceil(typingOnlyDuration / typingSoundDuration);
+    const concatInputs = Array(loopsNeeded).fill('[1:a]').join('');
+    const concatFilter = `${concatInputs}concat=n=${loopsNeeded}:v=0:a=1,atrim=duration=${typingOnlyDuration}[a1]`;
+
+    let audioFilter = `[0:a]volume=0[a0];${concatFilter};[a0][a1]amix=inputs=2[outa]`;
 
     if (speedFactor < 1) {
       // Need to slow down video first, then apply subtitles
@@ -837,7 +841,7 @@ export async function createTypingEffectVideo(
       '-c:a',
       'aac',
       '-b:a',
-      '128k',
+      '124k',
       '-t',
       requiredDuration.toString(),
       fullOutputPath,
