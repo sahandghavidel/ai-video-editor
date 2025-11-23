@@ -1,8 +1,8 @@
 // Custom streaming upload for large files
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
-import { readFile, access, unlink, stat } from 'fs/promises';
+import { readFile, access, unlink, stat, writeFile } from 'fs/promises';
 import { createReadStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import http from 'http';
@@ -10,6 +10,43 @@ import https from 'https';
 import type { IncomingMessage } from 'http';
 
 const execAsync = promisify(exec);
+
+// Helper function to run FFmpeg with spawn (avoids shell interpretation issues)
+function runFFmpegSpawn(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log('Running FFmpeg command:', 'ffmpeg', ...args);
+    const ffmpeg = spawn('ffmpeg', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    ffmpeg.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    ffmpeg.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        console.log('FFmpeg completed successfully');
+        resolve();
+      } else {
+        console.error('FFmpeg failed with code:', code);
+        console.error('FFmpeg stderr:', stderr);
+        reject(new Error(`FFmpeg process exited with code ${code}: ${stderr}`));
+      }
+    });
+
+    ffmpeg.on('error', (error) => {
+      console.error('FFmpeg spawn error:', error);
+      reject(error);
+    });
+  });
+}
 
 // Custom streaming upload for large files
 function uploadLargeFileToMinio(
@@ -652,5 +689,246 @@ export async function speedUpVideoWithUpload(
     }
 
     throw error;
+  }
+}
+
+/**
+ * Create a typing effect video with text overlay and typing sound
+ */
+export async function createTypingEffectVideo(
+  inputVideoUrl: string,
+  text: string,
+  outputPath?: string
+): Promise<string> {
+  const outputFileName =
+    outputPath ||
+    `typing_effect_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}.mp4`;
+  const fullOutputPath = path.resolve('/tmp', outputFileName);
+
+  try {
+    // Get video duration first
+    const durationCommand = [
+      'ffprobe',
+      '-v',
+      'quiet',
+      '-print_format',
+      'json',
+      '-show_format',
+      `"${inputVideoUrl}"`,
+    ];
+
+    const { stdout: probeOutput } = await execAsync(durationCommand.join(' '));
+    const probeData = JSON.parse(probeOutput);
+    const videoDuration = parseFloat(probeData.format.duration);
+
+    // Split text into characters for typing effect
+    const characters = text.split('');
+    const typingSpeed = 0.15; // seconds per character (from N8N workflow)
+
+    // Use the full video duration - we can't extend the video
+    const totalDuration = videoDuration;
+
+    // Calculate how much time we can spend on typing vs final display
+    // Reserve at least 1 second for final display if possible
+    const minFinalDisplay = Math.min(1.0, totalDuration * 0.2); // 20% or 1 second minimum
+    const availableForTyping = totalDuration - minFinalDisplay;
+
+    // Calculate how many characters we can fit in the available typing time
+    const maxCharactersForTyping = Math.floor(availableForTyping / typingSpeed);
+    const actualCharacters = Math.min(
+      characters.length,
+      maxCharactersForTyping
+    );
+
+    const typingOnlyDuration = actualCharacters * typingSpeed;
+    const finalDisplayDuration = totalDuration - typingOnlyDuration;
+
+    // Generate SRT content for typing effect
+    let srtContent = '';
+    const frames: Array<{
+      text: string;
+      timestamp: number;
+      frame_number: number;
+    }> = [];
+
+    // Create frames for typing effect (only for characters that fit)
+    for (let i = 1; i <= actualCharacters; i++) {
+      frames.push({
+        text: characters.slice(0, i).join(''),
+        timestamp: i * typingSpeed,
+        frame_number: i,
+      });
+    }
+
+    // Add final frame with full text displayed for the remaining time
+    if (actualCharacters < characters.length) {
+      // If we couldn't fit all characters, show partial text
+      const partialText = characters.slice(0, actualCharacters).join('');
+      frames.push({
+        text: partialText,
+        timestamp: totalDuration,
+        frame_number: actualCharacters + 1,
+      });
+    } else {
+      // Show full text for the final display duration
+      frames.push({
+        text: text,
+        timestamp: totalDuration,
+        frame_number: characters.length + 1,
+      });
+    }
+
+    // Create SRT format
+    frames.forEach((frame, index) => {
+      const startTime = index === 0 ? 0 : frames[index - 1].timestamp;
+      const endTime = frame.timestamp;
+
+      srtContent += `${index + 1}\n`;
+      srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(
+        endTime
+      )}\n`;
+      srtContent += `${frame.text}\n\n`;
+    });
+
+    // Write SRT to temp file
+    const srtFilePath = path.resolve('/tmp', `typing_${Date.now()}.srt`);
+    await writeFile(srtFilePath, srtContent);
+
+    // Create typing sound path (from public folder)
+    const typingSoundPath = path.resolve(
+      process.cwd(),
+      'public',
+      'type-sound.WAV'
+    );
+
+    // Create FFmpeg command using subtitles filter
+    const ffmpegCommand = [
+      '-y',
+      '-i',
+      inputVideoUrl,
+      '-i',
+      typingSoundPath,
+      '-filter_complex',
+      `[0:v]subtitles=${srtFilePath}:force_style='FontSize=80,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=2,MarginV=50'[vout];[1:a]aloop=loop=-1:size=2G,atrim=duration=${typingOnlyDuration},apad=pad_dur=${finalDisplayDuration}[outa]`,
+      '-map',
+      '[vout]',
+      '-map',
+      '[outa]',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'medium',
+      '-crf',
+      '23',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-t',
+      totalDuration.toString(),
+      fullOutputPath,
+    ];
+
+    // Use spawn instead of exec to avoid shell interpretation of parentheses
+    await runFFmpegSpawn(ffmpegCommand);
+
+    // Clean up SRT file
+    try {
+      await unlink(srtFilePath);
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup SRT file:', cleanupError);
+    }
+
+    console.log('Typing effect video created successfully');
+
+    return fullOutputPath;
+  } catch (error) {
+    console.error('Error creating typing effect video:', error);
+    throw new Error(
+      `Typing effect creation failed: ${
+        error instanceof Error ? error.message : 'Unknown error'
+      }`
+    );
+  }
+}
+
+// Helper function to format time for SRT (HH:MM:SS,mmm)
+function formatSRTTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const milliseconds = Math.floor((seconds % 1) * 1000);
+
+  return `${hours.toString().padStart(2, '0')}:${minutes
+    .toString()
+    .padStart(2, '0')}:${secs.toString().padStart(2, '0')},${milliseconds
+    .toString()
+    .padStart(3, '0')}`;
+}
+
+/**
+ * Complete workflow: FFmpeg typing effect + MinIO upload + local cleanup
+ */
+export async function createTypingEffectVideoWithUpload(options: {
+  videoUrl: string;
+  text: string;
+  sceneId?: string;
+  cleanup?: boolean;
+}): Promise<{ localPath: string; uploadUrl: string }> {
+  const { videoUrl, text, sceneId, cleanup = true } = options;
+
+  let localPath: string | null = null;
+
+  try {
+    // Step 1: Create the typing effect video using FFmpeg
+    const ffmpegStart = Date.now();
+    localPath = await createTypingEffectVideo(videoUrl, text);
+    const ffmpegEnd = Date.now();
+    console.log(
+      `[FFMPEG] Scene ${sceneId} typing effect processing took ${
+        ffmpegEnd - ffmpegStart
+      }ms`
+    );
+
+    // Step 2: Generate filename for upload
+    const timestamp = Date.now();
+    const filename = sceneId
+      ? `scene_${sceneId}_typing_${timestamp}.mp4`
+      : `typing_effect_${timestamp}.mp4`;
+
+    // Step 3: Upload to MinIO
+    const uploadStart = Date.now();
+    const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
+    const uploadEnd = Date.now();
+    console.log(
+      `[UPLOAD] Scene ${sceneId} typing effect uploaded in ${
+        uploadEnd - uploadStart
+      }ms`
+    );
+
+    return { localPath, uploadUrl };
+  } catch (error) {
+    // Clean up local file on error if it exists
+    if (localPath && cleanup) {
+      try {
+        await unlink(localPath);
+        console.log(`[CLEANUP] Removed local file after error: ${localPath}`);
+      } catch (cleanupError) {
+        console.warn(`[CLEANUP] Failed to remove local file: ${cleanupError}`);
+      }
+    }
+    throw error;
+  } finally {
+    // Clean up local file if requested and no error occurred
+    if (localPath && cleanup) {
+      try {
+        await unlink(localPath);
+        console.log(`[CLEANUP] Removed local file: ${localPath}`);
+      } catch (cleanupError) {
+        console.warn(`[CLEANUP] Failed to remove local file: ${cleanupError}`);
+      }
+    }
   }
 }

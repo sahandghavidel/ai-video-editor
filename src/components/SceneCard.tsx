@@ -20,6 +20,7 @@ import {
   Volume2,
   VolumeX,
   Scissors,
+  Keyboard,
 } from 'lucide-react';
 
 // Helper: get original sentence from field_6901
@@ -137,6 +138,7 @@ export default function SceneCard({
     setGeneratingVideo,
     clipGeneration,
     setGeneratingSingleClip,
+    setCreatingTypingEffect,
   } = useAppStore();
 
   // Keyboard shortcuts for player speed
@@ -1250,6 +1252,81 @@ export default function SceneCard({
     ]
   );
 
+  const handleTypingEffect = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow) => {
+      try {
+        setCreatingTypingEffect(sceneId);
+
+        // Get the scene text
+        const sceneText = String(
+          sceneData?.['field_6890'] || sceneData?.field_6890 || ''
+        ).trim();
+        if (!sceneText) {
+          throw new Error('No text available for typing effect');
+        }
+
+        // Get the original video URL
+        const videoUrl = sceneData?.['field_6888'] || sceneData?.field_6888;
+        if (!videoUrl || typeof videoUrl !== 'string') {
+          throw new Error('No original video available for typing effect');
+        }
+
+        // Call the typing effect API
+        const response = await fetch('/api/create-typing-effect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sceneId,
+            videoUrl,
+            text: sceneText,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Typing effect error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = `Typing effect error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        const typingEffectVideoUrl = result.videoUrl;
+
+        // Update the Baserow field with the typing effect video URL
+        const updatedRow = await updateBaserowRow(sceneId, {
+          field_6886: typingEffectVideoUrl,
+        });
+
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6886: typingEffectVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server
+        refreshDataRef.current?.();
+
+        playSuccessSound();
+      } catch (error) {
+        console.error('Error creating typing effect:', error);
+        playErrorSound();
+        // You could show a user-friendly error message here
+      } finally {
+        setCreatingTypingEffect(null);
+      }
+    },
+    [setCreatingTypingEffect]
+  );
+
   // Expose handler functions to parent component (only once on mount)
   useEffect(() => {
     if (onHandlersReady) {
@@ -1259,6 +1336,7 @@ export default function SceneCard({
         handleVideoGenerate,
         handleSpeedUpVideo,
         handleTranscribeScene,
+        handleTypingEffect,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2085,6 +2163,52 @@ export default function SceneCard({
                             : batchOperations.generatingAllVideos
                             ? 'Video Busy'
                             : 'Sync'}
+                        </span>
+                      </button>
+                    )}
+
+                  {/* Typing Effect Button */}
+                  {typeof scene['field_6888'] === 'string' &&
+                    scene['field_6888'] &&
+                    String(
+                      scene['field_6890'] || scene.field_6890 || ''
+                    ).trim() && (
+                      <button
+                        onClick={() => handleTypingEffect(scene.id, scene)}
+                        disabled={
+                          sceneLoading.creatingTypingEffect !== null ||
+                          batchOperations.generatingAllVideos
+                        }
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
+                          sceneLoading.creatingTypingEffect === scene.id
+                            ? 'bg-gray-100 text-gray-500'
+                            : sceneLoading.creatingTypingEffect !== null ||
+                              batchOperations.generatingAllVideos
+                            ? 'bg-gray-50 text-gray-400'
+                            : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          sceneLoading.creatingTypingEffect === scene.id
+                            ? 'Creating typing effect for this scene...'
+                            : sceneLoading.creatingTypingEffect !== null
+                            ? `Typing effect is being created for scene ${sceneLoading.creatingTypingEffect}`
+                            : batchOperations.generatingAllVideos
+                            ? 'Batch video generation is in progress'
+                            : 'Create typing effect video with animated text overlay'
+                        }
+                      >
+                        {sceneLoading.creatingTypingEffect === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <Keyboard className='h-3 w-3' />
+                        )}
+                        <span>
+                          {sceneLoading.creatingTypingEffect === scene.id
+                            ? 'Typing...'
+                            : sceneLoading.creatingTypingEffect !== null ||
+                              batchOperations.generatingAllVideos
+                            ? 'Typing Busy'
+                            : 'Typing'}
                         </span>
                       </button>
                     )}
