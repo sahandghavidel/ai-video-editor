@@ -708,7 +708,7 @@ export async function createTypingEffectVideo(
   const fullOutputPath = path.resolve('/tmp', outputFileName);
 
   try {
-    // Get video duration first
+    // Get video duration and dimensions
     const durationCommand = [
       'ffprobe',
       '-v',
@@ -716,12 +716,27 @@ export async function createTypingEffectVideo(
       '-print_format',
       'json',
       '-show_format',
+      '-show_streams',
       `"${inputVideoUrl}"`,
     ];
 
     const { stdout: probeOutput } = await execAsync(durationCommand.join(' '));
     const probeData = JSON.parse(probeOutput);
     const videoDuration = parseFloat(probeData.format.duration);
+
+    // Get video dimensions from the first video stream
+    const videoStream = probeData.streams.find(
+      (stream: any) => stream.codec_type === 'video'
+    );
+    const videoWidth = videoStream.width;
+    const videoHeight = videoStream.height;
+
+    // Calculate appropriate font size based on video dimensions
+    // Use about 2.5% of the video height as font size, with min 24 and max 60
+    const fontSize = Math.max(
+      24,
+      Math.min(60, Math.round(videoHeight * 0.025))
+    );
 
     // Split text into characters for typing effect
     const characters = text.split('');
@@ -813,7 +828,7 @@ export async function createTypingEffectVideo(
       videoFilter += `setpts=${1 / speedFactor}*PTS,`;
     }
 
-    videoFilter += `subtitles=${srtFilePath}:force_style='FontSize=80,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=2,MarginV=50'[vout]`;
+    videoFilter += `subtitles=${srtFilePath}:force_style='FontSize=${fontSize},PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=5,MarginV=50'[vout]`;
 
     // Create FFmpeg command using subtitles filter
     const ffmpegCommand = [
