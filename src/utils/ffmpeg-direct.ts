@@ -415,25 +415,78 @@ export async function uploadToMinio(
     const bucket = 'nca-toolkit';
     const uploadUrl = `http://host.docker.internal:9000/${bucket}/${finalFilename}`;
 
-    // For large files (> 2GB), use streaming upload
-    if (fileSize > 2 * 1024 * 1024 * 1024) {
-      // 2GB limit
+    // For large files (> 100MB), use streaming upload to avoid memory issues
+    if (fileSize > 100 * 1024 * 1024) {
+      // 100MB limit for streaming
       console.log(
-        `Large file detected (${(fileSize / (1024 * 1024 * 1024)).toFixed(
+        `Large file detected (${(fileSize / (1024 * 1024)).toFixed(
           2
-        )}GB), using streaming upload`
+        )}MB), using streaming upload`
       );
 
+      // Verify file exists before attempting upload
+      try {
+        await access(filePath);
+        // Double-check file size matches what we got earlier
+        const verifyStats = await stat(filePath);
+        if (verifyStats.size !== fileSize) {
+          console.warn(
+            `File size changed during upload preparation: ${fileSize} -> ${verifyStats.size}`
+          );
+        }
+      } catch (accessError) {
+        console.error(`File access error: ${accessError}`);
+        throw new Error(
+          `File does not exist or is not accessible: ${filePath}`
+        );
+      }
+
+      // Add a small delay to ensure file system operations are complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       const streamStart = Date.now();
-      await uploadLargeFileToMinio(filePath, uploadUrl, contentType);
+      let fileStream: ReturnType<typeof createReadStream>;
+      try {
+        fileStream = createReadStream(filePath);
+      } catch (streamError) {
+        console.error(`Failed to create read stream: ${streamError}`);
+        throw new Error(`Failed to create read stream for file: ${filePath}`);
+      }
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': fileSize.toString(),
+        },
+        body: fileStream as unknown as BodyInit,
+        duplex: 'half' as const,
+      } as RequestInit & { duplex: 'half' });
       const streamEnd = Date.now();
       console.log(
         `[STREAM] Streaming upload took ${streamEnd - streamStart}ms`
       );
 
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('MinIO streaming upload error:', errorText);
+        throw new Error(
+          `MinIO streaming upload error: ${uploadResponse.status}`
+        );
+      }
+
       return uploadUrl;
     } else {
       // For smaller files, use the original buffer method
+      // Verify file exists before attempting upload
+      try {
+        await access(filePath);
+      } catch (accessError) {
+        throw new Error(
+          `File does not exist or is not accessible: ${filePath}`
+        );
+      }
+
       const readStart = Date.now();
       const fileBuffer = await readFile(filePath);
       const readEnd = Date.now();
@@ -445,6 +498,7 @@ export async function uploadToMinio(
         method: 'PUT',
         headers: {
           'Content-Type': contentType,
+          'Content-Length': fileSize.toString(),
         },
         body: new Uint8Array(fileBuffer),
       });
