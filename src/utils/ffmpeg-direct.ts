@@ -748,26 +748,8 @@ export async function createTypingEffectVideo(
     const requiredDuration = typingOnlyDuration + finalDisplayDuration;
 
     // Calculate speed factor to slow down video to match required duration
-    // This ensures typing appears at normal speed in the final video
     const rawSpeedFactor = videoDuration / requiredDuration;
-    const speedFactor = Math.max(0.3, rawSpeedFactor); // Allow slower minimum speed for very long text
-
-    // Calculate actual duration after slowing down
-    const actualDuration = videoDuration / speedFactor;
-
-    // Calculate how much time we can spend on typing in the slowed video
-    const availableTimeForTyping = actualDuration - 1; // Leave 1 second for final display
-    const maxCharactersForTyping = Math.floor(
-      availableTimeForTyping / typingSpeed
-    );
-    const actualCharacters = Math.min(
-      characters.length,
-      maxCharactersForTyping
-    );
-
-    // Calculate final display timing
-    const typingEndTime = actualCharacters * typingSpeed;
-    const finalDisplayStart = typingEndTime;
+    const speedFactor = Math.max(0.2, rawSpeedFactor); // Allow even slower minimum speed
 
     // Generate SRT content for typing effect
     let srtContent = '';
@@ -777,8 +759,8 @@ export async function createTypingEffectVideo(
       frame_number: number;
     }> = [];
 
-    // Create frames for typing effect (full text now)
-    for (let i = 1; i <= actualCharacters; i++) {
+    // Create frames for typing effect (all characters)
+    for (let i = 1; i <= characters.length; i++) {
       frames.push({
         text: characters.slice(0, i).join(''),
         timestamp: i * typingSpeed,
