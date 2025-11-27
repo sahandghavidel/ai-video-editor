@@ -110,6 +110,9 @@ export default function SceneCard({
   const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
     useState<boolean>(false);
   const [updatingTime, setUpdatingTime] = useState<Set<number>>(new Set());
+  const [inputValues, setInputValues] = useState<{
+    [key: number]: { start: string; end: string };
+  }>({});
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -426,6 +429,98 @@ export default function SceneCard({
       // Removed refreshData call to prevent double updates
     } catch (error) {
       console.error('Failed to adjust end time:', error);
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
+    } finally {
+      setUpdatingTime((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(sceneId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleSetStartTime = async (sceneId: number, newStartTime: number) => {
+    // Prevent multiple simultaneous updates for the same scene
+    if (updatingTime.has(sceneId)) return;
+
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    setUpdatingTime((prev) => new Set(prev).add(sceneId));
+
+    const clampedStartTime = Math.max(0, Number(newStartTime.toFixed(2)));
+    const currentEndTime = Number(currentScene.field_6897) || 0;
+    const newDuration = Math.max(
+      0,
+      Number((currentEndTime - clampedStartTime).toFixed(2))
+    );
+
+    // Optimistic update
+    const optimisticData = data.map((scene) =>
+      scene.id === sceneId
+        ? {
+            ...scene,
+            field_6896: clampedStartTime,
+            field_6898: clampedStartTime,
+            field_6884: newDuration,
+          }
+        : scene
+    );
+    onDataUpdate?.(optimisticData);
+
+    try {
+      await updateBaserowRow(sceneId, {
+        field_6896: clampedStartTime,
+        field_6898: clampedStartTime,
+        field_6884: newDuration,
+      });
+      // Removed refreshData call to prevent double updates
+    } catch (error) {
+      console.error('Failed to set start time:', error);
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
+    } finally {
+      setUpdatingTime((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(sceneId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleSetEndTime = async (sceneId: number, newEndTime: number) => {
+    // Prevent multiple simultaneous updates for the same scene
+    if (updatingTime.has(sceneId)) return;
+
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    setUpdatingTime((prev) => new Set(prev).add(sceneId));
+
+    const clampedEndTime = Math.max(0, Number(newEndTime.toFixed(2)));
+    const currentStartTime = Number(currentScene.field_6896) || 0;
+    const newDuration = Math.max(
+      0,
+      Number((clampedEndTime - currentStartTime).toFixed(2))
+    );
+
+    // Optimistic update
+    const optimisticData = data.map((scene) =>
+      scene.id === sceneId
+        ? { ...scene, field_6897: clampedEndTime, field_6884: newDuration }
+        : scene
+    );
+    onDataUpdate?.(optimisticData);
+
+    try {
+      await updateBaserowRow(sceneId, {
+        field_6897: clampedEndTime,
+        field_6884: newDuration,
+      });
+      // Removed refreshData call to prevent double updates
+    } catch (error) {
+      console.error('Failed to set end time:', error);
       // Revert optimistic update on error
       onDataUpdate?.(data);
     } finally {
@@ -1837,56 +1932,163 @@ export default function SceneCard({
                       <div className='space-y-3'>
                         <div>
                           <label className='block text-xs font-medium text-gray-700 mb-1'>
-                            Start Time:{' '}
-                            {Number(scene.field_6896 || 0).toFixed(1)}s
+                            Start Time
                           </label>
-                          <div className='flex items-center gap-1'>
-                            <button
-                              onClick={() =>
-                                handleAdjustStartTime(scene.id, -0.1)
+                          <div className='flex items-center gap-2'>
+                            <input
+                              type='number'
+                              step='0.01'
+                              min='0'
+                              value={
+                                inputValues[scene.id]?.start ??
+                                Number(scene.field_6896 || 0).toFixed(2)
                               }
+                              onChange={(e) => {
+                                setInputValues((prev) => ({
+                                  ...prev,
+                                  [scene.id]: {
+                                    ...prev[scene.id],
+                                    start: e.target.value,
+                                  },
+                                }));
+                              }}
+                              onBlur={() => {
+                                const value =
+                                  parseFloat(
+                                    inputValues[scene.id]?.start || '0'
+                                  ) || 0;
+                                handleSetStartTime(scene.id, value);
+                                // Clear the local input value after setting
+                                setInputValues((prev) => ({
+                                  ...prev,
+                                  [scene.id]: {
+                                    ...prev[scene.id],
+                                    start: undefined,
+                                  },
+                                }));
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const value =
+                                    parseFloat(
+                                      inputValues[scene.id]?.start || '0'
+                                    ) || 0;
+                                  handleSetStartTime(scene.id, value);
+                                  setInputValues((prev) => ({
+                                    ...prev,
+                                    [scene.id]: {
+                                      ...prev[scene.id],
+                                      start: undefined,
+                                    },
+                                  }));
+                                }
+                              }}
                               disabled={updatingTime.has(scene.id)}
-                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-700 disabled:text-gray-400 rounded transition-colors duration-200'
-                              title='Decrease start time by 0.1s'
-                            >
-                              <Minus className='h-3 w-3' />
-                            </button>
-                            <button
-                              onClick={() =>
-                                handleAdjustStartTime(scene.id, 0.1)
-                              }
-                              disabled={updatingTime.has(scene.id)}
-                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-green-700 disabled:text-gray-400 rounded transition-colors duration-200'
-                              title='Increase start time by 0.1s'
-                            >
-                              <Plus className='h-3 w-3' />
-                            </button>
+                              className='flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed'
+                              placeholder='0.00'
+                            />
+                            <div className='flex items-center gap-1'>
+                              <button
+                                onClick={() =>
+                                  handleAdjustStartTime(scene.id, -0.1)
+                                }
+                                disabled={updatingTime.has(scene.id)}
+                                className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-700 disabled:text-gray-400 rounded transition-colors duration-200'
+                                title='Decrease start time by 0.1s'
+                              >
+                                <Minus className='h-3 w-3' />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleAdjustStartTime(scene.id, 0.1)
+                                }
+                                disabled={updatingTime.has(scene.id)}
+                                className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-green-700 disabled:text-gray-400 rounded transition-colors duration-200'
+                                title='Increase start time by 0.1s'
+                              >
+                                <Plus className='h-3 w-3' />
+                              </button>
+                            </div>
                           </div>
                         </div>
                         <div>
                           <label className='block text-xs font-medium text-gray-700 mb-1'>
-                            End Time: {Number(scene.field_6897 || 0).toFixed(1)}
-                            s
+                            End Time
                           </label>
-                          <div className='flex items-center gap-1'>
-                            <button
-                              onClick={() =>
-                                handleAdjustEndTime(scene.id, -0.1)
+                          <div className='flex items-center gap-2'>
+                            <input
+                              type='number'
+                              step='0.01'
+                              min='0'
+                              value={
+                                inputValues[scene.id]?.end ??
+                                Number(scene.field_6897 || 0).toFixed(2)
                               }
+                              onChange={(e) => {
+                                setInputValues((prev) => ({
+                                  ...prev,
+                                  [scene.id]: {
+                                    ...prev[scene.id],
+                                    end: e.target.value,
+                                  },
+                                }));
+                              }}
+                              onBlur={() => {
+                                const value =
+                                  parseFloat(
+                                    inputValues[scene.id]?.end || '0'
+                                  ) || 0;
+                                handleSetEndTime(scene.id, value);
+                                setInputValues((prev) => ({
+                                  ...prev,
+                                  [scene.id]: {
+                                    ...prev[scene.id],
+                                    end: undefined,
+                                  },
+                                }));
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const value =
+                                    parseFloat(
+                                      inputValues[scene.id]?.end || '0'
+                                    ) || 0;
+                                  handleSetEndTime(scene.id, value);
+                                  setInputValues((prev) => ({
+                                    ...prev,
+                                    [scene.id]: {
+                                      ...prev[scene.id],
+                                      end: undefined,
+                                    },
+                                  }));
+                                }
+                              }}
                               disabled={updatingTime.has(scene.id)}
-                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-700 disabled:text-gray-400 rounded transition-colors duration-200'
-                              title='Decrease end time by 0.1s'
-                            >
-                              <Minus className='h-3 w-3' />
-                            </button>
-                            <button
-                              onClick={() => handleAdjustEndTime(scene.id, 0.1)}
-                              disabled={updatingTime.has(scene.id)}
-                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-green-700 disabled:text-gray-400 rounded transition-colors duration-200'
-                              title='Increase end time by 0.1s'
-                            >
-                              <Plus className='h-3 w-3' />
-                            </button>
+                              className='flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed'
+                              placeholder='0.00'
+                            />
+                            <div className='flex items-center gap-1'>
+                              <button
+                                onClick={() =>
+                                  handleAdjustEndTime(scene.id, -0.1)
+                                }
+                                disabled={updatingTime.has(scene.id)}
+                                className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-700 disabled:text-gray-400 rounded transition-colors duration-200'
+                                title='Decrease end time by 0.1s'
+                              >
+                                <Minus className='h-3 w-3' />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleAdjustEndTime(scene.id, 0.1)
+                                }
+                                disabled={updatingTime.has(scene.id)}
+                                className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-green-700 disabled:text-gray-400 rounded transition-colors duration-200'
+                                title='Increase end time by 0.1s'
+                              >
+                                <Plus className='h-3 w-3' />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
