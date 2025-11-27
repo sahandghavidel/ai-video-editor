@@ -109,6 +109,7 @@ export default function SceneCard({
   );
   const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
     useState<boolean>(false);
+  const [updatingTime, setUpdatingTime] = useState<Set<number>>(new Set());
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -337,11 +338,19 @@ export default function SceneCard({
   };
 
   const handleAdjustStartTime = async (sceneId: number, adjustment: number) => {
+    // Prevent multiple simultaneous updates for the same scene
+    if (updatingTime.has(sceneId)) return;
+
     const currentScene = data.find((scene) => scene.id === sceneId);
     if (!currentScene) return;
 
+    setUpdatingTime((prev) => new Set(prev).add(sceneId));
+
     const currentStartTime = Number(currentScene.field_6896) || 0;
-    const newStartTime = Math.max(0, currentStartTime + adjustment);
+    const newStartTime = Math.max(
+      0,
+      Number((currentStartTime + adjustment).toFixed(2))
+    );
 
     // Optimistic update
     const optimisticData = data.map((scene) =>
@@ -356,15 +365,29 @@ export default function SceneCard({
       console.error('Failed to adjust start time:', error);
       // Revert optimistic update on error
       onDataUpdate?.(data);
+    } finally {
+      setUpdatingTime((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(sceneId);
+        return newSet;
+      });
     }
   };
 
   const handleAdjustEndTime = async (sceneId: number, adjustment: number) => {
+    // Prevent multiple simultaneous updates for the same scene
+    if (updatingTime.has(sceneId)) return;
+
     const currentScene = data.find((scene) => scene.id === sceneId);
     if (!currentScene) return;
 
+    setUpdatingTime((prev) => new Set(prev).add(sceneId));
+
     const currentEndTime = Number(currentScene.field_6897) || 0;
-    const newEndTime = Math.max(0, currentEndTime + adjustment);
+    const newEndTime = Math.max(
+      0,
+      Number((currentEndTime + adjustment).toFixed(2))
+    );
 
     // Optimistic update
     const optimisticData = data.map((scene) =>
@@ -379,6 +402,12 @@ export default function SceneCard({
       console.error('Failed to adjust end time:', error);
       // Revert optimistic update on error
       onDataUpdate?.(data);
+    } finally {
+      setUpdatingTime((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(sceneId);
+        return newSet;
+      });
     }
   };
 
@@ -1790,7 +1819,8 @@ export default function SceneCard({
                               onClick={() =>
                                 handleAdjustStartTime(scene.id, -0.1)
                               }
-                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors duration-200'
+                              disabled={updatingTime.has(scene.id)}
+                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-700 disabled:text-gray-400 rounded transition-colors duration-200'
                               title='Decrease start time by 0.1s'
                             >
                               <Minus className='h-3 w-3' />
@@ -1799,7 +1829,8 @@ export default function SceneCard({
                               onClick={() =>
                                 handleAdjustStartTime(scene.id, 0.1)
                               }
-                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors duration-200'
+                              disabled={updatingTime.has(scene.id)}
+                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-green-700 disabled:text-gray-400 rounded transition-colors duration-200'
                               title='Increase start time by 0.1s'
                             >
                               <Plus className='h-3 w-3' />
@@ -1816,14 +1847,16 @@ export default function SceneCard({
                               onClick={() =>
                                 handleAdjustEndTime(scene.id, -0.1)
                               }
-                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors duration-200'
+                              disabled={updatingTime.has(scene.id)}
+                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-700 disabled:text-gray-400 rounded transition-colors duration-200'
                               title='Decrease end time by 0.1s'
                             >
                               <Minus className='h-3 w-3' />
                             </button>
                             <button
                               onClick={() => handleAdjustEndTime(scene.id, 0.1)}
-                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors duration-200'
+                              disabled={updatingTime.has(scene.id)}
+                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-green-700 disabled:text-gray-400 rounded transition-colors duration-200'
                               title='Increase end time by 0.1s'
                             >
                               <Plus className='h-3 w-3' />
