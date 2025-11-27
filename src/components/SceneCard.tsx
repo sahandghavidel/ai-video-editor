@@ -354,12 +354,17 @@ export default function SceneCard({
 
     // Optimistic update
     const optimisticData = data.map((scene) =>
-      scene.id === sceneId ? { ...scene, field_6896: newStartTime } : scene
+      scene.id === sceneId
+        ? { ...scene, field_6896: newStartTime, field_6898: newStartTime }
+        : scene
     );
     onDataUpdate?.(optimisticData);
 
     try {
-      await updateBaserowRow(sceneId, { field_6896: newStartTime });
+      await updateBaserowRow(sceneId, {
+        field_6896: newStartTime,
+        field_6898: newStartTime,
+      });
       refreshData?.();
     } catch (error) {
       console.error('Failed to adjust start time:', error);
