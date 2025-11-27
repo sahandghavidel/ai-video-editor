@@ -376,7 +376,7 @@ export default function SceneCard({
         field_6898: newStartTime,
         field_6884: newDuration,
       });
-      refreshData?.();
+      // Removed refreshData call to prevent double updates
     } catch (error) {
       console.error('Failed to adjust start time:', error);
       // Revert optimistic update on error
@@ -423,7 +423,7 @@ export default function SceneCard({
         field_6897: newEndTime,
         field_6884: newDuration,
       });
-      refreshData?.();
+      // Removed refreshData call to prevent double updates
     } catch (error) {
       console.error('Failed to adjust end time:', error);
       // Revert optimistic update on error
