@@ -122,9 +122,9 @@ function schedulePeriodicTimeoutCheck(): void {
       }
     }, remaining);
   } else {
-    // Schedule next check in 1 minute
+    // Schedule next check in 3 minutes
     console.log(
-      `🔄 [${new Date().toISOString()}] Periodic check: Scheduling next check in 1 minute`
+      `🔄 [${new Date().toISOString()}] Periodic check: Scheduling next check in 3 minutes`
     );
     serverTimeout = setTimeout(() => {
       // Check session before scheduling next check
@@ -136,7 +136,7 @@ function schedulePeriodicTimeoutCheck(): void {
       ) {
         schedulePeriodicTimeoutCheck();
       }
-    }, 60000);
+    }, 180000);
   }
 }
 
