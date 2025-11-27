@@ -21,6 +21,9 @@ import {
   VolumeX,
   Scissors,
   Keyboard,
+  ChevronDown,
+  Plus,
+  Minus,
 } from 'lucide-react';
 
 // Helper: get original sentence from field_6901
@@ -101,6 +104,9 @@ export default function SceneCard({
     'asc' | 'desc' | null
   >(null);
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
+  const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
+    null
+  );
   const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
     useState<boolean>(false);
 
@@ -230,6 +236,21 @@ export default function SceneCard({
     mediaPlayer.playingProducedVideoId,
   ]);
 
+  // Click outside handler for time adjustment dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showTimeAdjustment !== null) {
+        const target = event.target as Element;
+        if (!target.closest('[data-time-adjustment-dropdown]')) {
+          setShowTimeAdjustment(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTimeAdjustment]);
+
   // Local wrapper for cycling through speeds
   const cycleSpeed = () => {
     cycleThroughSpeeds(videoSettings.selectedSpeed, updateVideoSettings);
@@ -312,8 +333,52 @@ export default function SceneCard({
       console.error('Failed to clear video:', error);
       // Revert optimistic update on error
       onDataUpdate?.(data);
-    } finally {
-      setClearingVideoId(null);
+    }
+  };
+
+  const handleAdjustStartTime = async (sceneId: number, adjustment: number) => {
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    const currentStartTime = Number(currentScene.field_6896) || 0;
+    const newStartTime = Math.max(0, currentStartTime + adjustment);
+
+    // Optimistic update
+    const optimisticData = data.map((scene) =>
+      scene.id === sceneId ? { ...scene, field_6896: newStartTime } : scene
+    );
+    onDataUpdate?.(optimisticData);
+
+    try {
+      await updateBaserowRow(sceneId, { field_6896: newStartTime });
+      refreshData?.();
+    } catch (error) {
+      console.error('Failed to adjust start time:', error);
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
+    }
+  };
+
+  const handleAdjustEndTime = async (sceneId: number, adjustment: number) => {
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    const currentEndTime = Number(currentScene.field_6897) || 0;
+    const newEndTime = Math.max(0, currentEndTime + adjustment);
+
+    // Optimistic update
+    const optimisticData = data.map((scene) =>
+      scene.id === sceneId ? { ...scene, field_6897: newEndTime } : scene
+    );
+    onDataUpdate?.(optimisticData);
+
+    try {
+      await updateBaserowRow(sceneId, { field_6897: newEndTime });
+      refreshData?.();
+    } catch (error) {
+      console.error('Failed to adjust end time:', error);
+      // Revert optimistic update on error
+      onDataUpdate?.(data);
     }
   };
 
@@ -518,7 +583,7 @@ export default function SceneCard({
         // Step 5: Update the scene record with the captions URL (field_6910) and new sentence text (field_6890)
         const captionsUrl = uploadResult.url || uploadResult.file_url;
         if (captionsUrl) {
-          const updateData: Record<string, any> = {
+          const updateData: Record<string, unknown> = {
             field_6910: captionsUrl, // Captions URL for Scene field
           };
 
@@ -1688,6 +1753,86 @@ export default function SceneCard({
                       ({String(scene.field_6884 || 'N/A')})
                     </span>
                   </span>
+                </div>
+
+                {/* Time Adjustment Dropdown */}
+                <div className='relative'>
+                  <button
+                    onClick={() => {
+                      const newState =
+                        showTimeAdjustment === scene.id ? null : scene.id;
+                      setShowTimeAdjustment(newState);
+                    }}
+                    className='flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200'
+                    title='Adjust start/end times'
+                  >
+                    <Settings className='h-3 w-3' />
+                    <ChevronDown
+                      className={`h-3 w-3 transition-transform duration-200 ${
+                        showTimeAdjustment === scene.id ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {showTimeAdjustment === scene.id && (
+                    <div
+                      data-time-adjustment-dropdown
+                      className='absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-3'
+                    >
+                      <div className='space-y-3'>
+                        <div>
+                          <label className='block text-xs font-medium text-gray-700 mb-1'>
+                            Start Time:{' '}
+                            {Number(scene.field_6896 || 0).toFixed(1)}s
+                          </label>
+                          <div className='flex items-center gap-1'>
+                            <button
+                              onClick={() =>
+                                handleAdjustStartTime(scene.id, -0.1)
+                              }
+                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors duration-200'
+                              title='Decrease start time by 0.1s'
+                            >
+                              <Minus className='h-3 w-3' />
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleAdjustStartTime(scene.id, 0.1)
+                              }
+                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors duration-200'
+                              title='Increase start time by 0.1s'
+                            >
+                              <Plus className='h-3 w-3' />
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className='block text-xs font-medium text-gray-700 mb-1'>
+                            End Time: {Number(scene.field_6897 || 0).toFixed(1)}
+                            s
+                          </label>
+                          <div className='flex items-center gap-1'>
+                            <button
+                              onClick={() =>
+                                handleAdjustEndTime(scene.id, -0.1)
+                              }
+                              className='flex items-center justify-center w-6 h-6 bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors duration-200'
+                              title='Decrease end time by 0.1s'
+                            >
+                              <Minus className='h-3 w-3' />
+                            </button>
+                            <button
+                              onClick={() => handleAdjustEndTime(scene.id, 0.1)}
+                              className='flex items-center justify-center w-6 h-6 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors duration-200'
+                              title='Increase end time by 0.1s'
+                            >
+                              <Plus className='h-3 w-3' />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
