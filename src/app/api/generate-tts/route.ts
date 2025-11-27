@@ -12,6 +12,11 @@ let ttsServerPid: number | null = null; // Track PID for reliable killing
 let serverTimeout: NodeJS.Timeout | null = null;
 let timeoutScheduledAt: number = 0; // Track when timeout was scheduled
 const SERVER_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+console.log(
+  `🔧 TTS server timeout configured: ${
+    SERVER_TIMEOUT / 1000 / 60
+  } minutes (${SERVER_TIMEOUT}ms)`
+);
 const SERVER_HOST = 'host.docker.internal';
 const SERVER_PORT = 8004;
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
@@ -160,12 +165,20 @@ function scheduleServerStop(): void {
 
   // Schedule new timeout
   const fireTime = now + SERVER_TIMEOUT;
-  console.log('⏰ Scheduling server shutdown in 15 minutes');
+  console.log(
+    `⏰ Scheduling server shutdown in ${
+      SERVER_TIMEOUT / 1000 / 60
+    } minutes (${SERVER_TIMEOUT}ms)`
+  );
   timeoutScheduledAt = now;
   serverTimeout = setTimeout(async () => {
     const actualDelay = Date.now() - timeoutScheduledAt;
     const expectedDelay = SERVER_TIMEOUT;
-    console.log('⏰ Server shutdown timeout fired');
+    console.log(
+      `⏰ Server shutdown timeout fired after ${
+        actualDelay / 1000 / 60
+      } minutes (${actualDelay}ms actual, ${expectedDelay}ms expected)`
+    );
 
     // Double-check if we should still shut down (in case a request came in and cleared this timeout)
     if (serverTimeout === null) {
@@ -177,7 +190,11 @@ function scheduleServerStop(): void {
     const serverStatus = await checkTTSServer();
 
     if (serverStatus.running) {
-      console.log('🛑 Auto-stopping TTS server after 15 minutes of inactivity');
+      console.log(
+        `🛑 Auto-stopping TTS server after ${
+          SERVER_TIMEOUT / 1000 / 60
+        } minutes of inactivity`
+      );
 
       // Priority 1: Kill by port (most reliable for detached processes)
       console.log('🔍 Attempting to kill TTS server processes by port...');
