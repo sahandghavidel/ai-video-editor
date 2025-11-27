@@ -96,6 +96,8 @@ export default function OriginalVideosList({
     saving: boolean;
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
+  const [bulkStatusChange, setBulkStatusChange] = useState<string>('');
+  const [updatingBulkStatus, setUpdatingBulkStatus] = useState(false);
   const [draggedRow, setDraggedRow] = useState<number | null>(null);
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
@@ -477,6 +479,7 @@ export default function OriginalVideosList({
     switch (status?.toLowerCase()) {
       case 'completed':
       case 'complete':
+      case 'done':
         return <CheckCircle className='w-4 h-4 text-green-500' />;
       case 'processing':
       case 'in progress':
@@ -490,6 +493,7 @@ export default function OriginalVideosList({
     switch (status?.toLowerCase()) {
       case 'completed':
       case 'complete':
+      case 'done':
         return 'bg-green-100 text-green-800';
       case 'processing':
       case 'in progress':
@@ -652,6 +656,56 @@ export default function OriginalVideosList({
       console.error('Failed to update status:', error);
     } finally {
       setUpdatingStatus(null);
+    }
+  };
+
+  // Bulk status change function
+  const handleBulkStatusChange = async () => {
+    if (!bulkStatusChange || originalVideos.length === 0) return;
+
+    setUpdatingBulkStatus(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      // Update all videos with the selected status
+      const updatePromises = originalVideos.map(async (video) => {
+        try {
+          await updateOriginalVideoRow(video.id, {
+            field_6864: bulkStatusChange,
+          });
+          successCount++;
+          return video.id;
+        } catch (error) {
+          console.error(
+            `Failed to update status for video ${video.id}:`,
+            error
+          );
+          errorCount++;
+          return null;
+        }
+      });
+
+      await Promise.all(updatePromises);
+
+      // Update local state for all successfully updated videos
+      setOriginalVideos((prevVideos) =>
+        prevVideos.map((video) => ({
+          ...video,
+          field_6864: bulkStatusChange,
+        }))
+      );
+
+      console.log(
+        `Bulk status update completed: ${successCount} successful, ${errorCount} failed`
+      );
+
+      // Reset the bulk status change
+      setBulkStatusChange('');
+    } catch (error) {
+      console.error('Bulk status update failed:', error);
+    } finally {
+      setUpdatingBulkStatus(false);
     }
   };
 
@@ -4147,6 +4201,51 @@ export default function OriginalVideosList({
                     <X className='w-5 h-5' />
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bulk Status Change Controls */}
+          {originalVideos.length > 0 && (
+            <div className='bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6'>
+              <div className='flex items-center gap-4'>
+                <div className='flex items-center gap-2'>
+                  <label
+                    htmlFor='bulk-status'
+                    className='text-sm font-medium text-gray-700'
+                  >
+                    Change Status for All Videos:
+                  </label>
+                  <select
+                    id='bulk-status'
+                    value={bulkStatusChange}
+                    onChange={(e) => setBulkStatusChange(e.target.value)}
+                    className='px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                    disabled={updatingBulkStatus}
+                  >
+                    <option value=''>Select Status</option>
+                    <option value='Processing'>Processing</option>
+                    <option value='Done'>Done</option>
+                    <option value='Pending'>Pending</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleBulkStatusChange}
+                  disabled={!bulkStatusChange || updatingBulkStatus}
+                  className='px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2'
+                >
+                  {updatingBulkStatus ? (
+                    <>
+                      <div className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Check className='w-4 h-4' />
+                      Apply to All ({originalVideos.length} videos)
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}
