@@ -814,8 +814,8 @@ export async function createTypingEffectVideo(
       videoFilter += `setpts=${1 / speedFactor}*PTS,`;
     }
 
-    // Add brightness filter to darken the video for better text visibility (95% darker)
-    videoFilter += `eq=brightness=-0.95,`;
+    // Add brightness filter to darken the video for better text visibility (99% darker)
+    videoFilter += `eq=brightness=-0.99,`;
 
     videoFilter += `subtitles=${srtFilePath}:force_style='FontSize=${fontSize},PrimaryColour=&HFFFFFF&,BackColour=&H000000&,BorderStyle=3,Outline=1,Shadow=3,Alignment=8,MarginV=20'[vout]`;
 
