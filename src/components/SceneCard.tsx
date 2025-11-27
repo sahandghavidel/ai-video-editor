@@ -242,10 +242,22 @@ export default function SceneCard({
 
   // Click outside handler for time adjustment dropdown
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = async (event: MouseEvent) => {
       if (showTimeAdjustment !== null) {
         const target = event.target as Element;
         if (!target.closest('[data-time-adjustment-dropdown]')) {
+          // Save any pending input values before closing
+          const sceneInputValues = inputValues[showTimeAdjustment];
+          if (sceneInputValues) {
+            if (sceneInputValues.start !== undefined) {
+              const startValue = parseFloat(sceneInputValues.start || '0') || 0;
+              await handleSetStartTime(showTimeAdjustment, startValue);
+            }
+            if (sceneInputValues.end !== undefined) {
+              const endValue = parseFloat(sceneInputValues.end || '0') || 0;
+              await handleSetEndTime(showTimeAdjustment, endValue);
+            }
+          }
           setShowTimeAdjustment(null);
         }
       }
@@ -253,7 +265,7 @@ export default function SceneCard({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showTimeAdjustment]);
+  }, [showTimeAdjustment, inputValues]);
 
   // Local wrapper for cycling through speeds
   const cycleSpeed = () => {
