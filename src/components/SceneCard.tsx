@@ -347,15 +347,25 @@ export default function SceneCard({
     setUpdatingTime((prev) => new Set(prev).add(sceneId));
 
     const currentStartTime = Number(currentScene.field_6896) || 0;
+    const currentEndTime = Number(currentScene.field_6897) || 0;
     const newStartTime = Math.max(
       0,
       Number((currentStartTime + adjustment).toFixed(2))
+    );
+    const newDuration = Math.max(
+      0,
+      Number((currentEndTime - newStartTime).toFixed(2))
     );
 
     // Optimistic update
     const optimisticData = data.map((scene) =>
       scene.id === sceneId
-        ? { ...scene, field_6896: newStartTime, field_6898: newStartTime }
+        ? {
+            ...scene,
+            field_6896: newStartTime,
+            field_6898: newStartTime,
+            field_6884: newDuration,
+          }
         : scene
     );
     onDataUpdate?.(optimisticData);
@@ -364,6 +374,7 @@ export default function SceneCard({
       await updateBaserowRow(sceneId, {
         field_6896: newStartTime,
         field_6898: newStartTime,
+        field_6884: newDuration,
       });
       refreshData?.();
     } catch (error) {
@@ -389,19 +400,29 @@ export default function SceneCard({
     setUpdatingTime((prev) => new Set(prev).add(sceneId));
 
     const currentEndTime = Number(currentScene.field_6897) || 0;
+    const currentStartTime = Number(currentScene.field_6896) || 0;
     const newEndTime = Math.max(
       0,
       Number((currentEndTime + adjustment).toFixed(2))
     );
+    const newDuration = Math.max(
+      0,
+      Number((newEndTime - currentStartTime).toFixed(2))
+    );
 
     // Optimistic update
     const optimisticData = data.map((scene) =>
-      scene.id === sceneId ? { ...scene, field_6897: newEndTime } : scene
+      scene.id === sceneId
+        ? { ...scene, field_6897: newEndTime, field_6884: newDuration }
+        : scene
     );
     onDataUpdate?.(optimisticData);
 
     try {
-      await updateBaserowRow(sceneId, { field_6897: newEndTime });
+      await updateBaserowRow(sceneId, {
+        field_6897: newEndTime,
+        field_6884: newDuration,
+      });
       refreshData?.();
     } catch (error) {
       console.error('Failed to adjust end time:', error);
