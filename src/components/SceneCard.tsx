@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { updateBaserowRow, BaserowRow } from '@/lib/baserow-actions';
+import {
+  updateBaserowRow,
+  updateSceneRow,
+  BaserowRow,
+} from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
@@ -305,7 +309,7 @@ export default function SceneCard({
     );
     onDataUpdate?.(optimisticData);
     try {
-      await updateBaserowRow(sceneId, { field_6890: originalSentence });
+      await updateSceneRow(sceneId, { field_6890: originalSentence });
       refreshData?.();
     } catch (error) {
       console.error('Failed to revert sentence:', error);
@@ -329,7 +333,7 @@ export default function SceneCard({
     );
     onDataUpdate?.(optimisticData);
     try {
-      await updateBaserowRow(sceneId, { field_6891: '' });
+      await updateSceneRow(sceneId, { field_6891: '' });
       refreshData?.();
     } catch (error) {
       console.error('Failed to remove TTS:', error);
@@ -353,7 +357,7 @@ export default function SceneCard({
     );
     onDataUpdate?.(optimisticData);
     try {
-      await updateBaserowRow(sceneId, { field_6886: '' });
+      await updateSceneRow(sceneId, { field_6886: '' });
       refreshData?.();
     } catch (error) {
       console.error('Failed to clear video:', error);
@@ -377,12 +381,40 @@ export default function SceneCard({
     setUploadingSceneVideo(sceneId);
 
     try {
+      // Get the current scene data to extract video ID
+      const currentScene = data.find((scene) => scene.id === sceneId);
+      if (!currentScene) {
+        throw new Error('Scene not found');
+      }
+
+      // Extract videoId from scene data (can be number, string, or array)
+      let videoId: number | null = null;
+      const videoIdField = currentScene.field_6889;
+      if (typeof videoIdField === 'number') {
+        videoId = videoIdField;
+      } else if (typeof videoIdField === 'string') {
+        videoId = parseInt(videoIdField, 10);
+      } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+        const firstId =
+          typeof videoIdField[0] === 'object'
+            ? videoIdField[0].id || videoIdField[0].value
+            : videoIdField[0];
+        videoId = parseInt(String(firstId), 10);
+      }
+
+      if (!videoId) {
+        throw new Error('Video ID not found for scene');
+      }
+
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('sceneId', sceneId.toString());
+      formData.append('videoId', videoId.toString());
 
       console.log('Uploading file:', file.name, 'Size:', file.size);
+      console.log('Scene ID:', sceneId, 'Video ID:', videoId);
 
-      const response = await fetch('/api/upload-video', {
+      const response = await fetch('/api/upload-scene-video', {
         method: 'POST',
         body: formData,
       });
@@ -398,13 +430,13 @@ export default function SceneCard({
       console.log('Upload successful, URL:', uploadedUrl);
       console.log('Updating scene', sceneId, 'with fields 6886 and 6888');
 
-      // Update both Videos (6886) and Video Clip URL (6888) fields
-      await updateBaserowRow(sceneId, {
+      // Update both Videos (6886) and Video Clip URL (6888) fields in scenes table only
+      await updateSceneRow(sceneId, {
         field_6886: uploadedUrl,
         field_6888: uploadedUrl,
       });
 
-      console.log('Baserow update successful');
+      console.log('Scene update successful');
 
       // Refresh data from server to ensure consistency
       refreshData?.();
@@ -461,7 +493,7 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
 
     try {
-      await updateBaserowRow(sceneId, {
+      await updateSceneRow(sceneId, {
         field_6896: newStartTime,
         field_6898: newStartTime,
         field_6884: newDuration,
@@ -509,7 +541,7 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
 
     try {
-      await updateBaserowRow(sceneId, {
+      await updateSceneRow(sceneId, {
         field_6897: newEndTime,
         field_6884: newDuration,
       });
@@ -557,7 +589,7 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
 
     try {
-      await updateBaserowRow(sceneId, {
+      await updateSceneRow(sceneId, {
         field_6896: clampedStartTime,
         field_6898: clampedStartTime,
         field_6884: newDuration,
@@ -601,7 +633,7 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
 
     try {
-      await updateBaserowRow(sceneId, {
+      await updateSceneRow(sceneId, {
         field_6897: clampedEndTime,
         field_6884: newDuration,
       });
@@ -830,7 +862,7 @@ export default function SceneCard({
             console.log('Updating scene sentence with transcribed text');
           }
 
-          await updateBaserowRow(sceneId, updateData);
+          await updateSceneRow(sceneId, updateData);
 
           // Optimistic update
           const optimisticData = data.map((scene) =>
@@ -1009,8 +1041,8 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
 
     try {
-      // updateBaserowRow returns the updated row data directly or throws an error
-      const updatedRow = await updateBaserowRow(sceneId, {
+      // updateSceneRow returns the updated row data directly or throws an error
+      const updatedRow = await updateSceneRow(sceneId, {
         field_6890: editingText,
       });
 
@@ -1064,8 +1096,8 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
 
     try {
-      // updateBaserowRow returns the updated row data directly or throws an error
-      const updatedRow = await updateBaserowRow(sceneId, {
+      // updateSceneRow returns the updated row data directly or throws an error
+      const updatedRow = await updateSceneRow(sceneId, {
         field_6890: editingText,
       });
 
@@ -1338,7 +1370,7 @@ export default function SceneCard({
         const audioUrl = result.audioUrl;
 
         // Update the Baserow field with the MinIO URL
-        const updatedRow = await updateBaserowRow(sceneId, {
+        const updatedRow = await updateSceneRow(sceneId, {
           field_6891: audioUrl,
         });
 
@@ -1435,7 +1467,7 @@ export default function SceneCard({
         const isCached = result.cached === true;
 
         // Update the Baserow field with the generated video URL
-        const updatedRow = await updateBaserowRow(sceneId, {
+        const updatedRow = await updateSceneRow(sceneId, {
           field_6886: generatedVideoUrl,
         });
 
@@ -1510,7 +1542,7 @@ export default function SceneCard({
 
       // Update the Baserow field with the improved sentence
       try {
-        await updateBaserowRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6890: improvedSentence,
         });
       } catch (updateError) {
@@ -1601,7 +1633,7 @@ export default function SceneCard({
         const typingEffectVideoUrl = result.videoUrl;
 
         // Update the Baserow field with the typing effect video URL
-        const updatedRow = await updateBaserowRow(sceneId, {
+        const updatedRow = await updateSceneRow(sceneId, {
           field_6886: typingEffectVideoUrl,
         });
 
