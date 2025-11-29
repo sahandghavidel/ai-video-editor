@@ -891,9 +891,10 @@ export async function createTypingEffectVideoWithUpload(options: {
   videoUrl: string;
   text: string;
   sceneId?: string;
+  videoId?: string;
   cleanup?: boolean;
 }): Promise<{ localPath: string; uploadUrl: string }> {
-  const { videoUrl, text, sceneId, cleanup = true } = options;
+  const { videoUrl, text, sceneId, videoId, cleanup = true } = options;
 
   let localPath: string | null = null;
 
@@ -903,23 +904,26 @@ export async function createTypingEffectVideoWithUpload(options: {
     localPath = await createTypingEffectVideo(videoUrl, text);
     const ffmpegEnd = Date.now();
     console.log(
-      `[FFMPEG] Scene ${sceneId} typing effect processing took ${
+      `[FFMPEG] Scene ${sceneId} (video ${videoId}) typing effect processing took ${
         ffmpegEnd - ffmpegStart
       }ms`
     );
 
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
-    const filename = sceneId
-      ? `scene_${sceneId}_typing_${timestamp}.mp4`
-      : `typing_effect_${timestamp}.mp4`;
+    const filename =
+      videoId && sceneId
+        ? `video_${videoId}_scene_${sceneId}_typing_${timestamp}.mp4`
+        : sceneId
+        ? `scene_${sceneId}_typing_${timestamp}.mp4`
+        : `typing_effect_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadStart = Date.now();
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
     const uploadEnd = Date.now();
     console.log(
-      `[UPLOAD] Scene ${sceneId} typing effect uploaded in ${
+      `[UPLOAD] Scene ${sceneId} (video ${videoId}) typing effect uploaded in ${
         uploadEnd - uploadStart
       }ms`
     );

@@ -3,7 +3,7 @@ import { createTypingEffectVideoWithUpload } from '@/utils/ffmpeg-direct';
 
 export async function POST(request: NextRequest) {
   try {
-    const { sceneId, videoUrl, text } = await request.json();
+    const { sceneId, videoId, videoUrl, text } = await request.json();
 
     if (!videoUrl || !text) {
       return NextResponse.json(
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     console.log(
       `[TYPING] Starting typing effect creation for scene ${
         sceneId || 'unknown'
-      }`
+      } (video ${videoId || 'unknown'})`
     );
     console.log(`[TYPING] Video URL: ${videoUrl}`);
     console.log(`[TYPING] Text: "${text}"`);
@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       videoUrl,
       text,
       sceneId: sceneId?.toString(),
+      videoId: videoId?.toString(),
       cleanup: true, // Clean up local files after upload
     });
 

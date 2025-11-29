@@ -1605,6 +1605,25 @@ export default function SceneCard({
           throw new Error('No original video available for typing effect');
         }
 
+        // Extract videoId from scene data
+        let videoId: number | null = null;
+        const videoIdField = sceneData?.['field_6889'];
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        if (!videoId) {
+          throw new Error('Video ID not found for scene');
+        }
+
         // Call the typing effect API
         const response = await fetch('/api/create-typing-effect', {
           method: 'POST',
@@ -1613,6 +1632,7 @@ export default function SceneCard({
           },
           body: JSON.stringify({
             sceneId,
+            videoId,
             videoUrl,
             text: sceneText,
           }),
