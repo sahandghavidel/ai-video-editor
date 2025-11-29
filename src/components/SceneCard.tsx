@@ -69,6 +69,10 @@ interface SceneCardProps {
       sceneId: number,
       sceneData?: BaserowRow
     ) => Promise<void>;
+    handleConvertToCFR: (
+      sceneId: number,
+      sceneData?: BaserowRow
+    ) => Promise<void>;
   }) => void;
 }
 
@@ -158,6 +162,7 @@ export default function SceneCard({
     setSpeedingUpVideo,
     setTranscribingScene,
     setGeneratingVideo,
+    setConvertingToCFRVideo,
     clipGeneration,
     setGeneratingSingleClip,
     setCreatingTypingEffect,
@@ -1681,6 +1686,97 @@ export default function SceneCard({
     [setCreatingTypingEffect]
   );
 
+  const handleConvertToCFR = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow) => {
+      try {
+        setConvertingToCFRVideo(sceneId);
+
+        // Get the video URL to convert from field_6886 (synced/processed video)
+        const videoUrl = sceneData?.['field_6886'] || sceneData?.field_6886;
+        if (!videoUrl || typeof videoUrl !== 'string') {
+          throw new Error('No processed video available for CFR conversion');
+        }
+
+        // Extract videoId from scene data
+        let videoId: number | null = null;
+        const videoIdField = sceneData?.['field_6889'];
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        if (!videoId) {
+          throw new Error('Video ID not found for scene');
+        }
+
+        // Call the convert to CFR API
+        const response = await fetch('/api/convert-to-cfr', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            videoId: sceneId, // Use sceneId as the video identifier for naming
+            videoUrl,
+            framerate: 30, // Target framerate of 30 fps
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `CFR conversion error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = `CFR conversion error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        const cfrVideoUrl = result.data?.cfrUrl;
+
+        if (!cfrVideoUrl) {
+          throw new Error('No CFR video URL returned from API');
+        }
+
+        // Update the Baserow field with the CFR video URL
+        // For scenes, we update the synced/processed video field (field_6886)
+        const updatedRow = await updateSceneRow(sceneId, {
+          field_6886: cfrVideoUrl,
+        });
+
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6886: cfrVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server
+        refreshDataRef.current?.();
+
+        playSuccessSound();
+      } catch (error) {
+        console.error('Error converting scene to CFR:', error);
+        playErrorSound();
+        // You could show a user-friendly error message here
+      } finally {
+        setConvertingToCFRVideo(null);
+      }
+    },
+    [setConvertingToCFRVideo]
+  );
+
   // Expose handler functions to parent component (only once on mount)
   useEffect(() => {
     if (onHandlersReady) {
@@ -1691,6 +1787,7 @@ export default function SceneCard({
         handleSpeedUpVideo,
         handleTranscribeScene,
         handleTypingEffect,
+        handleConvertToCFR,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2318,6 +2415,58 @@ export default function SceneCard({
                                       batchOperations.generatingAllVideos
                                     ? 'Typing Effect Busy'
                                     : 'Create Typing Effect'}
+                                </span>
+                              </button>
+                            </div>
+                          )}
+
+                        {/* Convert to CFR Section */}
+                        {typeof scene['field_6886'] === 'string' &&
+                          scene['field_6886'] && (
+                            <div className='border-t border-gray-200 pt-3'>
+                              <button
+                                onClick={() => {
+                                  handleConvertToCFR(scene.id, scene);
+                                  setShowTimeAdjustment(null); // Close dropdown
+                                }}
+                                disabled={
+                                  sceneLoading.convertingToCFRVideo !== null ||
+                                  batchOperations.convertingAllToCFR
+                                }
+                                className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded w-full text-left ${
+                                  sceneLoading.convertingToCFRVideo === scene.id
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : sceneLoading.convertingToCFRVideo !==
+                                        null ||
+                                      batchOperations.convertingAllToCFR
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : ''
+                                }`}
+                                title={
+                                  sceneLoading.convertingToCFRVideo === scene.id
+                                    ? 'Converting scene to CFR...'
+                                    : sceneLoading.convertingToCFRVideo !== null
+                                    ? `CFR conversion is in progress for scene ${sceneLoading.convertingToCFRVideo}`
+                                    : batchOperations.convertingAllToCFR
+                                    ? 'Batch CFR conversion is in progress'
+                                    : 'Convert scene video to Constant Frame Rate (30fps)'
+                                }
+                              >
+                                {sceneLoading.convertingToCFRVideo ===
+                                scene.id ? (
+                                  <Loader2 className='h-3 w-3 animate-spin' />
+                                ) : (
+                                  <Video className='h-3 w-3' />
+                                )}
+                                <span>
+                                  {sceneLoading.convertingToCFRVideo ===
+                                  scene.id
+                                    ? 'Converting to CFR...'
+                                    : sceneLoading.convertingToCFRVideo !==
+                                        null ||
+                                      batchOperations.convertingAllToCFR
+                                    ? 'CFR Busy'
+                                    : 'Convert to CFR'}
                                 </span>
                               </button>
                             </div>
