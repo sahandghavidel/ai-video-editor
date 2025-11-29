@@ -77,6 +77,14 @@ interface SceneCardProps {
       sceneId: number,
       sceneData?: BaserowRow
     ) => Promise<void>;
+    handleNormalizeOriginalVideo: (
+      sceneId: number,
+      sceneData?: BaserowRow
+    ) => Promise<void>;
+    handleNormalizeFinalVideo: (
+      sceneId: number,
+      sceneData?: BaserowRow
+    ) => Promise<void>;
   }) => void;
 }
 
@@ -1907,6 +1915,162 @@ export default function SceneCard({
     [setNormalizingAudio]
   );
 
+  // Normalize original video handler
+  const handleNormalizeOriginalVideo = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow) => {
+      try {
+        setNormalizingAudio(sceneId);
+
+        // Get the video URL to normalize from field_6888 (original video)
+        const videoUrl = sceneData?.['field_6888'] || sceneData?.field_6888;
+        if (!videoUrl || typeof videoUrl !== 'string') {
+          throw new Error(
+            'No original video available for audio normalization'
+          );
+        }
+
+        // Call the normalize audio API
+        const response = await fetch('/api/normalize-audio', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sceneId: sceneId,
+            videoUrl,
+            targetLoudness: -19, // EBU R128 standard
+            loudnessRange: 7,
+            truePeak: -2,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Audio normalization failed');
+        }
+
+        const result = await response.json();
+        const normalizedVideoUrl = result.data?.normalizedUrl;
+
+        if (!normalizedVideoUrl) {
+          throw new Error('No normalized video URL returned from API');
+        }
+
+        console.log(
+          'Original video audio normalization successful, URL:',
+          normalizedVideoUrl
+        );
+
+        // Update the scene with the normalized video URL for the original video field
+        await updateSceneRow(sceneId, {
+          field_6888: normalizedVideoUrl,
+        });
+
+        // Update local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6888: normalizedVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server
+        refreshDataRef.current?.();
+
+        playSuccessSound();
+      } catch (error) {
+        console.error('Error normalizing original video audio:', error);
+        playErrorSound();
+        alert(
+          `Original video audio normalization failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      } finally {
+        setNormalizingAudio(null);
+      }
+    },
+    [setNormalizingAudio]
+  );
+
+  // Normalize final video handler
+  const handleNormalizeFinalVideo = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow) => {
+      try {
+        setNormalizingAudio(sceneId);
+
+        // Get the video URL to normalize from field_6886 (final/processed video)
+        const videoUrl = sceneData?.['field_6886'] || sceneData?.field_6886;
+        if (!videoUrl || typeof videoUrl !== 'string') {
+          throw new Error('No final video available for audio normalization');
+        }
+
+        // Call the normalize audio API
+        const response = await fetch('/api/normalize-audio', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sceneId: sceneId,
+            videoUrl,
+            targetLoudness: -19, // EBU R128 standard
+            loudnessRange: 7,
+            truePeak: -2,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Audio normalization failed');
+        }
+
+        const result = await response.json();
+        const normalizedVideoUrl = result.data?.normalizedUrl;
+
+        if (!normalizedVideoUrl) {
+          throw new Error('No normalized video URL returned from API');
+        }
+
+        console.log(
+          'Final video audio normalization successful, URL:',
+          normalizedVideoUrl
+        );
+
+        // Update the scene with the normalized video URL for the final video field
+        await updateSceneRow(sceneId, {
+          field_6886: normalizedVideoUrl,
+        });
+
+        // Update local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6886: normalizedVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server
+        refreshDataRef.current?.();
+
+        playSuccessSound();
+      } catch (error) {
+        console.error('Error normalizing final video audio:', error);
+        playErrorSound();
+        alert(
+          `Final video audio normalization failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      } finally {
+        setNormalizingAudio(null);
+      }
+    },
+    [setNormalizingAudio]
+  );
+
   // Expose handler functions to parent component (only once on mount)
   useEffect(() => {
     if (onHandlersReady) {
@@ -1919,6 +2083,8 @@ export default function SceneCard({
         handleTypingEffect,
         handleConvertToCFR,
         handleNormalizeAudio,
+        handleNormalizeOriginalVideo,
+        handleNormalizeFinalVideo,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2619,47 +2785,102 @@ export default function SceneCard({
                         )}
 
                         {/* Normalize Audio Section */}
-                        {typeof scene['field_6886'] === 'string' &&
-                          scene['field_6886'] && (
-                            <div className='border-t border-gray-200 pt-3'>
-                              <button
-                                onClick={() => {
-                                  handleNormalizeAudio(scene.id, scene);
-                                  setShowTimeAdjustment(null); // Close dropdown
-                                }}
-                                disabled={
-                                  sceneLoading.normalizingAudio !== null
-                                }
-                                className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded w-full text-left ${
-                                  sceneLoading.normalizingAudio === scene.id
-                                    ? 'opacity-50 cursor-not-allowed'
-                                    : sceneLoading.normalizingAudio !== null
-                                    ? 'opacity-50 cursor-not-allowed'
-                                    : ''
-                                }`}
-                                title={
-                                  sceneLoading.normalizingAudio === scene.id
-                                    ? 'Normalizing audio...'
-                                    : sceneLoading.normalizingAudio !== null
-                                    ? `Audio normalization is in progress for scene ${sceneLoading.normalizingAudio}`
-                                    : 'Normalize audio using EBU R128 standard'
-                                }
-                              >
-                                {sceneLoading.normalizingAudio === scene.id ? (
-                                  <Loader2 className='h-3 w-3 animate-spin' />
-                                ) : (
-                                  <Volume2 className='h-3 w-3' />
+                        {((typeof scene['field_6886'] === 'string' &&
+                          scene['field_6886']) ||
+                          (typeof scene['field_6888'] === 'string' &&
+                            scene['field_6888'])) && (
+                          <div className='border-t border-gray-200 pt-3'>
+                            <div className='flex gap-2'>
+                              {/* Normalize Original Video Button */}
+                              {typeof scene['field_6888'] === 'string' &&
+                                scene['field_6888'] && (
+                                  <button
+                                    onClick={() => {
+                                      handleNormalizeOriginalVideo(
+                                        scene.id,
+                                        scene
+                                      );
+                                      setShowTimeAdjustment(null); // Close dropdown
+                                    }}
+                                    disabled={
+                                      sceneLoading.normalizingAudio !== null
+                                    }
+                                    className={`flex items-center space-x-1 px-2 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded flex-1 justify-center ${
+                                      sceneLoading.normalizingAudio === scene.id
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : sceneLoading.normalizingAudio !== null
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : ''
+                                    }`}
+                                    title={
+                                      sceneLoading.normalizingAudio === scene.id
+                                        ? 'Normalizing original video audio...'
+                                        : sceneLoading.normalizingAudio !== null
+                                        ? `Audio normalization is in progress for scene ${sceneLoading.normalizingAudio}`
+                                        : 'Normalize original video audio using EBU R128 standard'
+                                    }
+                                  >
+                                    {sceneLoading.normalizingAudio ===
+                                    scene.id ? (
+                                      <Loader2 className='h-3 w-3 animate-spin' />
+                                    ) : (
+                                      <Volume2 className='h-3 w-3' />
+                                    )}
+                                    <span>
+                                      {sceneLoading.normalizingAudio ===
+                                      scene.id
+                                        ? 'Normalizing...'
+                                        : 'Original'}
+                                    </span>
+                                  </button>
                                 )}
-                                <span>
-                                  {sceneLoading.normalizingAudio === scene.id
-                                    ? 'Normalizing...'
-                                    : sceneLoading.normalizingAudio !== null
-                                    ? 'Normalize Busy'
-                                    : 'Normalize Audio'}
-                                </span>
-                              </button>
+
+                              {/* Normalize Final Video Button */}
+                              {typeof scene['field_6886'] === 'string' &&
+                                scene['field_6886'] && (
+                                  <button
+                                    onClick={() => {
+                                      handleNormalizeFinalVideo(
+                                        scene.id,
+                                        scene
+                                      );
+                                      setShowTimeAdjustment(null); // Close dropdown
+                                    }}
+                                    disabled={
+                                      sceneLoading.normalizingAudio !== null
+                                    }
+                                    className={`flex items-center space-x-1 px-2 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded flex-1 justify-center ${
+                                      sceneLoading.normalizingAudio === scene.id
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : sceneLoading.normalizingAudio !== null
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : ''
+                                    }`}
+                                    title={
+                                      sceneLoading.normalizingAudio === scene.id
+                                        ? 'Normalizing final video audio...'
+                                        : sceneLoading.normalizingAudio !== null
+                                        ? `Audio normalization is in progress for scene ${sceneLoading.normalizingAudio}`
+                                        : 'Normalize final video audio using EBU R128 standard'
+                                    }
+                                  >
+                                    {sceneLoading.normalizingAudio ===
+                                    scene.id ? (
+                                      <Loader2 className='h-3 w-3 animate-spin' />
+                                    ) : (
+                                      <Volume2 className='h-3 w-3' />
+                                    )}
+                                    <span>
+                                      {sceneLoading.normalizingAudio ===
+                                      scene.id
+                                        ? 'Normalizing...'
+                                        : 'Final'}
+                                    </span>
+                                  </button>
+                                )}
                             </div>
-                          )}
+                          </div>
+                        )}
 
                         {/* Typing Effect Section */}
                         {typeof scene['field_6888'] === 'string' &&
