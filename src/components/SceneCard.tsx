@@ -2457,6 +2457,85 @@ export default function SceneCard({
                           </div>
                         </div>
 
+                        {/* Transcribe Section */}
+                        {((typeof scene['field_6888'] === 'string' &&
+                          scene['field_6888']) ||
+                          (typeof scene['field_6886'] === 'string' &&
+                            scene['field_6886'])) && (
+                          <div className='border-t border-gray-200 pt-3'>
+                            <button
+                              onClick={() => {
+                                handleTranscribeScene(
+                                  scene.id,
+                                  scene,
+                                  transcriptionSettings.selectedVideoType
+                                );
+                                setShowTimeAdjustment(null); // Close dropdown
+                              }}
+                              disabled={sceneLoading.transcribingScene !== null}
+                              className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded w-full text-left ${
+                                sceneLoading.transcribingScene === scene.id
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : sceneLoading.transcribingScene !== null
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : ''
+                              }`}
+                              title={
+                                sceneLoading.transcribingScene === scene.id
+                                  ? 'Transcribing scene audio...'
+                                  : sceneLoading.transcribingScene !== null
+                                  ? `Scene transcription is in progress for scene ${sceneLoading.transcribingScene}`
+                                  : typeof scene['field_6910'] === 'string' &&
+                                    scene['field_6910']
+                                  ? 'Scene already transcribed - click to re-transcribe'
+                                  : `Transcribe ${transcriptionSettings.selectedVideoType} video and save captions`
+                              }
+                            >
+                              {sceneLoading.transcribingScene === scene.id ? (
+                                <Loader2 className='h-3 w-3 animate-spin' />
+                              ) : (
+                                <div className='flex items-center space-x-1'>
+                                  <div
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      updateTranscriptionSettings({
+                                        selectedVideoType:
+                                          transcriptionSettings.selectedVideoType ===
+                                          'original'
+                                            ? 'final'
+                                            : 'original',
+                                      });
+                                    }}
+                                    className='px-1 py-0.5 text-xs font-bold text-cyan-700 hover:bg-cyan-600/20 rounded transition-colors duration-200 cursor-pointer'
+                                    title={`Click to toggle video type (${
+                                      transcriptionSettings.selectedVideoType ===
+                                      'original'
+                                        ? 'final'
+                                        : 'original'
+                                    })`}
+                                  >
+                                    {transcriptionSettings.selectedVideoType ===
+                                    'original'
+                                      ? 'Orig'
+                                      : 'Final'}
+                                  </div>
+                                  <span className='text-xs'>🎙️</span>
+                                </div>
+                              )}
+                              <span>
+                                {sceneLoading.transcribingScene === scene.id
+                                  ? 'Transcribing...'
+                                  : sceneLoading.transcribingScene !== null
+                                  ? 'Transcribe Busy'
+                                  : typeof scene['field_6910'] === 'string' &&
+                                    scene['field_6910']
+                                  ? 'Re-transcribe'
+                                  : 'Transcribe'}
+                              </span>
+                            </button>
+                          </div>
+                        )}
+
                         {/* Typing Effect Section */}
                         {typeof scene['field_6888'] === 'string' &&
                           scene['field_6888'] &&
@@ -2664,85 +2743,6 @@ export default function SceneCard({
                         : 'Gen TTS'}
                     </span>
                   </button>
-
-                  {/* Transcribe Scene Button */}
-                  {((typeof scene['field_6888'] === 'string' &&
-                    scene['field_6888']) ||
-                    (typeof scene['field_6886'] === 'string' &&
-                      scene['field_6886'])) && (
-                    <button
-                      onClick={() =>
-                        handleTranscribeScene(
-                          scene.id,
-                          scene,
-                          transcriptionSettings.selectedVideoType
-                        )
-                      }
-                      disabled={sceneLoading.transcribingScene !== null}
-                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
-                        sceneLoading.transcribingScene === scene.id
-                          ? 'bg-gray-100 text-gray-500'
-                          : sceneLoading.transcribingScene !== null
-                          ? 'bg-gray-50 text-gray-400'
-                          : typeof scene['field_6910'] === 'string' &&
-                            scene['field_6910']
-                          ? 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
-                          : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      title={
-                        sceneLoading.transcribingScene === scene.id
-                          ? 'Transcribing scene audio...'
-                          : sceneLoading.transcribingScene !== null
-                          ? `Scene transcription is in progress for scene ${sceneLoading.transcribingScene}`
-                          : typeof scene['field_6910'] === 'string' &&
-                            scene['field_6910']
-                          ? 'Scene already transcribed - click to re-transcribe'
-                          : `Transcribe ${transcriptionSettings.selectedVideoType} video and save captions`
-                      }
-                    >
-                      {sceneLoading.transcribingScene === scene.id ? (
-                        <Loader2 className='animate-spin h-3 w-3' />
-                      ) : (
-                        <div className='flex items-center space-x-1'>
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateTranscriptionSettings({
-                                selectedVideoType:
-                                  transcriptionSettings.selectedVideoType ===
-                                  'original'
-                                    ? 'final'
-                                    : 'original',
-                              });
-                            }}
-                            className='px-1 py-0.5 text-xs font-bold text-cyan-700 hover:bg-cyan-600/20 rounded transition-colors duration-200 cursor-pointer'
-                            title={`Click to toggle video type (${
-                              transcriptionSettings.selectedVideoType ===
-                              'original'
-                                ? 'final'
-                                : 'original'
-                            })`}
-                          >
-                            {transcriptionSettings.selectedVideoType ===
-                            'original'
-                              ? 'Orig'
-                              : 'Final'}
-                          </div>
-                          <span className='text-xs'>🎙️</span>
-                        </div>
-                      )}
-                      <span>
-                        {sceneLoading.transcribingScene === scene.id
-                          ? 'Transcribing...'
-                          : sceneLoading.transcribingScene !== null
-                          ? 'Transcribe Busy'
-                          : typeof scene['field_6910'] === 'string' &&
-                            scene['field_6910']
-                          ? 'Re-transcribe'
-                          : 'Transcribe'}
-                      </span>
-                    </button>
-                  )}
 
                   {/* AI Improvement Button */}
                   <button
