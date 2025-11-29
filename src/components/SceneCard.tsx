@@ -119,7 +119,7 @@ export default function SceneCard({
   );
   const [applyCfrAfterUpload, setApplyCfrAfterUpload] = useState<boolean>(true);
   const [applyNormalizeAfterUpload, setApplyNormalizeAfterUpload] =
-    useState<boolean>(false);
+    useState<boolean>(true);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
