@@ -99,6 +99,7 @@ export default function SceneCard({
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
+  const dropdownRefs = useRef<Record<number, HTMLDivElement>>({});
 
   // Use refs to store stable references to props
   const dataRef = useRef(data);
@@ -127,6 +128,9 @@ export default function SceneCard({
   const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
     useState<boolean>(false);
   const [updatingTime, setUpdatingTime] = useState<Set<number>>(new Set());
+  const [dropdownPositions, setDropdownPositions] = useState<
+    Record<number, 'up' | 'down'>
+  >({});
   const [inputValues, setInputValues] = useState<{
     [key: number]: { start: string | undefined; end: string | undefined };
   }>({});
@@ -370,6 +374,24 @@ export default function SceneCard({
       // Revert optimistic update on error
       onDataUpdate?.(data);
     }
+  };
+
+  // Calculate dropdown position based on available space
+  const calculateDropdownPosition = (sceneId: number) => {
+    const dropdownRef = dropdownRefs.current[sceneId];
+    if (!dropdownRef) return 'down';
+
+    const rect = dropdownRef.getBoundingClientRect();
+    const dropdownHeight = 300; // Approximate height of dropdown
+    const windowHeight = window.innerHeight;
+    const spaceBelow = windowHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // If there's not enough space below but enough space above, open upwards
+    if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+      return 'up';
+    }
+    return 'down';
   };
 
   const handleSceneVideoUpload = async (
@@ -2175,6 +2197,16 @@ export default function SceneCard({
                       const newState =
                         showTimeAdjustment === scene.id ? null : scene.id;
                       setShowTimeAdjustment(newState);
+                      if (newState !== null) {
+                        // Calculate position when opening dropdown
+                        setTimeout(() => {
+                          const position = calculateDropdownPosition(scene.id);
+                          setDropdownPositions((prev) => ({
+                            ...prev,
+                            [scene.id]: position,
+                          }));
+                        }, 0);
+                      }
                     }}
                     className='flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200'
                     title='Adjust start/end times'
@@ -2189,8 +2221,17 @@ export default function SceneCard({
 
                   {showTimeAdjustment === scene.id && (
                     <div
+                      ref={(el) => {
+                        if (el) {
+                          dropdownRefs.current[scene.id] = el;
+                        }
+                      }}
                       data-time-adjustment-dropdown
-                      className='absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-3'
+                      className={`absolute ${
+                        dropdownPositions[scene.id] === 'up'
+                          ? 'bottom-full mb-1'
+                          : 'top-full mt-1'
+                      } left-0 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-3`}
                     >
                       <div className='space-y-3'>
                         <div>
