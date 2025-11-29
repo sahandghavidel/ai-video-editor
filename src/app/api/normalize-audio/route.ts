@@ -5,6 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const {
       sceneId,
+      videoId,
       videoUrl,
       targetLoudness = -19, // Changed from -23 to -16 LUFS for louder audio
       loudnessRange = 7,
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
         targetLoudness,
         loudnessRange,
         truePeak,
+        videoId: videoId?.toString(),
         sceneId: sceneId.toString(),
       });
 

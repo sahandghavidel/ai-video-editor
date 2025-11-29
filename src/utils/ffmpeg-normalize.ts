@@ -190,11 +190,12 @@ export async function uploadToMinio(
  */
 export async function normalizeAudioWithUpload(
   options: NormalizeAudioOptions & {
+    videoId?: string;
     sceneId?: string;
     cleanup?: boolean;
   }
 ): Promise<{ localPath: string; uploadUrl: string }> {
-  const { sceneId, cleanup = true, ...normalizeOptions } = options;
+  const { videoId, sceneId, cleanup = true, ...normalizeOptions } = options;
 
   let localPath: string | null = null;
 
@@ -204,9 +205,14 @@ export async function normalizeAudioWithUpload(
 
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
-    const filename = sceneId
-      ? `video_${sceneId}_normalized_${timestamp}.mp4`
-      : `normalized_${timestamp}.mp4`;
+    const filename =
+      videoId && sceneId
+        ? `video_${videoId}_scene_${sceneId}_normalized_${timestamp}.mp4`
+        : videoId
+        ? `video_${videoId}_normalized_${timestamp}.mp4`
+        : sceneId
+        ? `scene_${sceneId}_normalized_${timestamp}.mp4`
+        : `normalized_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');

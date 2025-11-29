@@ -2167,6 +2167,21 @@ export default function SceneCard({
           );
         }
 
+        // Extract videoId from scene data
+        let videoId: number | null = null;
+        const videoIdField = sceneData?.['field_6889'];
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
         // Call the normalize audio API
         const response = await fetch('/api/normalize-audio', {
           method: 'POST',
@@ -2175,6 +2190,7 @@ export default function SceneCard({
           },
           body: JSON.stringify({
             sceneId: sceneId,
+            videoId: videoId,
             videoUrl,
             targetLoudness: -19, // EBU R128 standard
             loudnessRange: 7,
@@ -2250,6 +2266,21 @@ export default function SceneCard({
           throw new Error('No final video available for audio normalization');
         }
 
+        // Extract videoId from scene data
+        let videoId: number | null = null;
+        const videoIdField = sceneData?.['field_6889'];
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
         // Call the normalize audio API
         const response = await fetch('/api/normalize-audio', {
           method: 'POST',
@@ -2258,6 +2289,7 @@ export default function SceneCard({
           },
           body: JSON.stringify({
             sceneId: sceneId,
+            videoId: videoId,
             videoUrl,
             targetLoudness: -19, // EBU R128 standard
             loudnessRange: 7,
