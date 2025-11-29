@@ -29,6 +29,7 @@ import {
   Plus,
   Minus,
   Upload,
+  FastForward,
 } from 'lucide-react';
 
 // Helper: get original sentence from field_6901
@@ -94,6 +95,20 @@ interface SceneCardProps {
     handleNormalizeFinalVideo: (
       sceneId: number,
       sceneData?: BaserowRow
+    ) => Promise<void>;
+    handleOptimizeSilence: (
+      sceneId: number,
+      sceneData?: BaserowRow
+    ) => Promise<void>;
+    handleOptimizeSilenceOriginal: (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound?: boolean
+    ) => Promise<void>;
+    handleOptimizeSilenceFinal: (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound?: boolean
     ) => Promise<void>;
   }) => void;
 }
@@ -2302,6 +2317,308 @@ export default function SceneCard({
     [setNormalizingAudio]
   );
 
+  // Optimize silence handler
+  const handleOptimizeSilence = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow) => {
+      try {
+        setConvertingToCFRVideo(sceneId); // Reuse the CFR loading state
+
+        // Get the video URL to optimize from field_6886 (final/processed video)
+        const videoUrl = sceneData?.['field_6886'] || sceneData?.field_6886;
+        if (!videoUrl || typeof videoUrl !== 'string') {
+          throw new Error(
+            'No processed video available for silence optimization'
+          );
+        }
+
+        // Extract videoId from scene data
+        let videoId: number | null = null;
+        const videoIdField = sceneData?.['field_6889'];
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        if (!videoId) {
+          throw new Error('Video ID not found for scene');
+        }
+
+        // Call the optimize silence API
+        const response = await fetch('/api/optimize-silence', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            videoId: videoId,
+            videoUrl,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Silence optimization error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = `Silence optimization error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        const optimizedVideoUrl = result.data?.optimizedUrl;
+
+        if (!optimizedVideoUrl) {
+          throw new Error('No optimized video URL returned from API');
+        }
+
+        // Update the Baserow field with the optimized video URL
+        const updatedRow = await updateSceneRow(sceneId, {
+          field_6886: optimizedVideoUrl,
+        });
+
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6886: optimizedVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server
+        refreshDataRef.current?.();
+
+        playSuccessSound();
+      } catch (error) {
+        console.error('Error optimizing silence:', error);
+        playErrorSound();
+        // You could show a user-friendly error message here
+      } finally {
+        setConvertingToCFRVideo(null);
+      }
+    },
+    [setConvertingToCFRVideo]
+  );
+
+  // Optimize silence for original video handler
+  const handleOptimizeSilenceOriginal = useCallback(
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound: boolean = true
+    ) => {
+      try {
+        setConvertingToCFRVideo(sceneId);
+
+        // Get the video URL to optimize from field_6888 (original video)
+        const videoUrl = sceneData?.['field_6888'] || sceneData?.field_6888;
+        if (!videoUrl || typeof videoUrl !== 'string') {
+          throw new Error(
+            'No original video available for silence optimization'
+          );
+        }
+
+        // Extract videoId from scene data
+        let videoId: number | null = null;
+        const videoIdField = sceneData?.['field_6889'];
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        if (!videoId) {
+          throw new Error('Video ID not found for scene');
+        }
+
+        // Call the optimize silence API
+        const response = await fetch('/api/optimize-silence', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            videoId: videoId,
+            videoUrl,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          let errorMessage = 'Failed to optimize silence for original video';
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          } else if (response.status === 400) {
+            errorMessage = `Bad request: ${response.status} - ${response.statusText}`;
+          } else if (response.status === 500) {
+            errorMessage = `Server error: ${response.status} - ${response.statusText}`;
+          } else {
+            errorMessage = `Silence optimization error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        const optimizedVideoUrl = result.data?.optimizedUrl;
+
+        if (!optimizedVideoUrl) {
+          throw new Error('No optimized video URL returned from API');
+        }
+
+        // Update the Baserow field with the optimized video URL for original video
+        const updatedRow = await updateSceneRow(sceneId, {
+          field_6888: optimizedVideoUrl,
+        });
+
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6888: optimizedVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server
+        refreshDataRef.current?.();
+
+        if (playSound) {
+          playSuccessSound();
+        }
+      } catch (error) {
+        console.error('Error optimizing silence for original video:', error);
+        playErrorSound();
+        alert(
+          `Original video silence optimization failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      } finally {
+        setConvertingToCFRVideo(null);
+      }
+    },
+    [setConvertingToCFRVideo]
+  );
+
+  // Optimize silence for final video handler
+  const handleOptimizeSilenceFinal = useCallback(
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound: boolean = true
+    ) => {
+      try {
+        setConvertingToCFRVideo(sceneId);
+
+        // Get the video URL to optimize from field_6886 (final/processed video)
+        const videoUrl = sceneData?.['field_6886'] || sceneData?.field_6886;
+        if (!videoUrl || typeof videoUrl !== 'string') {
+          throw new Error('No final video available for silence optimization');
+        }
+
+        // Extract videoId from scene data
+        let videoId: number | null = null;
+        const videoIdField = sceneData?.['field_6889'];
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? videoIdField[0].id || videoIdField[0].value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        if (!videoId) {
+          throw new Error('Video ID not found for scene');
+        }
+
+        // Call the optimize silence API
+        const response = await fetch('/api/optimize-silence', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            videoId: videoId,
+            videoUrl,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          let errorMessage = 'Failed to optimize silence for final video';
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          } else if (response.status === 400) {
+            errorMessage = `Bad request: ${response.status} - ${response.statusText}`;
+          } else if (response.status === 500) {
+            errorMessage = `Server error: ${response.status} - ${response.statusText}`;
+          } else {
+            errorMessage = `Silence optimization error: ${response.status} - ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        const optimizedVideoUrl = result.data?.optimizedUrl;
+
+        if (!optimizedVideoUrl) {
+          throw new Error('No optimized video URL returned from API');
+        }
+
+        // Update the Baserow field with the optimized video URL for final video
+        const updatedRow = await updateSceneRow(sceneId, {
+          field_6886: optimizedVideoUrl,
+        });
+
+        // Update the local data optimistically
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6886: optimizedVideoUrl };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+
+        // Refresh data from server
+        refreshDataRef.current?.();
+
+        if (playSound) {
+          playSuccessSound();
+        }
+      } catch (error) {
+        console.error('Error optimizing silence for final video:', error);
+        playErrorSound();
+        alert(
+          `Final video silence optimization failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      } finally {
+        setConvertingToCFRVideo(null);
+      }
+    },
+    [setConvertingToCFRVideo]
+  );
+
   // Expose handler functions to parent component (only once on mount)
   useEffect(() => {
     if (onHandlersReady) {
@@ -2318,6 +2635,9 @@ export default function SceneCard({
         handleNormalizeAudio,
         handleNormalizeOriginalVideo,
         handleNormalizeFinalVideo,
+        handleOptimizeSilence,
+        handleOptimizeSilenceOriginal,
+        handleOptimizeSilenceFinal,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3127,6 +3447,112 @@ export default function SceneCard({
                                       scene.id
                                         ? 'Normalizing...'
                                         : 'Final'}
+                                    </span>
+                                  </button>
+                                )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Optimize Silence Section */}
+                        {((typeof scene['field_6886'] === 'string' &&
+                          scene['field_6886']) ||
+                          (typeof scene['field_6888'] === 'string' &&
+                            scene['field_6888'])) && (
+                          <div className='border-t border-gray-200 pt-3'>
+                            <div className='flex gap-2'>
+                              {/* Optimize Silence Original Video Button */}
+                              {typeof scene['field_6888'] === 'string' &&
+                                scene['field_6888'] && (
+                                  <button
+                                    onClick={() => {
+                                      handleOptimizeSilenceOriginal(
+                                        scene.id,
+                                        scene
+                                      );
+                                      setShowTimeAdjustment(null); // Close dropdown
+                                    }}
+                                    disabled={
+                                      sceneLoading.convertingToCFRVideo !== null
+                                    }
+                                    className={`flex items-center space-x-1 px-2 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded flex-1 justify-center ${
+                                      sceneLoading.convertingToCFRVideo ===
+                                      scene.id
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : sceneLoading.convertingToCFRVideo !==
+                                          null
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : ''
+                                    }`}
+                                    title={
+                                      sceneLoading.convertingToCFRVideo ===
+                                      scene.id
+                                        ? 'Optimizing silence in original video...'
+                                        : sceneLoading.convertingToCFRVideo !==
+                                          null
+                                        ? `Silence optimization is in progress for scene ${sceneLoading.convertingToCFRVideo}`
+                                        : 'Detect and speed up silent parts in original video'
+                                    }
+                                  >
+                                    {sceneLoading.convertingToCFRVideo ===
+                                    scene.id ? (
+                                      <Loader2 className='h-3 w-3 animate-spin' />
+                                    ) : (
+                                      <FastForward className='h-3 w-3' />
+                                    )}
+                                    <span>
+                                      {sceneLoading.convertingToCFRVideo ===
+                                      scene.id
+                                        ? 'Optimizing...'
+                                        : 'Original Silence'}
+                                    </span>
+                                  </button>
+                                )}
+
+                              {/* Optimize Silence Final Video Button */}
+                              {typeof scene['field_6886'] === 'string' &&
+                                scene['field_6886'] && (
+                                  <button
+                                    onClick={() => {
+                                      handleOptimizeSilenceFinal(
+                                        scene.id,
+                                        scene
+                                      );
+                                      setShowTimeAdjustment(null); // Close dropdown
+                                    }}
+                                    disabled={
+                                      sceneLoading.convertingToCFRVideo !== null
+                                    }
+                                    className={`flex items-center space-x-1 px-2 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded flex-1 justify-center ${
+                                      sceneLoading.convertingToCFRVideo ===
+                                      scene.id
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : sceneLoading.convertingToCFRVideo !==
+                                          null
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : ''
+                                    }`}
+                                    title={
+                                      sceneLoading.convertingToCFRVideo ===
+                                      scene.id
+                                        ? 'Optimizing silence in final video...'
+                                        : sceneLoading.convertingToCFRVideo !==
+                                          null
+                                        ? `Silence optimization is in progress for scene ${sceneLoading.convertingToCFRVideo}`
+                                        : 'Detect and speed up silent parts in final video'
+                                    }
+                                  >
+                                    {sceneLoading.convertingToCFRVideo ===
+                                    scene.id ? (
+                                      <Loader2 className='h-3 w-3 animate-spin' />
+                                    ) : (
+                                      <FastForward className='h-3 w-3' />
+                                    )}
+                                    <span>
+                                      {sceneLoading.convertingToCFRVideo ===
+                                      scene.id
+                                        ? 'Optimizing...'
+                                        : 'Final Silence'}
                                     </span>
                                   </button>
                                 )}
