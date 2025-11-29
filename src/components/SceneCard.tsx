@@ -2215,6 +2215,61 @@ export default function SceneCard({
                             />
                           </label>
                         </div>
+
+                        {/* Typing Effect Section */}
+                        {typeof scene['field_6888'] === 'string' &&
+                          scene['field_6888'] &&
+                          String(
+                            scene['field_6890'] || scene.field_6890 || ''
+                          ).trim() && (
+                            <div className='border-t border-gray-200 pt-3'>
+                              <button
+                                onClick={() => {
+                                  handleTypingEffect(scene.id, scene);
+                                  setShowTimeAdjustment(null); // Close dropdown
+                                }}
+                                disabled={
+                                  sceneLoading.creatingTypingEffect !== null ||
+                                  batchOperations.generatingAllVideos
+                                }
+                                className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded w-full text-left ${
+                                  sceneLoading.creatingTypingEffect === scene.id
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : sceneLoading.creatingTypingEffect !==
+                                        null ||
+                                      batchOperations.generatingAllVideos
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : ''
+                                }`}
+                                title={
+                                  sceneLoading.creatingTypingEffect === scene.id
+                                    ? 'Creating typing effect for this scene...'
+                                    : sceneLoading.creatingTypingEffect !== null
+                                    ? `Typing effect is being created for scene ${sceneLoading.creatingTypingEffect}`
+                                    : batchOperations.generatingAllVideos
+                                    ? 'Batch video generation is in progress'
+                                    : 'Create typing effect video with animated text overlay'
+                                }
+                              >
+                                {sceneLoading.creatingTypingEffect ===
+                                scene.id ? (
+                                  <Loader2 className='h-3 w-3 animate-spin' />
+                                ) : (
+                                  <Keyboard className='h-3 w-3' />
+                                )}
+                                <span>
+                                  {sceneLoading.creatingTypingEffect ===
+                                  scene.id
+                                    ? 'Creating Typing Effect...'
+                                    : sceneLoading.creatingTypingEffect !==
+                                        null ||
+                                      batchOperations.generatingAllVideos
+                                    ? 'Typing Effect Busy'
+                                    : 'Create Typing Effect'}
+                                </span>
+                              </button>
+                            </div>
+                          )}
                       </div>
                     </div>
                   )}
@@ -2693,52 +2748,6 @@ export default function SceneCard({
                             : batchOperations.generatingAllVideos
                             ? 'Video Busy'
                             : 'Sync'}
-                        </span>
-                      </button>
-                    )}
-
-                  {/* Typing Effect Button */}
-                  {typeof scene['field_6888'] === 'string' &&
-                    scene['field_6888'] &&
-                    String(
-                      scene['field_6890'] || scene.field_6890 || ''
-                    ).trim() && (
-                      <button
-                        onClick={() => handleTypingEffect(scene.id, scene)}
-                        disabled={
-                          sceneLoading.creatingTypingEffect !== null ||
-                          batchOperations.generatingAllVideos
-                        }
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
-                          sceneLoading.creatingTypingEffect === scene.id
-                            ? 'bg-gray-100 text-gray-500'
-                            : sceneLoading.creatingTypingEffect !== null ||
-                              batchOperations.generatingAllVideos
-                            ? 'bg-gray-50 text-gray-400'
-                            : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title={
-                          sceneLoading.creatingTypingEffect === scene.id
-                            ? 'Creating typing effect for this scene...'
-                            : sceneLoading.creatingTypingEffect !== null
-                            ? `Typing effect is being created for scene ${sceneLoading.creatingTypingEffect}`
-                            : batchOperations.generatingAllVideos
-                            ? 'Batch video generation is in progress'
-                            : 'Create typing effect video with animated text overlay'
-                        }
-                      >
-                        {sceneLoading.creatingTypingEffect === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : (
-                          <Keyboard className='h-3 w-3' />
-                        )}
-                        <span>
-                          {sceneLoading.creatingTypingEffect === scene.id
-                            ? 'Typing...'
-                            : sceneLoading.creatingTypingEffect !== null ||
-                              batchOperations.generatingAllVideos
-                            ? 'Typing Busy'
-                            : 'Typing'}
                         </span>
                       </button>
                     )}
