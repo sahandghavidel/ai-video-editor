@@ -73,6 +73,7 @@ export interface SceneLoadingState {
   currentlyProcessingVideo: number | null;
   optimizingSilenceVideo: number | null;
   normalizingAudioVideo: number | null;
+  normalizingAudio: number | null;
   convertingToCFRVideo: number | null;
   transcribingScene: number | null;
   creatingTypingEffect: number | null;
@@ -242,6 +243,7 @@ interface AppState {
   setCurrentlyProcessingVideo: (videoId: number | null) => void;
   setOptimizingSilenceVideo: (videoId: number | null) => void;
   setNormalizingAudioVideo: (videoId: number | null) => void;
+  setNormalizingAudio: (sceneId: number | null) => void;
   setConvertingToCFRVideo: (videoId: number | null) => void;
 
   // Merged Video Actions
@@ -364,6 +366,7 @@ const defaultSceneLoading: SceneLoadingState = {
   currentlyProcessingVideo: null,
   optimizingSilenceVideo: null,
   normalizingAudioVideo: null,
+  normalizingAudio: null,
   convertingToCFRVideo: null,
   transcribingScene: null,
   creatingTypingEffect: null,
@@ -731,6 +734,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       sceneLoading: {
         ...state.sceneLoading,
         normalizingAudioVideo: videoId,
+      },
+    })),
+
+  setNormalizingAudio: (sceneId) =>
+    set((state) => ({
+      sceneLoading: {
+        ...state.sceneLoading,
+        normalizingAudio: sceneId,
       },
     })),
 
