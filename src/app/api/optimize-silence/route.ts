@@ -3,7 +3,7 @@ import { optimizeSilenceWithUpload } from '@/utils/ffmpeg-silence';
 
 export async function POST(request: NextRequest) {
   try {
-    const { videoId, videoUrl, options } = await request.json();
+    const { videoId, videoUrl, sceneId, options } = await request.json();
 
     if (!videoId) {
       return NextResponse.json(
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[SILENCE] Video ${videoId}: Optimizing silence with options:`,
+      `[SILENCE] Video ${videoId}, Scene ${sceneId}: Optimizing silence with options:`,
       options
     );
 
@@ -31,12 +31,13 @@ export async function POST(request: NextRequest) {
       const result = await optimizeSilenceWithUpload({
         inputUrl: videoUrl,
         videoId: videoId.toString(),
+        sceneId: sceneId?.toString(),
         ...options,
       });
 
       const silenceEndTime = Date.now();
       console.log(
-        `[SILENCE] Video ${videoId}: Silence optimization completed in ${
+        `[SILENCE] Video ${videoId}, Scene ${sceneId}: Silence optimization completed in ${
           silenceEndTime - silenceStartTime
         }ms`
       );
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (silenceError) {
       console.error(
-        `[SILENCE] Video ${videoId}: Silence optimization failed:`,
+        `[SILENCE] Video ${videoId}, Scene ${sceneId}: Silence optimization failed:`,
         silenceError
       );
 
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
               ? silenceError.message
               : 'Unknown error',
           videoId,
+          sceneId,
         },
         { status: 500 }
       );

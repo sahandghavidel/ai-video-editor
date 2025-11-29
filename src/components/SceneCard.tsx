@@ -2454,6 +2454,7 @@ export default function SceneCard({
           },
           body: JSON.stringify({
             videoId: videoId,
+            sceneId: sceneId,
             videoUrl,
           }),
         });
@@ -2558,6 +2559,7 @@ export default function SceneCard({
           },
           body: JSON.stringify({
             videoId: videoId,
+            sceneId: sceneId,
             videoUrl,
           }),
         });
