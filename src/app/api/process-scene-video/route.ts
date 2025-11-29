@@ -4,6 +4,7 @@ import {
   normalizeAudioWithUpload,
 } from '@/utils/ffmpeg-normalize';
 import { convertToCFR, convertToCFRWithUpload } from '@/utils/ffmpeg-cfr';
+import { optimizeSilence } from '@/utils/ffmpeg-silence';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
 import path from 'path';
 import { writeFile, unlink } from 'fs/promises';
@@ -16,6 +17,7 @@ export async function POST(request: NextRequest) {
     const videoId = formData.get('videoId') as string;
     const applyNormalize = formData.get('applyNormalize') === 'true';
     const applyCfr = formData.get('applyCfr') === 'true';
+    const applySilence = formData.get('applySilence') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -47,7 +49,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`Processing scene video: ${file.name}, size: ${file.size}`);
     console.log(`Scene ID: ${sceneId}, Video ID: ${videoId}`);
-    console.log(`Apply normalize: ${applyNormalize}, Apply CFR: ${applyCfr}`);
+    console.log(
+      `Apply normalize: ${applyNormalize}, Apply CFR: ${applyCfr}, Apply silence: ${applySilence}`
+    );
 
     // Convert file to buffer and save temporarily
     const arrayBuffer = await file.arrayBuffer();
@@ -116,7 +120,34 @@ export async function POST(request: NextRequest) {
         console.log('CFR conversion completed');
       }
 
-      // Step 3: Upload the final processed video to MinIO
+      // Step 3: Apply silence optimization if requested
+      if (applySilence) {
+        console.log('Applying silence optimization...');
+        const result = await optimizeSilence({
+          inputUrl: currentPath,
+          soundLevel: -30,
+          minSilenceLength: 0.5,
+          speedRate: 4,
+        });
+        const silencePath = result.outputPath;
+
+        // Clean up previous file if different
+        if (currentPath !== inputPath) {
+          try {
+            await unlink(currentPath);
+          } catch (cleanupError) {
+            console.warn(
+              `Failed to cleanup intermediate file: ${cleanupError}`
+            );
+          }
+        }
+
+        currentPath = silencePath;
+        finalPath = silencePath;
+        console.log('Silence optimization completed');
+      }
+
+      // Step 4: Upload the final processed video to MinIO
       console.log('Uploading processed video to MinIO...');
       const filename = `video_${videoId}_scene_${sceneId}_processed_${timestamp}.mp4`;
       const uploadUrl = await uploadToMinio(finalPath, filename, 'video/mp4');
@@ -138,6 +169,7 @@ export async function POST(request: NextRequest) {
         processing: {
           normalized: applyNormalize,
           cfr: applyCfr,
+          silence: applySilence,
         },
       });
     } catch (processingError) {

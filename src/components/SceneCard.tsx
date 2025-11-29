@@ -135,6 +135,8 @@ export default function SceneCard({
   const [applyCfrAfterUpload, setApplyCfrAfterUpload] = useState<boolean>(true);
   const [applyNormalizeAfterUpload, setApplyNormalizeAfterUpload] =
     useState<boolean>(true);
+  const [applySilenceAfterUpload, setApplySilenceAfterUpload] =
+    useState<boolean>(true);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -438,7 +440,8 @@ export default function SceneCard({
     sceneId: number,
     file: File,
     applyCfrAfterUpload: boolean = false,
-    applyNormalizeAfterUpload: boolean = false
+    applyNormalizeAfterUpload: boolean = false,
+    applySilenceAfterUpload: boolean = false
   ) => {
     if (!file.type.startsWith('video/')) {
       alert('Please select a video file');
@@ -485,6 +488,7 @@ export default function SceneCard({
       formData.append('videoId', videoId.toString());
       formData.append('applyNormalize', applyNormalizeAfterUpload.toString());
       formData.append('applyCfr', applyCfrAfterUpload.toString());
+      formData.append('applySilence', applySilenceAfterUpload.toString());
 
       console.log('Processing file:', file.name, 'Size:', file.size);
       console.log('Scene ID:', sceneId, 'Video ID:', videoId);
@@ -492,7 +496,9 @@ export default function SceneCard({
         'Processing options - Normalize:',
         applyNormalizeAfterUpload,
         'CFR:',
-        applyCfrAfterUpload
+        applyCfrAfterUpload,
+        'Silence:',
+        applySilenceAfterUpload
       );
 
       const response = await fetch('/api/process-scene-video', {
@@ -3066,7 +3072,7 @@ export default function SceneCard({
                         dropdownPositions[scene.id] === 'up'
                           ? 'bottom-full mb-1'
                           : 'top-full mt-1'
-                      } left-0 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-3`}
+                      } left-0 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-3`}
                     >
                       <div className='space-y-3'>
                         <div>
@@ -3233,7 +3239,7 @@ export default function SceneCard({
 
                         {/* Upload Video Section */}
                         <div className='border-t border-gray-200 pt-3'>
-                          <div className='flex items-center gap-3'>
+                          <div className='flex items-start gap-3'>
                             <label
                               className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded cursor-pointer border border-gray-200 transition-colors duration-200 ${
                                 uploadingSceneVideo === scene.id
@@ -3261,7 +3267,8 @@ export default function SceneCard({
                                       scene.id,
                                       file,
                                       applyCfrAfterUpload,
-                                      applyNormalizeAfterUpload
+                                      applyNormalizeAfterUpload,
+                                      applySilenceAfterUpload
                                     );
                                     setShowTimeAdjustment(null); // Close dropdown
                                   }
@@ -3272,41 +3279,63 @@ export default function SceneCard({
                                 disabled={uploadingSceneVideo === scene.id}
                               />
                             </label>
-                            <div className='flex items-center space-x-2'>
-                              <input
-                                type='checkbox'
-                                id={`normalize-upload-${scene.id}`}
-                                checked={applyNormalizeAfterUpload}
-                                onChange={(e) =>
-                                  setApplyNormalizeAfterUpload(e.target.checked)
-                                }
-                                className='h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
-                                disabled={uploadingSceneVideo === scene.id}
-                              />
-                              <label
-                                htmlFor={`normalize-upload-${scene.id}`}
-                                className='text-xs text-gray-600 cursor-pointer'
-                              >
-                                Normalize
-                              </label>
-                            </div>
-                            <div className='flex items-center space-x-2'>
-                              <input
-                                type='checkbox'
-                                id={`cfr-upload-${scene.id}`}
-                                checked={applyCfrAfterUpload}
-                                onChange={(e) =>
-                                  setApplyCfrAfterUpload(e.target.checked)
-                                }
-                                className='h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
-                                disabled={uploadingSceneVideo === scene.id}
-                              />
-                              <label
-                                htmlFor={`cfr-upload-${scene.id}`}
-                                className='text-xs text-gray-600 cursor-pointer'
-                              >
-                                CFR (Both)
-                              </label>
+                            <div className='flex flex-col space-y-2'>
+                              <div className='flex items-center space-x-2'>
+                                <input
+                                  type='checkbox'
+                                  id={`normalize-upload-${scene.id}`}
+                                  checked={applyNormalizeAfterUpload}
+                                  onChange={(e) =>
+                                    setApplyNormalizeAfterUpload(
+                                      e.target.checked
+                                    )
+                                  }
+                                  className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+                                  disabled={uploadingSceneVideo === scene.id}
+                                />
+                                <label
+                                  htmlFor={`normalize-upload-${scene.id}`}
+                                  className='text-xs text-gray-600 cursor-pointer'
+                                >
+                                  Normalize
+                                </label>
+                              </div>
+                              <div className='flex items-center space-x-2'>
+                                <input
+                                  type='checkbox'
+                                  id={`cfr-upload-${scene.id}`}
+                                  checked={applyCfrAfterUpload}
+                                  onChange={(e) =>
+                                    setApplyCfrAfterUpload(e.target.checked)
+                                  }
+                                  className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+                                  disabled={uploadingSceneVideo === scene.id}
+                                />
+                                <label
+                                  htmlFor={`cfr-upload-${scene.id}`}
+                                  className='text-xs text-gray-600 cursor-pointer'
+                                >
+                                  CFR (Both)
+                                </label>
+                              </div>
+                              <div className='flex items-center space-x-2'>
+                                <input
+                                  type='checkbox'
+                                  id={`silence-upload-${scene.id}`}
+                                  checked={applySilenceAfterUpload}
+                                  onChange={(e) =>
+                                    setApplySilenceAfterUpload(e.target.checked)
+                                  }
+                                  className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+                                  disabled={uploadingSceneVideo === scene.id}
+                                />
+                                <label
+                                  htmlFor={`silence-upload-${scene.id}`}
+                                  className='text-xs text-gray-600 cursor-pointer'
+                                >
+                                  Silence
+                                </label>
+                              </div>
                             </div>
                           </div>
                         </div>
