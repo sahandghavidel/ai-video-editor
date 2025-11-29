@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Plus,
   Minus,
+  Upload,
 } from 'lucide-react';
 
 // Helper: get original sentence from field_6901
@@ -60,6 +61,10 @@ interface SceneCardProps {
       sceneData?: BaserowRow,
       videoType?: 'original' | 'final'
     ) => Promise<void>;
+    handleTypingEffect: (
+      sceneId: number,
+      sceneData?: BaserowRow
+    ) => Promise<void>;
   }) => void;
 }
 
@@ -79,6 +84,9 @@ export default function SceneCard({
   const [loadingProducedVideo, setLoadingProducedVideo] = useState<
     number | null
   >(null);
+  const [uploadingSceneVideo, setUploadingSceneVideo] = useState<number | null>(
+    null
+  );
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -111,7 +119,7 @@ export default function SceneCard({
     useState<boolean>(false);
   const [updatingTime, setUpdatingTime] = useState<Set<number>>(new Set());
   const [inputValues, setInputValues] = useState<{
-    [key: number]: { start: string; end: string };
+    [key: number]: { start: string | undefined; end: string | undefined };
   }>({});
 
   // State for improving all sentences
@@ -240,11 +248,13 @@ export default function SceneCard({
     mediaPlayer.playingProducedVideoId,
   ]);
 
-  // Click outside handler for time adjustment dropdown
+  // Click outside handler for time adjustment and settings dropdowns
   useEffect(() => {
     const handleClickOutside = async (event: MouseEvent) => {
+      const target = event.target as Element;
+
+      // Handle time adjustment dropdown
       if (showTimeAdjustment !== null) {
-        const target = event.target as Element;
         if (!target.closest('[data-time-adjustment-dropdown]')) {
           // Save any pending input values before closing
           const sceneInputValues = inputValues[showTimeAdjustment];
@@ -349,6 +359,71 @@ export default function SceneCard({
       console.error('Failed to clear video:', error);
       // Revert optimistic update on error
       onDataUpdate?.(data);
+    }
+  };
+
+  const handleSceneVideoUpload = async (sceneId: number, file: File) => {
+    if (!file.type.startsWith('video/')) {
+      alert('Please select a video file');
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024 * 1024; // 10GB
+    if (file.size > maxSize) {
+      alert('File size must be less than 10GB');
+      return;
+    }
+
+    setUploadingSceneVideo(sceneId);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      console.log('Uploading file:', file.name, 'Size:', file.size);
+
+      const response = await fetch('/api/upload-video', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      const result = await response.json();
+      const uploadedUrl = result.videoUrl;
+
+      console.log('Upload successful, URL:', uploadedUrl);
+      console.log('Updating scene', sceneId, 'with fields 6886 and 6888');
+
+      // Update both Videos (6886) and Video Clip URL (6888) fields
+      await updateBaserowRow(sceneId, {
+        field_6886: uploadedUrl,
+        field_6888: uploadedUrl,
+      });
+
+      console.log('Baserow update successful');
+
+      // Refresh data from server to ensure consistency
+      refreshData?.();
+
+      // Update local state as well for immediate UI feedback
+      const updatedData = data.map((scene) =>
+        scene.id === sceneId
+          ? { ...scene, field_6886: uploadedUrl, field_6888: uploadedUrl }
+          : scene
+      );
+      onDataUpdate?.(updatedData);
+
+      playSuccessSound();
+    } catch (error) {
+      console.error('Failed to upload scene video:', error);
+      playErrorSound();
+      alert('Failed to upload video. Please try again.');
+    } finally {
+      setUploadingSceneVideo(null);
     }
   };
 
@@ -2102,6 +2177,43 @@ export default function SceneCard({
                               </button>
                             </div>
                           </div>
+                        </div>
+
+                        {/* Upload Video Section */}
+                        <div className='border-t border-gray-200 pt-3'>
+                          <label
+                            className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded cursor-pointer ${
+                              uploadingSceneVideo === scene.id
+                                ? 'opacity-50 cursor-not-allowed'
+                                : ''
+                            }`}
+                          >
+                            {uploadingSceneVideo === scene.id ? (
+                              <Loader2 className='h-3 w-3 animate-spin' />
+                            ) : (
+                              <Upload className='h-3 w-3' />
+                            )}
+                            <span>
+                              {uploadingSceneVideo === scene.id
+                                ? 'Uploading...'
+                                : 'Upload Video'}
+                            </span>
+                            <input
+                              type='file'
+                              accept='video/*'
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleSceneVideoUpload(scene.id, file);
+                                  setShowTimeAdjustment(null); // Close dropdown
+                                }
+                                // Reset input
+                                e.target.value = '';
+                              }}
+                              className='hidden'
+                              disabled={uploadingSceneVideo === scene.id}
+                            />
+                          </label>
                         </div>
                       </div>
                     </div>

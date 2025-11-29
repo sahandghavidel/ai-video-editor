@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   createOriginalVideoRow,
   getOriginalVideosData,
+  BaserowRow,
 } from '@/lib/baserow-actions';
 
 export async function POST(request: NextRequest) {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Generate unique title based on filename
     const generateUniqueTitle = (
       baseName: string,
-      existingVideos: any[]
+      existingVideos: BaserowRow[]
     ): string => {
       // Get all existing titles (field_6852)
       const existingTitles = existingVideos

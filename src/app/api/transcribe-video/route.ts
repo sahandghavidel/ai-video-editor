@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
 
+interface TranscriptionResult {
+  response?: {
+    text: string;
+    segments: Array<{
+      start: number;
+      end: number;
+      text: string;
+    }>;
+    duration: number;
+  };
+  error?: string;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -17,7 +30,7 @@ export async function POST(request: NextRequest) {
     console.log(`Starting ${model} transcription for:`, media_url);
 
     // Handle different transcription models
-    let transcriptionPromise: Promise<any>;
+    let transcriptionPromise: Promise<TranscriptionResult>;
 
     if (model === 'parakeet') {
       // Path to the Parakeet transcription script

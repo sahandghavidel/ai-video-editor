@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createVideoClipWithUpload } from '@/utils/ffmpeg-direct';
+import { BaserowRow } from '@/lib/baserow-actions';
 import path from 'path';
 import fs from 'fs/promises';
+
+type ClipResponseItem = {
+  file_url?: string;
+  url?: string;
+  response?: string;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -233,7 +240,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to extract video URL
-function extractVideoUrl(field: any): string | null {
+function extractVideoUrl(field: BaserowFileField): string | null {
   if (!field) return null;
 
   if (typeof field === 'string' && field.startsWith('http')) {
@@ -471,7 +478,7 @@ async function createVideoClipsBatch(videoUrl: string, scenes: any[]) {
   }
 
   const clipUrls = result.response.map(
-    (item: any) => item.file_url || item.url || item.response
+    (item: ClipResponseItem) => item.file_url || item.url || item.response
   );
 
   if (clipUrls.length !== scenes.length) {

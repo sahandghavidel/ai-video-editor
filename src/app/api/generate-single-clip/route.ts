@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createVideoClipWithUpload } from '@/utils/ffmpeg-direct';
 
+type BaserowFileField =
+  | string
+  | {
+      url?: string;
+      file?: {
+        url?: string;
+      };
+    }
+  | Array<{
+      url?: string;
+      file?: {
+        url?: string;
+      };
+    }>
+  | null
+  | undefined;
+
 // Import the working authentication from baserow-actions
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
@@ -78,7 +95,7 @@ async function getSceneData(sceneId: string) {
 }
 
 // Helper function to extract video URL
-function extractVideoUrl(field: any): string | null {
+function extractVideoUrl(field: BaserowFileField): string | null {
   if (!field) return null;
 
   if (typeof field === 'string' && field.startsWith('http')) {

@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
-import { getBaserowData } from '@/lib/baserow-actions';
+import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
+
+interface ExtendedChatCompletionMessage
+  extends OpenAI.Chat.Completions.ChatCompletionMessage {
+  reasoning?: string;
+}
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -11,7 +16,7 @@ const openai = new OpenAI({
 });
 
 // Helper function to fetch scenes from Baserow table 714
-async function getScenesFromTable(): Promise<any[]> {
+async function getScenesFromTable(): Promise<BaserowRow[]> {
   try {
     // Use the existing getBaserowData function which handles authentication and pagination
     const scenes = await getBaserowData();
@@ -63,7 +68,7 @@ export async function POST(request: Request) {
     // Filter scenes by video ID and extract sentences
     let allSentences: string[] = [];
     let sentenceNumber = 1;
-    let videoScenes: any[] = [];
+    let videoScenes: BaserowRow[] = [];
 
     if (videoId && allScenes.length > 0) {
       videoScenes = allScenes.filter((scene) => {
@@ -100,7 +105,7 @@ export async function POST(request: Request) {
 
     // Create context from all sentences if available
     let scriptContext = '';
-    let hasContext = allSentences.length > 1; // Need at least 2 sentences for meaningful context
+    const hasContext = allSentences.length > 1; // Need at least 2 sentences for meaningful context
 
     if (hasContext) {
       // Create scene-sentence mapping for context
@@ -272,7 +277,7 @@ Return only the improved sentence, nothing else.`;
 
           // If content is empty, check the reasoning field (DeepSeek R1 specific)
           if (!currentImprovedSentence) {
-            const extendedMessage = message as any;
+            const extendedMessage = message as ExtendedChatCompletionMessage;
             if (extendedMessage.reasoning) {
               console.log('Content empty, extracting from reasoning field...');
               const reasoning: string = extendedMessage.reasoning;

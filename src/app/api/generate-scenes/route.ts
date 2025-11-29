@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+interface SceneSegment {
+  id: number;
+  words: string;
+  duration: number;
+  startTime: number;
+  endTime: number;
+  preEndTime: number;
+  type: 'sentence' | 'gap';
+  videoId: string;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const {
@@ -57,7 +68,7 @@ export async function POST(request: NextRequest) {
     // Step 3: Create all scene records in Baserow using batch operation
     console.log(`Creating ${scenes.length} scenes in batch...`);
     const createdScenes = await createSceneRecordsBatch(scenes);
-    const sceneIds = createdScenes.map((scene: any) => scene.id);
+    const sceneIds = createdScenes.map((scene: { id: number }) => scene.id);
 
     // Step 4: Update the original video record with scene IDs
     console.log(
@@ -90,7 +101,7 @@ function generateScenesFromTranscription(
   transcriptionData: any,
   videoId: string,
   videoDuration?: number
-) {
+): SceneSegment[] {
   // Handle different data structures
   let segments: any[] = [];
 
@@ -147,7 +158,7 @@ function generateScenesFromTranscription(
   }
 
   // Process words to create sentence segments
-  const processedSegments: any[] = [];
+  const processedSegments: SceneSegment[] = [];
   let currentSegment = {
     id: 0,
     words: '',
@@ -202,7 +213,9 @@ function generateScenesFromTranscription(
           duration: exactDuration,
           startTime: currentSegment.startTime,
           endTime: currentSegment.endTime,
+          preEndTime: 0, // Placeholder, will be recalculated after adjustments
           type: 'sentence',
+          videoId,
         });
       }
 
@@ -229,12 +242,14 @@ function generateScenesFromTranscription(
       duration: exactDuration,
       startTime: currentSegment.startTime,
       endTime: currentSegment.endTime,
+      preEndTime: 0, // Placeholder, will be recalculated after adjustments
       type: 'sentence',
+      videoId,
     });
   }
 
   // Deduplicate overlapping sentences
-  const sentenceSegments: any[] = [];
+  const sentenceSegments: SceneSegment[] = [];
   const usedTimeRanges: Array<{ start: number; end: number }> = [];
 
   for (const segment of processedSegments) {
@@ -274,7 +289,7 @@ function generateScenesFromTranscription(
   );
 
   // Create final segments array including gaps
-  const allSegments = [];
+  const allSegments: SceneSegment[] = [];
   let segmentId = 0;
   const gapSet = new Set(); // Track unique gaps to prevent duplicates
   const sentenceSet = new Set(); // Track unique sentences to prevent duplicates
@@ -649,7 +664,7 @@ async function getJWTToken() {
 }
 
 // Function to create multiple scene records in Baserow using batch operation
-async function createSceneRecordsBatch(scenes: any[]) {
+async function createSceneRecordsBatch(scenes: SceneSegment[]) {
   const baserowUrl = process.env.BASEROW_API_URL;
   const token = await getJWTToken();
 
