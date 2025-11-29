@@ -493,8 +493,14 @@ export default function SceneCard({
       formData.append('applyCfr', applyCfrAfterUpload.toString());
       formData.append('applySilence', applySilenceAfterUpload.toString());
       formData.append('applyTranscribe', applyTranscribeAfterUpload.toString());
-      formData.append('transcriptionModel', transcriptionSettings.selectedModel);
-      formData.append('transcriptionVideoType', transcriptionSettings.selectedVideoType);
+      formData.append(
+        'transcriptionModel',
+        transcriptionSettings.selectedModel
+      );
+      formData.append(
+        'transcriptionVideoType',
+        transcriptionSettings.selectedVideoType
+      );
 
       console.log('Processing file:', file.name, 'Size:', file.size);
       console.log('Scene ID:', sceneId, 'Video ID:', videoId);
@@ -3351,7 +3357,9 @@ export default function SceneCard({
                                   id={`transcribe-upload-${scene.id}`}
                                   checked={applyTranscribeAfterUpload}
                                   onChange={(e) =>
-                                    setApplyTranscribeAfterUpload(e.target.checked)
+                                    setApplyTranscribeAfterUpload(
+                                      e.target.checked
+                                    )
                                   }
                                   className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
                                   disabled={uploadingSceneVideo === scene.id}

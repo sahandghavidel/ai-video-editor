@@ -41,7 +41,10 @@ export async function PATCH(
     const scenesTableId = '714'; // Scenes table
 
     if (!baserowUrl) {
-      return NextResponse.json({ error: 'Missing Baserow URL' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Missing Baserow URL' },
+        { status: 500 }
+      );
     }
 
     // Get JWT token

@@ -20,7 +20,9 @@ export async function POST(request: NextRequest) {
     const applySilence = formData.get('applySilence') === 'true';
     const applyTranscribe = formData.get('applyTranscribe') === 'true';
     const transcriptionModel = formData.get('transcriptionModel') as string;
-    const transcriptionVideoType = formData.get('transcriptionVideoType') as string;
+    const transcriptionVideoType = formData.get(
+      'transcriptionVideoType'
+    ) as string;
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -56,7 +58,9 @@ export async function POST(request: NextRequest) {
       `Apply normalize: ${applyNormalize}, Apply CFR: ${applyCfr}, Apply silence: ${applySilence}, Apply transcribe: ${applyTranscribe}`
     );
     if (applyTranscribe) {
-      console.log(`Transcription model: ${transcriptionModel}, Video type: ${transcriptionVideoType}`);
+      console.log(
+        `Transcription model: ${transcriptionModel}, Video type: ${transcriptionVideoType}`
+      );
     }
 
     // Convert file to buffer and save temporarily
@@ -164,7 +168,9 @@ export async function POST(request: NextRequest) {
         console.log('Starting transcription for uploaded video...');
         try {
           const transcribeResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/transcribe-scene`,
+            `${
+              process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+            }/api/transcribe-scene`,
             {
               method: 'POST',
               headers: {
@@ -179,7 +185,9 @@ export async function POST(request: NextRequest) {
           );
 
           if (!transcribeResponse.ok) {
-            console.warn('Transcription failed, but video processing succeeded');
+            console.warn(
+              'Transcription failed, but video processing succeeded'
+            );
           } else {
             console.log('Transcription completed successfully');
 
@@ -214,7 +222,9 @@ export async function POST(request: NextRequest) {
             formData.append('file', blob, filename);
 
             const uploadResponse = await fetch(
-              `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/upload-captions`,
+              `${
+                process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+              }/api/upload-captions`,
               {
                 method: 'POST',
                 body: formData,
@@ -225,10 +235,15 @@ export async function POST(request: NextRequest) {
               console.warn('Failed to upload scene captions');
             } else {
               const uploadResult = await uploadResponse.json();
-              console.log('Scene captions uploaded successfully:', uploadResult);
+              console.log(
+                'Scene captions uploaded successfully:',
+                uploadResult
+              );
 
               // Step 3: Extract full text from transcription
-              const fullText = wordTimestamps.map((word) => word.word).join(' ');
+              const fullText = wordTimestamps
+                .map((word) => word.word)
+                .join(' ');
               console.log('Extracted full text from transcription:', fullText);
 
               // Step 4: Update the scene record with the captions URL and transcribed text
@@ -245,13 +260,20 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Import and use the updateSceneRow server action
-                const { updateSceneRow } = await import('@/lib/baserow-actions');
+                const { updateSceneRow } = await import(
+                  '@/lib/baserow-actions'
+                );
 
                 try {
                   await updateSceneRow(parseInt(sceneId), updateData);
-                  console.log('Scene updated successfully with transcription data');
+                  console.log(
+                    'Scene updated successfully with transcription data'
+                  );
                 } catch (updateError) {
-                  console.warn('Failed to update scene with transcription data:', updateError);
+                  console.warn(
+                    'Failed to update scene with transcription data:',
+                    updateError
+                  );
                 }
               }
             }
