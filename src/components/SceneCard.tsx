@@ -509,10 +509,19 @@ export default function SceneCard({
             'Applying CFR conversion after upload for scene:',
             sceneId
           );
-          await handleConvertToCFR(sceneId, {
+
+          // Apply CFR to both original and final videos
+          const updatedSceneData = {
             ...currentScene,
             field_6886: uploadedUrl,
-          });
+            field_6888: uploadedUrl,
+          };
+
+          // Convert original video to CFR
+          await handleConvertOriginalToCFR(sceneId, updatedSceneData);
+
+          // Convert final video to CFR
+          await handleConvertFinalToCFR(sceneId, updatedSceneData);
         } catch (cfrError) {
           console.error('CFR conversion failed after upload:', cfrError);
           // Don't fail the entire upload if CFR fails, just log the error
@@ -2909,7 +2918,7 @@ export default function SceneCard({
                                 htmlFor={`cfr-upload-${scene.id}`}
                                 className='text-xs text-gray-600 cursor-pointer'
                               >
-                                CFR
+                                CFR (Both)
                               </label>
                             </div>
                           </div>
