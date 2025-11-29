@@ -75,11 +75,13 @@ interface SceneCardProps {
     ) => Promise<void>;
     handleConvertOriginalToCFR: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
+      playSound?: boolean
     ) => Promise<void>;
     handleConvertFinalToCFR: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
+      playSound?: boolean
     ) => Promise<void>;
     handleNormalizeAudio: (
       sceneId: number,
@@ -518,10 +520,13 @@ export default function SceneCard({
           };
 
           // Convert original video to CFR
-          await handleConvertOriginalToCFR(sceneId, updatedSceneData);
+          await handleConvertOriginalToCFR(sceneId, updatedSceneData, false);
 
           // Convert final video to CFR
-          await handleConvertFinalToCFR(sceneId, updatedSceneData);
+          await handleConvertFinalToCFR(sceneId, updatedSceneData, false);
+
+          // Play success sound only after everything (upload + CFR) is complete
+          playSuccessSound();
         } catch (cfrError) {
           console.error('CFR conversion failed after upload:', cfrError);
           // Don't fail the entire upload if CFR fails, just log the error
@@ -530,9 +535,10 @@ export default function SceneCard({
             'Video uploaded successfully, but CFR conversion failed. You can try converting to CFR manually.'
           );
         }
+      } else {
+        // Play success sound immediately after upload if CFR is not enabled
+        playSuccessSound();
       }
-
-      playSuccessSound();
     } catch (error) {
       console.error('Failed to upload scene video:', error);
       playErrorSound();
@@ -1858,7 +1864,11 @@ export default function SceneCard({
 
   // Convert original video to CFR handler
   const handleConvertOriginalToCFR = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound: boolean = true
+    ) => {
       try {
         setConvertingToCFRVideo(sceneId);
 
@@ -1940,7 +1950,9 @@ export default function SceneCard({
         // Refresh data from server
         refreshDataRef.current?.();
 
-        playSuccessSound();
+        if (playSound) {
+          playSuccessSound();
+        }
       } catch (error) {
         console.error('Error converting original video to CFR:', error);
         playErrorSound();
@@ -1958,7 +1970,11 @@ export default function SceneCard({
 
   // Convert final video to CFR handler
   const handleConvertFinalToCFR = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound: boolean = true
+    ) => {
       try {
         setConvertingToCFRVideo(sceneId);
 
@@ -2040,7 +2056,9 @@ export default function SceneCard({
         // Refresh data from server
         refreshDataRef.current?.();
 
-        playSuccessSound();
+        if (playSound) {
+          playSuccessSound();
+        }
       } catch (error) {
         console.error('Error converting final video to CFR:', error);
         playErrorSound();
