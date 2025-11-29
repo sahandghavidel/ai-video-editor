@@ -18,6 +18,9 @@ export async function POST(request: NextRequest) {
     const applyNormalize = formData.get('applyNormalize') === 'true';
     const applyCfr = formData.get('applyCfr') === 'true';
     const applySilence = formData.get('applySilence') === 'true';
+    const applyTranscribe = formData.get('applyTranscribe') === 'true';
+    const transcriptionModel = formData.get('transcriptionModel') as string;
+    const transcriptionVideoType = formData.get('transcriptionVideoType') as string;
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -50,8 +53,11 @@ export async function POST(request: NextRequest) {
     console.log(`Processing scene video: ${file.name}, size: ${file.size}`);
     console.log(`Scene ID: ${sceneId}, Video ID: ${videoId}`);
     console.log(
-      `Apply normalize: ${applyNormalize}, Apply CFR: ${applyCfr}, Apply silence: ${applySilence}`
+      `Apply normalize: ${applyNormalize}, Apply CFR: ${applyCfr}, Apply silence: ${applySilence}, Apply transcribe: ${applyTranscribe}`
     );
+    if (applyTranscribe) {
+      console.log(`Transcription model: ${transcriptionModel}, Video type: ${transcriptionVideoType}`);
+    }
 
     // Convert file to buffer and save temporarily
     const arrayBuffer = await file.arrayBuffer();
@@ -63,7 +69,6 @@ export async function POST(request: NextRequest) {
     const inputPath = path.resolve('/tmp', inputFileName);
 
     // Write buffer to temp file
-    const { writeFile } = await import('fs/promises');
     await writeFile(inputPath, buffer);
 
     let currentPath = inputPath;
@@ -154,6 +159,109 @@ export async function POST(request: NextRequest) {
 
       console.log('Scene video processed and uploaded successfully:', filename);
 
+      // Step 5: Transcribe the video if requested
+      if (applyTranscribe) {
+        console.log('Starting transcription for uploaded video...');
+        try {
+          const transcribeResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/transcribe-scene`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                media_url: uploadUrl,
+                model: transcriptionModel,
+                scene_id: parseInt(sceneId),
+              }),
+            }
+          );
+
+          if (!transcribeResponse.ok) {
+            console.warn('Transcription failed, but video processing succeeded');
+          } else {
+            console.log('Transcription completed successfully');
+
+            // Process transcription response
+            const transcriptionData = await transcribeResponse.json();
+
+            // Step 1: Process the response to extract word timestamps
+            const wordTimestamps = [];
+            const segments = transcriptionData.response?.segments;
+
+            if (segments && segments.length > 0) {
+              for (const segment of segments) {
+                if (segment.words) {
+                  for (const wordObj of segment.words) {
+                    wordTimestamps.push({
+                      word: wordObj.word.trim(),
+                      start: wordObj.start,
+                      end: wordObj.end,
+                    });
+                  }
+                }
+              }
+            }
+
+            // Step 2: Upload the captions file to MinIO
+            const captionsData = JSON.stringify(wordTimestamps);
+            const timestamp = Date.now();
+            const filename = `scene_${sceneId}_captions_${timestamp}.json`;
+
+            const formData = new FormData();
+            const blob = new Blob([captionsData], { type: 'application/json' });
+            formData.append('file', blob, filename);
+
+            const uploadResponse = await fetch(
+              `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/upload-captions`,
+              {
+                method: 'POST',
+                body: formData,
+              }
+            );
+
+            if (!uploadResponse.ok) {
+              console.warn('Failed to upload scene captions');
+            } else {
+              const uploadResult = await uploadResponse.json();
+              console.log('Scene captions uploaded successfully:', uploadResult);
+
+              // Step 3: Extract full text from transcription
+              const fullText = wordTimestamps.map((word) => word.word).join(' ');
+              console.log('Extracted full text from transcription:', fullText);
+
+              // Step 4: Update the scene record with the captions URL and transcribed text
+              const captionsUrl = uploadResult.url || uploadResult.file_url;
+              if (captionsUrl) {
+                const updateData: Record<string, unknown> = {
+                  field_6910: captionsUrl, // Captions URL for Scene field
+                };
+
+                // Only update the sentence if we have extracted text
+                if (fullText.trim()) {
+                  updateData.field_6890 = fullText.trim(); // Update Sentence field with transcribed text
+                  console.log('Updating scene sentence with transcribed text');
+                }
+
+                // Import and use the updateSceneRow server action
+                const { updateSceneRow } = await import('@/lib/baserow-actions');
+
+                try {
+                  await updateSceneRow(parseInt(sceneId), updateData);
+                  console.log('Scene updated successfully with transcription data');
+                } catch (updateError) {
+                  console.warn('Failed to update scene with transcription data:', updateError);
+                }
+              }
+            }
+          }
+        } catch (transcribeError) {
+          console.warn('Transcription error:', transcribeError);
+          // Don't fail the whole process if transcription fails
+        }
+      }
+
       // Clean up final file
       try {
         await unlink(finalPath);
@@ -170,6 +278,7 @@ export async function POST(request: NextRequest) {
           normalized: applyNormalize,
           cfr: applyCfr,
           silence: applySilence,
+          transcribed: applyTranscribe,
         },
       });
     } catch (processingError) {

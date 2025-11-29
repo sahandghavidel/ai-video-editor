@@ -137,6 +137,8 @@ export default function SceneCard({
     useState<boolean>(true);
   const [applySilenceAfterUpload, setApplySilenceAfterUpload] =
     useState<boolean>(true);
+  const [applyTranscribeAfterUpload, setApplyTranscribeAfterUpload] =
+    useState<boolean>(true);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -441,7 +443,8 @@ export default function SceneCard({
     file: File,
     applyCfrAfterUpload: boolean = false,
     applyNormalizeAfterUpload: boolean = false,
-    applySilenceAfterUpload: boolean = false
+    applySilenceAfterUpload: boolean = false,
+    applyTranscribeAfterUpload: boolean = true
   ) => {
     if (!file.type.startsWith('video/')) {
       alert('Please select a video file');
@@ -489,6 +492,9 @@ export default function SceneCard({
       formData.append('applyNormalize', applyNormalizeAfterUpload.toString());
       formData.append('applyCfr', applyCfrAfterUpload.toString());
       formData.append('applySilence', applySilenceAfterUpload.toString());
+      formData.append('applyTranscribe', applyTranscribeAfterUpload.toString());
+      formData.append('transcriptionModel', transcriptionSettings.selectedModel);
+      formData.append('transcriptionVideoType', transcriptionSettings.selectedVideoType);
 
       console.log('Processing file:', file.name, 'Size:', file.size);
       console.log('Scene ID:', sceneId, 'Video ID:', videoId);
@@ -498,7 +504,9 @@ export default function SceneCard({
         'CFR:',
         applyCfrAfterUpload,
         'Silence:',
-        applySilenceAfterUpload
+        applySilenceAfterUpload,
+        'Transcribe:',
+        applyTranscribeAfterUpload
       );
 
       const response = await fetch('/api/process-scene-video', {
@@ -3268,7 +3276,8 @@ export default function SceneCard({
                                       file,
                                       applyCfrAfterUpload,
                                       applyNormalizeAfterUpload,
-                                      applySilenceAfterUpload
+                                      applySilenceAfterUpload,
+                                      applyTranscribeAfterUpload
                                     );
                                     setShowTimeAdjustment(null); // Close dropdown
                                   }
@@ -3334,6 +3343,24 @@ export default function SceneCard({
                                   className='text-xs text-gray-600 cursor-pointer'
                                 >
                                   Silence
+                                </label>
+                              </div>
+                              <div className='flex items-center space-x-2'>
+                                <input
+                                  type='checkbox'
+                                  id={`transcribe-upload-${scene.id}`}
+                                  checked={applyTranscribeAfterUpload}
+                                  onChange={(e) =>
+                                    setApplyTranscribeAfterUpload(e.target.checked)
+                                  }
+                                  className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+                                  disabled={uploadingSceneVideo === scene.id}
+                                />
+                                <label
+                                  htmlFor={`transcribe-upload-${scene.id}`}
+                                  className='text-xs text-gray-600 cursor-pointer'
+                                >
+                                  Transcribe
                                 </label>
                               </div>
                             </div>

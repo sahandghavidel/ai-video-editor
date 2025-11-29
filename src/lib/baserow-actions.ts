@@ -301,37 +301,24 @@ export async function updateSceneRow(
   sceneId: number,
   rowData: Record<string, unknown>
 ): Promise<BaserowRow> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const scenesTableId = '714'; // Scenes table
+  // Call the API route instead of making direct Baserow calls
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const response = await fetch(`${baseUrl}/api/baserow/scenes/${sceneId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(rowData),
+  });
 
-  if (!baserowUrl) {
+  if (!response.ok) {
+    const errorText = await response.text();
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
     );
   }
 
-  try {
-    const response = await makeAuthenticatedRequest(
-      `${baserowUrl}/database/rows/table/${scenesTableId}/${sceneId}/`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(rowData),
-        cache: 'no-store',
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
-      );
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error updating scene row:', error);
-    throw error;
-  }
+  return await response.json();
 }
 
 export async function deleteBaserowRow(rowId: number): Promise<void> {
