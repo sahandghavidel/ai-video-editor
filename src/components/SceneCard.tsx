@@ -2398,9 +2398,9 @@ export default function SceneCard({
 
                         {/* Upload Video Section */}
                         <div className='border-t border-gray-200 pt-3'>
-                          <div className='space-y-2'>
+                          <div className='flex items-center gap-3'>
                             <label
-                              className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded cursor-pointer ${
+                              className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded cursor-pointer border border-gray-200 transition-colors duration-200 ${
                                 uploadingSceneVideo === scene.id
                                   ? 'opacity-50 cursor-not-allowed'
                                   : ''
@@ -2414,7 +2414,7 @@ export default function SceneCard({
                               <span>
                                 {uploadingSceneVideo === scene.id
                                   ? 'Uploading...'
-                                  : 'Upload Video'}
+                                  : 'Upload'}
                               </span>
                               <input
                                 type='file'
@@ -2436,7 +2436,7 @@ export default function SceneCard({
                                 disabled={uploadingSceneVideo === scene.id}
                               />
                             </label>
-                            <div className='flex items-center space-x-2 px-3'>
+                            <div className='flex items-center space-x-2'>
                               <input
                                 type='checkbox'
                                 id={`cfr-upload-${scene.id}`}
@@ -2451,7 +2451,7 @@ export default function SceneCard({
                                 htmlFor={`cfr-upload-${scene.id}`}
                                 className='text-xs text-gray-600 cursor-pointer'
                               >
-                                Apply CFR after upload
+                                CFR
                               </label>
                             </div>
                           </div>
