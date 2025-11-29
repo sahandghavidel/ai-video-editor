@@ -468,30 +468,38 @@ export default function SceneCard({
       formData.append('file', file);
       formData.append('sceneId', sceneId.toString());
       formData.append('videoId', videoId.toString());
+      formData.append('applyNormalize', applyNormalizeAfterUpload.toString());
+      formData.append('applyCfr', applyCfrAfterUpload.toString());
 
-      console.log('Uploading file:', file.name, 'Size:', file.size);
+      console.log('Processing file:', file.name, 'Size:', file.size);
       console.log('Scene ID:', sceneId, 'Video ID:', videoId);
+      console.log(
+        'Processing options - Normalize:',
+        applyNormalizeAfterUpload,
+        'CFR:',
+        applyCfrAfterUpload
+      );
 
-      const response = await fetch('/api/upload-scene-video', {
+      const response = await fetch('/api/process-scene-video', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
+        throw new Error(errorData.error || 'Processing failed');
       }
 
       const result = await response.json();
-      const uploadedUrl = result.videoUrl;
+      const processedUrl = result.videoUrl;
 
-      console.log('Upload successful, URL:', uploadedUrl);
+      console.log('Processing successful, URL:', processedUrl);
       console.log('Updating scene', sceneId, 'with fields 6886 and 6888');
 
-      // Update both Videos (6886) and Video Clip URL (6888) fields in scenes table only
+      // Update both Videos (6886) and Video Clip URL (6888) fields in scenes table
       await updateSceneRow(sceneId, {
-        field_6886: uploadedUrl,
-        field_6888: uploadedUrl,
+        field_6886: processedUrl,
+        field_6888: processedUrl,
       });
 
       console.log('Scene update successful');
@@ -502,99 +510,17 @@ export default function SceneCard({
       // Update local state as well for immediate UI feedback
       const updatedData = data.map((scene) =>
         scene.id === sceneId
-          ? { ...scene, field_6886: uploadedUrl, field_6888: uploadedUrl }
+          ? { ...scene, field_6886: processedUrl, field_6888: processedUrl }
           : scene
       );
       onDataUpdate?.(updatedData);
 
-      // Apply normalization and/or CFR conversion if requested
-      if (applyNormalizeAfterUpload || applyCfrAfterUpload) {
-        try {
-          console.log(
-            'Applying processing after upload for scene:',
-            sceneId,
-            'normalize:',
-            applyNormalizeAfterUpload,
-            'cfr:',
-            applyCfrAfterUpload
-          );
-
-          // Update scene data with uploaded URLs for processing
-          const updatedSceneData = {
-            ...currentScene,
-            field_6886: uploadedUrl,
-            field_6888: uploadedUrl,
-          };
-
-          // Apply normalization first if requested
-          if (applyNormalizeAfterUpload) {
-            console.log(
-              'Applying normalization to uploaded video for scene:',
-              sceneId
-            );
-
-            // Normalize original video
-            await handleNormalizeOriginalVideo(
-              sceneId,
-              updatedSceneData,
-              false
-            );
-
-            // Normalize final video
-            await handleNormalizeFinalVideo(sceneId, updatedSceneData, false);
-
-            // Refresh data to get the updated URLs after normalization
-            refreshData?.(); // Refresh data from server
-            await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for data to be updated
-
-            // Get fresh scene data with normalized URLs
-            const freshData = dataRef.current || data;
-            const normalizedScene = freshData.find(
-              (scene) => scene.id === sceneId
-            );
-            if (normalizedScene) {
-              updatedSceneData.field_6886 = normalizedScene.field_6886;
-              updatedSceneData.field_6888 = normalizedScene.field_6888;
-            }
-          }
-
-          // Apply CFR conversion if requested (after normalization if both are selected)
-          if (applyCfrAfterUpload) {
-            console.log(
-              'Applying CFR conversion after upload for scene:',
-              sceneId
-            );
-
-            // Convert original video to CFR
-            await handleConvertOriginalToCFR(sceneId, updatedSceneData, false);
-
-            // Convert final video to CFR
-            await handleConvertFinalToCFR(sceneId, updatedSceneData, false);
-          }
-
-          // Play success sound only after all processing is complete
-          playSuccessSound();
-        } catch (processingError) {
-          console.error('Processing failed after upload:', processingError);
-          // Don't fail the entire upload if processing fails, just log the error
-          playErrorSound();
-          const failedOperations = [];
-          if (applyNormalizeAfterUpload) failedOperations.push('normalization');
-          if (applyCfrAfterUpload) failedOperations.push('CFR conversion');
-          alert(
-            `Video uploaded successfully, but ${failedOperations.join(
-              ' and '
-            )} failed. You can try processing manually.`
-          );
-        }
-      } else {
-        // Play success sound immediately after upload if no processing is enabled
-        playSuccessSound();
-      }
+      // Play success sound
+      playSuccessSound();
     } catch (error) {
-      console.error('Failed to upload scene video:', error);
+      console.error('Failed to process scene video:', error);
       playErrorSound();
-      alert('Failed to upload video. Please try again.');
+      alert('Failed to process video. Please try again.');
     } finally {
       setUploadingSceneVideo(null);
     }
