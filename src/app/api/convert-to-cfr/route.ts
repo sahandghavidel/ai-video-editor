@@ -3,7 +3,7 @@ import { convertToCFRWithUpload } from '@/utils/ffmpeg-cfr';
 
 export async function POST(request: NextRequest) {
   try {
-    const { videoId, videoUrl, framerate = 30 } = await request.json();
+    const { videoId, sceneId, videoUrl, framerate = 30 } = await request.json();
 
     if (!videoId) {
       return NextResponse.json(
@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
         inputUrl: videoUrl,
         framerate,
         videoId: videoId.toString(),
+        sceneId: sceneId?.toString(),
       });
 
       const cfrEndTime = Date.now();

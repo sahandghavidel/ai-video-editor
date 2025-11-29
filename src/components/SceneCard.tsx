@@ -95,6 +95,7 @@ export default function SceneCard({
   const [uploadingSceneVideo, setUploadingSceneVideo] = useState<number | null>(
     null
   );
+  const [applyCfrAfterUpload, setApplyCfrAfterUpload] = useState<boolean>(true);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -371,7 +372,11 @@ export default function SceneCard({
     }
   };
 
-  const handleSceneVideoUpload = async (sceneId: number, file: File) => {
+  const handleSceneVideoUpload = async (
+    sceneId: number,
+    file: File,
+    applyCfrAfterUpload: boolean = false
+  ) => {
     if (!file.type.startsWith('video/')) {
       alert('Please select a video file');
       return;
@@ -453,6 +458,27 @@ export default function SceneCard({
           : scene
       );
       onDataUpdate?.(updatedData);
+
+      // Apply CFR conversion if requested
+      if (applyCfrAfterUpload) {
+        try {
+          console.log(
+            'Applying CFR conversion after upload for scene:',
+            sceneId
+          );
+          await handleConvertToCFR(sceneId, {
+            ...currentScene,
+            field_6886: uploadedUrl,
+          });
+        } catch (cfrError) {
+          console.error('CFR conversion failed after upload:', cfrError);
+          // Don't fail the entire upload if CFR fails, just log the error
+          playErrorSound();
+          alert(
+            'Video uploaded successfully, but CFR conversion failed. You can try converting to CFR manually.'
+          );
+        }
+      }
 
       playSuccessSound();
     } catch (error) {
@@ -1723,7 +1749,8 @@ export default function SceneCard({
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            videoId: sceneId, // Use sceneId as the video identifier for naming
+            videoId: videoId, // Original video ID
+            sceneId: sceneId, // Scene ID for proper naming
             videoUrl,
             framerate: 30, // Target framerate of 30 fps
           }),
@@ -2330,39 +2357,63 @@ export default function SceneCard({
 
                         {/* Upload Video Section */}
                         <div className='border-t border-gray-200 pt-3'>
-                          <label
-                            className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded cursor-pointer ${
-                              uploadingSceneVideo === scene.id
-                                ? 'opacity-50 cursor-not-allowed'
-                                : ''
-                            }`}
-                          >
-                            {uploadingSceneVideo === scene.id ? (
-                              <Loader2 className='h-3 w-3 animate-spin' />
-                            ) : (
-                              <Upload className='h-3 w-3' />
-                            )}
-                            <span>
-                              {uploadingSceneVideo === scene.id
-                                ? 'Uploading...'
-                                : 'Upload Video'}
-                            </span>
-                            <input
-                              type='file'
-                              accept='video/*'
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleSceneVideoUpload(scene.id, file);
-                                  setShowTimeAdjustment(null); // Close dropdown
+                          <div className='space-y-2'>
+                            <label
+                              className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded cursor-pointer ${
+                                uploadingSceneVideo === scene.id
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : ''
+                              }`}
+                            >
+                              {uploadingSceneVideo === scene.id ? (
+                                <Loader2 className='h-3 w-3 animate-spin' />
+                              ) : (
+                                <Upload className='h-3 w-3' />
+                              )}
+                              <span>
+                                {uploadingSceneVideo === scene.id
+                                  ? 'Uploading...'
+                                  : 'Upload Video'}
+                              </span>
+                              <input
+                                type='file'
+                                accept='video/*'
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleSceneVideoUpload(
+                                      scene.id,
+                                      file,
+                                      applyCfrAfterUpload
+                                    );
+                                    setShowTimeAdjustment(null); // Close dropdown
+                                  }
+                                  // Reset input
+                                  e.target.value = '';
+                                }}
+                                className='hidden'
+                                disabled={uploadingSceneVideo === scene.id}
+                              />
+                            </label>
+                            <div className='flex items-center space-x-2 px-3'>
+                              <input
+                                type='checkbox'
+                                id={`cfr-upload-${scene.id}`}
+                                checked={applyCfrAfterUpload}
+                                onChange={(e) =>
+                                  setApplyCfrAfterUpload(e.target.checked)
                                 }
-                                // Reset input
-                                e.target.value = '';
-                              }}
-                              className='hidden'
-                              disabled={uploadingSceneVideo === scene.id}
-                            />
-                          </label>
+                                className='h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+                                disabled={uploadingSceneVideo === scene.id}
+                              />
+                              <label
+                                htmlFor={`cfr-upload-${scene.id}`}
+                                className='text-xs text-gray-600 cursor-pointer'
+                              >
+                                Apply CFR after upload
+                              </label>
+                            </div>
+                          </div>
                         </div>
 
                         {/* Typing Effect Section */}
