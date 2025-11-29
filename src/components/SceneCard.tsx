@@ -118,6 +118,8 @@ export default function SceneCard({
     null
   );
   const [applyCfrAfterUpload, setApplyCfrAfterUpload] = useState<boolean>(true);
+  const [applyNormalizeAfterUpload, setApplyNormalizeAfterUpload] =
+    useState<boolean>(false);
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -420,7 +422,8 @@ export default function SceneCard({
   const handleSceneVideoUpload = async (
     sceneId: number,
     file: File,
-    applyCfrAfterUpload: boolean = false
+    applyCfrAfterUpload: boolean = false,
+    applyNormalizeAfterUpload: boolean = false
   ) => {
     if (!file.type.startsWith('video/')) {
       alert('Please select a video file');
@@ -504,39 +507,88 @@ export default function SceneCard({
       );
       onDataUpdate?.(updatedData);
 
-      // Apply CFR conversion if requested
-      if (applyCfrAfterUpload) {
+      // Apply normalization and/or CFR conversion if requested
+      if (applyNormalizeAfterUpload || applyCfrAfterUpload) {
         try {
           console.log(
-            'Applying CFR conversion after upload for scene:',
-            sceneId
+            'Applying processing after upload for scene:',
+            sceneId,
+            'normalize:',
+            applyNormalizeAfterUpload,
+            'cfr:',
+            applyCfrAfterUpload
           );
 
-          // Apply CFR to both original and final videos
+          // Update scene data with uploaded URLs for processing
           const updatedSceneData = {
             ...currentScene,
             field_6886: uploadedUrl,
             field_6888: uploadedUrl,
           };
 
-          // Convert original video to CFR
-          await handleConvertOriginalToCFR(sceneId, updatedSceneData, false);
+          // Apply normalization first if requested
+          if (applyNormalizeAfterUpload) {
+            console.log(
+              'Applying normalization to uploaded video for scene:',
+              sceneId
+            );
 
-          // Convert final video to CFR
-          await handleConvertFinalToCFR(sceneId, updatedSceneData, false);
+            // Normalize original video
+            await handleNormalizeOriginalVideo(
+              sceneId,
+              updatedSceneData,
+              false
+            );
 
-          // Play success sound only after everything (upload + CFR) is complete
+            // Normalize final video
+            await handleNormalizeFinalVideo(sceneId, updatedSceneData, false);
+
+            // Refresh data to get the updated URLs after normalization
+            refreshData?.(); // Refresh data from server
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for data to be updated
+
+            // Get fresh scene data with normalized URLs
+            const freshData = dataRef.current || data;
+            const normalizedScene = freshData.find(
+              (scene) => scene.id === sceneId
+            );
+            if (normalizedScene) {
+              updatedSceneData.field_6886 = normalizedScene.field_6886;
+              updatedSceneData.field_6888 = normalizedScene.field_6888;
+            }
+          }
+
+          // Apply CFR conversion if requested (after normalization if both are selected)
+          if (applyCfrAfterUpload) {
+            console.log(
+              'Applying CFR conversion after upload for scene:',
+              sceneId
+            );
+
+            // Convert original video to CFR
+            await handleConvertOriginalToCFR(sceneId, updatedSceneData, false);
+
+            // Convert final video to CFR
+            await handleConvertFinalToCFR(sceneId, updatedSceneData, false);
+          }
+
+          // Play success sound only after all processing is complete
           playSuccessSound();
-        } catch (cfrError) {
-          console.error('CFR conversion failed after upload:', cfrError);
-          // Don't fail the entire upload if CFR fails, just log the error
+        } catch (processingError) {
+          console.error('Processing failed after upload:', processingError);
+          // Don't fail the entire upload if processing fails, just log the error
           playErrorSound();
+          const failedOperations = [];
+          if (applyNormalizeAfterUpload) failedOperations.push('normalization');
+          if (applyCfrAfterUpload) failedOperations.push('CFR conversion');
           alert(
-            'Video uploaded successfully, but CFR conversion failed. You can try converting to CFR manually.'
+            `Video uploaded successfully, but ${failedOperations.join(
+              ' and '
+            )} failed. You can try processing manually.`
           );
         }
       } else {
-        // Play success sound immediately after upload if CFR is not enabled
+        // Play success sound immediately after upload if no processing is enabled
         playSuccessSound();
       }
     } catch (error) {
@@ -2076,7 +2128,11 @@ export default function SceneCard({
 
   // Normalize audio handler
   const handleNormalizeAudio = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound: boolean = true
+    ) => {
       try {
         setNormalizingAudio(sceneId);
 
@@ -2134,7 +2190,9 @@ export default function SceneCard({
         // Refresh data from server
         refreshDataRef.current?.();
 
-        playSuccessSound();
+        if (playSound) {
+          playSuccessSound();
+        }
       } catch (error) {
         console.error('Error normalizing audio:', error);
         playErrorSound();
@@ -2152,7 +2210,11 @@ export default function SceneCard({
 
   // Normalize original video handler
   const handleNormalizeOriginalVideo = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound: boolean = true
+    ) => {
       try {
         setNormalizingAudio(sceneId);
 
@@ -2213,7 +2275,9 @@ export default function SceneCard({
         // Refresh data from server
         refreshDataRef.current?.();
 
-        playSuccessSound();
+        if (playSound) {
+          playSuccessSound();
+        }
       } catch (error) {
         console.error('Error normalizing original video audio:', error);
         playErrorSound();
@@ -2231,7 +2295,11 @@ export default function SceneCard({
 
   // Normalize final video handler
   const handleNormalizeFinalVideo = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      playSound: boolean = true
+    ) => {
       try {
         setNormalizingAudio(sceneId);
 
@@ -2290,7 +2358,9 @@ export default function SceneCard({
         // Refresh data from server
         refreshDataRef.current?.();
 
-        playSuccessSound();
+        if (playSound) {
+          playSuccessSound();
+        }
       } catch (error) {
         console.error('Error normalizing final video audio:', error);
         playErrorSound();
@@ -2910,7 +2980,8 @@ export default function SceneCard({
                                     handleSceneVideoUpload(
                                       scene.id,
                                       file,
-                                      applyCfrAfterUpload
+                                      applyCfrAfterUpload,
+                                      applyNormalizeAfterUpload
                                     );
                                     setShowTimeAdjustment(null); // Close dropdown
                                   }
@@ -2921,6 +2992,24 @@ export default function SceneCard({
                                 disabled={uploadingSceneVideo === scene.id}
                               />
                             </label>
+                            <div className='flex items-center space-x-2'>
+                              <input
+                                type='checkbox'
+                                id={`normalize-upload-${scene.id}`}
+                                checked={applyNormalizeAfterUpload}
+                                onChange={(e) =>
+                                  setApplyNormalizeAfterUpload(e.target.checked)
+                                }
+                                className='h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+                                disabled={uploadingSceneVideo === scene.id}
+                              />
+                              <label
+                                htmlFor={`normalize-upload-${scene.id}`}
+                                className='text-xs text-gray-600 cursor-pointer'
+                              >
+                                Normalize
+                              </label>
+                            </div>
                             <div className='flex items-center space-x-2'>
                               <input
                                 type='checkbox'
