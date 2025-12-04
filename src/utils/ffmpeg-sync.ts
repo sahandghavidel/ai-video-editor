@@ -350,29 +350,113 @@ export async function syncVideoWithAudioAdvanced(
             }% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`
           );
         } else if (panMode === 'topToBottom') {
-          // Top to Bottom pan: pan from top of video to bottom over OUTPUT duration
-          // This creates a vertical scrolling effect
+          // Top to Bottom pan: TWO-STEP PROCESS
+          // Step 1: Sync video to audio duration first (separate FFmpeg call)
+          // Step 2: Apply pan effect to the synced video
           const fps = 30;
-          const totalOutputFrames = Math.ceil(audioDuration * fps);
-          const zoomFactor = 1 + zoomLevel / 100; // Apply static zoom if set
-          // For vertical pan, we need enough vertical room to pan
-          // Scale video to be taller than output (e.g., 2x height for 1080 -> 2160)
-          // Then pan y from 0 to (scaled_height - output_height)
-          // Using a 2x vertical scale gives us room to pan smoothly
-          // y starts at 0 (top), ends at (2160-1080)=1080 (bottom)
-          // Use linear interpolation for smooth vertical pan (sine can feel weird for vertical)
-          // Actually use the same 10x scale approach but calculate y properly
-          // After 10x scale: 10*height. Max y = 10*height - height = 9*height
-          // y = maxY * progress where progress = on/totalOutputFrames
-          // Use linear for vertical pan (more natural than sine for scrolling)
-          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${zoomFactor}':x='iw/2-(iw/zoom/2)':y='(ih-oh)*(on/${totalOutputFrames})':d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
-          console.log(
-            `[SYNC] First syncing video (ratio: ${speedRatio.toFixed(
-              4
-            )}) to ${audioDuration.toFixed(
-              2
-            )}s, then applying top-to-bottom pan over ${totalOutputFrames} output frames (linear)`
+          const zoomFactor = 1 + zoomLevel / 100;
+
+          // Create temp synced video first (use fullOutputPath, not outputPath which could be undefined)
+          const tempSyncedPath = fullOutputPath.replace(
+            '.mp4',
+            '_synced_temp.mp4'
           );
+          const syncCommand = [
+            'ffmpeg',
+            '-y',
+            '-i',
+            `"${videoUrl}"`,
+            '-i',
+            `"${audioUrl}"`,
+            '-filter_complex',
+            `"[0:v]setpts=PTS*${speedRatio}[v];[1:a]aresample=${originalSampleRate}[a]"`,
+            '-map',
+            '[v]',
+            '-map',
+            '[a]',
+            '-c:v',
+            'libx264',
+            '-preset',
+            'fast',
+            '-crf',
+            '18',
+            '-c:a',
+            'aac',
+            '-shortest',
+            `"${tempSyncedPath}"`,
+          ];
+
+          console.log(`[SYNC] Step 1: Syncing video to audio duration...`);
+          console.log(`[SYNC] Sync command: ${syncCommand.join(' ')}`);
+          await execAsync(syncCommand.join(' '));
+
+          // Get the actual duration of the synced video
+          const syncedDurationCmd = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${tempSyncedPath}"`;
+          const { stdout: syncedDurationStr } = await execAsync(
+            syncedDurationCmd
+          );
+          const syncedDuration = parseFloat(syncedDurationStr.trim());
+          console.log(`[SYNC] Synced video duration: ${syncedDuration}s`);
+
+          // Get synced video dimensions
+          const syncedDimCmd = `ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "${tempSyncedPath}"`;
+          const { stdout: syncedDimStr } = await execAsync(syncedDimCmd);
+          const [syncedWidth, syncedHeight] = syncedDimStr
+            .trim()
+            .split(',')
+            .map(Number);
+          console.log(
+            `[SYNC] Synced video dimensions: ${syncedWidth}x${syncedHeight}`
+          );
+
+          // Top-to-bottom pan effect with FIXED zoom level:
+          // - Scale by zoomFactor (e.g., 1.2 for 20% zoom) - this is the zoom amount
+          // - Pan from top to bottom over the entire video duration
+          // - The pan speed adapts to duration (longer video = slower pan)
+          //
+          // Example: 20% zoom on 1080p video
+          // Scaled: 1296p height, Crop: 1080p
+          // Max Y travel: 1296 - 1080 = 216 pixels
+          // For 2s video: 108 px/s, For 10s video: 21.6 px/s
+          const scaleFactor = zoomFactor; // Use the zoom level (1.2 = 20% zoom)
+          const scaledWidth = Math.round(syncedWidth * scaleFactor);
+          const scaledHeight = Math.round(syncedHeight * scaleFactor);
+          const cropX = Math.floor((scaledWidth - syncedWidth) / 2); // Center horizontally
+          const maxY = scaledHeight - syncedHeight; // Total vertical distance to pan
+
+          console.log(
+            `[SYNC] Zoom factor: ${scaleFactor}, Scaled: ${scaledWidth}x${scaledHeight}, MaxY: ${maxY}px over ${syncedDuration}s`
+          );
+
+          const panCommand = [
+            'ffmpeg',
+            '-y',
+            '-i',
+            `"${tempSyncedPath}"`,
+            '-vf',
+            `"scale=${scaledWidth}:${scaledHeight},crop=${syncedWidth}:${syncedHeight}:${cropX}:'${maxY}*(t/${syncedDuration})'"`,
+            '-c:v',
+            isHardware ? 'h264_videotoolbox' : 'libx264',
+            isHardware ? '-b:v' : '-crf',
+            isHardware ? videoBitrate : '23',
+            '-c:a',
+            'copy',
+            `"${fullOutputPath}"`,
+          ];
+
+          console.log(
+            `[SYNC] Step 2: Top-to-bottom pan (${
+              (scaleFactor - 1) * 100
+            }% zoom, ${maxY}px over ${syncedDuration}s)...`
+          );
+          console.log(`[SYNC] Pan command: ${panCommand.join(' ')}`);
+          await execAsync(panCommand.join(' '));
+
+          // Clean up temp file
+          await execAsync(`rm -f "${tempSyncedPath}"`);
+
+          console.log(`[SYNC] Two-step top-to-bottom pan complete`);
+          return fullOutputPath;
         } else if (zoomLevel > 0) {
           const zoomFactor = 1 + zoomLevel / 100;
           videoFilter = `setpts=PTS*${speedRatio},scale=iw*${zoomFactor}:ih*${zoomFactor},crop=iw/${zoomFactor}:ih/${zoomFactor}`;
