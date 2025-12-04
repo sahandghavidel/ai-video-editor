@@ -12,6 +12,7 @@ export interface SyncOptions {
   outputPath?: string;
   useHardwareAcceleration?: boolean;
   videoBitrate?: string;
+  zoomLevel?: number; // Zoom percentage (0 = no zoom, 10 = 10% zoom, etc.)
 }
 
 /**
@@ -203,6 +204,7 @@ export async function syncVideoWithAudioAdvanced(
     outputPath,
     useHardwareAcceleration = true,
     videoBitrate = '6000k',
+    zoomLevel = 0,
   } = options;
 
   // Create a unique output filename
@@ -311,7 +313,15 @@ export async function syncVideoWithAudioAdvanced(
         ];
 
         // Apply speed adjustment to video and audio processing
+        // Add zoom filter if zoomLevel > 0
         let videoFilter = `setpts=PTS*${speedRatio}`;
+        if (zoomLevel > 0) {
+          const zoomFactor = 1 + zoomLevel / 100;
+          videoFilter = `setpts=PTS*${speedRatio},scale=iw*${zoomFactor}:ih*${zoomFactor},crop=iw/${zoomFactor}:ih/${zoomFactor}`;
+          console.log(
+            `[SYNC] Applying ${zoomLevel}% zoom (factor: ${zoomFactor})`
+          );
+        }
         let audioFilter = `aresample=${originalSampleRate}`;
 
         ffmpegCommand.push(
@@ -448,54 +458,62 @@ export async function syncVideoWithUpload(
     clipTimestamp,
     cleanup = true,
     useAdvancedSync = true,
+    zoomLevel = 0,
     ...syncOptions
   } = options;
+
+  // Re-add zoomLevel to syncOptions since we extracted it
+  const syncOptionsWithZoom = { ...syncOptions, zoomLevel };
 
   let localPath: string | null = null;
 
   try {
     // Step 1: Sync the video and audio using FFmpeg
     localPath = useAdvancedSync
-      ? await syncVideoWithAudioAdvanced(syncOptions)
-      : await syncVideoWithAudio(syncOptions);
+      ? await syncVideoWithAudioAdvanced(syncOptionsWithZoom)
+      : await syncVideoWithAudio(syncOptionsWithZoom);
 
     // Step 2: Generate filename for upload
-    // Format: video_ID_scene_ID_synced_TTS_TIMESTAMP_CLIP_TIMESTAMP.mp4
+    // Format: video_ID_scene_ID_synced_TTS_TIMESTAMP_CLIP_TIMESTAMP_zoomX.mp4
     // This allows us to regenerate sync if either TTS or clip changes
+    // Always include zoom suffix (zoom0, zoom10, zoom20, etc.)
+    const zoomSuffix = `_zoom${zoomLevel}`;
     let filename: string;
 
     if (ttsTimestamp && clipTimestamp) {
       // Both timestamps available - full tracking
       filename =
         videoId && sceneId
-          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}.mp4`
+          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`
           : sceneId
-          ? `scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}.mp4`
-          : `synced_video_${ttsTimestamp}_${clipTimestamp}.mp4`;
+          ? `scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`
+          : `synced_video_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`;
       console.log(
-        `[SYNC] Generating filename with TTS timestamp (${ttsTimestamp}) and clip timestamp (${clipTimestamp}): ${filename}`
+        `[SYNC] Generating filename with TTS timestamp (${ttsTimestamp}), clip timestamp (${clipTimestamp}), zoom ${zoomLevel}%: ${filename}`
       );
     } else if (ttsTimestamp) {
       // Only TTS timestamp - backward compatibility
       filename =
         videoId && sceneId
-          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}.mp4`
+          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}${zoomSuffix}.mp4`
           : sceneId
-          ? `scene_${sceneId}_synced_${ttsTimestamp}.mp4`
-          : `synced_video_${ttsTimestamp}.mp4`;
+          ? `scene_${sceneId}_synced_${ttsTimestamp}${zoomSuffix}.mp4`
+          : `synced_video_${ttsTimestamp}${zoomSuffix}.mp4`;
       console.log(
-        `[SYNC] Generating filename with TTS timestamp only: ${filename}`
+        `[SYNC] Generating filename with TTS timestamp only, zoom ${zoomLevel}%: ${filename}`
       );
     } else {
       // No timestamps - generate new one
       const timestamp = Date.now().toString();
       filename =
         videoId && sceneId
-          ? `video_${videoId}_scene_${sceneId}_synced_${timestamp}.mp4`
+          ? `video_${videoId}_scene_${sceneId}_synced_${timestamp}${zoomSuffix}.mp4`
           : sceneId
-          ? `scene_${sceneId}_synced_${timestamp}.mp4`
-          : `synced_video_${timestamp}.mp4`;
-      console.log(`[SYNC] Generating filename with new timestamp: ${filename}`);
+          ? `scene_${sceneId}_synced_${timestamp}${zoomSuffix}.mp4`
+          : `synced_video_${timestamp}${zoomSuffix}.mp4`;
+      console.log(
+        `[SYNC] Generating filename with new timestamp, zoom ${zoomLevel}%: ${filename}`
+      );
     }
 
     // Step 3: Upload to MinIO

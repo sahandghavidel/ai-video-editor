@@ -3,7 +3,13 @@ import { syncVideoWithUpload } from '@/utils/ffmpeg-sync';
 
 export async function POST(request: NextRequest) {
   try {
-    const { videoUrl, audioUrl, sceneId, videoId } = await request.json();
+    const {
+      videoUrl,
+      audioUrl,
+      sceneId,
+      videoId,
+      zoomLevel = 0,
+    } = await request.json();
 
     if (!videoUrl || !audioUrl) {
       return NextResponse.json(
@@ -13,7 +19,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[SYNC] Starting video-audio sync for scene ${sceneId || 'unknown'}`
+      `[SYNC] Starting video-audio sync for scene ${
+        sceneId || 'unknown'
+      } (zoom: ${zoomLevel}%)`
     );
     console.log(`[SYNC] Video URL: ${videoUrl}`);
     console.log(`[SYNC] Audio URL: ${audioUrl}`);
@@ -82,22 +90,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check if sync with both timestamps already exists
+    // Check if sync with both timestamps already exists (including zoom level in filename)
+    const zoomSuffix = `_zoom${zoomLevel}`;
     if (ttsTimestamp && clipTimestamp) {
       const expectedSyncUrl =
         videoId && sceneId
-          ? `http://host.docker.internal:9000/nca-toolkit/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}.mp4`
-          : `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}.mp4`;
+          ? `http://host.docker.internal:9000/nca-toolkit/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`
+          : `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`;
       try {
         const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
         if (checkResponse.ok) {
           console.log(
-            `[SYNC] Found existing synced video with same TTS and clip timestamps: ${expectedSyncUrl}`
+            `[SYNC] Found existing synced video with same TTS, clip timestamps and zoom level: ${expectedSyncUrl}`
           );
           console.log(`[SYNC] Skipping regeneration - returning cached sync`);
           return NextResponse.json({
             videoUrl: expectedSyncUrl,
-            message: `Using cached synchronized video (TTS: ${ttsTimestamp}, Clip: ${clipTimestamp})`,
+            message: `Using cached synchronized video (TTS: ${ttsTimestamp}, Clip: ${clipTimestamp}, Zoom: ${zoomLevel}%)`,
             cached: true,
             method: 'cache_hit',
           });
@@ -122,6 +131,7 @@ export async function POST(request: NextRequest) {
         videoBitrate: '6000k', // Same bitrate as speed-up function for consistent format
         cleanup: true, // Clean up local files after upload
         useAdvancedSync: true, // Use duration-based speed adjustment (like NCA toolkit)
+        zoomLevel: zoomLevel, // Pass zoom level to FFmpeg
       });
 
       const syncEndTime = Date.now();

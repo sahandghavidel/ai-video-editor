@@ -177,6 +177,8 @@ export default function SceneCard({
   const [inputValues, setInputValues] = useState<{
     [key: number]: { start: string | undefined; end: string | undefined };
   }>({});
+  // Local zoom level state for Sync button (0 = no zoom, cycles by 10%)
+  const [syncZoomLevel, setSyncZoomLevel] = useState<number>(0);
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -1517,7 +1519,8 @@ export default function SceneCard({
       sceneId: number,
       videoUrl: string,
       audioUrl: string,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
+      zoomLevel: number = 0
     ) => {
       try {
         setGeneratingVideo(sceneId);
@@ -1550,6 +1553,7 @@ export default function SceneCard({
             audioUrl,
             sceneId, // Pass sceneId for better tracking
             videoId: videoId || undefined,
+            zoomLevel, // Pass zoom level for video zoom effect
           }),
         });
 
@@ -1568,10 +1572,15 @@ export default function SceneCard({
         const generatedVideoUrl = result.videoUrl;
         const isCached = result.cached === true;
 
+        console.log(`[SYNC] Received video URL: ${generatedVideoUrl}`);
+        console.log(`[SYNC] Updating Baserow scene ${sceneId} with field_6886`);
+
         // Update the Baserow field with the generated video URL
         const updatedRow = await updateSceneRow(sceneId, {
           field_6886: generatedVideoUrl,
         });
+
+        console.log(`[SYNC] Baserow update result:`, updatedRow);
 
         // Update the local data optimistically
         const updatedData = dataRef.current.map((scene) => {
@@ -4176,7 +4185,8 @@ export default function SceneCard({
                             scene.id,
                             scene['field_6888'] as string,
                             scene['field_6891'] as string,
-                            scene
+                            scene,
+                            syncZoomLevel
                           )
                         }
                         disabled={
@@ -4198,13 +4208,28 @@ export default function SceneCard({
                             ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
                             : batchOperations.generatingAllVideos
                             ? 'Batch video generation is in progress'
-                            : 'Generate synchronized video'
+                            : `Generate synchronized video (Zoom: ${syncZoomLevel}%)`
                         }
                       >
                         {sceneLoading.generatingVideo === scene.id ? (
                           <Loader2 className='animate-spin h-3 w-3' />
                         ) : (
-                          <Settings className='h-3 w-3' />
+                          <>
+                            <Settings className='h-3 w-3' />
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Cycle zoom: 0 -> 10 -> 20 -> 30 -> 40 -> 50 -> 0
+                                setSyncZoomLevel((prev) =>
+                                  prev >= 50 ? 0 : prev + 10
+                                );
+                              }}
+                              className='px-1 py-0.5 text-xs font-bold text-teal-700 hover:bg-teal-600/20 rounded transition-colors duration-200 cursor-pointer'
+                              title='Click to cycle zoom level (0% → 10% → 20% → 30% → 40% → 50% → 0%)'
+                            >
+                              {syncZoomLevel}%
+                            </div>
+                          </>
                         )}
                         <span>
                           {sceneLoading.generatingVideo === scene.id
