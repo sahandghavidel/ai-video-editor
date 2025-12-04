@@ -410,31 +410,45 @@ export async function syncVideoWithAudioAdvanced(
           );
 
           // Top-to-bottom pan effect with FIXED zoom level:
-          // - Scale by zoomFactor (e.g., 1.2 for 20% zoom) - this is the zoom amount
+          // - Scale by 10x first for smooth sub-pixel movement (no shakiness)
+          // - The zoomFactor determines how much we zoom in (e.g., 1.2 = 20% zoom)
           // - Pan from top to bottom over the entire video duration
           // - The pan speed adapts to duration (longer video = slower pan)
           //
-          // Example: 20% zoom on 1080p video
-          // Scaled: 1296p height, Crop: 1080p
-          // Max Y travel: 1296 - 1080 = 216 pixels
-          // For 2s video: 108 px/s, For 10s video: 21.6 px/s
+          // Math:
+          // 1. Scale video by 10x for smooth sub-pixel panning
+          // 2. Crop size = original * 10 / zoomFactor (to achieve the zoom effect)
+          //    e.g., 20% zoom (zoomFactor=1.2): crop = 10/1.2 = 8.33x original
+          // 3. maxY = scaledHeight - cropHeight (the pan distance)
+          // 4. Scale the crop back down to original size
+          const upscaleFactor = 10;
           const scaleFactor = zoomFactor; // Use the zoom level (1.2 = 20% zoom)
-          const scaledWidth = Math.round(syncedWidth * scaleFactor);
-          const scaledHeight = Math.round(syncedHeight * scaleFactor);
-          const cropX = Math.floor((scaledWidth - syncedWidth) / 2); // Center horizontally
-          const maxY = scaledHeight - syncedHeight; // Total vertical distance to pan
+          const scaledWidth = Math.round(syncedWidth * upscaleFactor);
+          const scaledHeight = Math.round(syncedHeight * upscaleFactor);
+          // Crop size: to achieve zoomFactor zoom, we crop to (upscale / zoomFactor) of original
+          const cropWidth = Math.round(
+            (syncedWidth * upscaleFactor) / scaleFactor
+          );
+          const cropHeight = Math.round(
+            (syncedHeight * upscaleFactor) / scaleFactor
+          );
+          const cropX = Math.floor((scaledWidth - cropWidth) / 2); // Center horizontally
+          const maxY = scaledHeight - cropHeight; // Total vertical distance to pan
 
           console.log(
-            `[SYNC] Zoom factor: ${scaleFactor}, Scaled: ${scaledWidth}x${scaledHeight}, MaxY: ${maxY}px over ${syncedDuration}s`
+            `[SYNC] Zoom factor: ${scaleFactor}, Scaled: ${scaledWidth}x${scaledHeight}, Crop: ${cropWidth}x${cropHeight}, MaxY: ${maxY}px over ${syncedDuration}s`
           );
 
+          // Use sine easing for smooth pan motion (same as zoom pan)
+          // sin((t/duration)*PI/2) gives 0->1 with ease-out curve
+          // Final scale down to original dimensions
           const panCommand = [
             'ffmpeg',
             '-y',
             '-i',
             `"${tempSyncedPath}"`,
             '-vf',
-            `"scale=${scaledWidth}:${scaledHeight},crop=${syncedWidth}:${syncedHeight}:${cropX}:'${maxY}*(t/${syncedDuration})'"`,
+            `"scale=${scaledWidth}:${scaledHeight},crop=${cropWidth}:${cropHeight}:${cropX}:'${maxY}*sin((t/${syncedDuration})*PI/2)',scale=${syncedWidth}:${syncedHeight}"`,
             '-c:v',
             isHardware ? 'h264_videotoolbox' : 'libx264',
             isHardware ? '-b:v' : '-crf',
@@ -445,9 +459,9 @@ export async function syncVideoWithAudioAdvanced(
           ];
 
           console.log(
-            `[SYNC] Step 2: Top-to-bottom pan (${
+            `[SYNC] Step 2: Top-to-bottom pan with sine easing (${
               (scaleFactor - 1) * 100
-            }% zoom, ${maxY}px over ${syncedDuration}s)...`
+            }% zoom, 10x upscale, ${maxY}px over ${syncedDuration}s)...`
           );
           console.log(`[SYNC] Pan command: ${panCommand.join(' ')}`);
           await execAsync(panCommand.join(' '));
