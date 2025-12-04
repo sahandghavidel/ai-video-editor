@@ -315,29 +315,30 @@ export async function syncVideoWithAudioAdvanced(
         ];
 
         // Apply speed adjustment to video and audio processing
-        // First sync the video to audio, THEN apply zoom effects to the output
         let videoFilter = `setpts=PTS*${speedRatio}`;
 
         if (zoomPan) {
-          // Zoom pan: animate from zoomLevel% to (zoomLevel+20)% over the OUTPUT duration
-          // Apply zoompan AFTER the sync (setpts) so it operates on the final output timing
+          // Zoom pan: animate from zoomLevel% to (zoomLevel+20)% over OUTPUT duration
+          // Order: setpts (sync) -> fps -> scale -> zoompan
+          // 1. setpts to sync video to audio duration FIRST
+          // 2. fps to normalize frame rate after sync
+          // 3. Scale up 10x for quality
+          // 4. Zoompan using 'on' (output frame number) based on OUTPUT frame count
           const startZoom = 1 + zoomLevel / 100;
           const endZoom = 1 + (zoomLevel + 20) / 100;
           const zoomDelta = endZoom - startZoom; // Should be 0.2 for 20% increase
-          // Use zoompan on the synced output
-          // fps=30 for smooth output, d=1 to process each frame
-          // Base the zoom progression on audio duration (which is the output duration)
           const fps = 30;
-          const outputFrames = Math.ceil(audioDuration * fps);
-          const zoomPerFrame = zoomDelta / outputFrames;
-          // Chain: first setpts to sync, then zoompan on the result
-          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},zoompan=z='if(eq(on,0),${startZoom},pzoom+${zoomPerFrame})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1920x1080:fps=${fps}`;
+          // Total output frames = audioDuration * fps
+          const totalOutputFrames = Math.ceil(audioDuration * fps);
+          // Use 'on' (output frame number) which counts frames output by zoompan
+          // on/totalOutputFrames gives 0->1 progression over the synced output
+          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${startZoom}+${zoomDelta}*sin((on/${totalOutputFrames})*PI/2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1920x1080:fps=${fps}`;
           console.log(
-            `[SYNC] First syncing video (speed ratio: ${speedRatio.toFixed(
-              4
-            )}), then applying zoom pan from ${zoomLevel}% to ${
+            `[SYNC] First syncing video to ${audioDuration.toFixed(
+              2
+            )}s, then applying smooth zoom from ${zoomLevel}% to ${
               zoomLevel + 20
-            }% over ${audioDuration.toFixed(2)}s output`
+            }% over ${totalOutputFrames} output frames`
           );
         } else if (zoomLevel > 0) {
           const zoomFactor = 1 + zoomLevel / 100;
