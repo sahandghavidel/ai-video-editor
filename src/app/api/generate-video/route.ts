@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
       sceneId,
       videoId,
       zoomLevel = 0,
+      zoomPan = false,
     } = await request.json();
 
     if (!videoUrl || !audioUrl) {
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     console.log(
       `[SYNC] Starting video-audio sync for scene ${
         sceneId || 'unknown'
-      } (zoom: ${zoomLevel}%)`
+      } (zoom: ${zoomLevel}%${zoomPan ? ' pan' : ''})`
     );
     console.log(`[SYNC] Video URL: ${videoUrl}`);
     console.log(`[SYNC] Audio URL: ${audioUrl}`);
@@ -90,8 +91,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check if sync with both timestamps already exists (including zoom level in filename)
-    const zoomSuffix = `_zoom${zoomLevel}`;
+    // Check if sync with both timestamps already exists (including zoom level and pan in filename)
+    const zoomSuffix = `_zoom${zoomLevel}${zoomPan ? '_pan' : ''}`;
     if (ttsTimestamp && clipTimestamp) {
       const expectedSyncUrl =
         videoId && sceneId
@@ -101,12 +102,14 @@ export async function POST(request: NextRequest) {
         const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
         if (checkResponse.ok) {
           console.log(
-            `[SYNC] Found existing synced video with same TTS, clip timestamps and zoom level: ${expectedSyncUrl}`
+            `[SYNC] Found existing synced video with same TTS, clip timestamps, zoom level and pan: ${expectedSyncUrl}`
           );
           console.log(`[SYNC] Skipping regeneration - returning cached sync`);
           return NextResponse.json({
             videoUrl: expectedSyncUrl,
-            message: `Using cached synchronized video (TTS: ${ttsTimestamp}, Clip: ${clipTimestamp}, Zoom: ${zoomLevel}%)`,
+            message: `Using cached synchronized video (TTS: ${ttsTimestamp}, Clip: ${clipTimestamp}, Zoom: ${zoomLevel}%${
+              zoomPan ? ' pan' : ''
+            })`,
             cached: true,
             method: 'cache_hit',
           });
@@ -132,6 +135,7 @@ export async function POST(request: NextRequest) {
         cleanup: true, // Clean up local files after upload
         useAdvancedSync: true, // Use duration-based speed adjustment (like NCA toolkit)
         zoomLevel: zoomLevel, // Pass zoom level to FFmpeg
+        zoomPan: zoomPan, // Pass zoom pan to FFmpeg for animated zoom
       });
 
       const syncEndTime = Date.now();

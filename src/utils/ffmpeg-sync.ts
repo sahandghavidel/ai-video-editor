@@ -13,6 +13,7 @@ export interface SyncOptions {
   useHardwareAcceleration?: boolean;
   videoBitrate?: string;
   zoomLevel?: number; // Zoom percentage (0 = no zoom, 10 = 10% zoom, etc.)
+  zoomPan?: boolean; // Enable zoom pan effect (zooms from zoomLevel to zoomLevel+20%)
 }
 
 /**
@@ -205,6 +206,7 @@ export async function syncVideoWithAudioAdvanced(
     useHardwareAcceleration = true,
     videoBitrate = '6000k',
     zoomLevel = 0,
+    zoomPan = false,
   } = options;
 
   // Create a unique output filename
@@ -313,9 +315,31 @@ export async function syncVideoWithAudioAdvanced(
         ];
 
         // Apply speed adjustment to video and audio processing
-        // Add zoom filter if zoomLevel > 0
+        // First sync the video to audio, THEN apply zoom effects to the output
         let videoFilter = `setpts=PTS*${speedRatio}`;
-        if (zoomLevel > 0) {
+
+        if (zoomPan) {
+          // Zoom pan: animate from zoomLevel% to (zoomLevel+20)% over the OUTPUT duration
+          // Apply zoompan AFTER the sync (setpts) so it operates on the final output timing
+          const startZoom = 1 + zoomLevel / 100;
+          const endZoom = 1 + (zoomLevel + 20) / 100;
+          const zoomDelta = endZoom - startZoom; // Should be 0.2 for 20% increase
+          // Use zoompan on the synced output
+          // fps=30 for smooth output, d=1 to process each frame
+          // Base the zoom progression on audio duration (which is the output duration)
+          const fps = 30;
+          const outputFrames = Math.ceil(audioDuration * fps);
+          const zoomPerFrame = zoomDelta / outputFrames;
+          // Chain: first setpts to sync, then zoompan on the result
+          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},zoompan=z='if(eq(on,0),${startZoom},pzoom+${zoomPerFrame})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1920x1080:fps=${fps}`;
+          console.log(
+            `[SYNC] First syncing video (speed ratio: ${speedRatio.toFixed(
+              4
+            )}), then applying zoom pan from ${zoomLevel}% to ${
+              zoomLevel + 20
+            }% over ${audioDuration.toFixed(2)}s output`
+          );
+        } else if (zoomLevel > 0) {
           const zoomFactor = 1 + zoomLevel / 100;
           videoFilter = `setpts=PTS*${speedRatio},scale=iw*${zoomFactor}:ih*${zoomFactor},crop=iw/${zoomFactor}:ih/${zoomFactor}`;
           console.log(
@@ -323,6 +347,8 @@ export async function syncVideoWithAudioAdvanced(
           );
         }
         let audioFilter = `aresample=${originalSampleRate}`;
+
+        console.log(`[SYNC] Video filter: ${videoFilter}`);
 
         ffmpegCommand.push(
           '-filter_complex',
@@ -459,11 +485,12 @@ export async function syncVideoWithUpload(
     cleanup = true,
     useAdvancedSync = true,
     zoomLevel = 0,
+    zoomPan = false,
     ...syncOptions
   } = options;
 
-  // Re-add zoomLevel to syncOptions since we extracted it
-  const syncOptionsWithZoom = { ...syncOptions, zoomLevel };
+  // Re-add zoomLevel and zoomPan to syncOptions since we extracted them
+  const syncOptionsWithZoom = { ...syncOptions, zoomLevel, zoomPan };
 
   let localPath: string | null = null;
 
@@ -474,10 +501,11 @@ export async function syncVideoWithUpload(
       : await syncVideoWithAudio(syncOptionsWithZoom);
 
     // Step 2: Generate filename for upload
-    // Format: video_ID_scene_ID_synced_TTS_TIMESTAMP_CLIP_TIMESTAMP_zoomX.mp4
+    // Format: video_ID_scene_ID_synced_TTS_TIMESTAMP_CLIP_TIMESTAMP_zoomX[_pan].mp4
     // This allows us to regenerate sync if either TTS or clip changes
     // Always include zoom suffix (zoom0, zoom10, zoom20, etc.)
-    const zoomSuffix = `_zoom${zoomLevel}`;
+    // Add _pan suffix if zoomPan is enabled
+    const zoomSuffix = `_zoom${zoomLevel}${zoomPan ? '_pan' : ''}`;
     let filename: string;
 
     if (ttsTimestamp && clipTimestamp) {
@@ -489,7 +517,9 @@ export async function syncVideoWithUpload(
           ? `scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`
           : `synced_video_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`;
       console.log(
-        `[SYNC] Generating filename with TTS timestamp (${ttsTimestamp}), clip timestamp (${clipTimestamp}), zoom ${zoomLevel}%: ${filename}`
+        `[SYNC] Generating filename with TTS timestamp (${ttsTimestamp}), clip timestamp (${clipTimestamp}), zoom ${zoomLevel}%${
+          zoomPan ? ' pan' : ''
+        }: ${filename}`
       );
     } else if (ttsTimestamp) {
       // Only TTS timestamp - backward compatibility
