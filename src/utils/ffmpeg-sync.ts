@@ -13,7 +13,7 @@ export interface SyncOptions {
   useHardwareAcceleration?: boolean;
   videoBitrate?: string;
   zoomLevel?: number; // Zoom percentage (0 = no zoom, 10 = 10% zoom, etc.)
-  zoomPan?: boolean; // Enable zoom pan effect (zooms from zoomLevel to zoomLevel+20%)
+  panMode?: 'none' | 'zoom' | 'topToBottom'; // Pan mode: none, zoom pan, or top-to-bottom pan
 }
 
 /**
@@ -206,7 +206,7 @@ export async function syncVideoWithAudioAdvanced(
     useHardwareAcceleration = true,
     videoBitrate = '6000k',
     zoomLevel = 0,
-    zoomPan = false,
+    panMode = 'none',
   } = options;
 
   // Create a unique output filename
@@ -259,6 +259,15 @@ export async function syncVideoWithAudioAdvanced(
     const audioDurationCmd = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${audioUrl}"`;
     const { stdout: audioDurationStr } = await execAsync(audioDurationCmd);
     const audioDuration = parseFloat(audioDurationStr.trim());
+
+    // Step 2.5: Get video dimensions
+    const videoDimensionsCmd = `ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "${videoUrl}"`;
+    const { stdout: videoDimensionsStr } = await execAsync(videoDimensionsCmd);
+    const [videoWidth, videoHeight] = videoDimensionsStr
+      .trim()
+      .split(',')
+      .map(Number);
+    console.log(`[SYNC] Video dimensions: ${videoWidth}x${videoHeight}`);
 
     // Step 3: Probe video audio properties to preserve quality
     console.log('[SYNC] Probing video audio properties...');
@@ -317,7 +326,7 @@ export async function syncVideoWithAudioAdvanced(
         // Apply speed adjustment to video and audio processing
         let videoFilter = `setpts=PTS*${speedRatio}`;
 
-        if (zoomPan) {
+        if (panMode === 'zoom') {
           // Zoom pan: animate from zoomLevel% to (zoomLevel+20)% over OUTPUT duration
           // Order: setpts (sync) -> fps -> scale -> zoompan
           // 1. setpts to sync video to audio duration FIRST
@@ -332,13 +341,37 @@ export async function syncVideoWithAudioAdvanced(
           const totalOutputFrames = Math.ceil(audioDuration * fps);
           // Use 'on' (output frame number) which counts frames output by zoompan
           // on/totalOutputFrames gives 0->1 progression over the synced output
-          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${startZoom}+${zoomDelta}*sin((on/${totalOutputFrames})*PI/2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1920x1080:fps=${fps}`;
+          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${startZoom}+${zoomDelta}*sin((on/${totalOutputFrames})*PI/2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
           console.log(
             `[SYNC] First syncing video to ${audioDuration.toFixed(
               2
-            )}s, then applying smooth zoom from ${zoomLevel}% to ${
+            )}s, then applying smooth zoom pan from ${zoomLevel}% to ${
               zoomLevel + 20
-            }% over ${totalOutputFrames} output frames`
+            }% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`
+          );
+        } else if (panMode === 'topToBottom') {
+          // Top to Bottom pan: pan from top of video to bottom over OUTPUT duration
+          // This creates a vertical scrolling effect
+          const fps = 30;
+          const totalOutputFrames = Math.ceil(audioDuration * fps);
+          const zoomFactor = 1 + zoomLevel / 100; // Apply static zoom if set
+          // For vertical pan, we need enough vertical room to pan
+          // Scale video to be taller than output (e.g., 2x height for 1080 -> 2160)
+          // Then pan y from 0 to (scaled_height - output_height)
+          // Using a 2x vertical scale gives us room to pan smoothly
+          // y starts at 0 (top), ends at (2160-1080)=1080 (bottom)
+          // Use linear interpolation for smooth vertical pan (sine can feel weird for vertical)
+          // Actually use the same 10x scale approach but calculate y properly
+          // After 10x scale: 10*height. Max y = 10*height - height = 9*height
+          // y = maxY * progress where progress = on/totalOutputFrames
+          // Use linear for vertical pan (more natural than sine for scrolling)
+          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${zoomFactor}':x='iw/2-(iw/zoom/2)':y='(ih-oh)*(on/${totalOutputFrames})':d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
+          console.log(
+            `[SYNC] First syncing video (ratio: ${speedRatio.toFixed(
+              4
+            )}) to ${audioDuration.toFixed(
+              2
+            )}s, then applying top-to-bottom pan over ${totalOutputFrames} output frames (linear)`
           );
         } else if (zoomLevel > 0) {
           const zoomFactor = 1 + zoomLevel / 100;
@@ -486,12 +519,12 @@ export async function syncVideoWithUpload(
     cleanup = true,
     useAdvancedSync = true,
     zoomLevel = 0,
-    zoomPan = false,
+    panMode = 'none',
     ...syncOptions
   } = options;
 
-  // Re-add zoomLevel and zoomPan to syncOptions since we extracted them
-  const syncOptionsWithZoom = { ...syncOptions, zoomLevel, zoomPan };
+  // Re-add zoomLevel and panMode to syncOptions since we extracted them
+  const syncOptionsWithZoom = { ...syncOptions, zoomLevel, panMode };
 
   let localPath: string | null = null;
 
@@ -502,11 +535,12 @@ export async function syncVideoWithUpload(
       : await syncVideoWithAudio(syncOptionsWithZoom);
 
     // Step 2: Generate filename for upload
-    // Format: video_ID_scene_ID_synced_TTS_TIMESTAMP_CLIP_TIMESTAMP_zoomX[_pan].mp4
+    // Format: video_ID_scene_ID_synced_TTS_TIMESTAMP_CLIP_TIMESTAMP_zoomX[_panMode].mp4
     // This allows us to regenerate sync if either TTS or clip changes
     // Always include zoom suffix (zoom0, zoom10, zoom20, etc.)
-    // Add _pan suffix if zoomPan is enabled
-    const zoomSuffix = `_zoom${zoomLevel}${zoomPan ? '_pan' : ''}`;
+    // Add panMode suffix if not 'none'
+    const panSuffix = panMode !== 'none' ? `_${panMode}` : '';
+    const zoomSuffix = `_zoom${zoomLevel}${panSuffix}`;
     let filename: string;
 
     if (ttsTimestamp && clipTimestamp) {
@@ -519,7 +553,7 @@ export async function syncVideoWithUpload(
           : `synced_video_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`;
       console.log(
         `[SYNC] Generating filename with TTS timestamp (${ttsTimestamp}), clip timestamp (${clipTimestamp}), zoom ${zoomLevel}%${
-          zoomPan ? ' pan' : ''
+          panMode !== 'none' ? ` ${panMode}` : ''
         }: ${filename}`
       );
     } else if (ttsTimestamp) {

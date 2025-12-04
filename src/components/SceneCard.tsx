@@ -179,8 +179,13 @@ export default function SceneCard({
   }>({});
   // Local zoom level state for Sync button (0 = no zoom, cycles by 10%)
   const [syncZoomLevel, setSyncZoomLevel] = useState<number>(0);
-  // Local zoom pan state - when enabled, zooms from zoomLevel to zoomLevel+20% during video
-  const [syncZoomPan, setSyncZoomPan] = useState<boolean>(false);
+  // Local pan mode state - 'none', 'zoom' (zoom pan), or 'topToBottom' (vertical pan)
+  const [syncPanMode, setSyncPanMode] = useState<
+    'none' | 'zoom' | 'topToBottom'
+  >('none');
+  // Dropdown open state for pan mode selector
+  const [panModeDropdownOpen, setPanModeDropdownOpen] =
+    useState<boolean>(false);
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -1523,7 +1528,7 @@ export default function SceneCard({
       audioUrl: string,
       sceneData?: BaserowRow,
       zoomLevel: number = 0,
-      zoomPan: boolean = false
+      panMode: 'none' | 'zoom' | 'topToBottom' = 'none'
     ) => {
       try {
         setGeneratingVideo(sceneId);
@@ -1557,7 +1562,7 @@ export default function SceneCard({
             sceneId, // Pass sceneId for better tracking
             videoId: videoId || undefined,
             zoomLevel, // Pass zoom level for video zoom effect
-            zoomPan, // Pass zoom pan for animated zoom effect
+            panMode, // Pass pan mode: 'none', 'zoom', or 'topToBottom'
           }),
         });
 
@@ -4191,7 +4196,7 @@ export default function SceneCard({
                             scene['field_6891'] as string,
                             scene,
                             syncZoomLevel,
-                            syncZoomPan
+                            syncPanMode
                           )
                         }
                         disabled={
@@ -4214,7 +4219,7 @@ export default function SceneCard({
                             : batchOperations.generatingAllVideos
                             ? 'Batch video generation is in progress'
                             : `Generate synchronized video (Zoom: ${syncZoomLevel}%${
-                                syncZoomPan ? ' pan' : ''
+                                syncPanMode !== 'none' ? ` ${syncPanMode}` : ''
                               })`
                         }
                       >
@@ -4236,25 +4241,71 @@ export default function SceneCard({
                             >
                               {syncZoomLevel}%
                             </div>
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSyncZoomPan((prev) => !prev);
-                              }}
-                              className={`px-1 py-0.5 text-xs font-bold rounded transition-colors duration-200 cursor-pointer ${
-                                syncZoomPan
-                                  ? 'text-orange-700 bg-orange-200 hover:bg-orange-300'
-                                  : 'text-teal-700 hover:bg-teal-600/20'
-                              }`}
-                              title={
-                                syncZoomPan
-                                  ? `Zoom pan ON: will animate from ${syncZoomLevel}% to ${
-                                      syncZoomLevel + 20
-                                    }%`
-                                  : 'Click to enable zoom pan (animated zoom)'
-                              }
-                            >
-                              {syncZoomPan ? 'PAN' : 'pan'}
+                            <div className='relative'>
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPanModeDropdownOpen((prev) => !prev);
+                                }}
+                                className={`px-1 py-0.5 text-xs font-bold rounded transition-colors duration-200 cursor-pointer ${
+                                  syncPanMode !== 'none'
+                                    ? 'text-orange-700 bg-orange-200 hover:bg-orange-300'
+                                    : 'text-teal-700 hover:bg-teal-600/20'
+                                }`}
+                                title='Click to select pan mode'
+                              >
+                                {syncPanMode === 'none'
+                                  ? '▼'
+                                  : syncPanMode === 'zoom'
+                                  ? 'Z▼'
+                                  : 'T▼'}
+                              </div>
+                              {panModeDropdownOpen && (
+                                <div
+                                  className='absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[120px]'
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div
+                                    onClick={() => {
+                                      setSyncPanMode('none');
+                                      setPanModeDropdownOpen(false);
+                                    }}
+                                    className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 ${
+                                      syncPanMode === 'none'
+                                        ? 'bg-gray-100 font-bold'
+                                        : ''
+                                    }`}
+                                  >
+                                    None
+                                  </div>
+                                  <div
+                                    onClick={() => {
+                                      setSyncPanMode('zoom');
+                                      setPanModeDropdownOpen(false);
+                                    }}
+                                    className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 ${
+                                      syncPanMode === 'zoom'
+                                        ? 'bg-orange-100 font-bold text-orange-700'
+                                        : ''
+                                    }`}
+                                  >
+                                    Zoom Pan
+                                  </div>
+                                  <div
+                                    onClick={() => {
+                                      setSyncPanMode('topToBottom');
+                                      setPanModeDropdownOpen(false);
+                                    }}
+                                    className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 ${
+                                      syncPanMode === 'topToBottom'
+                                        ? 'bg-orange-100 font-bold text-orange-700'
+                                        : ''
+                                    }`}
+                                  >
+                                    Top to Bottom
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </>
                         )}

@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       sceneId,
       videoId,
       zoomLevel = 0,
-      zoomPan = false,
+      panMode = 'none',
     } = await request.json();
 
     if (!videoUrl || !audioUrl) {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     console.log(
       `[SYNC] Starting video-audio sync for scene ${
         sceneId || 'unknown'
-      } (zoom: ${zoomLevel}%${zoomPan ? ' pan' : ''})`
+      } (zoom: ${zoomLevel}%${panMode !== 'none' ? ` ${panMode}` : ''})`
     );
     console.log(`[SYNC] Video URL: ${videoUrl}`);
     console.log(`[SYNC] Audio URL: ${audioUrl}`);
@@ -91,8 +91,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check if sync with both timestamps already exists (including zoom level and pan in filename)
-    const zoomSuffix = `_zoom${zoomLevel}${zoomPan ? '_pan' : ''}`;
+    // Check if sync with both timestamps already exists (including zoom level and pan mode in filename)
+    const panSuffix = panMode !== 'none' ? `_${panMode}` : '';
+    const zoomSuffix = `_zoom${zoomLevel}${panSuffix}`;
     if (ttsTimestamp && clipTimestamp) {
       const expectedSyncUrl =
         videoId && sceneId
@@ -102,13 +103,13 @@ export async function POST(request: NextRequest) {
         const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
         if (checkResponse.ok) {
           console.log(
-            `[SYNC] Found existing synced video with same TTS, clip timestamps, zoom level and pan: ${expectedSyncUrl}`
+            `[SYNC] Found existing synced video with same TTS, clip timestamps, zoom level and pan mode: ${expectedSyncUrl}`
           );
           console.log(`[SYNC] Skipping regeneration - returning cached sync`);
           return NextResponse.json({
             videoUrl: expectedSyncUrl,
             message: `Using cached synchronized video (TTS: ${ttsTimestamp}, Clip: ${clipTimestamp}, Zoom: ${zoomLevel}%${
-              zoomPan ? ' pan' : ''
+              panMode !== 'none' ? ` ${panMode}` : ''
             })`,
             cached: true,
             method: 'cache_hit',
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
         cleanup: true, // Clean up local files after upload
         useAdvancedSync: true, // Use duration-based speed adjustment (like NCA toolkit)
         zoomLevel: zoomLevel, // Pass zoom level to FFmpeg
-        zoomPan: zoomPan, // Pass zoom pan to FFmpeg for animated zoom
+        panMode: panMode, // Pass pan mode: 'none', 'zoom', or 'topToBottom'
       });
 
       const syncEndTime = Date.now();
