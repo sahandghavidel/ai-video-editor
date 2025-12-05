@@ -13,7 +13,7 @@ export interface SyncOptions {
   useHardwareAcceleration?: boolean;
   videoBitrate?: string;
   zoomLevel?: number; // Zoom percentage (0 = no zoom, 10 = 10% zoom, etc.)
-  panMode?: 'none' | 'zoom' | 'topToBottom'; // Pan mode: none, zoom pan, or top-to-bottom pan
+  panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom'; // Pan mode: none, zoom pan, zoom out, or top-to-bottom pan
 }
 
 /**
@@ -327,7 +327,7 @@ export async function syncVideoWithAudioAdvanced(
         let videoFilter = `setpts=PTS*${speedRatio}`;
 
         if (panMode === 'zoom') {
-          // Zoom pan: animate from zoomLevel% to (zoomLevel+20)% over OUTPUT duration
+          // Zoom In: animate from zoomLevel% to (zoomLevel+20)% over OUTPUT duration
           // Order: setpts (sync) -> fps -> scale -> zoompan
           // 1. setpts to sync video to audio duration FIRST
           // 2. fps to normalize frame rate after sync
@@ -345,9 +345,26 @@ export async function syncVideoWithAudioAdvanced(
           console.log(
             `[SYNC] First syncing video to ${audioDuration.toFixed(
               2
-            )}s, then applying smooth zoom pan from ${zoomLevel}% to ${
+            )}s, then applying smooth zoom IN from ${zoomLevel}% to ${
               zoomLevel + 20
             }% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`
+          );
+        } else if (panMode === 'zoomOut') {
+          // Zoom Out: animate from (zoomLevel+20)% to zoomLevel% over OUTPUT duration
+          // Opposite of zoom in - starts zoomed in, ends less zoomed
+          const startZoom = 1 + (zoomLevel + 20) / 100; // Start more zoomed in
+          const endZoom = 1 + zoomLevel / 100; // End at base zoom level
+          const zoomDelta = endZoom - startZoom; // Negative value (zooming out)
+          const fps = 30;
+          const totalOutputFrames = Math.ceil(audioDuration * fps);
+          // Same formula but with negative delta = zoom out effect
+          videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${startZoom}+${zoomDelta}*sin((on/${totalOutputFrames})*PI/2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
+          console.log(
+            `[SYNC] First syncing video to ${audioDuration.toFixed(
+              2
+            )}s, then applying smooth zoom OUT from ${
+              zoomLevel + 20
+            }% to ${zoomLevel}% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`
           );
         } else if (panMode === 'topToBottom') {
           // Top to Bottom pan: TWO-STEP PROCESS

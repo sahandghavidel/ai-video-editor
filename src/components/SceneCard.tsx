@@ -179,13 +179,14 @@ export default function SceneCard({
   }>({});
   // Local zoom level state for Sync button (0 = no zoom, cycles by 10%)
   const [syncZoomLevel, setSyncZoomLevel] = useState<number>(0);
-  // Local pan mode state - 'none', 'zoom' (zoom pan), or 'topToBottom' (vertical pan)
+  // Local pan mode state - 'none', 'zoom' (zoom pan), 'zoomOut' (zoom out), or 'topToBottom' (vertical pan)
   const [syncPanMode, setSyncPanMode] = useState<
-    'none' | 'zoom' | 'topToBottom'
+    'none' | 'zoom' | 'zoomOut' | 'topToBottom'
   >('none');
-  // Dropdown open state for pan mode selector
-  const [panModeDropdownOpen, setPanModeDropdownOpen] =
-    useState<boolean>(false);
+  // Dropdown open state for pan mode selector - stores the scene ID of the open dropdown (null if closed)
+  const [panModeDropdownOpen, setPanModeDropdownOpen] = useState<number | null>(
+    null
+  );
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -1528,7 +1529,7 @@ export default function SceneCard({
       audioUrl: string,
       sceneData?: BaserowRow,
       zoomLevel: number = 0,
-      panMode: 'none' | 'zoom' | 'topToBottom' = 'none'
+      panMode: 'none' | 'zoom' | 'zoomOut' | 'topToBottom' = 'none'
     ) => {
       try {
         setGeneratingVideo(sceneId);
@@ -4245,7 +4246,9 @@ export default function SceneCard({
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setPanModeDropdownOpen((prev) => !prev);
+                                  setPanModeDropdownOpen((prev) =>
+                                    prev === scene.id ? null : scene.id
+                                  );
                                 }}
                                 className={`px-1 py-0.5 text-xs font-bold rounded transition-colors duration-200 cursor-pointer ${
                                   syncPanMode !== 'none'
@@ -4258,9 +4261,11 @@ export default function SceneCard({
                                   ? '▼'
                                   : syncPanMode === 'zoom'
                                   ? 'Z▼'
+                                  : syncPanMode === 'zoomOut'
+                                  ? 'O▼'
                                   : 'T▼'}
                               </div>
-                              {panModeDropdownOpen && (
+                              {panModeDropdownOpen === scene.id && (
                                 <div
                                   className='absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[120px]'
                                   onClick={(e) => e.stopPropagation()}
@@ -4268,7 +4273,7 @@ export default function SceneCard({
                                   <div
                                     onClick={() => {
                                       setSyncPanMode('none');
-                                      setPanModeDropdownOpen(false);
+                                      setPanModeDropdownOpen(null);
                                     }}
                                     className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 ${
                                       syncPanMode === 'none'
@@ -4281,7 +4286,7 @@ export default function SceneCard({
                                   <div
                                     onClick={() => {
                                       setSyncPanMode('zoom');
-                                      setPanModeDropdownOpen(false);
+                                      setPanModeDropdownOpen(null);
                                     }}
                                     className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 ${
                                       syncPanMode === 'zoom'
@@ -4289,12 +4294,25 @@ export default function SceneCard({
                                         : ''
                                     }`}
                                   >
-                                    Zoom Pan
+                                    Zoom In
+                                  </div>
+                                  <div
+                                    onClick={() => {
+                                      setSyncPanMode('zoomOut');
+                                      setPanModeDropdownOpen(null);
+                                    }}
+                                    className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 ${
+                                      syncPanMode === 'zoomOut'
+                                        ? 'bg-orange-100 font-bold text-orange-700'
+                                        : ''
+                                    }`}
+                                  >
+                                    Zoom Out
                                   </div>
                                   <div
                                     onClick={() => {
                                       setSyncPanMode('topToBottom');
-                                      setPanModeDropdownOpen(false);
+                                      setPanModeDropdownOpen(null);
                                     }}
                                     className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 ${
                                       syncPanMode === 'topToBottom'

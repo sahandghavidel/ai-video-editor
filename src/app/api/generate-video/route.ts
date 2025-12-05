@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
         cleanup: true, // Clean up local files after upload
         useAdvancedSync: true, // Use duration-based speed adjustment (like NCA toolkit)
         zoomLevel: zoomLevel, // Pass zoom level to FFmpeg
-        panMode: panMode, // Pass pan mode: 'none', 'zoom', or 'topToBottom'
+        panMode: panMode, // Pass pan mode: 'none', 'zoom', 'zoomOut', or 'topToBottom'
       });
 
       const syncEndTime = Date.now();
