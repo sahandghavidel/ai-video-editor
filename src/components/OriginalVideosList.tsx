@@ -166,6 +166,7 @@ export default function OriginalVideosList({
     setOptimizingSilenceVideo,
     setNormalizingAudioVideo,
     setConvertingToCFRVideo,
+    setConvertingFinalToCFRVideo,
     videoSettings,
     pipelineConfig,
     silenceSpeedRate,
@@ -2360,6 +2361,157 @@ export default function OriginalVideosList({
     }
   };
 
+  // Convert All Final Merged Videos to CFR
+  const handleConvertFinalToCFRAll = async () => {
+    try {
+      setError(null);
+      setConvertingFinalToCFRVideo(null);
+      startBatchOperation('convertingAllFinalToCFR');
+
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
+      // Filter videos that have Final Merged Video URLs AND status is "Processing"
+      const videosToConvert = freshVideosData.filter((video) => {
+        const finalVideoUrl = extractUrl(video.field_6858);
+        const status = extractFieldValue(video.field_6864);
+        const isAlreadyCFR = finalVideoUrl && finalVideoUrl.includes('_cfr');
+        return finalVideoUrl && status === 'Processing' && !isAlreadyCFR; // Has final video URL, Processing status, and not already CFR
+      });
+
+      if (videosToConvert.length === 0) {
+        console.log('No final videos found that need CFR conversion');
+        return;
+      }
+
+      console.log(
+        `Starting CFR conversion for ${videosToConvert.length} final videos...`
+      );
+
+      // Process videos one by one to avoid overwhelming the API
+      for (const video of videosToConvert) {
+        const finalVideoUrl = extractUrl(video.field_6858);
+        if (finalVideoUrl) {
+          console.log(`Converting final video ${video.id} to CFR...`);
+          setConvertingFinalToCFRVideo(video.id);
+
+          try {
+            const response = await fetch('/api/convert-to-cfr', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                videoId: video.id,
+                videoUrl: finalVideoUrl,
+                framerate: 30, // Target framerate of 30 fps
+              }),
+            });
+
+            if (!response.ok) {
+              let errorMessage = `CFR conversion failed: ${response.status}`;
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+                console.error('API Error:', errorData);
+              } catch (parseError) {
+                console.error('Could not parse error response');
+              }
+              throw new Error(errorMessage);
+            }
+
+            const result = await response.json();
+            console.log(
+              `Successfully converted final video ${video.id} to CFR`
+            );
+            console.log('Result:', result);
+            console.log('CFR URL:', result.data?.cfrUrl);
+
+            // Update the record with the CFR final video URL
+            if (result.data?.cfrUrl) {
+              console.log(
+                `Updating video ${video.id} final video with CFR URL...`
+              );
+
+              // Store the old final video URL before updating
+              const oldFinalVideoUrl = finalVideoUrl;
+
+              console.log(`[CFR FINAL BATCH] Old URL: ${oldFinalVideoUrl}`);
+              console.log(`[CFR FINAL BATCH] New URL: ${result.data.cfrUrl}`);
+
+              await updateOriginalVideoRow(video.id, {
+                field_6858: result.data.cfrUrl, // Replace the Final Merged Video URL with CFR version
+              });
+              console.log(`Video ${video.id} final video updated successfully`);
+
+              // Delete the old final video from MinIO to save space
+              if (oldFinalVideoUrl && oldFinalVideoUrl !== result.data.cfrUrl) {
+                console.log(
+                  `[CFR FINAL BATCH] Deleting original final video from MinIO: ${oldFinalVideoUrl}`
+                );
+                try {
+                  const deleted = await deleteFromMinio(oldFinalVideoUrl);
+                  if (deleted) {
+                    console.log(
+                      `[CFR FINAL BATCH] Successfully deleted original final video from MinIO`
+                    );
+                  } else {
+                    console.warn(
+                      `[CFR FINAL BATCH] Failed to delete original final video from MinIO, but continuing`
+                    );
+                  }
+                } catch (deleteError) {
+                  console.error(
+                    `[CFR FINAL BATCH] Error deleting original final video from MinIO:`,
+                    deleteError
+                  );
+                  // Don't throw - CFR conversion was successful
+                }
+              } else {
+                console.log(
+                  `[CFR FINAL BATCH] Skipping deletion - URLs are the same or old URL is missing`
+                );
+              }
+
+              // Refresh after each video to show updates immediately
+              await handleRefresh();
+            } else {
+              console.warn(
+                `No CFR URL found in result for final video ${video.id}`
+              );
+            }
+          } catch (error) {
+            console.error(
+              `Failed to convert final video ${video.id} to CFR:`,
+              error
+            );
+            // Continue with next video even if one fails
+          }
+        }
+      }
+
+      console.log('Batch CFR conversion for final videos completed');
+      await handleRefresh();
+
+      // Play success sound
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error in batch CFR conversion for final videos:', error);
+
+      // Play error sound
+      playErrorSound();
+
+      setError(
+        `Failed to convert final videos to CFR: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setConvertingFinalToCFRVideo(null);
+      completeBatchOperation('convertingAllFinalToCFR');
+    }
+  };
+
   // Merge All Final Videos
   const handleMergeAllFinalVideos = async () => {
     try {
@@ -4007,6 +4159,38 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
+                    {/* Convert Final Videos to CFR Button */}
+                    <button
+                      onClick={() => handleConvertFinalToCFRAll()}
+                      disabled={
+                        batchOperations.convertingAllFinalToCFR ||
+                        sceneLoading.convertingFinalToCFRVideo !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        batchOperations.convertingAllFinalToCFR
+                          ? 'Converting all final videos to CFR...'
+                          : 'Convert all final merged videos to constant frame rate (30 fps)'
+                      }
+                    >
+                      <Film
+                        className={`w-4 h-4 ${
+                          batchOperations.convertingAllFinalToCFR
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {batchOperations.convertingAllFinalToCFR
+                          ? sceneLoading.convertingFinalToCFRVideo !== null
+                            ? `V${sceneLoading.convertingFinalToCFRVideo}`
+                            : 'Processing...'
+                          : 'CFR Final All'}
+                      </span>
+                    </button>
+
                     {/* Final Actions */}
                     {/* Generate Timestamps Button */}
                     <button
@@ -4497,19 +4681,32 @@ export default function OriginalVideosList({
                               const finalVideoUrl = extractUrl(
                                 video.field_6858
                               );
+                              const isCFR =
+                                finalVideoUrl && finalVideoUrl.includes('_cfr');
                               return finalVideoUrl ? (
-                                <a
-                                  href={finalVideoUrl}
-                                  target='_blank'
-                                  rel='noopener noreferrer'
-                                  className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
-                                >
-                                  <Video className='w-4 h-4' />
-                                  <span className='truncate max-w-32'>
-                                    Final Video
-                                  </span>
-                                  <ExternalLink className='w-3 h-3' />
-                                </a>
+                                <div className='inline-flex items-center gap-2'>
+                                  <a
+                                    href={finalVideoUrl}
+                                    target='_blank'
+                                    rel='noopener noreferrer'
+                                    className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
+                                  >
+                                    <Video className='w-4 h-4' />
+                                    <span className='truncate max-w-32'>
+                                      Final Video
+                                    </span>
+                                    <ExternalLink className='w-3 h-3' />
+                                  </a>
+                                  {isCFR && (
+                                    <span
+                                      className='inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-pink-100 text-pink-700'
+                                      title='Constant Frame Rate (30fps)'
+                                    >
+                                      <Film className='w-3 h-3' />
+                                      CFR
+                                    </span>
+                                  )}
+                                </div>
                               ) : (
                                 <span className='text-gray-400'>Not ready</span>
                               );

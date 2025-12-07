@@ -46,6 +46,7 @@ export interface BatchOperationsState {
   optimizingAllSilence: boolean;
   normalizingAllAudio: boolean;
   convertingAllToCFR: boolean;
+  convertingAllFinalToCFR: boolean;
 }
 
 // Media player state interface
@@ -75,6 +76,7 @@ export interface SceneLoadingState {
   normalizingAudioVideo: number | null;
   normalizingAudio: number | null;
   convertingToCFRVideo: number | null;
+  convertingFinalToCFRVideo: number | null;
   transcribingScene: number | null;
   creatingTypingEffect: number | null;
 }
@@ -245,6 +247,7 @@ interface AppState {
   setNormalizingAudioVideo: (videoId: number | null) => void;
   setNormalizingAudio: (sceneId: number | null) => void;
   setConvertingToCFRVideo: (videoId: number | null) => void;
+  setConvertingFinalToCFRVideo: (videoId: number | null) => void;
 
   // Merged Video Actions
   setMergedVideo: (url: string, fileName?: string) => void;
@@ -339,6 +342,7 @@ const defaultBatchOperations: BatchOperationsState = {
   optimizingAllSilence: false,
   normalizingAllAudio: false,
   convertingAllToCFR: false,
+  convertingAllFinalToCFR: false,
 };
 
 // Default media player state
@@ -368,6 +372,7 @@ const defaultSceneLoading: SceneLoadingState = {
   normalizingAudioVideo: null,
   normalizingAudio: null,
   convertingToCFRVideo: null,
+  convertingFinalToCFRVideo: null,
   transcribingScene: null,
   creatingTypingEffect: null,
 };
@@ -750,6 +755,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       sceneLoading: {
         ...state.sceneLoading,
         convertingToCFRVideo: videoId,
+      },
+    })),
+
+  setConvertingFinalToCFRVideo: (videoId) =>
+    set((state) => ({
+      sceneLoading: {
+        ...state.sceneLoading,
+        convertingFinalToCFRVideo: videoId,
       },
     })),
 
