@@ -669,18 +669,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 </div>
               </div>
             )}
-
-            {/* Instructions */}
-            <div className='text-sm text-gray-600 bg-gray-50 p-3 rounded'>
-              <p className='font-medium mb-1'>Instructions:</p>
-              <ul className='list-disc list-inside space-y-1'>
-                <li>Upload an image to overlay on the video</li>
-                <li>Drag the image to position it</li>
-                <li>Adjust size and position using the controls</li>
-                <li>Click "Preview" to see a short preview</li>
-                <li>Click "Apply" to permanently embed the image</li>
-              </ul>
-            </div>
           </div>
         </div>
 
