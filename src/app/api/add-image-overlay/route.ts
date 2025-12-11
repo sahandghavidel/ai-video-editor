@@ -26,6 +26,9 @@ export async function POST(request: NextRequest) {
     const startTime = parseFloat(formData.get('startTime') as string);
     const endTime = parseFloat(formData.get('endTime') as string);
     const preview = formData.get('preview') === 'true';
+    const textStyling = formData.get('textStyling')
+      ? JSON.parse(formData.get('textStyling') as string)
+      : null;
 
     console.log('API received:', {
       sceneId,
@@ -139,7 +142,29 @@ export async function POST(request: NextRequest) {
         .replace(/\(/g, '\\(') // Escape parentheses
         .replace(/\)/g, '\\)'); // Escape parentheses
 
-      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':fontsize=${fontSize}:fontcolor=white:shadowx=4:shadowy=4:shadowcolor=black@0.7:fontfile=/System/Library/Fonts/Helvetica.ttc:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
+      // Use custom styling if provided, otherwise use defaults
+      const fontColor = textStyling?.fontColor || 'white';
+      const borderWidth = textStyling?.borderWidth || 3;
+      const borderColor = textStyling?.borderColor || 'black';
+      const shadowX = textStyling?.shadowX || 8;
+      const shadowY = textStyling?.shadowY || 8;
+      const shadowColor = textStyling?.shadowColor || 'black';
+      const shadowOpacity = textStyling?.shadowOpacity || 0.9;
+      const fontFamily = textStyling?.fontFamily || 'Helvetica';
+
+      // Map font family names to actual font files
+      const fontFileMap: { [key: string]: string } = {
+        Helvetica: '/System/Library/Fonts/Helvetica.ttc',
+        ArialHB: '/System/Library/Fonts/ArialHB.ttc',
+        Courier: '/System/Library/Fonts/Courier.ttc',
+        Geneva: '/System/Library/Fonts/Geneva.ttf',
+        Times: '/System/Library/Fonts/Times.ttc',
+      };
+
+      const fontFile =
+        fontFileMap[fontFamily] || '/System/Library/Fonts/Helvetica.ttc';
+
+      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColor}:fontsize=${fontSize}:fontcolor=${fontColor}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColor}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
     } else {
       throw new Error('No overlay content provided');
     }

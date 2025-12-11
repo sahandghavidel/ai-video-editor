@@ -4,6 +4,17 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Upload, Loader2, RotateCcw, Maximize } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 
+// Helper function to convert hex color to RGB
+const hexToRgb = (hex: string) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(
+        result[3],
+        16
+      )}`
+    : '0, 0, 0';
+};
+
 interface ImageOverlayModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -16,7 +27,17 @@ interface ImageOverlayModalProps {
     position: { x: number; y: number },
     size: { width: number; height: number },
     startTime: number,
-    endTime: number
+    endTime: number,
+    textStyling?: {
+      fontColor: string;
+      borderWidth: number;
+      borderColor: string;
+      shadowX: number;
+      shadowY: number;
+      shadowColor: string;
+      shadowOpacity: number;
+      fontFamily: string;
+    }
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -59,6 +80,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     width: 20,
     height: 10,
   }); // percentage
+  const [textStyling, setTextStyling] = useState({
+    fontColor: '#ffffff',
+    borderWidth: 3,
+    borderColor: '#000000',
+    shadowX: 8,
+    shadowY: 8,
+    shadowColor: '#000000',
+    shadowOpacity: 0.9,
+    fontFamily: 'Helvetica',
+  });
   const [isDraggingText, setIsDraggingText] = useState(false);
   const [isResizingText, setIsResizingText] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -550,6 +581,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     formData.append('startTime', startTime.toString());
     formData.append('endTime', endTime.toString());
     formData.append('preview', 'true');
+    if (selectedWordText && textStyling) {
+      formData.append('textStyling', JSON.stringify(textStyling));
+    }
 
     try {
       const response = await fetch('/api/add-image-overlay', {
@@ -576,6 +610,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     textOverlaySize,
     startTime,
     endTime,
+    textStyling,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -588,7 +623,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       overlayImage ? overlayPosition : textOverlayPosition,
       overlayImage ? overlaySize : textOverlaySize,
       startTime,
-      endTime
+      endTime,
+      selectedWordText ? textStyling : undefined
     );
     onClose();
     // Reset state
@@ -879,7 +915,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
                 onPointerDown={handleTextMouseDown}
               >
-                <div className='w-full h-full flex items-center justify-center font-bold text-white select-none drop-shadow-lg whitespace-nowrap'>
+                <div
+                  className='w-full h-full flex items-center justify-center font-bold select-none whitespace-nowrap'
+                  style={{
+                    color: textStyling.fontColor,
+                    textShadow: `${textStyling.shadowX}px ${
+                      textStyling.shadowY
+                    }px 0px rgba(${hexToRgb(textStyling.shadowColor)}, ${
+                      textStyling.shadowOpacity
+                    })`,
+                    WebkitTextStroke:
+                      textStyling.borderWidth > 0
+                        ? `${textStyling.borderWidth}px ${textStyling.borderColor}`
+                        : 'none',
+                    fontWeight: 'bold',
+                    fontFamily: textStyling.fontFamily,
+                  }}
+                >
                   {selectedWordText}
                 </div>
               </div>
@@ -1245,6 +1297,168 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       title='Center and maximize size'
                     >
                       <Maximize className='h-3 w-3' />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Text Styling Controls */}
+                <div className='space-y-1 mt-2'>
+                  <h4 className='text-sm font-medium text-gray-700'>
+                    Text Styling
+                  </h4>
+                  <div className='flex flex-wrap gap-1 items-end'>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>Font</label>
+                      <select
+                        value={textStyling.fontFamily}
+                        onChange={(e) =>
+                          setTextStyling((prev) => ({
+                            ...prev,
+                            fontFamily: e.target.value,
+                          }))
+                        }
+                        className='w-20 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                      >
+                        <option value='Helvetica'>Helvetica</option>
+                        <option value='ArialHB'>Arial</option>
+                        <option value='Courier'>Courier</option>
+                        <option value='Geneva'>Geneva</option>
+                        <option value='Times'>Times</option>
+                      </select>
+                    </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        Color
+                      </label>
+                      <input
+                        type='color'
+                        value={textStyling.fontColor}
+                        onChange={(e) =>
+                          setTextStyling((prev) => ({
+                            ...prev,
+                            fontColor: e.target.value,
+                          }))
+                        }
+                        className='w-12 h-6 border border-gray-300 rounded cursor-pointer'
+                      />
+                    </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        Border
+                      </label>
+                      <div className='flex gap-1'>
+                        <input
+                          type='number'
+                          value={textStyling.borderWidth}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              borderWidth: Number(e.target.value),
+                            }))
+                          }
+                          className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min='0'
+                          max='10'
+                        />
+                        <input
+                          type='color'
+                          value={textStyling.borderColor}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              borderColor: e.target.value,
+                            }))
+                          }
+                          className='w-6 h-6 border border-gray-300 rounded cursor-pointer'
+                        />
+                      </div>
+                    </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        Shadow XY
+                      </label>
+                      <div className='flex gap-1'>
+                        <input
+                          type='number'
+                          value={textStyling.shadowX}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              shadowX: Number(e.target.value),
+                            }))
+                          }
+                          className='w-10 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min='0'
+                          max='20'
+                          placeholder='X'
+                        />
+                        <input
+                          type='number'
+                          value={textStyling.shadowY}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              shadowY: Number(e.target.value),
+                            }))
+                          }
+                          className='w-10 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min='0'
+                          max='20'
+                          placeholder='Y'
+                        />
+                      </div>
+                    </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        Opacity
+                      </label>
+                      <input
+                        type='number'
+                        value={textStyling.shadowOpacity}
+                        onChange={(e) =>
+                          setTextStyling((prev) => ({
+                            ...prev,
+                            shadowOpacity: Number(e.target.value),
+                          }))
+                        }
+                        className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                        min='0'
+                        max='1'
+                        step='0.1'
+                      />
+                    </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        Shadow
+                      </label>
+                      <input
+                        type='color'
+                        value={textStyling.shadowColor}
+                        onChange={(e) =>
+                          setTextStyling((prev) => ({
+                            ...prev,
+                            shadowColor: e.target.value,
+                          }))
+                        }
+                        className='w-12 h-6 border border-gray-300 rounded cursor-pointer'
+                      />
+                    </div>
+                    <button
+                      onClick={() =>
+                        setTextStyling({
+                          fontColor: '#ffffff',
+                          borderWidth: 3,
+                          borderColor: '#000000',
+                          shadowX: 8,
+                          shadowY: 8,
+                          shadowColor: '#000000',
+                          shadowOpacity: 0.9,
+                          fontFamily: 'Helvetica',
+                        })
+                      }
+                      className='px-2 py-0.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 h-6'
+                    >
+                      Reset
                     </button>
                   </div>
                 </div>
