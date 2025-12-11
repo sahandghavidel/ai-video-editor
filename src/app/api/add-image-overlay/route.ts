@@ -5,30 +5,33 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
+import { updateSceneRow } from '@/lib/baserow-actions';
 
 const execAsync = promisify(exec);
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const sceneId = formData.get('sceneId') as string;
+    const sceneIdString = formData.get('sceneId') as string;
+    const sceneId = parseInt(sceneIdString, 10);
     const videoUrl = formData.get('videoUrl') as string;
     const overlayImage = formData.get('overlayImage') as File;
     const positionX = parseFloat(formData.get('positionX') as string);
     const positionY = parseFloat(formData.get('positionY') as string);
-    const widthPercent = parseFloat(formData.get('widthPercent') as string);
-    const heightPercent = parseFloat(formData.get('heightPercent') as string);
+    const sizeWidth = parseFloat(formData.get('sizeWidth') as string);
+    const sizeHeight = parseFloat(formData.get('sizeHeight') as string);
     const startTime = parseFloat(formData.get('startTime') as string);
     const endTime = parseFloat(formData.get('endTime') as string);
+    const preview = formData.get('preview') === 'true';
 
     if (
-      !sceneId ||
+      isNaN(sceneId) ||
       !videoUrl ||
       !overlayImage ||
       isNaN(positionX) ||
       isNaN(positionY) ||
-      isNaN(widthPercent) ||
-      isNaN(heightPercent) ||
+      isNaN(sizeWidth) ||
+      isNaN(sizeHeight) ||
       isNaN(startTime) ||
       isNaN(endTime)
     ) {
@@ -67,8 +70,8 @@ export async function POST(request: NextRequest) {
       const videoHeight = videoStream.height;
 
       // Calculate overlay dimensions in pixels
-      const overlayWidth = Math.round((widthPercent / 100) * videoWidth);
-      const overlayHeight = Math.round((heightPercent / 100) * videoHeight);
+      const overlayWidth = Math.round((sizeWidth / 100) * videoWidth);
+      const overlayHeight = Math.round((sizeHeight / 100) * videoHeight);
       const imageBuffer = await overlayImage.arrayBuffer();
       const imagePath = path.join(tempDir, 'overlay.png');
       await fs.promises.writeFile(imagePath, Buffer.from(imageBuffer));
@@ -78,12 +81,13 @@ export async function POST(request: NextRequest) {
 
       const isGif = overlayImage.type === 'image/gif';
       const streamLoop = isGif ? '-stream_loop -1' : '';
+      const durationLimit = preview ? '-t 10' : '';
 
       const ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay];[0:v][overlay]overlay=W*${
         positionX / 100
       }-(${overlayWidth})/2:H*${
         positionY / 100
-      }-(${overlayHeight})/2:enable='gte(t\,${startTime})*lte(t\,${endTime})'" -c:a copy -shortest "${outputPath}"`;
+      }-(${overlayHeight})/2:enable='gte(t\,${startTime})*lte(t\,${endTime})'" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
 
       await execAsync(ffmpegCommand);
 
@@ -91,12 +95,19 @@ export async function POST(request: NextRequest) {
       const outputBuffer = await fs.promises.readFile(outputPath);
       const tempUploadPath = path.join(tempDir, 'upload.mp4');
       await fs.promises.writeFile(tempUploadPath, outputBuffer);
-      const fileName = `scene-${sceneId}-overlay-${Date.now()}.mp4`;
+      const fileName = preview
+        ? `temp-preview-${sceneId}-${Date.now()}.mp4`
+        : `scene-${sceneId}-overlay-${Date.now()}.mp4`;
       const uploadUrl = await uploadToMinio(
         tempUploadPath,
         fileName,
         'video/mp4'
       );
+
+      // Update the scene with the new video URL
+      await updateSceneRow(sceneId, {
+        field_6886: uploadUrl,
+      });
 
       return NextResponse.json({ success: true, url: uploadUrl });
     } finally {

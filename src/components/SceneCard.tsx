@@ -1472,8 +1472,8 @@ export default function SceneCard({
       formData.append('overlayImage', overlayImage);
       formData.append('positionX', position.x.toString());
       formData.append('positionY', position.y.toString());
-      formData.append('widthPercent', size.width.toString());
-      formData.append('heightPercent', size.height.toString());
+      formData.append('sizeWidth', size.width.toString());
+      formData.append('sizeHeight', size.height.toString());
       formData.append('startTime', startTime.toString());
       formData.append('endTime', endTime.toString());
 

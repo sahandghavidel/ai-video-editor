@@ -40,6 +40,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     width: 20,
     height: 20,
   });
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -186,28 +187,73 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsResizing(false);
   }, []);
 
+  const handlePreview = useCallback(async () => {
+    if (!overlayImage) return;
+
+    const formData = new FormData();
+    formData.append('videoUrl', videoUrl);
+    formData.append('sceneId', sceneId.toString());
+    formData.append('overlayImage', overlayImage);
+    formData.append('positionX', overlayPosition.x.toString());
+    formData.append('positionY', overlayPosition.y.toString());
+    formData.append('sizeWidth', overlaySize.width.toString());
+    formData.append('sizeHeight', overlaySize.height.toString());
+    formData.append('startTime', startTime.toString());
+    formData.append('endTime', endTime.toString());
+    formData.append('preview', 'true');
+
+    try {
+      const response = await fetch('/api/add-image-overlay', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.success) {
+        setPreviewUrl(data.url);
+      } else {
+        alert('Preview failed: ' + data.error);
+      }
+    } catch (error) {
+      alert('Error generating preview');
+    }
+  }, [
+    overlayImage,
+    videoUrl,
+    sceneId,
+    overlayPosition,
+    overlaySize,
+    startTime,
+    endTime,
+  ]);
+
   const handleApply = useCallback(async () => {
     if (!overlayImage) return;
 
-    try {
-      await onApply(
-        sceneId,
-        overlayImage,
-        overlayPosition,
-        overlaySize,
-        startTime,
-        endTime
-      );
-      onClose();
-      // Reset state
-      setOverlayImage(null);
-      setOverlayImageUrl(null);
-      setOverlayPosition({ x: 50, y: 50 });
-      setOverlaySize({ width: 20, height: 20 });
-    } catch (error) {
-      console.error('Failed to apply image overlay:', error);
-    }
-  }, [overlayImage, sceneId, overlayPosition, overlaySize, onApply, onClose]);
+    await onApply(
+      sceneId,
+      overlayImage,
+      overlayPosition,
+      overlaySize,
+      startTime,
+      endTime
+    );
+    onClose();
+    // Reset state
+    setOverlayImage(null);
+    setOverlayImageUrl(null);
+    setOverlayPosition({ x: 50, y: 50 });
+    setOverlaySize({ width: 20, height: 20 });
+    setPreviewUrl(null);
+  }, [
+    overlayImage,
+    sceneId,
+    overlayPosition,
+    overlaySize,
+    startTime,
+    endTime,
+    onApply,
+    onClose,
+  ]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -219,6 +265,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setResizeStartSize({ width: 20, height: 20 });
     setStartTime(0);
     setEndTime(0);
+    setPreviewUrl(null);
   }, [onClose]);
 
   if (!isOpen) return null;
@@ -448,6 +495,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <li>Upload an image to overlay on the video</li>
                 <li>Drag the image to position it</li>
                 <li>Adjust size and position using the controls</li>
+                <li>Click "Preview" to see a short preview</li>
                 <li>Click "Apply" to permanently embed the image</li>
               </ul>
             </div>
@@ -464,6 +512,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             Cancel
           </button>
           <button
+            onClick={handlePreview}
+            disabled={!overlayImage || isApplying}
+            className='px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+          >
+            Preview
+          </button>
+          <button
             onClick={handleApply}
             disabled={!overlayImage || isApplying}
             className='flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
@@ -476,6 +531,33 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Preview Video Overlay */}
+      {previewUrl && (
+        <div
+          className='fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]'
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div className='relative max-w-4xl max-h-[80vh] w-full mx-4'>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewUrl(null);
+              }}
+              className='absolute -top-10 right-0 text-white hover:text-gray-300 text-xl font-bold'
+            >
+              ✕
+            </button>
+            <video
+              src={previewUrl}
+              controls
+              autoPlay
+              className='w-full h-full rounded-lg'
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
