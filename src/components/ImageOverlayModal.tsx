@@ -49,9 +49,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     start: number;
     end: number;
   }> | null>(null);
-  const [selectedWordIndex, setSelectedWordIndex] = useState<number | null>(
-    null
-  );
   const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string>('');
   const [textOverlayPosition, setTextOverlayPosition] = useState({
@@ -568,7 +565,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlaySize({ width: 40, height: 40 });
     setPreviewUrl(null);
     setSelectedWordText(null);
-    setSelectedWordIndex(null);
     setCustomText('');
   }, [
     overlayImage,
@@ -595,11 +591,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setEndTime(0);
     setPreviewUrl(null);
     setTranscriptionWords(null);
-    setSelectedWordIndex(null);
     setSelectedWordText(null);
     setCustomText('');
     setSelectedWordText(null);
-    setSelectedWordIndex(null);
   }, [onClose]);
 
   // Fetch transcription data
@@ -1030,19 +1024,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         key={index}
                         onClick={() => {
                           setStartTime(wordData.start);
-                          setSelectedWordIndex(index);
-                          setSelectedWordText(wordData.word);
-                          setCustomText(''); // Clear custom text when selecting a word
+                          setCustomText(wordData.word); // Add word to input field instead of directly selecting it
                           // Also seek the video to this time
                           if (videoRef.current) {
                             videoRef.current.currentTime = wordData.start;
                           }
                         }}
-                        className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
-                          selectedWordIndex === index
-                            ? 'bg-blue-500 text-white border-blue-500'
-                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-blue-50 hover:border-blue-300'
-                        }`}
+                        className={`px-3 py-1.5 text-sm font-medium rounded transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-blue-50 hover:border-blue-300`}
                         title={`Click to set start time to ${wordData.start}s`}
                       >
                         {wordData.word}
@@ -1063,7 +1051,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     onClick={() => {
                       if (customText.trim()) {
                         setSelectedWordText(customText.trim());
-                        setSelectedWordIndex(null); // Clear word selection
                       }
                     }}
                     disabled={!customText.trim()}
