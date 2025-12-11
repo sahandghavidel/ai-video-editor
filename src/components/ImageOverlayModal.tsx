@@ -42,39 +42,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const getVideoContentRect = useCallback(() => {
     const video = videoRef.current;
-    if (!video || video.readyState < 2)
-      return video?.getBoundingClientRect() || null;
+    if (!video) return null;
 
-    const rect = video.getBoundingClientRect();
-    const videoWidth = video.videoWidth;
-    const videoHeight = video.videoHeight;
-
-    if (!videoWidth || !videoHeight) return rect; // fallback
-
-    // Calculate the scale to fit the container while maintaining aspect ratio
-    const containerAspect = rect.width / rect.height;
-    const videoAspect = videoWidth / videoHeight;
-
-    let contentWidth, contentHeight;
-    if (containerAspect > videoAspect) {
-      // Container is wider, fit by height
-      contentHeight = rect.height;
-      contentWidth = contentHeight * videoAspect;
-    } else {
-      // Container is taller, fit by width
-      contentWidth = rect.width;
-      contentHeight = contentWidth / videoAspect;
-    }
-
-    const contentLeft = rect.left + (rect.width - contentWidth) / 2;
-    const contentTop = rect.top + (rect.height - contentHeight) / 2;
-
-    return {
-      left: contentLeft,
-      top: contentTop,
-      width: contentWidth,
-      height: contentHeight,
-    };
+    // Use the container rect for consistent positioning
+    const container = video.parentElement;
+    const rect =
+      container?.getBoundingClientRect() || video.getBoundingClientRect();
+    return rect;
   }, []);
 
   const handleImageUpload = useCallback(
@@ -110,14 +84,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       const overlayHeight_px = (overlaySize.height / 100) * contentRect.height;
 
       // Check if clicking on resize handle (bottom-right corner)
-      const resizeHandleX = overlayX_px + overlayWidth_px - 8; // 8px is handle size
-      const resizeHandleY = overlayY_px + overlayHeight_px - 8;
+      const resizeHandleX = overlayX_px + overlayWidth_px - 12; // 12px is handle size
+      const resizeHandleY = overlayY_px + overlayHeight_px - 12;
 
       if (
         x >= resizeHandleX &&
-        x <= resizeHandleX + 8 &&
+        x <= resizeHandleX + 12 &&
         y >= resizeHandleY &&
-        y <= resizeHandleY + 8
+        y <= resizeHandleY + 12
       ) {
         setIsResizing(true);
         setDragStart({
@@ -278,10 +252,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 />
                 {/* Resize handle */}
                 <div
-                  className='absolute bottom-0 right-0 w-8 h-8 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100 border-2 border-white'
+                  className='absolute bottom-0 right-0 w-12 h-12 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100 border-2 border-white'
                   onMouseDown={(e) => {
                     e.stopPropagation();
-                    handleMouseDown(e);
+                    setIsResizing(true);
+                    setDragStart({
+                      x: e.clientX,
+                      y: e.clientY,
+                    });
+                    setResizeStartSize(overlaySize);
                   }}
                 />
               </div>
