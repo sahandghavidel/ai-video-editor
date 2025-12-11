@@ -112,16 +112,23 @@ export async function POST(request: NextRequest) {
     } else if (overlayText) {
       // Handle text overlay
       const fontSize = Math.min(overlayWidth, overlayHeight) * 0.8;
-      const xPos = `(w-text_w)/2`;
-      const yPos = `(h-text_h)/2`;
+      // Position text at specified percentage (top-left corner of text at that position)
+      const xPos = `(w-text_w)*${positionX / 100}`;
+      const yPos = `(h-text_h)*${positionY / 100}`;
 
-      // Escape text properly for FFmpeg
+      // Escape text properly for FFmpeg - handle special characters that can break FFmpeg
       const escapedText = overlayText
-        .replace(/'/g, "\\'")
-        .replace(/:/g, '\\:')
-        .replace(/\\/g, '\\\\');
+        .replace(/\\/g, '\\\\') // Escape backslashes first
+        .replace(/'/g, "\\'") // Escape single quotes
+        .replace(/:/g, '\\:') // Escape colons
+        .replace(/\[/g, '\\[') // Escape square brackets
+        .replace(/\]/g, '\\]') // Escape square brackets
+        .replace(/,/g, '\\,') // Escape commas
+        .replace(/;/g, '\\;') // Escape semicolons
+        .replace(/\(/g, '\\(') // Escape parentheses
+        .replace(/\)/g, '\\)'); // Escape parentheses
 
-      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':fontsize=${fontSize}:fontcolor=white:shadowx=2:shadowy=2:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
+      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':fontsize=${fontSize}:fontcolor=white:shadowx=2:shadowy=2:fontfile=/System/Library/Fonts/Helvetica.ttc:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
     } else {
       throw new Error('No overlay content provided');
     }

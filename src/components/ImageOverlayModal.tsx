@@ -540,10 +540,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [
     overlayImage,
+    selectedWordText,
     videoUrl,
     sceneId,
     overlayPosition,
+    textOverlayPosition,
     overlaySize,
+    textOverlaySize,
     startTime,
     endTime,
   ]);
