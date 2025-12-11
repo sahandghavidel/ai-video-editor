@@ -28,10 +28,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
   const [overlayPosition, setOverlayPosition] = useState({ x: 50, y: 50 }); // percentage
-  const [overlaySize, setOverlaySize] = useState({ width: 200, height: 200 }); // pixels
+  const [overlaySize, setOverlaySize] = useState({ width: 20, height: 20 }); // percentage
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [resizeStartSize, setResizeStartSize] = useState({
+    width: 200,
+    height: 200,
+  });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,21 +63,41 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       const y = event.clientY - rect.top;
 
       // Check if clicking on the overlay image
-      const overlayX =
-        (overlayPosition.x / 100) * rect.width - overlaySize.width / 2;
-      const overlayY =
-        (overlayPosition.y / 100) * rect.height - overlaySize.height / 2;
+      const overlayX = overlayPosition.x - overlaySize.width / 2;
+      const overlayY = overlayPosition.y - overlaySize.height / 2;
+
+      // Convert to pixels
+      const overlayX_px = (overlayX / 100) * rect.width;
+      const overlayY_px = (overlayY / 100) * rect.height;
+      const overlayWidth_px = (overlaySize.width / 100) * rect.width;
+      const overlayHeight_px = (overlaySize.height / 100) * rect.height;
+
+      // Check if clicking on resize handle (bottom-right corner)
+      const resizeHandleX = overlayX_px + overlayWidth_px - 6; // 6px is handle size
+      const resizeHandleY = overlayY_px + overlayHeight_px - 6;
 
       if (
-        x >= overlayX &&
-        x <= overlayX + overlaySize.width &&
-        y >= overlayY &&
-        y <= overlayY + overlaySize.height
+        x >= resizeHandleX &&
+        x <= resizeHandleX + 6 &&
+        y >= resizeHandleY &&
+        y <= resizeHandleY + 6
+      ) {
+        setIsResizing(true);
+        setDragStart({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        setResizeStartSize(overlaySize);
+      } else if (
+        x >= overlayX_px &&
+        x <= overlayX_px + overlayWidth_px &&
+        y >= overlayY_px &&
+        y <= overlayY_px + overlayHeight_px
       ) {
         setIsDragging(true);
         setDragStart({
-          x: event.clientX - overlayPosition.x,
-          y: event.clientY - overlayPosition.y,
+          x: event.clientX - rect.left - overlayX_px - overlayWidth_px / 2,
+          y: event.clientY - rect.top - overlayY_px - overlayHeight_px / 2,
         });
       }
     },
@@ -86,16 +110,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         const rect = videoRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        const newX = ((event.clientX - dragStart.x) / rect.width) * 100;
-        const newY = ((event.clientY - dragStart.y) / rect.height) * 100;
+        const newX =
+          ((event.clientX - rect.left - dragStart.x) / rect.width) * 100;
+        const newY =
+          ((event.clientY - rect.top - dragStart.y) / rect.height) * 100;
 
         setOverlayPosition({
           x: Math.max(0, Math.min(100, newX)),
           y: Math.max(0, Math.min(100, newY)),
         });
+      } else if (isResizing) {
+        const rect = videoRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const deltaX = ((event.clientX - dragStart.x) / rect.width) * 100;
+        const deltaY = ((event.clientY - dragStart.y) / rect.height) * 100;
+
+        const newWidth = Math.max(5, resizeStartSize.width + deltaX);
+        const newHeight = Math.max(5, resizeStartSize.height + deltaY);
+
+        setOverlaySize({
+          width: Math.min(newWidth, 100), // Max 100%
+          height: Math.min(newHeight, 100), // Max 100%
+        });
       }
     },
-    [isDragging, dragStart]
+    [isDragging, isResizing, dragStart, overlaySize, resizeStartSize]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -113,7 +153,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOverlayImage(null);
       setOverlayImageUrl(null);
       setOverlayPosition({ x: 50, y: 50 });
-      setOverlaySize({ width: 200, height: 200 });
+      setOverlaySize({ width: 20, height: 20 });
     } catch (error) {
       console.error('Failed to apply image overlay:', error);
     }
@@ -125,7 +165,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayImage(null);
     setOverlayImageUrl(null);
     setOverlayPosition({ x: 50, y: 50 });
-    setOverlaySize({ width: 200, height: 200 });
+    setOverlaySize({ width: 20, height: 20 });
+    setResizeStartSize({ width: 20, height: 20 });
   }, [onClose]);
 
   if (!isOpen) return null;
@@ -145,39 +186,38 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
           {/* Video Preview */}
-          <div className='relative'>
+          <div
+            className='relative'
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
             <video
               ref={videoRef}
               src={videoUrl}
               className='w-full rounded border'
               controls
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
             />
             {overlayImageUrl && (
               <div
                 className='absolute border-2 border-blue-500 cursor-move'
                 style={{
-                  left: `calc(${overlayPosition.x}% - ${
-                    overlaySize.width / 2
-                  }px)`,
-                  top: `calc(${overlayPosition.y}% - ${
-                    overlaySize.height / 2
-                  }px)`,
-                  width: `${overlaySize.width}px`,
-                  height: `${overlaySize.height}px`,
+                  left: `${overlayPosition.x}%`,
+                  top: `${overlayPosition.y}%`,
+                  width: `${overlaySize.width}%`,
+                  height: `${overlaySize.height}%`,
+                  transform: 'translate(-50%, -50%)',
                 }}
               >
                 <img
                   src={overlayImageUrl}
                   alt='Overlay'
-                  className='w-full h-full object-cover'
+                  className='w-full h-full object-cover pointer-events-none'
                   draggable={false}
                 />
                 {/* Resize handle */}
-                <div className='absolute bottom-0 right-0 w-4 h-4 bg-blue-500 cursor-se-resize' />
+                <div className='absolute bottom-0 right-0 w-6 h-6 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100' />
               </div>
             )}
           </div>
@@ -258,7 +298,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <div className='grid grid-cols-2 gap-2'>
                   <div>
                     <label className='block text-xs text-gray-600'>
-                      Width (px)
+                      Width (%)
                     </label>
                     <input
                       type='number'
@@ -270,13 +310,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         }))
                       }
                       className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
-                      min='50'
-                      max='1000'
+                      min='5'
+                      max='100'
                     />
                   </div>
                   <div>
                     <label className='block text-xs text-gray-600'>
-                      Height (px)
+                      Height (%)
                     </label>
                     <input
                       type='number'
@@ -288,8 +328,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         }))
                       }
                       className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
-                      min='50'
-                      max='1000'
+                      min='5'
+                      max='100'
                     />
                   </div>
                 </div>

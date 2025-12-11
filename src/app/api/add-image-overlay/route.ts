@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
     const overlayImage = formData.get('overlayImage') as File;
     const positionX = parseFloat(formData.get('positionX') as string);
     const positionY = parseFloat(formData.get('positionY') as string);
-    const width = parseInt(formData.get('width') as string);
-    const height = parseInt(formData.get('height') as string);
+    const widthPercent = parseFloat(formData.get('widthPercent') as string);
+    const heightPercent = parseFloat(formData.get('heightPercent') as string);
 
     if (
       !sceneId ||
@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
       !overlayImage ||
       isNaN(positionX) ||
       isNaN(positionY) ||
-      isNaN(width) ||
-      isNaN(height)
+      isNaN(widthPercent) ||
+      isNaN(heightPercent)
     ) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
@@ -48,7 +48,23 @@ export async function POST(request: NextRequest) {
       const videoPath = path.join(tempDir, 'input.mp4');
       await fs.promises.writeFile(videoPath, Buffer.from(videoBuffer));
 
-      // Save overlay image
+      // Get video dimensions
+      const { stdout: probeOutput } = await execAsync(
+        `ffprobe -v quiet -print_format json -show_streams "${videoPath}"`
+      );
+      const probeData = JSON.parse(probeOutput);
+      const videoStream = probeData.streams.find(
+        (s: any) => s.codec_type === 'video'
+      );
+      if (!videoStream) {
+        throw new Error('No video stream found');
+      }
+      const videoWidth = videoStream.width;
+      const videoHeight = videoStream.height;
+
+      // Calculate overlay dimensions in pixels
+      const overlayWidth = Math.round((widthPercent / 100) * videoWidth);
+      const overlayHeight = Math.round((heightPercent / 100) * videoHeight);
       const imageBuffer = await overlayImage.arrayBuffer();
       const imagePath = path.join(tempDir, 'overlay.png');
       await fs.promises.writeFile(imagePath, Buffer.from(imageBuffer));
@@ -56,13 +72,11 @@ export async function POST(request: NextRequest) {
       // Apply FFmpeg overlay
       const outputPath = path.join(tempDir, 'output.mp4');
 
-      // Calculate position in pixels (assuming 1920x1080 base resolution)
-      const baseWidth = 1920;
-      const baseHeight = 1080;
-      const x = Math.round((positionX / 100) * baseWidth - width / 2);
-      const y = Math.round((positionY / 100) * baseHeight - height / 2);
-
-      const ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${imagePath}" -filter_complex "[1:v]scale=${width}:${height}[overlay];[0:v][overlay]overlay=${x}:${y}" -c:a copy "${outputPath}"`;
+      const ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${imagePath}" -filter_complex "[1:v]scale=${overlayWidth}:${overlayHeight}[overlay];[0:v][overlay]overlay=W*${
+        positionX / 100
+      }-(${overlayWidth})/2:H*${
+        positionY / 100
+      }-(${overlayHeight})/2" -c:a copy "${outputPath}"`;
 
       await execAsync(ffmpegCommand);
 

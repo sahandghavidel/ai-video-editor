@@ -1470,8 +1470,8 @@ export default function SceneCard({
       formData.append('overlayImage', overlayImage);
       formData.append('positionX', position.x.toString());
       formData.append('positionY', position.y.toString());
-      formData.append('width', size.width.toString());
-      formData.append('height', size.height.toString());
+      formData.append('widthPercent', size.width.toString());
+      formData.append('heightPercent', size.height.toString());
 
       const response = await fetch('/api/add-image-overlay', {
         method: 'POST',
