@@ -36,6 +36,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,6 +70,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const video = videoRef.current;
     if (video && video.duration) {
       setEndTime(video.duration);
+      setDuration(video.duration);
+
+      // Add event listeners for video state
+      video.addEventListener('timeupdate', () => {
+        setCurrentTime(video.currentTime);
+      });
+
+      video.addEventListener('play', () => {
+        setIsPlaying(true);
+      });
+
+      video.addEventListener('pause', () => {
+        setIsPlaying(false);
+      });
+
+      video.addEventListener('ended', () => {
+        setIsPlaying(false);
+      });
     }
   }, []);
 
@@ -371,22 +392,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setPreviewUrl(null);
   }, [onClose]);
 
-  // Handle ESC key to close preview
+  // Cleanup video event listeners
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && previewUrl) {
-        setPreviewUrl(null);
+    const video = videoRef.current;
+    return () => {
+      if (video) {
+        video.removeEventListener('timeupdate', () => {});
+        video.removeEventListener('play', () => {});
+        video.removeEventListener('pause', () => {});
+        video.removeEventListener('ended', () => {});
       }
     };
-
-    if (previewUrl) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [previewUrl]);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -414,12 +431,50 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             <video
               ref={videoRef}
               src={videoUrl}
-              className={`w-full h-full object-contain rounded border ${
-                overlayImageUrl ? 'pointer-events-none' : ''
-              }`}
-              controls
+              className='w-full h-full object-contain rounded border'
               onLoadedMetadata={handleVideoLoad}
             />
+            {/* Custom Controls */}
+            <div className='absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 p-2 flex items-center justify-center space-x-2 pointer-events-auto'>
+              <button
+                onClick={() => {
+                  const video = videoRef.current;
+                  if (video) {
+                    if (video.paused) {
+                      video.play();
+                    } else {
+                      video.pause();
+                    }
+                  }
+                }}
+                className='text-white hover:text-blue-400 text-lg'
+              >
+                {isPlaying ? '⏸️' : '▶️'}
+              </button>
+              <input
+                type='range'
+                min='0'
+                max={duration}
+                value={currentTime}
+                onChange={(e) => {
+                  const video = videoRef.current;
+                  if (video) {
+                    video.currentTime = parseFloat(e.target.value);
+                  }
+                }}
+                className='flex-1'
+              />
+              <span className='text-white text-sm'>
+                {Math.floor(currentTime / 60)}:
+                {Math.floor(currentTime % 60)
+                  .toString()
+                  .padStart(2, '0')}{' '}
+                / {Math.floor(duration / 60)}:
+                {Math.floor(duration % 60)
+                  .toString()
+                  .padStart(2, '0')}
+              </span>
+            </div>
             {overlayImageUrl && (
               <div
                 className='absolute border-2 border-blue-500 cursor-move pointer-events-auto'
