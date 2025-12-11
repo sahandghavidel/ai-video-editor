@@ -86,6 +86,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayImage(file);
         const url = URL.createObjectURL(file);
         setOverlayImageUrl(url);
+        // Clear text overlay when adding image
+        setSelectedWordText(null);
+        setCustomText('');
       }
     },
     []
@@ -1051,6 +1054,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     onClick={() => {
                       if (customText.trim()) {
                         setSelectedWordText(customText.trim());
+                        // Clear image overlay when adding text
+                        setOverlayImage(null);
+                        setOverlayImageUrl(null);
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = '';
+                        }
                       }
                     }}
                     disabled={!customText.trim()}
