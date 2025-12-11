@@ -48,6 +48,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     start: number;
     end: number;
   }> | null>(null);
+  const [selectedWordIndex, setSelectedWordIndex] = useState<number | null>(
+    null
+  );
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
 
@@ -385,6 +388,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setEndTime(0);
     setPreviewUrl(null);
     setTranscriptionWords(null);
+    setSelectedWordIndex(null);
+    setSelectedWordIndex(null);
   }, [onClose]);
 
   // Fetch transcription data
@@ -776,19 +781,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             {/* Transcription Words */}
             {transcriptionWords && transcriptionWords.length > 0 ? (
               <div className='space-y-2'>
-                <div className='max-h-32 overflow-y-auto bg-gray-50 p-3 rounded border'>
+                <div className='max-h-48 overflow-y-auto bg-gray-50 p-3 rounded border'>
                   <div className='flex flex-wrap gap-1'>
                     {transcriptionWords.map((wordData, index) => (
                       <button
                         key={index}
                         onClick={() => {
                           setStartTime(wordData.start);
+                          setSelectedWordIndex(index);
                           // Also seek the video to this time
                           if (videoRef.current) {
                             videoRef.current.currentTime = wordData.start;
                           }
                         }}
-                        className='px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors'
+                        className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                          selectedWordIndex === index
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-blue-50 hover:border-blue-300'
+                        }`}
                         title={`Click to set start time to ${wordData.start}s`}
                       >
                         {wordData.word}
