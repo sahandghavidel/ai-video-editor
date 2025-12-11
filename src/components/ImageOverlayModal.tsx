@@ -42,7 +42,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const getVideoContentRect = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return null;
+    if (!video || video.readyState < 2)
+      return video?.getBoundingClientRect() || null;
 
     const rect = video.getBoundingClientRect();
     const videoWidth = video.videoWidth;
@@ -109,14 +110,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       const overlayHeight_px = (overlaySize.height / 100) * contentRect.height;
 
       // Check if clicking on resize handle (bottom-right corner)
-      const resizeHandleX = overlayX_px + overlayWidth_px - 6; // 6px is handle size
-      const resizeHandleY = overlayY_px + overlayHeight_px - 6;
+      const resizeHandleX = overlayX_px + overlayWidth_px - 8; // 8px is handle size
+      const resizeHandleY = overlayY_px + overlayHeight_px - 8;
 
       if (
         x >= resizeHandleX &&
-        x <= resizeHandleX + 6 &&
+        x <= resizeHandleX + 8 &&
         y >= resizeHandleY &&
-        y <= resizeHandleY + 6
+        y <= resizeHandleY + 8
       ) {
         setIsResizing(true);
         setDragStart({
@@ -266,15 +267,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   height: `${overlaySize.height}%`,
                   transform: 'translate(-50%, -50%)',
                 }}
+                onMouseDown={handleMouseDown}
               >
                 <img
                   src={overlayImageUrl}
                   alt='Overlay'
-                  className='w-full h-full object-cover pointer-events-none'
+                  className='w-full h-full object-cover'
                   draggable={false}
+                  onMouseDown={handleMouseDown}
                 />
                 {/* Resize handle */}
-                <div className='absolute bottom-0 right-0 w-6 h-6 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100' />
+                <div
+                  className='absolute bottom-0 right-0 w-8 h-8 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100 border-2 border-white'
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleMouseDown(e);
+                  }}
+                />
               </div>
             )}
           </div>
