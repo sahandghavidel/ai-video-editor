@@ -205,7 +205,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   return (
     <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
-      <div className='bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden'>
+      <div className='bg-white rounded-lg p-8 w-full mx-2 h-[95vh] overflow-hidden'>
         <div className='flex justify-between items-center mb-4'>
           <h2 className='text-xl font-semibold'>Add Image Overlay</h2>
           <button
@@ -216,10 +216,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </button>
         </div>
 
-        <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
+        <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
           {/* Video Preview */}
           <div
-            className='relative aspect-video'
+            className='relative lg:col-span-2'
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
