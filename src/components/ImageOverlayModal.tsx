@@ -595,9 +595,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           <div className='space-y-4'>
             {/* Image Upload */}
             <div>
-              <label className='block text-sm font-medium mb-2'>
-                Overlay Image
-              </label>
               <input
                 ref={fileInputRef}
                 type='file'
@@ -620,10 +617,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             </div>
 
             {/* Position Controls */}
+            {/* Position and Size Controls */}
             {overlayImageUrl && (
               <div className='space-y-2'>
-                <label className='block text-sm font-medium'>Position</label>
-                <div className='grid grid-cols-2 gap-2'>
+                <div className='grid grid-cols-4 gap-2'>
                   <div>
                     <label className='block text-xs text-gray-600'>X (%)</label>
                     <input
@@ -656,15 +653,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       max='100'
                     />
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Size Controls */}
-            {overlayImageUrl && (
-              <div className='space-y-2'>
-                <label className='block text-sm font-medium'>Size</label>
-                <div className='grid grid-cols-2 gap-2'>
                   <div>
                     <label className='block text-xs text-gray-600'>
                       Width (%)
