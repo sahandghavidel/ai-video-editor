@@ -11,7 +11,8 @@ interface ImageOverlayModalProps {
   sceneId: number;
   onApply: (
     sceneId: number,
-    overlayImage: File,
+    overlayImage: File | null,
+    overlayText: string | null,
     position: { x: number; y: number },
     size: { width: number; height: number },
     startTime: number,
@@ -51,6 +52,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [selectedWordIndex, setSelectedWordIndex] = useState<number | null>(
     null
   );
+  const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
+  const [customText, setCustomText] = useState<string>('');
+  const [textOverlayPosition, setTextOverlayPosition] = useState({
+    x: 50,
+    y: 80,
+  }); // percentage
+  const [textOverlaySize, setTextOverlaySize] = useState({
+    width: 20,
+    height: 10,
+  }); // percentage
+  const [isDraggingText, setIsDraggingText] = useState(false);
+  const [isResizingText, setIsResizingText] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
 
@@ -253,6 +266,168 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect]
   );
 
+  const handleTextMouseDown = useCallback(
+    (event: React.PointerEvent) => {
+      if (!selectedWordText) return;
+
+      const contentRect = getVideoContentRect();
+      if (!contentRect) return;
+
+      const x = event.clientX - contentRect.left;
+      const y = event.clientY - contentRect.top;
+
+      // Check if clicking on the text overlay
+      const textX = textOverlayPosition.x - textOverlaySize.width / 2;
+      const textY = textOverlayPosition.y - textOverlaySize.height / 2;
+
+      // Convert to pixels
+      const textX_px = (textX / 100) * contentRect.width;
+      const textY_px = (textY / 100) * contentRect.height;
+      const textWidth_px = (textOverlaySize.width / 100) * contentRect.width;
+      const textHeight_px = (textOverlaySize.height / 100) * contentRect.height;
+
+      // Check if clicking near edges/corners for resizing (within 10px of edges)
+      const edgeThreshold = 10;
+      const nearLeftEdge =
+        x >= textX_px - edgeThreshold && x <= textX_px + edgeThreshold;
+      const nearRightEdge =
+        x >= textX_px + textWidth_px - edgeThreshold &&
+        x <= textX_px + textWidth_px + edgeThreshold;
+      const nearTopEdge =
+        y >= textY_px - edgeThreshold && y <= textY_px + edgeThreshold;
+      const nearBottomEdge =
+        y >= textY_px + textHeight_px - edgeThreshold &&
+        y <= textY_px + textHeight_px + edgeThreshold;
+
+      const isNearEdge =
+        nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
+
+      if (isNearEdge) {
+        // Start resizing - determine resize direction based on which edges are near
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startSize = { ...textOverlaySize };
+        const startPos = { ...textOverlayPosition };
+        const pointerId = event.pointerId;
+
+        setIsResizingText(true);
+
+        const handleGlobalPointerMove = (e: PointerEvent) => {
+          const rect = getVideoContentRect();
+          if (!rect) return;
+
+          let newWidth = startSize.width;
+          let newHeight = startSize.height;
+          let newX = startPos.x;
+          let newY = startPos.y;
+
+          // Handle horizontal resizing
+          if (nearLeftEdge) {
+            const deltaX = ((e.clientX - startX) / rect.width) * 100;
+            newWidth = Math.max(5, startSize.width - deltaX);
+            newX = startPos.x + deltaX / 2; // Move position to keep right edge in place
+          } else if (nearRightEdge) {
+            const deltaX = ((e.clientX - startX) / rect.width) * 100;
+            newWidth = Math.max(5, startSize.width + deltaX);
+          }
+
+          // Handle vertical resizing
+          if (nearTopEdge) {
+            const deltaY = ((e.clientY - startY) / rect.height) * 100;
+            newHeight = Math.max(5, startSize.height - deltaY);
+            newY = startPos.y + deltaY / 2; // Move position to keep bottom edge in place
+          } else if (nearBottomEdge) {
+            const deltaY = ((e.clientY - startY) / rect.height) * 100;
+            newHeight = Math.max(5, startSize.height + deltaY);
+          }
+
+          setTextOverlaySize({
+            width: Math.min(newWidth, 100),
+            height: Math.min(newHeight, 100),
+          });
+
+          // Update position if resizing from top/left
+          if (nearLeftEdge || nearTopEdge) {
+            setTextOverlayPosition({
+              x: Math.max(0, Math.min(100, newX)),
+              y: Math.max(0, Math.min(100, newY)),
+            });
+          }
+        };
+
+        const handleGlobalPointerUp = () => {
+          setIsResizingText(false);
+          document.removeEventListener('pointermove', handleGlobalPointerMove);
+          document.removeEventListener('pointerup', handleGlobalPointerUp);
+          // Release pointer capture
+          try {
+            (event.target as Element)?.releasePointerCapture(pointerId);
+          } catch (e) {
+            // Ignore errors if pointer capture wasn't set
+          }
+        };
+
+        document.addEventListener('pointermove', handleGlobalPointerMove);
+        document.addEventListener('pointerup', handleGlobalPointerUp);
+
+        // Capture pointer to ensure mouse events are received even outside the element
+        (event.target as Element).setPointerCapture(event.pointerId);
+        event.preventDefault();
+      } else if (
+        x >= textX_px &&
+        x <= textX_px + textWidth_px &&
+        y >= textY_px &&
+        y <= textY_px + textHeight_px
+      ) {
+        // Start dragging (center area)
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startPos = { ...textOverlayPosition };
+        const pointerId = event.pointerId;
+
+        setIsDraggingText(true);
+
+        const handleGlobalPointerMove = (e: PointerEvent) => {
+          const rect = getVideoContentRect();
+          if (!rect) return;
+
+          const deltaX = ((e.clientX - startX) / rect.width) * 100;
+          const deltaY = ((e.clientY - startY) / rect.height) * 100;
+
+          setTextOverlayPosition({
+            x: Math.max(0, Math.min(100, startPos.x + deltaX)),
+            y: Math.max(0, Math.min(100, startPos.y + deltaY)),
+          });
+        };
+
+        const handleGlobalPointerUp = () => {
+          setIsDraggingText(false);
+          document.removeEventListener('pointermove', handleGlobalPointerMove);
+          document.removeEventListener('pointerup', handleGlobalPointerUp);
+          // Release pointer capture
+          try {
+            (event.target as Element)?.releasePointerCapture(pointerId);
+          } catch (e) {
+            // Ignore errors if pointer capture wasn't set
+          }
+        };
+
+        document.addEventListener('pointermove', handleGlobalPointerMove);
+        document.addEventListener('pointerup', handleGlobalPointerUp);
+
+        // Capture pointer to ensure mouse events are received even outside the element
+        (event.target as Element).setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }
+    },
+    [
+      selectedWordText,
+      textOverlayPosition,
+      textOverlaySize,
+      getVideoContentRect,
+    ]
+  );
+
   const handlePointerMove = useCallback(
     (event: React.PointerEvent) => {
       if (!overlayImageUrl) return;
@@ -318,16 +493,33 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, []);
 
   const handlePreview = useCallback(async () => {
-    if (!overlayImage) return;
+    if (!overlayImage && !selectedWordText) return;
 
     const formData = new FormData();
     formData.append('videoUrl', videoUrl);
     formData.append('sceneId', sceneId.toString());
-    formData.append('overlayImage', overlayImage);
-    formData.append('positionX', overlayPosition.x.toString());
-    formData.append('positionY', overlayPosition.y.toString());
-    formData.append('sizeWidth', overlaySize.width.toString());
-    formData.append('sizeHeight', overlaySize.height.toString());
+    if (overlayImage) {
+      formData.append('overlayImage', overlayImage);
+    }
+    if (selectedWordText) {
+      formData.append('overlayText', selectedWordText);
+    }
+    formData.append(
+      'positionX',
+      (overlayImage ? overlayPosition.x : textOverlayPosition.x).toString()
+    );
+    formData.append(
+      'positionY',
+      (overlayImage ? overlayPosition.y : textOverlayPosition.y).toString()
+    );
+    formData.append(
+      'sizeWidth',
+      (overlayImage ? overlaySize.width : textOverlaySize.width).toString()
+    );
+    formData.append(
+      'sizeHeight',
+      (overlayImage ? overlaySize.height : textOverlaySize.height).toString()
+    );
     formData.append('startTime', startTime.toString());
     formData.append('endTime', endTime.toString());
     formData.append('preview', 'true');
@@ -357,13 +549,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   ]);
 
   const handleApply = useCallback(async () => {
-    if (!overlayImage) return;
+    if (!overlayImage && !selectedWordText) return;
 
     await onApply(
       sceneId,
       overlayImage,
-      overlayPosition,
-      overlaySize,
+      selectedWordText,
+      overlayImage ? overlayPosition : textOverlayPosition,
+      overlayImage ? overlaySize : textOverlaySize,
       startTime,
       endTime
     );
@@ -374,11 +567,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayPosition({ x: 50, y: 50 });
     setOverlaySize({ width: 40, height: 40 });
     setPreviewUrl(null);
+    setSelectedWordText(null);
+    setSelectedWordIndex(null);
+    setCustomText('');
   }, [
     overlayImage,
+    selectedWordText,
     sceneId,
     overlayPosition,
     overlaySize,
+    textOverlayPosition,
+    textOverlaySize,
     startTime,
     endTime,
     onApply,
@@ -397,6 +596,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setPreviewUrl(null);
     setTranscriptionWords(null);
     setSelectedWordIndex(null);
+    setSelectedWordText(null);
+    setCustomText('');
+    setSelectedWordText(null);
     setSelectedWordIndex(null);
   }, [onClose]);
 
@@ -600,6 +802,27 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   draggable={false}
                   onPointerDown={handleMouseDown}
                 />
+              </div>
+            )}
+            {selectedWordText && (
+              <div
+                className='absolute border-2 border-green-500 cursor-move pointer-events-auto z-10 rounded px-2 py-1'
+                style={{
+                  left: `${textOverlayPosition.x}%`,
+                  top: `${textOverlayPosition.y}%`,
+                  width: `${textOverlaySize.width}%`,
+                  height: `${textOverlaySize.height}%`,
+                  transform: 'translate(-50%, -50%)',
+                  fontSize: `${
+                    Math.min(textOverlaySize.width, textOverlaySize.height) *
+                    0.8
+                  }vw`,
+                }}
+                onPointerDown={handleTextMouseDown}
+              >
+                <div className='w-full h-full flex items-center justify-center font-bold text-white select-none drop-shadow-lg'>
+                  {selectedWordText}
+                </div>
               </div>
             )}
           </div>
@@ -808,6 +1031,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         onClick={() => {
                           setStartTime(wordData.start);
                           setSelectedWordIndex(index);
+                          setSelectedWordText(wordData.word);
+                          setCustomText(''); // Clear custom text when selecting a word
                           // Also seek the video to this time
                           if (videoRef.current) {
                             videoRef.current.currentTime = wordData.start;
@@ -824,6 +1049,28 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       </button>
                     ))}
                   </div>
+                </div>
+                {/* Custom Text Input */}
+                <div className='flex gap-2 mt-3'>
+                  <input
+                    type='text'
+                    value={customText}
+                    onChange={(e) => setCustomText(e.target.value)}
+                    placeholder='Enter custom text for overlay...'
+                    className='flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                  />
+                  <button
+                    onClick={() => {
+                      if (customText.trim()) {
+                        setSelectedWordText(customText.trim());
+                        setSelectedWordIndex(null); // Clear word selection
+                      }
+                    }}
+                    disabled={!customText.trim()}
+                    className='px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                  >
+                    Add Text
+                  </button>
                 </div>
               </div>
             ) : (
@@ -877,14 +1124,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </button>
           <button
             onClick={handlePreview}
-            disabled={!overlayImage || isApplying}
+            disabled={!(overlayImage || selectedWordText) || isApplying}
             className='px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
           >
             Preview
           </button>
           <button
             onClick={handleApply}
-            disabled={!overlayImage || isApplying}
+            disabled={!(overlayImage || selectedWordText) || isApplying}
             className='flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
           >
             {isApplying ? (

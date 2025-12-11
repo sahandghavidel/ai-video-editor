@@ -1457,7 +1457,8 @@ export default function SceneCard({
 
   const handleApplyImageOverlay = async (
     sceneId: number,
-    overlayImage: File,
+    overlayImage: File | null,
+    overlayText: string | null,
     position: { x: number; y: number },
     size: { width: number; height: number },
     startTime: number,
@@ -1469,7 +1470,12 @@ export default function SceneCard({
       const formData = new FormData();
       formData.append('sceneId', sceneId.toString());
       formData.append('videoUrl', imageOverlayModal.videoUrl!);
-      formData.append('overlayImage', overlayImage);
+      if (overlayImage) {
+        formData.append('overlayImage', overlayImage);
+      }
+      if (overlayText) {
+        formData.append('overlayText', overlayText);
+      }
       formData.append('positionX', position.x.toString());
       formData.append('positionY', position.y.toString());
       formData.append('sizeWidth', size.width.toString());
@@ -1484,7 +1490,7 @@ export default function SceneCard({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to add image overlay');
+        throw new Error(errorData.error || 'Failed to add overlay');
       }
 
       const result = await response.json();
