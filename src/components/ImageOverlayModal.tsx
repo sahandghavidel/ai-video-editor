@@ -756,15 +756,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             {/* Transcription Words */}
             {transcriptionWords && transcriptionWords.length > 0 && (
               <div className='space-y-2'>
-                <label className='block text-sm font-medium'>
-                  Transcription
-                </label>
                 <div className='max-h-32 overflow-y-auto bg-gray-50 p-3 rounded border'>
                   <div className='flex flex-wrap gap-1'>
                     {transcriptionWords.map((wordData, index) => (
                       <button
                         key={index}
-                        onClick={() => setStartTime(wordData.start)}
+                        onClick={() => {
+                          setStartTime(wordData.start);
+                          // Also seek the video to this time
+                          if (videoRef.current) {
+                            videoRef.current.currentTime = wordData.start;
+                          }
+                        }}
                         className='px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors'
                         title={`Click to set start time to ${wordData.start}s`}
                       >
@@ -773,9 +776,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     ))}
                   </div>
                 </div>
-                <p className='text-xs text-gray-500'>
-                  Click any word to set the start time
-                </p>
               </div>
             )}
           </div>
