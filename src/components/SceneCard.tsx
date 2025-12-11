@@ -30,7 +30,9 @@ import {
   Minus,
   Upload,
   FastForward,
+  ImageIcon,
 } from 'lucide-react';
+import { ImageOverlayModal } from './ImageOverlayModal';
 
 // Helper: get original sentence from field_6901
 
@@ -185,6 +187,20 @@ export default function SceneCard({
   >('none');
   // Dropdown open state for pan mode selector - stores the scene ID of the open dropdown (null if closed)
   const [panModeDropdownOpen, setPanModeDropdownOpen] = useState<number | null>(
+    null
+  );
+
+  // Image overlay modal state
+  const [imageOverlayModal, setImageOverlayModal] = useState<{
+    isOpen: boolean;
+    sceneId: number | null;
+    videoUrl: string | null;
+  }>({
+    isOpen: false,
+    sceneId: null,
+    videoUrl: null,
+  });
+  const [addingImageOverlay, setAddingImageOverlay] = useState<number | null>(
     null
   );
 
@@ -1427,6 +1443,65 @@ export default function SceneCard({
     if (video) {
       video.pause();
       setPlayingProducedVideo(null);
+    }
+  };
+
+  // Image overlay handlers
+  const handleOpenImageOverlayModal = (sceneId: number, videoUrl: string) => {
+    setImageOverlayModal({
+      isOpen: true,
+      sceneId,
+      videoUrl,
+    });
+  };
+
+  const handleApplyImageOverlay = async (
+    sceneId: number,
+    overlayImage: File,
+    position: { x: number; y: number },
+    size: { width: number; height: number }
+  ) => {
+    try {
+      setAddingImageOverlay(sceneId);
+
+      const formData = new FormData();
+      formData.append('sceneId', sceneId.toString());
+      formData.append('videoUrl', imageOverlayModal.videoUrl!);
+      formData.append('overlayImage', overlayImage);
+      formData.append('positionX', position.x.toString());
+      formData.append('positionY', position.y.toString());
+      formData.append('width', size.width.toString());
+      formData.append('height', size.height.toString());
+
+      const response = await fetch('/api/add-image-overlay', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add image overlay');
+      }
+
+      const result = await response.json();
+
+      // Update the scene with the new video URL
+      await updateBaserowRow(sceneId, {
+        field_6886: result.url, // Update the final video field
+      });
+
+      // Refresh data to show the updated video
+      if (refreshDataRef.current) {
+        refreshDataRef.current();
+      }
+
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error adding image overlay:', error);
+      playErrorSound();
+      throw error;
+    } finally {
+      setAddingImageOverlay(null);
     }
   };
 
@@ -4375,6 +4450,37 @@ export default function SceneCard({
                         </span>
                       </button>
                     )}
+
+                  {/* Image Overlay Button */}
+                  {typeof scene['field_6886'] === 'string' &&
+                    scene['field_6886'] && (
+                      <button
+                        onClick={() =>
+                          handleOpenImageOverlayModal(
+                            scene.id,
+                            scene['field_6886'] as string
+                          )
+                        }
+                        disabled={addingImageOverlay === scene.id}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
+                          addingImageOverlay === scene.id
+                            ? 'bg-gray-100 text-gray-500'
+                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title='Add image overlay to final video'
+                      >
+                        {addingImageOverlay === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <ImageIcon className='h-3 w-3' />
+                        )}
+                        <span>
+                          {addingImageOverlay === scene.id
+                            ? 'Adding...'
+                            : 'Add Image'}
+                        </span>
+                      </button>
+                    )}
                 </div>
               </div>
             </div>
@@ -4500,6 +4606,18 @@ export default function SceneCard({
           />
         </svg>
       </button>
+
+      {/* Image Overlay Modal */}
+      <ImageOverlayModal
+        isOpen={imageOverlayModal.isOpen}
+        onClose={() =>
+          setImageOverlayModal({ isOpen: false, sceneId: null, videoUrl: null })
+        }
+        videoUrl={imageOverlayModal.videoUrl || ''}
+        sceneId={imageOverlayModal.sceneId || 0}
+        onApply={handleApplyImageOverlay}
+        isApplying={addingImageOverlay !== null}
+      />
     </div>
   );
 }
