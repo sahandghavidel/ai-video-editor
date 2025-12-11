@@ -81,6 +81,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     []
   );
 
+  const handleRemoveImage = useCallback(() => {
+    setOverlayImage(null);
+    setOverlayImageUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
   const handleVideoLoad = useCallback(() => {
     const video = videoRef.current;
     if (video && video.duration) {
@@ -607,13 +615,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 onChange={handleImageUpload}
                 className='hidden'
               />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className='flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50'
-              >
-                <Upload className='h-4 w-4' />
-                <span>{overlayImage ? 'Change Image' : 'Upload Image'}</span>
-              </button>
+              <div className='flex items-center space-x-2'>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className='flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50'
+                >
+                  <Upload className='h-4 w-4' />
+                  <span>{overlayImage ? 'Change Image' : 'Upload Image'}</span>
+                </button>
+                {overlayImage && (
+                  <button
+                    onClick={handleRemoveImage}
+                    className='flex items-center space-x-2 px-3 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50 hover:border-red-400'
+                    title='Remove image'
+                  >
+                    <X className='h-4 w-4' />
+                  </button>
+                )}
+              </div>
               {overlayImage && (
                 <p className='text-sm text-gray-600 mt-1'>
                   {overlayImage.name}
