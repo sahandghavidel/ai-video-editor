@@ -33,12 +33,48 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [resizeStartSize, setResizeStartSize] = useState({
-    width: 200,
-    height: 200,
+    width: 20,
+    height: 20,
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getVideoContentRect = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return null;
+
+    const rect = video.getBoundingClientRect();
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+
+    if (!videoWidth || !videoHeight) return rect; // fallback
+
+    // Calculate the scale to fit the container while maintaining aspect ratio
+    const containerAspect = rect.width / rect.height;
+    const videoAspect = videoWidth / videoHeight;
+
+    let contentWidth, contentHeight;
+    if (containerAspect > videoAspect) {
+      // Container is wider, fit by height
+      contentHeight = rect.height;
+      contentWidth = contentHeight * videoAspect;
+    } else {
+      // Container is taller, fit by width
+      contentWidth = rect.width;
+      contentHeight = contentWidth / videoAspect;
+    }
+
+    const contentLeft = rect.left + (rect.width - contentWidth) / 2;
+    const contentTop = rect.top + (rect.height - contentHeight) / 2;
+
+    return {
+      left: contentLeft,
+      top: contentTop,
+      width: contentWidth,
+      height: contentHeight,
+    };
+  }, []);
 
   const handleImageUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,21 +92,21 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     (event: React.MouseEvent) => {
       if (!overlayImageUrl) return;
 
-      const rect = videoRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      const contentRect = getVideoContentRect();
+      if (!contentRect) return;
 
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      const x = event.clientX - contentRect.left;
+      const y = event.clientY - contentRect.top;
 
       // Check if clicking on the overlay image
       const overlayX = overlayPosition.x - overlaySize.width / 2;
       const overlayY = overlayPosition.y - overlaySize.height / 2;
 
       // Convert to pixels
-      const overlayX_px = (overlayX / 100) * rect.width;
-      const overlayY_px = (overlayY / 100) * rect.height;
-      const overlayWidth_px = (overlaySize.width / 100) * rect.width;
-      const overlayHeight_px = (overlaySize.height / 100) * rect.height;
+      const overlayX_px = (overlayX / 100) * contentRect.width;
+      const overlayY_px = (overlayY / 100) * contentRect.height;
+      const overlayWidth_px = (overlaySize.width / 100) * contentRect.width;
+      const overlayHeight_px = (overlaySize.height / 100) * contentRect.height;
 
       // Check if clicking on resize handle (bottom-right corner)
       const resizeHandleX = overlayX_px + overlayWidth_px - 6; // 6px is handle size
@@ -96,35 +132,49 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       ) {
         setIsDragging(true);
         setDragStart({
-          x: event.clientX - rect.left - overlayX_px - overlayWidth_px / 2,
-          y: event.clientY - rect.top - overlayY_px - overlayHeight_px / 2,
+          x:
+            event.clientX -
+            contentRect.left -
+            overlayX_px -
+            overlayWidth_px / 2,
+          y:
+            event.clientY -
+            contentRect.top -
+            overlayY_px -
+            overlayHeight_px / 2,
         });
       }
     },
-    [overlayImageUrl, overlayPosition, overlaySize]
+    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect]
   );
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent) => {
       if (isDragging) {
-        const rect = videoRef.current?.getBoundingClientRect();
-        if (!rect) return;
+        const contentRect = getVideoContentRect();
+        if (!contentRect) return;
 
         const newX =
-          ((event.clientX - rect.left - dragStart.x) / rect.width) * 100;
+          ((event.clientX - contentRect.left - dragStart.x) /
+            contentRect.width) *
+          100;
         const newY =
-          ((event.clientY - rect.top - dragStart.y) / rect.height) * 100;
+          ((event.clientY - contentRect.top - dragStart.y) /
+            contentRect.height) *
+          100;
 
         setOverlayPosition({
           x: Math.max(0, Math.min(100, newX)),
           y: Math.max(0, Math.min(100, newY)),
         });
       } else if (isResizing) {
-        const rect = videoRef.current?.getBoundingClientRect();
-        if (!rect) return;
+        const contentRect = getVideoContentRect();
+        if (!contentRect) return;
 
-        const deltaX = ((event.clientX - dragStart.x) / rect.width) * 100;
-        const deltaY = ((event.clientY - dragStart.y) / rect.height) * 100;
+        const deltaX =
+          ((event.clientX - dragStart.x) / contentRect.width) * 100;
+        const deltaY =
+          ((event.clientY - dragStart.y) / contentRect.height) * 100;
 
         const newWidth = Math.max(5, resizeStartSize.width + deltaX);
         const newHeight = Math.max(5, resizeStartSize.height + deltaY);
@@ -135,7 +185,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         });
       }
     },
-    [isDragging, isResizing, dragStart, overlaySize, resizeStartSize]
+    [
+      isDragging,
+      isResizing,
+      dragStart,
+      overlaySize,
+      resizeStartSize,
+      getVideoContentRect,
+    ]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -187,7 +244,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
           {/* Video Preview */}
           <div
-            className='relative'
+            className='relative aspect-video'
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -196,7 +253,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             <video
               ref={videoRef}
               src={videoUrl}
-              className='w-full rounded border'
+              className='w-full h-full object-contain rounded border'
               controls
             />
             {overlayImageUrl && (
