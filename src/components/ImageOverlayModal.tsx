@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Upload, Loader2 } from 'lucide-react';
 
 interface ImageOverlayModalProps {
@@ -267,6 +267,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setEndTime(0);
     setPreviewUrl(null);
   }, [onClose]);
+
+  // Handle ESC key to close preview
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && previewUrl) {
+        setPreviewUrl(null);
+      }
+    };
+
+    if (previewUrl) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [previewUrl]);
 
   if (!isOpen) return null;
 
