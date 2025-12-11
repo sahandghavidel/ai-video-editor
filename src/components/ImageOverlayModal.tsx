@@ -630,6 +630,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       min='0'
                       step='0.1'
                     />
+                    <button
+                      onClick={() => {
+                        const video = videoRef.current;
+                        if (video) {
+                          setStartTime(video.currentTime);
+                        }
+                      }}
+                      className='mt-1 w-full px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium'
+                    >
+                      Set Current Time
+                    </button>
                   </div>
                   <div>
                     <label className='block text-xs text-gray-600'>
@@ -643,6 +654,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       min='0'
                       step='0.1'
                     />
+                    <button
+                      onClick={() => {
+                        const video = videoRef.current;
+                        if (video) {
+                          setEndTime(video.currentTime);
+                        }
+                      }}
+                      className='mt-1 w-full px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium'
+                    >
+                      Set Current Time
+                    </button>
                   </div>
                 </div>
               </div>
