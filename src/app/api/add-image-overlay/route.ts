@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       // Apply FFmpeg overlay
       const outputPath = path.join(tempDir, 'output.mp4');
 
-      const ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${imagePath}" -filter_complex "[1:v]scale=${overlayWidth}:${overlayHeight}[overlay];[0:v][overlay]overlay=W*${
+      const ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${imagePath}" -filter_complex "[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay];[0:v][overlay]overlay=W*${
         positionX / 100
       }-(${overlayWidth})/2:H*${
         positionY / 100
