@@ -252,7 +252,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 />
                 {/* Resize handle */}
                 <div
-                  className='absolute bottom-0 right-0 w-12 h-12 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100 border-2 border-white'
+                  className='absolute bottom-0 right-0 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100 border-2 border-white'
+                  style={{
+                    width: `${overlaySize.width * 0.2}%`,
+                    height: `${overlaySize.height * 0.2}%`,
+                  }}
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     setIsResizing(true);
