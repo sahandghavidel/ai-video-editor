@@ -36,9 +36,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,24 +67,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const video = videoRef.current;
     if (video && video.duration) {
       setEndTime(video.duration);
-      setDuration(video.duration);
-
-      // Add event listeners for video state
-      video.addEventListener('timeupdate', () => {
-        setCurrentTime(video.currentTime);
-      });
-
-      video.addEventListener('play', () => {
-        setIsPlaying(true);
-      });
-
-      video.addEventListener('pause', () => {
-        setIsPlaying(false);
-      });
-
-      video.addEventListener('ended', () => {
-        setIsPlaying(false);
-      });
     }
   }, []);
 
@@ -392,16 +371,26 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setPreviewUrl(null);
   }, [onClose]);
 
-  // Cleanup video event listeners
+  // Handle keyboard controls
   useEffect(() => {
-    const video = videoRef.current;
-    return () => {
-      if (video) {
-        video.removeEventListener('timeupdate', () => {});
-        video.removeEventListener('play', () => {});
-        video.removeEventListener('pause', () => {});
-        video.removeEventListener('ended', () => {});
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Spacebar for play/pause
+      if (event.code === 'Space') {
+        event.preventDefault();
+        const video = videoRef.current;
+        if (video) {
+          if (video.paused) {
+            video.play();
+          } else {
+            video.pause();
+          }
+        }
       }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -432,52 +421,55 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               ref={videoRef}
               src={videoUrl}
               className='w-full h-full object-contain rounded border'
+              controls
               onLoadedMetadata={handleVideoLoad}
             />
-            {/* Custom Controls */}
-            <div className='absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 p-2 flex items-center justify-center space-x-2 pointer-events-auto'>
-              <button
-                onClick={() => {
-                  const video = videoRef.current;
-                  if (video) {
-                    if (video.paused) {
-                      video.play();
-                    } else {
-                      video.pause();
-                    }
-                  }
-                }}
-                className='text-white hover:text-blue-400 text-lg'
-              >
-                {isPlaying ? '⏸️' : '▶️'}
-              </button>
-              <input
-                type='range'
-                min='0'
-                max={duration}
-                value={currentTime}
-                onChange={(e) => {
-                  const video = videoRef.current;
-                  if (video) {
-                    video.currentTime = parseFloat(e.target.value);
-                  }
-                }}
-                className='flex-1'
-              />
-              <span className='text-white text-sm'>
-                {Math.floor(currentTime / 60)}:
-                {Math.floor(currentTime % 60)
-                  .toString()
-                  .padStart(2, '0')}{' '}
-                / {Math.floor(duration / 60)}:
-                {Math.floor(duration % 60)
-                  .toString()
-                  .padStart(2, '0')}
-              </span>
-            </div>
+            {/* Invisible overlay to capture clicks when there's an overlay - excludes controls area */}
             {overlayImageUrl && (
               <div
-                className='absolute border-2 border-blue-500 cursor-move pointer-events-auto'
+                className='absolute pointer-events-auto z-5'
+                style={{
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: '40px', // Leave space for video controls at bottom
+                }}
+                onPointerDown={(e) => {
+                  // Only prevent default if clicking in overlay area
+                  const contentRect = getVideoContentRect();
+                  if (!contentRect) return;
+
+                  const x = e.clientX - contentRect.left;
+                  const y = e.clientY - contentRect.top;
+
+                  const overlayX = overlayPosition.x - overlaySize.width / 2;
+                  const overlayY = overlayPosition.y - overlaySize.height / 2;
+                  const overlayX_px = (overlayX / 100) * contentRect.width;
+                  const overlayY_px = (overlayY / 100) * contentRect.height;
+                  const overlayWidth_px =
+                    (overlaySize.width / 100) * contentRect.width;
+                  const overlayHeight_px =
+                    (overlaySize.height / 100) * contentRect.height;
+
+                  // If clicking within overlay bounds, handle overlay interaction
+                  if (
+                    x >= overlayX_px &&
+                    x <= overlayX_px + overlayWidth_px &&
+                    y >= overlayY_px &&
+                    y <= overlayY_px + overlayHeight_px
+                  ) {
+                    handleMouseDown(e);
+                  } else {
+                    // Outside overlay - allow video surface clicks (but not controls)
+                    // This will still prevent accidental play/pause on video surface
+                    e.preventDefault();
+                  }
+                }}
+              />
+            )}
+            {overlayImageUrl && (
+              <div
+                className='absolute border-2 border-blue-500 cursor-move pointer-events-auto z-20'
                 style={{
                   left: `${overlayPosition.x}%`,
                   top: `${overlayPosition.y}%`,
