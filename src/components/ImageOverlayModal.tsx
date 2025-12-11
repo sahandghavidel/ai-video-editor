@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, Upload, Loader2 } from 'lucide-react';
+import { X, Upload, Loader2, RotateCcw, Maximize } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 
 interface ImageOverlayModalProps {
@@ -37,7 +37,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
   const [overlayPosition, setOverlayPosition] = useState({ x: 50, y: 50 }); // percentage
-  const [overlaySize, setOverlaySize] = useState({ width: 20, height: 20 }); // percentage
+  const [overlaySize, setOverlaySize] = useState({ width: 40, height: 40 }); // percentage
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -361,7 +361,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayImage(null);
     setOverlayImageUrl(null);
     setOverlayPosition({ x: 50, y: 50 });
-    setOverlaySize({ width: 20, height: 20 });
+    setOverlaySize({ width: 40, height: 40 });
     setPreviewUrl(null);
   }, [
     overlayImage,
@@ -380,7 +380,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayImage(null);
     setOverlayImageUrl(null);
     setOverlayPosition({ x: 50, y: 50 });
-    setOverlaySize({ width: 20, height: 20 });
+    setOverlaySize({ width: 40, height: 40 });
     setStartTime(0);
     setEndTime(0);
     setPreviewUrl(null);
@@ -620,8 +620,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             {/* Position and Size Controls */}
             {overlayImageUrl && (
               <div className='space-y-2'>
-                <div className='grid grid-cols-4 gap-2'>
-                  <div>
+                <div className='flex gap-2 items-end w-full'>
+                  <div className='flex-1'>
                     <label className='block text-xs text-gray-600'>X (%)</label>
                     <input
                       type='number'
@@ -637,7 +637,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       max='100'
                     />
                   </div>
-                  <div>
+                  <div className='flex-1'>
                     <label className='block text-xs text-gray-600'>Y (%)</label>
                     <input
                       type='number'
@@ -653,7 +653,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       max='100'
                     />
                   </div>
-                  <div>
+                  <div className='flex-1'>
                     <label className='block text-xs text-gray-600'>
                       Width (%)
                     </label>
@@ -671,7 +671,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       max='100'
                     />
                   </div>
-                  <div>
+                  <div className='flex-1'>
                     <label className='block text-xs text-gray-600'>
                       Height (%)
                     </label>
@@ -688,6 +688,30 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       min='5'
                       max='100'
                     />
+                  </div>
+                  <div className='flex-shrink-0 mt-4'>
+                    <button
+                      onClick={() => {
+                        setOverlayPosition({ x: 50, y: 50 });
+                        setOverlaySize({ width: 40, height: 40 });
+                      }}
+                      className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+                      title='Center and reset size'
+                    >
+                      <RotateCcw className='h-3 w-3' />
+                    </button>
+                  </div>
+                  <div className='flex-shrink-0 mt-4'>
+                    <button
+                      onClick={() => {
+                        setOverlayPosition({ x: 50, y: 50 });
+                        setOverlaySize({ width: 100, height: 100 });
+                      }}
+                      className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+                      title='Center and maximize size'
+                    >
+                      <Maximize className='h-3 w-3' />
+                    </button>
                   </div>
                 </div>
               </div>
