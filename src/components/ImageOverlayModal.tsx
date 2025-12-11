@@ -63,6 +63,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isResizingText, setIsResizingText] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
+  const [containerRect, setContainerRect] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -270,21 +274,43 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     (event: React.PointerEvent) => {
       if (!selectedWordText) return;
 
-      const contentRect = getVideoContentRect();
+      const contentRect = containerRect
+        ? {
+            width: containerRect.width,
+            height: containerRect.height,
+            left: 0,
+            top: 0,
+          }
+        : getVideoContentRect();
       if (!contentRect) return;
 
       const x = event.clientX - contentRect.left;
       const y = event.clientY - contentRect.top;
 
-      // Check if clicking on the text overlay
-      const textX = textOverlayPosition.x - textOverlaySize.width / 2;
-      const textY = textOverlayPosition.y - textOverlaySize.height / 2;
+      // Check if clicking on the text overlay (calculate based on text content using percentages)
+      const textWidthPercent = Math.min(
+        95,
+        (selectedWordText.length <= 3
+          ? 35
+          : selectedWordText.length <= 7
+          ? 55
+          : selectedWordText.length <= 12
+          ? 70
+          : 85) *
+          (textOverlaySize.width / 20)
+      );
+      const textHeightPercent = Math.max(
+        10,
+        Math.min(85, (textOverlaySize.width / 100) * 60)
+      );
+      const textX = textOverlayPosition.x - textWidthPercent / 2;
+      const textY = textOverlayPosition.y - textHeightPercent / 2;
 
       // Convert to pixels
       const textX_px = (textX / 100) * contentRect.width;
       const textY_px = (textY / 100) * contentRect.height;
-      const textWidth_px = (textOverlaySize.width / 100) * contentRect.width;
-      const textHeight_px = (textOverlaySize.height / 100) * contentRect.height;
+      const textWidth_px = (textWidthPercent / 100) * contentRect.width;
+      const textHeight_px = (textHeightPercent / 100) * contentRect.height;
 
       // Check if clicking near edges/corners for resizing (within 10px of edges)
       const edgeThreshold = 10;
@@ -425,6 +451,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       textOverlayPosition,
       textOverlaySize,
       getVideoContentRect,
+      containerRect,
     ]
   );
 
@@ -710,6 +737,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     };
   }, [previewUrl, handleClose]);
 
+  // Update container dimensions
+  useEffect(() => {
+    const updateContainerRect = () => {
+      const rect = getVideoContentRect();
+      if (rect) {
+        setContainerRect({ width: rect.width, height: rect.height });
+      }
+    };
+
+    // Update immediately
+    updateContainerRect();
+
+    // Update on window resize
+    window.addEventListener('resize', updateContainerRect);
+    return () => window.removeEventListener('resize', updateContainerRect);
+  }, [getVideoContentRect]);
+
   if (!isOpen) return null;
 
   return (
@@ -806,21 +850,36 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             )}
             {selectedWordText && (
               <div
-                className='absolute border-2 border-green-500 cursor-move pointer-events-auto z-10 rounded px-2 py-1'
+                className='absolute border-2 border-green-500 cursor-move pointer-events-auto z-10 rounded'
                 style={{
                   left: `${textOverlayPosition.x}%`,
                   top: `${textOverlayPosition.y}%`,
-                  width: `${textOverlaySize.width}%`,
-                  height: `${textOverlaySize.height}%`,
                   transform: 'translate(-50%, -50%)',
-                  fontSize: `${
-                    Math.min(textOverlaySize.width, textOverlaySize.height) *
-                    0.8
-                  }vw`,
+                  width: `${
+                    Math.min(
+                      95,
+                      (selectedWordText.length <= 3
+                        ? 35
+                        : selectedWordText.length <= 7
+                        ? 55
+                        : selectedWordText.length <= 12
+                        ? 70
+                        : 85) *
+                        (textOverlaySize.width / 20)
+                    ) // Scale with font size
+                  }%`,
+                  height: `${Math.max(
+                    10,
+                    Math.min(85, (textOverlaySize.width / 100) * 60)
+                  )}%`,
+                  fontSize: `${Math.max(
+                    8,
+                    (textOverlaySize.width / 100) * 120
+                  )}px`,
                 }}
                 onPointerDown={handleTextMouseDown}
               >
-                <div className='w-full h-full flex items-center justify-center font-bold text-white select-none drop-shadow-lg'>
+                <div className='w-full h-full flex items-center justify-center font-bold text-white select-none drop-shadow-lg whitespace-nowrap'>
                   {selectedWordText}
                 </div>
               </div>
@@ -1148,7 +1207,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </div>
                   <div className='flex-1'>
                     <label className='block text-xs text-gray-600'>
-                      Width (%)
+                      Font Size (%)
                     </label>
                     <input
                       type='number'
@@ -1157,24 +1216,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         setTextOverlaySize((prev) => ({
                           ...prev,
                           width: Number(e.target.value),
-                        }))
-                      }
-                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
-                      min='5'
-                      max='100'
-                    />
-                  </div>
-                  <div className='flex-1'>
-                    <label className='block text-xs text-gray-600'>
-                      Height (%)
-                    </label>
-                    <input
-                      type='number'
-                      value={textOverlaySize.height}
-                      onChange={(e) =>
-                        setTextOverlaySize((prev) => ({
-                          ...prev,
-                          height: Number(e.target.value),
                         }))
                       }
                       className='w-full px-2 py-1 border border-gray-300 rounded text-sm'

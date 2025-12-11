@@ -110,11 +110,22 @@ export async function POST(request: NextRequest) {
         positionY / 100
       }-(${overlayHeight})/2:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
     } else if (overlayText) {
-      // Handle text overlay
-      const fontSize = Math.min(overlayWidth, overlayHeight) * 0.8;
-      // Position text at specified percentage (top-left corner of text at that position)
-      const xPos = `(w-text_w)*${positionX / 100}`;
-      const yPos = `(h-text_h)*${positionY / 100}`;
+      // Handle text overlay - sizeWidth controls font size (5-100%)
+      const fontSize = Math.max(
+        16,
+        Math.min(
+          500,
+          (sizeWidth / 100) * Math.min(videoWidth, videoHeight) * 0.2
+        )
+      );
+
+      // Estimate text dimensions (rough approximation)
+      const textWidth = overlayText.length * fontSize * 0.6; // approximate character width
+      const textHeight = fontSize * 1.2; // line height
+
+      // Position text to center it at the specified percentage
+      const xPos = `w*${positionX / 100}-(${textWidth}/2)`;
+      const yPos = `h*${positionY / 100}-(${textHeight}/2)`;
 
       // Escape text properly for FFmpeg - handle special characters that can break FFmpeg
       const escapedText = overlayText
@@ -128,7 +139,7 @@ export async function POST(request: NextRequest) {
         .replace(/\(/g, '\\(') // Escape parentheses
         .replace(/\)/g, '\\)'); // Escape parentheses
 
-      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':fontsize=${fontSize}:fontcolor=white:shadowx=2:shadowy=2:fontfile=/System/Library/Fonts/Helvetica.ttc:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
+      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':fontsize=${fontSize}:fontcolor=white:shadowx=4:shadowy=4:shadowcolor=black@0.7:fontfile=/System/Library/Fonts/Helvetica.ttc:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
     } else {
       throw new Error('No overlay content provided');
     }
