@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
         positionX / 100
       }-(${overlayWidth})/2:H*${
         positionY / 100
-      }-(${overlayHeight})/2:enable='between(t,${startTime},${endTime})'" -c:a copy -shortest "${outputPath}"`;
+      }-(${overlayHeight})/2:enable='gte(t\,${startTime})*lte(t\,${endTime})'" -c:a copy -shortest "${outputPath}"`;
 
       await execAsync(ffmpegCommand);
 
