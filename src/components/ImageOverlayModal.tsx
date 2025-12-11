@@ -35,11 +35,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [endTime, setEndTime] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [resizeStartSize, setResizeStartSize] = useState({
-    width: 20,
-    height: 20,
-  });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -76,7 +71,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, []);
 
   const handleMouseDown = useCallback(
-    (event: React.MouseEvent) => {
+    (event: React.PointerEvent) => {
       if (!overlayImageUrl) return;
 
       const contentRect = getVideoContentRect();
@@ -95,96 +90,205 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       const overlayWidth_px = (overlaySize.width / 100) * contentRect.width;
       const overlayHeight_px = (overlaySize.height / 100) * contentRect.height;
 
-      // Check if clicking on resize handle (bottom-right corner)
-      const resizeHandleX = overlayX_px + overlayWidth_px - 12; // 12px is handle size
-      const resizeHandleY = overlayY_px + overlayHeight_px - 12;
+      // Check if clicking near edges/corners for resizing (within 10px of edges)
+      const edgeThreshold = 10;
+      const nearLeftEdge =
+        x >= overlayX_px - edgeThreshold && x <= overlayX_px + edgeThreshold;
+      const nearRightEdge =
+        x >= overlayX_px + overlayWidth_px - edgeThreshold &&
+        x <= overlayX_px + overlayWidth_px + edgeThreshold;
+      const nearTopEdge =
+        y >= overlayY_px - edgeThreshold && y <= overlayY_px + edgeThreshold;
+      const nearBottomEdge =
+        y >= overlayY_px + overlayHeight_px - edgeThreshold &&
+        y <= overlayY_px + overlayHeight_px + edgeThreshold;
 
-      if (
-        x >= resizeHandleX &&
-        x <= resizeHandleX + 12 &&
-        y >= resizeHandleY &&
-        y <= resizeHandleY + 12
-      ) {
+      const isNearEdge =
+        nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
+
+      if (isNearEdge) {
+        // Start resizing - determine resize direction based on which edges are near
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startSize = { ...overlaySize };
+        const startPos = { ...overlayPosition };
+        const pointerId = event.pointerId;
+
         setIsResizing(true);
-        setDragStart({
-          x: event.clientX,
-          y: event.clientY,
-        });
-        setResizeStartSize(overlaySize);
+
+        const handleGlobalPointerMove = (e: PointerEvent) => {
+          const rect = getVideoContentRect();
+          if (!rect) return;
+
+          let newWidth = startSize.width;
+          let newHeight = startSize.height;
+          let newX = startPos.x;
+          let newY = startPos.y;
+
+          // Handle horizontal resizing
+          if (nearLeftEdge) {
+            const deltaX = ((e.clientX - startX) / rect.width) * 100;
+            newWidth = Math.max(5, startSize.width - deltaX);
+            newX = startPos.x + deltaX / 2; // Move position to keep right edge in place
+          } else if (nearRightEdge) {
+            const deltaX = ((e.clientX - startX) / rect.width) * 100;
+            newWidth = Math.max(5, startSize.width + deltaX);
+          }
+
+          // Handle vertical resizing
+          if (nearTopEdge) {
+            const deltaY = ((e.clientY - startY) / rect.height) * 100;
+            newHeight = Math.max(5, startSize.height - deltaY);
+            newY = startPos.y + deltaY / 2; // Move position to keep bottom edge in place
+          } else if (nearBottomEdge) {
+            const deltaY = ((e.clientY - startY) / rect.height) * 100;
+            newHeight = Math.max(5, startSize.height + deltaY);
+          }
+
+          setOverlaySize({
+            width: Math.min(newWidth, 100),
+            height: Math.min(newHeight, 100),
+          });
+
+          // Update position if resizing from top/left
+          if (nearLeftEdge || nearTopEdge) {
+            setOverlayPosition({
+              x: Math.max(0, Math.min(100, newX)),
+              y: Math.max(0, Math.min(100, newY)),
+            });
+          }
+        };
+
+        const handleGlobalPointerUp = () => {
+          setIsResizing(false);
+          document.removeEventListener('pointermove', handleGlobalPointerMove);
+          document.removeEventListener('pointerup', handleGlobalPointerUp);
+          // Release pointer capture
+          try {
+            (event.target as Element)?.releasePointerCapture(pointerId);
+          } catch (e) {
+            // Ignore errors if pointer capture wasn't set
+          }
+        };
+
+        document.addEventListener('pointermove', handleGlobalPointerMove);
+        document.addEventListener('pointerup', handleGlobalPointerUp);
+
+        // Capture pointer to ensure mouse events are received even outside the element
+        (event.target as Element).setPointerCapture(event.pointerId);
+        event.preventDefault();
       } else if (
         x >= overlayX_px &&
         x <= overlayX_px + overlayWidth_px &&
         y >= overlayY_px &&
         y <= overlayY_px + overlayHeight_px
       ) {
+        // Start dragging (center area)
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startPos = { ...overlayPosition };
+        const pointerId = event.pointerId;
+
         setIsDragging(true);
-        setDragStart({
-          x:
-            event.clientX -
-            contentRect.left -
-            overlayX_px -
-            overlayWidth_px / 2,
-          y:
-            event.clientY -
-            contentRect.top -
-            overlayY_px -
-            overlayHeight_px / 2,
-        });
+
+        const handleGlobalPointerMove = (e: PointerEvent) => {
+          const rect = getVideoContentRect();
+          if (!rect) return;
+
+          const deltaX = ((e.clientX - startX) / rect.width) * 100;
+          const deltaY = ((e.clientY - startY) / rect.height) * 100;
+
+          setOverlayPosition({
+            x: Math.max(0, Math.min(100, startPos.x + deltaX)),
+            y: Math.max(0, Math.min(100, startPos.y + deltaY)),
+          });
+        };
+
+        const handleGlobalPointerUp = () => {
+          setIsDragging(false);
+          document.removeEventListener('pointermove', handleGlobalPointerMove);
+          document.removeEventListener('pointerup', handleGlobalPointerUp);
+          // Release pointer capture
+          try {
+            (event.target as Element)?.releasePointerCapture(pointerId);
+          } catch (e) {
+            // Ignore errors if pointer capture wasn't set
+          }
+        };
+
+        document.addEventListener('pointermove', handleGlobalPointerMove);
+        document.addEventListener('pointerup', handleGlobalPointerUp);
+
+        // Capture pointer to ensure mouse events are received even outside the element
+        (event.target as Element).setPointerCapture(event.pointerId);
+        event.preventDefault();
       }
     },
     [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect]
   );
 
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent) => {
-      if (isDragging) {
-        const contentRect = getVideoContentRect();
-        if (!contentRect) return;
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      if (!overlayImageUrl) return;
 
-        const newX =
-          ((event.clientX - contentRect.left - dragStart.x) /
-            contentRect.width) *
-          100;
-        const newY =
-          ((event.clientY - contentRect.top - dragStart.y) /
-            contentRect.height) *
-          100;
+      const contentRect = getVideoContentRect();
+      if (!contentRect) return;
 
-        setOverlayPosition({
-          x: Math.max(0, Math.min(100, newX)),
-          y: Math.max(0, Math.min(100, newY)),
-        });
-      } else if (isResizing) {
-        const contentRect = getVideoContentRect();
-        if (!contentRect) return;
+      const x = event.clientX - contentRect.left;
+      const y = event.clientY - contentRect.top;
 
-        const deltaX =
-          ((event.clientX - dragStart.x) / contentRect.width) * 100;
-        const deltaY =
-          ((event.clientY - dragStart.y) / contentRect.height) * 100;
+      // Check if hovering near edges/corners for resizing
+      const overlayX = overlayPosition.x - overlaySize.width / 2;
+      const overlayY = overlayPosition.y - overlaySize.height / 2;
 
-        const newWidth = Math.max(5, resizeStartSize.width + deltaX);
-        const newHeight = Math.max(5, resizeStartSize.height + deltaY);
+      // Convert to pixels
+      const overlayX_px = (overlayX / 100) * contentRect.width;
+      const overlayY_px = (overlayY / 100) * contentRect.height;
+      const overlayWidth_px = (overlaySize.width / 100) * contentRect.width;
+      const overlayHeight_px = (overlaySize.height / 100) * contentRect.height;
 
-        setOverlaySize({
-          width: Math.min(newWidth, 100), // Max 100%
-          height: Math.min(newHeight, 100), // Max 100%
-        });
+      // Check if hovering near edges/corners (within 10px of edges)
+      const edgeThreshold = 10;
+      const nearLeftEdge =
+        x >= overlayX_px - edgeThreshold && x <= overlayX_px + edgeThreshold;
+      const nearRightEdge =
+        x >= overlayX_px + overlayWidth_px - edgeThreshold &&
+        x <= overlayX_px + overlayWidth_px + edgeThreshold;
+      const nearTopEdge =
+        y >= overlayY_px - edgeThreshold && y <= overlayY_px + edgeThreshold;
+      const nearBottomEdge =
+        y >= overlayY_px + overlayHeight_px - edgeThreshold &&
+        y <= overlayY_px + overlayHeight_px + edgeThreshold;
+
+      // Set cursor based on position
+      if (nearLeftEdge && nearTopEdge) {
+        document.body.style.cursor = 'nw-resize';
+      } else if (nearRightEdge && nearTopEdge) {
+        document.body.style.cursor = 'ne-resize';
+      } else if (nearLeftEdge && nearBottomEdge) {
+        document.body.style.cursor = 'sw-resize';
+      } else if (nearRightEdge && nearBottomEdge) {
+        document.body.style.cursor = 'se-resize';
+      } else if (nearLeftEdge || nearRightEdge) {
+        document.body.style.cursor = 'ew-resize';
+      } else if (nearTopEdge || nearBottomEdge) {
+        document.body.style.cursor = 'ns-resize';
+      } else if (
+        x >= overlayX_px &&
+        x <= overlayX_px + overlayWidth_px &&
+        y >= overlayY_px &&
+        y <= overlayY_px + overlayHeight_px
+      ) {
+        document.body.style.cursor = 'move';
+      } else {
+        document.body.style.cursor = 'default';
       }
     },
-    [
-      isDragging,
-      isResizing,
-      dragStart,
-      overlaySize,
-      resizeStartSize,
-      getVideoContentRect,
-    ]
+    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect]
   );
 
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-    setIsResizing(false);
+  const handlePointerLeave = useCallback(() => {
+    document.body.style.cursor = 'default';
   }, []);
 
   const handlePreview = useCallback(async () => {
@@ -262,7 +366,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayImageUrl(null);
     setOverlayPosition({ x: 50, y: 50 });
     setOverlaySize({ width: 20, height: 20 });
-    setResizeStartSize({ width: 20, height: 20 });
     setStartTime(0);
     setEndTime(0);
     setPreviewUrl(null);
@@ -304,21 +407,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           {/* Video Preview */}
           <div
             className='relative lg:col-span-2'
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            onPointerDown={handleMouseDown}
+            onPointerMove={handlePointerMove}
+            onPointerLeave={handlePointerLeave}
           >
             <video
               ref={videoRef}
               src={videoUrl}
-              className='w-full h-full object-contain rounded border'
+              className={`w-full h-full object-contain rounded border ${
+                overlayImageUrl ? 'pointer-events-none' : ''
+              }`}
               controls
               onLoadedMetadata={handleVideoLoad}
             />
             {overlayImageUrl && (
               <div
-                className='absolute border-2 border-blue-500 cursor-move'
+                className='absolute border-2 border-blue-500 cursor-move pointer-events-auto'
                 style={{
                   left: `${overlayPosition.x}%`,
                   top: `${overlayPosition.y}%`,
@@ -326,31 +430,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   height: `${overlaySize.height}%`,
                   transform: 'translate(-50%, -50%)',
                 }}
-                onMouseDown={handleMouseDown}
+                onPointerDown={handleMouseDown}
               >
                 <img
                   src={overlayImageUrl}
                   alt='Overlay'
                   className='w-full h-full object-cover'
                   draggable={false}
-                  onMouseDown={handleMouseDown}
-                />
-                {/* Resize handle */}
-                <div
-                  className='absolute bottom-0 right-0 bg-blue-500 cursor-se-resize rounded-sm opacity-80 hover:opacity-100 border-2 border-white'
-                  style={{
-                    width: `${overlaySize.width * 0.2}%`,
-                    height: `${overlaySize.height * 0.2}%`,
-                  }}
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    setIsResizing(true);
-                    setDragStart({
-                      x: e.clientX,
-                      y: e.clientY,
-                    });
-                    setResizeStartSize(overlaySize);
-                  }}
+                  onPointerDown={handleMouseDown}
                 />
               </div>
             )}
