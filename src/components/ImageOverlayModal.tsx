@@ -39,6 +39,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   const getVideoContentRect = useCallback(() => {
     const video = videoRef.current;
@@ -374,10 +375,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   // Handle keyboard controls
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Spacebar for play/pause
+      if (event.code === 'Escape') {
+        if (previewUrl) {
+          setPreviewUrl(null);
+        } else {
+          handleClose();
+        }
+        return;
+      }
+
       if (event.code === 'Space') {
         event.preventDefault();
-        const video = videoRef.current;
+        const video = previewUrl ? previewVideoRef.current : videoRef.current;
         if (video) {
           if (video.paused) {
             video.play();
@@ -392,7 +401,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [previewUrl, handleClose]);
 
   if (!isOpen) return null;
 
@@ -705,6 +714,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               autoPlay
               className='w-full h-full rounded-lg'
               onClick={(e) => e.stopPropagation()}
+              ref={previewVideoRef}
             />
           </div>
         </div>
