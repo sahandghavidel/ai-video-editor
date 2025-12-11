@@ -1047,3 +1047,41 @@ export async function updateOriginalVideoRow(
     throw error;
   }
 }
+
+export async function getSceneById(
+  sceneId: number
+): Promise<BaserowRow | null> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const scenesTableId = '714'; // Scenes table
+
+  if (!baserowUrl) {
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.'
+    );
+  }
+
+  try {
+    const url = `${baserowUrl}/database/rows/table/${scenesTableId}/${sceneId}/`;
+
+    const response = await makeAuthenticatedRequest(url, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null; // Scene not found
+      }
+      const errorText = await response.text();
+      console.error('Scene fetch failed with response:', errorText);
+      throw new Error(
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching scene:', error);
+    throw error;
+  }
+}

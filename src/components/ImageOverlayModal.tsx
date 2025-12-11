@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Upload, Loader2 } from 'lucide-react';
+import { getSceneById } from '@/lib/baserow-actions';
 
 interface ImageOverlayModalProps {
   isOpen: boolean;
@@ -36,6 +37,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [transcriptionWords, setTranscriptionWords] = useState<Array<{
+    word: string;
+    start: number;
+    end: number;
+  }> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -370,7 +376,85 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setStartTime(0);
     setEndTime(0);
     setPreviewUrl(null);
+    setTranscriptionWords(null);
   }, [onClose]);
+
+  // Fetch transcription data
+  useEffect(() => {
+    if (isOpen && sceneId) {
+      const fetchTranscription = async () => {
+        try {
+          // Fetch scene data from Baserow to get the Captions URL
+          const sceneData = await getSceneById(sceneId);
+
+          // Try different possible field names and specific field IDs
+          let captionsUrl = null;
+
+          // First try the specific field that contains captions URL
+          if (
+            sceneData?.['field_6910'] &&
+            typeof sceneData['field_6910'] === 'string' &&
+            (sceneData['field_6910'].startsWith('http') ||
+              sceneData['field_6910'].includes('.json'))
+          ) {
+            captionsUrl = sceneData['field_6910'];
+          }
+
+          // Then try other possible field names
+          if (!captionsUrl) {
+            captionsUrl =
+              sceneData?.['Captions URL'] ||
+              sceneData?.['captions_url'] ||
+              sceneData?.['CaptionsURL'] ||
+              sceneData?.['captions URL'];
+          }
+
+          // Finally try other field IDs that might contain captions (only if they look like URLs)
+          if (!captionsUrl) {
+            const possibleFields = [
+              'field_6892',
+              'field_6893',
+              'field_6894',
+              'field_6895',
+              'field_6897',
+              'field_6898',
+              'field_6899',
+            ];
+            for (const field of possibleFields) {
+              const value = sceneData?.[field];
+              if (
+                value &&
+                typeof value === 'string' &&
+                (value.startsWith('http') || value.includes('.json'))
+              ) {
+                captionsUrl = value;
+                break;
+              }
+            }
+          }
+
+          if (captionsUrl) {
+            const response = await fetch(captionsUrl as string);
+            if (response.ok) {
+              const data = await response.json();
+              setTranscriptionWords(data);
+            } else {
+              setTranscriptionWords(null);
+            }
+          } else {
+            setTranscriptionWords(null);
+          }
+        } catch (error) {
+          console.error('Failed to fetch transcription:', error);
+          setTranscriptionWords(null);
+        }
+      };
+      fetchTranscription();
+    } else {
+      // Modal is closed, clear transcription data
+      setTranscriptionWords(null);
+    }
+  }, [isOpen, sceneId]);
 
   // Handle keyboard controls
   useEffect(() => {
@@ -667,6 +751,31 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+            {/* Transcription Words */}
+            {transcriptionWords && transcriptionWords.length > 0 && (
+              <div className='space-y-2'>
+                <label className='block text-sm font-medium'>
+                  Transcription
+                </label>
+                <div className='max-h-32 overflow-y-auto bg-gray-50 p-3 rounded border'>
+                  <div className='flex flex-wrap gap-1'>
+                    {transcriptionWords.map((wordData, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setStartTime(wordData.start)}
+                        className='px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors'
+                        title={`Click to set start time to ${wordData.start}s`}
+                      >
+                        {wordData.word}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className='text-xs text-gray-500'>
+                  Click any word to set the start time
+                </p>
               </div>
             )}
           </div>
