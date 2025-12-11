@@ -1459,7 +1459,9 @@ export default function SceneCard({
     sceneId: number,
     overlayImage: File,
     position: { x: number; y: number },
-    size: { width: number; height: number }
+    size: { width: number; height: number },
+    startTime: number,
+    endTime: number
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1472,6 +1474,8 @@ export default function SceneCard({
       formData.append('positionY', position.y.toString());
       formData.append('widthPercent', size.width.toString());
       formData.append('heightPercent', size.height.toString());
+      formData.append('startTime', startTime.toString());
+      formData.append('endTime', endTime.toString());
 
       const response = await fetch('/api/add-image-overlay', {
         method: 'POST',

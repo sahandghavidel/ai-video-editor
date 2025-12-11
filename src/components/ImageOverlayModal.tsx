@@ -12,7 +12,9 @@ interface ImageOverlayModalProps {
     sceneId: number,
     overlayImage: File,
     position: { x: number; y: number },
-    size: { width: number; height: number }
+    size: { width: number; height: number },
+    startTime: number,
+    endTime: number
   ) => Promise<void>;
   isApplying?: boolean;
 }
@@ -29,6 +31,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
   const [overlayPosition, setOverlayPosition] = useState({ x: 50, y: 50 }); // percentage
   const [overlaySize, setOverlaySize] = useState({ width: 20, height: 20 }); // percentage
+  const [startTime, setStartTime] = useState(0);
+  const [endTime, setEndTime] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -62,6 +66,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     },
     []
   );
+
+  const handleVideoLoad = useCallback(() => {
+    const video = videoRef.current;
+    if (video && video.duration) {
+      setEndTime(video.duration);
+    }
+  }, []);
 
   const handleMouseDown = useCallback(
     (event: React.MouseEvent) => {
@@ -179,7 +190,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (!overlayImage) return;
 
     try {
-      await onApply(sceneId, overlayImage, overlayPosition, overlaySize);
+      await onApply(
+        sceneId,
+        overlayImage,
+        overlayPosition,
+        overlaySize,
+        startTime,
+        endTime
+      );
       onClose();
       // Reset state
       setOverlayImage(null);
@@ -199,6 +217,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayPosition({ x: 50, y: 50 });
     setOverlaySize({ width: 20, height: 20 });
     setResizeStartSize({ width: 20, height: 20 });
+    setStartTime(0);
+    setEndTime(0);
   }, [onClose]);
 
   if (!isOpen) return null;
@@ -230,6 +250,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               src={videoUrl}
               className='w-full h-full object-contain rounded border'
               controls
+              onLoadedMetadata={handleVideoLoad}
             />
             {overlayImageUrl && (
               <div
@@ -379,6 +400,41 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
                       min='5'
                       max='100'
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Timing Controls */}
+            {overlayImageUrl && (
+              <div className='space-y-2'>
+                <label className='block text-sm font-medium'>Timing</label>
+                <div className='grid grid-cols-2 gap-2'>
+                  <div>
+                    <label className='block text-xs text-gray-600'>
+                      Start Time (s)
+                    </label>
+                    <input
+                      type='number'
+                      value={startTime}
+                      onChange={(e) => setStartTime(Number(e.target.value))}
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
+                      min='0'
+                      step='0.1'
+                    />
+                  </div>
+                  <div>
+                    <label className='block text-xs text-gray-600'>
+                      End Time (s)
+                    </label>
+                    <input
+                      type='number'
+                      value={endTime}
+                      onChange={(e) => setEndTime(Number(e.target.value))}
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
+                      min='0'
+                      step='0.1'
                     />
                   </div>
                 </div>

@@ -18,6 +18,8 @@ export async function POST(request: NextRequest) {
     const positionY = parseFloat(formData.get('positionY') as string);
     const widthPercent = parseFloat(formData.get('widthPercent') as string);
     const heightPercent = parseFloat(formData.get('heightPercent') as string);
+    const startTime = parseFloat(formData.get('startTime') as string);
+    const endTime = parseFloat(formData.get('endTime') as string);
 
     if (
       !sceneId ||
@@ -26,7 +28,9 @@ export async function POST(request: NextRequest) {
       isNaN(positionX) ||
       isNaN(positionY) ||
       isNaN(widthPercent) ||
-      isNaN(heightPercent)
+      isNaN(heightPercent) ||
+      isNaN(startTime) ||
+      isNaN(endTime)
     ) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
@@ -79,7 +83,7 @@ export async function POST(request: NextRequest) {
         positionX / 100
       }-(${overlayWidth})/2:H*${
         positionY / 100
-      }-(${overlayHeight})/2" -c:a copy -shortest "${outputPath}"`;
+      }-(${overlayHeight})/2:enable='between(t,${startTime},${endTime})'" -c:a copy -shortest "${outputPath}"`;
 
       await execAsync(ffmpegCommand);
 
