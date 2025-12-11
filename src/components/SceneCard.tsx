@@ -4621,6 +4621,7 @@ export default function SceneCard({
         sceneId={imageOverlayModal.sceneId || 0}
         onApply={handleApplyImageOverlay}
         isApplying={addingImageOverlay !== null}
+        handleTranscribeScene={handleTranscribeScene}
       />
     </div>
   );

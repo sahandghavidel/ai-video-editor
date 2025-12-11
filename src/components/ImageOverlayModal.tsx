@@ -18,6 +18,11 @@ interface ImageOverlayModalProps {
     endTime: number
   ) => Promise<void>;
   isApplying?: boolean;
+  handleTranscribeScene?: (
+    sceneId: number,
+    sceneData?: any,
+    videoType?: 'original' | 'final'
+  ) => Promise<void>;
 }
 
 export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
@@ -27,6 +32,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   sceneId,
   onApply,
   isApplying = false,
+  handleTranscribeScene,
 }) => {
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
@@ -42,6 +48,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     start: number;
     end: number;
   }> | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -454,7 +462,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Modal is closed, clear transcription data
       setTranscriptionWords(null);
     }
-  }, [isOpen, sceneId]);
+  }, [isOpen, sceneId, refetchTrigger]);
 
   // Handle keyboard controls
   useEffect(() => {
@@ -754,7 +762,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               </div>
             )}
             {/* Transcription Words */}
-            {transcriptionWords && transcriptionWords.length > 0 && (
+            {transcriptionWords && transcriptionWords.length > 0 ? (
               <div className='space-y-2'>
                 <div className='max-h-32 overflow-y-auto bg-gray-50 p-3 rounded border'>
                   <div className='flex flex-wrap gap-1'>
@@ -777,6 +785,42 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </div>
                 </div>
               </div>
+            ) : (
+              handleTranscribeScene && (
+                <div className='space-y-2'>
+                  <button
+                    onClick={async () => {
+                      setIsTranscribing(true);
+                      try {
+                        await handleTranscribeScene(
+                          sceneId,
+                          undefined,
+                          'final'
+                        );
+                        // Refetch transcription after transcribing
+                        setRefetchTrigger((prev) => prev + 1);
+                      } catch (error) {
+                        console.error('Failed to transcribe:', error);
+                      } finally {
+                        setIsTranscribing(false);
+                      }
+                    }}
+                    disabled={isTranscribing}
+                    className='flex items-center space-x-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                  >
+                    {isTranscribing ? (
+                      <Loader2 className='h-4 w-4 animate-spin' />
+                    ) : (
+                      <span>🎙️</span>
+                    )}
+                    <span>
+                      {isTranscribing
+                        ? 'Transcribing...'
+                        : 'Transcribe Final Video'}
+                    </span>
+                  </button>
+                </div>
+              )
             )}
           </div>
         </div>
