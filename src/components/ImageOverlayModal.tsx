@@ -80,15 +80,21 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     width: 20,
     height: 10,
   }); // percentage
-  const [textStyling, setTextStyling] = useState({
-    fontColor: '#ffffff',
-    borderWidth: 3,
-    borderColor: '#000000',
-    shadowX: 8,
-    shadowY: 8,
-    shadowColor: '#000000',
-    shadowOpacity: 0.9,
-    fontFamily: 'Helvetica',
+  const [textStyling, setTextStyling] = useState(() => {
+    // Load default styling from localStorage, or use fallback defaults
+    const saved = localStorage.getItem('defaultTextStyling');
+    return saved
+      ? JSON.parse(saved)
+      : {
+          fontColor: '#ffffff',
+          borderWidth: 3,
+          borderColor: '#000000',
+          shadowX: 8,
+          shadowY: 8,
+          shadowColor: '#000000',
+          shadowOpacity: 0.9,
+          fontFamily: 'Helvetica',
+        };
   });
   const [isDraggingText, setIsDraggingText] = useState(false);
   const [isResizingText, setIsResizingText] = useState(false);
@@ -1444,21 +1450,39 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       />
                     </div>
                     <button
-                      onClick={() =>
-                        setTextStyling({
-                          fontColor: '#ffffff',
-                          borderWidth: 3,
-                          borderColor: '#000000',
-                          shadowX: 8,
-                          shadowY: 8,
-                          shadowColor: '#000000',
-                          shadowOpacity: 0.9,
-                          fontFamily: 'Helvetica',
-                        })
-                      }
+                      onClick={() => {
+                        const saved =
+                          localStorage.getItem('defaultTextStyling');
+                        setTextStyling(
+                          saved
+                            ? JSON.parse(saved)
+                            : {
+                                fontColor: '#ffffff',
+                                borderWidth: 3,
+                                borderColor: '#000000',
+                                shadowX: 8,
+                                shadowY: 8,
+                                shadowColor: '#000000',
+                                shadowOpacity: 0.9,
+                                fontFamily: 'Helvetica',
+                              }
+                        );
+                      }}
                       className='px-2 py-0.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 h-6'
                     >
                       Reset
+                    </button>
+                    <button
+                      onClick={() => {
+                        localStorage.setItem(
+                          'defaultTextStyling',
+                          JSON.stringify(textStyling)
+                        );
+                        alert('Text styling saved as default!');
+                      }}
+                      className='px-2 py-0.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 h-6'
+                    >
+                      Save Default
                     </button>
                   </div>
                 </div>
