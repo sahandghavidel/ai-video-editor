@@ -962,7 +962,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             )}
 
             {/* Timing Controls */}
-            {overlayImageUrl && (
+            {(overlayImageUrl || selectedWordText) && (
               <div className='space-y-2'>
                 <label className='block text-sm font-medium'>Timing</label>
                 <div className='grid grid-cols-2 gap-2'>
@@ -1095,7 +1095,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     {isTranscribing ? (
                       <Loader2 className='h-4 w-4 animate-spin' />
                     ) : (
-                      <span>🎙️</span>
+                      <Upload className='h-4 w-4' />
                     )}
                     <span>
                       {isTranscribing
@@ -1105,6 +1105,106 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </button>
                 </div>
               )
+            )}
+
+            {/* Text Position and Size Controls */}
+            {selectedWordText && (
+              <div className='space-y-2'>
+                <div className='flex gap-2 items-end w-full'>
+                  <div className='flex-1'>
+                    <label className='block text-xs text-gray-600'>X (%)</label>
+                    <input
+                      type='number'
+                      value={textOverlayPosition.x}
+                      onChange={(e) =>
+                        setTextOverlayPosition((prev) => ({
+                          ...prev,
+                          x: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
+                      min='0'
+                      max='100'
+                    />
+                  </div>
+                  <div className='flex-1'>
+                    <label className='block text-xs text-gray-600'>Y (%)</label>
+                    <input
+                      type='number'
+                      value={textOverlayPosition.y}
+                      onChange={(e) =>
+                        setTextOverlayPosition((prev) => ({
+                          ...prev,
+                          y: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
+                      min='0'
+                      max='100'
+                    />
+                  </div>
+                  <div className='flex-1'>
+                    <label className='block text-xs text-gray-600'>
+                      Width (%)
+                    </label>
+                    <input
+                      type='number'
+                      value={textOverlaySize.width}
+                      onChange={(e) =>
+                        setTextOverlaySize((prev) => ({
+                          ...prev,
+                          width: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
+                      min='5'
+                      max='100'
+                    />
+                  </div>
+                  <div className='flex-1'>
+                    <label className='block text-xs text-gray-600'>
+                      Height (%)
+                    </label>
+                    <input
+                      type='number'
+                      value={textOverlaySize.height}
+                      onChange={(e) =>
+                        setTextOverlaySize((prev) => ({
+                          ...prev,
+                          height: Number(e.target.value),
+                        }))
+                      }
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
+                      min='5'
+                      max='100'
+                    />
+                  </div>
+                  <div className='flex-shrink-0 mt-4'>
+                    <button
+                      onClick={() => {
+                        setTextOverlayPosition({ x: 50, y: 80 });
+                        setTextOverlaySize({ width: 20, height: 10 });
+                      }}
+                      className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+                      title='Center and reset size'
+                    >
+                      <RotateCcw className='h-3 w-3' />
+                    </button>
+                  </div>
+                  <div className='flex-shrink-0 mt-4'>
+                    <button
+                      onClick={() => {
+                        setTextOverlayPosition({ x: 50, y: 50 });
+                        setTextOverlaySize({ width: 100, height: 100 });
+                      }}
+                      className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+                      title='Center and maximize size'
+                    >
+                      <Maximize className='h-3 w-3' />
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
