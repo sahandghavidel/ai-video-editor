@@ -228,6 +228,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           height: coordinates.height,
         });
 
+        // Auto-reset overlay size to cropped image natural size
+        setOverlayPosition({ x: 50, y: 50 });
+        const videoWidth = 1920; // Assume HD width
+        const videoHeight = 1080; // Assume HD height
+
+        const widthPercent = (coordinates.width / videoWidth) * 100;
+        const heightPercent = (coordinates.height / videoHeight) * 100;
+
+        setOverlaySize({
+          width: Math.min(widthPercent, 100),
+          height: Math.min(heightPercent, 100),
+        });
+
         // Reset crop state
         setIsCropping(false);
         console.log('Crop applied successfully');
