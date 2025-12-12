@@ -10,6 +10,7 @@ import {
   Crop,
   ZoomIn,
   ZoomOut,
+  Camera,
 } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
@@ -187,6 +188,53 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayImageUrl(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleScreenshot = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], 'screenshot.png', {
+            type: 'image/png',
+          });
+          setOverlayImage(file);
+          const url = URL.createObjectURL(file);
+          setOverlayImageUrl(url);
+          // Clear text overlay when adding image
+          setSelectedWordText(null);
+          setCustomText('');
+
+          // Calculate original aspect ratio
+          const aspectRatio = canvas.width / canvas.height;
+          setOriginalImageAspectRatio(aspectRatio);
+          setActualImageDimensions({
+            width: canvas.width,
+            height: canvas.height,
+          });
+
+          // Set overlay size to show image at its actual pixel dimensions
+          // Assuming HD video (1920x1080), calculate percentage to show actual size
+          const videoWidth = 1920; // Assume HD width
+          const videoHeight = 1080; // Assume HD height
+
+          const widthPercent = (canvas.width / videoWidth) * 100;
+          const heightPercent = (canvas.height / videoHeight) * 100;
+
+          setOverlaySize({
+            width: Math.min(widthPercent, 100),
+            height: Math.min(heightPercent, 100),
+          });
+        }
+      }, 'image/png');
     }
   }, []);
 
@@ -973,6 +1021,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 src={originalVideoUrl}
                 className='w-full h-full object-contain rounded border'
                 controls
+                crossOrigin='anonymous'
                 onLoadedMetadata={handleVideoLoad}
               />
             ) : (
@@ -1119,6 +1168,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 >
                   <Upload className='h-4 w-4' />
                   <span>{overlayImage ? 'Change Image' : 'Upload Image'}</span>
+                </button>
+                <button
+                  onClick={handleScreenshot}
+                  className='flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50'
+                  title='Take screenshot from video'
+                >
+                  <Camera className='h-4 w-4' />
+                  <span>Screenshot</span>
                 </button>
                 {overlayImage && (
                   <button
@@ -1864,6 +1921,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               src={previewUrl}
               controls
               autoPlay
+              crossOrigin='anonymous'
               className='w-full h-full rounded-lg'
               onClick={(e) => e.stopPropagation()}
               ref={previewVideoRef}
