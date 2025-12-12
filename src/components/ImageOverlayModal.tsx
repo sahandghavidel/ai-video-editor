@@ -12,8 +12,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
-import ReactCrop, { Crop as CropType, PixelCrop } from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
+import Cropper from 'react-easy-crop';
 
 // Helper function to convert hex color to RGB
 const hexToRgb = (hex: string) => {
@@ -118,8 +117,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   // Cropping state
   const [isCropping, setIsCropping] = useState(false);
-  const [crop, setCrop] = useState<CropType>({});
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const [originalImageAspectRatio, setOriginalImageAspectRatio] = useState<
     number | null
   >(null);
@@ -190,7 +195,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, []);
 
   const applyCrop = useCallback(async () => {
-    if (!completedCrop || !overlayImageUrl) return;
+    if (!croppedAreaPixels || !overlayImageUrl) return;
 
     const image = new Image();
     image.src = overlayImageUrl;
@@ -203,22 +208,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const scaleX = image.naturalWidth / image.width;
-    const scaleY = image.naturalHeight / image.height;
-
-    canvas.width = completedCrop.width;
-    canvas.height = completedCrop.height;
+    canvas.width = croppedAreaPixels.width;
+    canvas.height = croppedAreaPixels.height;
 
     ctx.drawImage(
       image,
-      completedCrop.x * scaleX,
-      completedCrop.y * scaleY,
-      completedCrop.width * scaleX,
-      completedCrop.height * scaleY,
+      croppedAreaPixels.x,
+      croppedAreaPixels.y,
+      croppedAreaPixels.width,
+      croppedAreaPixels.height,
       0,
       0,
-      completedCrop.width,
-      completedCrop.height
+      croppedAreaPixels.width,
+      croppedAreaPixels.height
     );
 
     canvas.toBlob((blob) => {
@@ -232,20 +234,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayImageUrl(croppedUrl);
 
         // Update aspect ratio for the cropped image
-        const newAspectRatio = completedCrop.width / completedCrop.height;
+        const newAspectRatio =
+          croppedAreaPixels.width / croppedAreaPixels.height;
         setOriginalImageAspectRatio(newAspectRatio);
         setActualImageDimensions({
-          width: completedCrop.width,
-          height: completedCrop.height,
+          width: croppedAreaPixels.width,
+          height: croppedAreaPixels.height,
         });
 
         // Reset crop state
         setIsCropping(false);
-        setCrop({});
-        setCompletedCrop(null);
+        setCrop({ x: 0, y: 0 });
+        setZoom(1);
+        setCroppedAreaPixels(null);
       }
     }, 'image/png');
-  }, [completedCrop, overlayImageUrl]);
+  }, [croppedAreaPixels, overlayImageUrl]);
 
   const handleVideoLoad = useCallback(() => {
     const video = videoRef.current;
@@ -909,35 +913,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   // Update crop preview canvas when crop changes
   useEffect(() => {
-    if (completedCrop && overlayImageUrl && cropPreviewCanvasRef.current) {
+    if (croppedAreaPixels && overlayImageUrl && cropPreviewCanvasRef.current) {
       const canvas = cropPreviewCanvasRef.current;
       const ctx = canvas.getContext('2d');
       if (ctx) {
         const image = new Image();
         image.onload = () => {
-          const scaleX = image.naturalWidth / image.width;
-          const scaleY = image.naturalHeight / image.height;
-
-          canvas.width = completedCrop.width;
-          canvas.height = completedCrop.height;
+          canvas.width = croppedAreaPixels.width;
+          canvas.height = croppedAreaPixels.height;
 
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(
             image,
-            completedCrop.x * scaleX,
-            completedCrop.y * scaleY,
-            completedCrop.width * scaleX,
-            completedCrop.height * scaleY,
+            croppedAreaPixels.x,
+            croppedAreaPixels.y,
+            croppedAreaPixels.width,
+            croppedAreaPixels.height,
             0,
             0,
-            completedCrop.width,
-            completedCrop.height
+            croppedAreaPixels.width,
+            croppedAreaPixels.height
           );
         };
         image.src = overlayImageUrl;
       }
     }
-  }, [completedCrop, overlayImageUrl]);
+  }, [croppedAreaPixels, overlayImageUrl]);
 
   // Update container dimensions
   useEffect(() => {
@@ -1786,8 +1787,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               <button
                 onClick={() => {
                   setIsCropping(false);
-                  setCrop({});
-                  setCompletedCrop(null);
+                  setCrop({ x: 0, y: 0 });
+                  setZoom(1);
+                  setCroppedAreaPixels(null);
                 }}
                 className='p-1 hover:bg-gray-100 rounded'
               >
@@ -1800,18 +1802,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <div className='flex-1'>
                   <h4 className='text-sm font-medium mb-2'>Select Crop Area</h4>
                   <div className='max-h-[50vh] overflow-auto border rounded'>
-                    <ReactCrop
-                      crop={crop}
-                      onChange={(c) => setCrop(c)}
-                      onComplete={(c) => setCompletedCrop(c)}
-                      aspect={undefined} // Allow free-form cropping
-                    >
-                      <img
-                        src={overlayImageUrl}
-                        alt='Crop preview'
-                        className='max-w-full max-h-full object-contain'
+                    <div className='relative h-64'>
+                      <Cropper
+                        image={overlayImageUrl}
+                        crop={crop}
+                        zoom={zoom}
+                        aspect={undefined}
+                        onCropChange={setCrop}
+                        onZoomChange={setZoom}
+                        onCropComplete={(croppedArea, croppedAreaPixels) => {
+                          setCroppedAreaPixels(croppedAreaPixels);
+                        }}
                       />
-                    </ReactCrop>
+                    </div>
                   </div>
                 </div>
 
@@ -1819,7 +1822,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <div className='flex-1'>
                   <h4 className='text-sm font-medium mb-2'>Crop Preview</h4>
                   <div className='border rounded bg-gray-50 flex items-center justify-center min-h-[200px]'>
-                    {completedCrop ? (
+                    {croppedAreaPixels ? (
                       <canvas
                         ref={cropPreviewCanvasRef}
                         className='max-w-full max-h-full object-contain'
@@ -1832,10 +1835,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       </div>
                     )}
                   </div>
-                  {completedCrop && (
+                  {croppedAreaPixels && (
                     <div className='mt-2 text-xs text-gray-600 text-center'>
-                      {Math.round(completedCrop.width)} ×{' '}
-                      {Math.round(completedCrop.height)} pixels
+                      {Math.round(croppedAreaPixels.width)} ×{' '}
+                      {Math.round(croppedAreaPixels.height)} pixels
                     </div>
                   )}
                 </div>
@@ -1844,8 +1847,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <button
                   onClick={() => {
                     setIsCropping(false);
-                    setCrop({});
-                    setCompletedCrop(null);
+                    setCrop({ x: 0, y: 0 });
+                    setZoom(1);
+                    setCroppedAreaPixels(null);
                   }}
                   className='px-4 py-2 border border-gray-300 rounded hover:bg-gray-50'
                 >
@@ -1853,12 +1857,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 </button>
                 <button
                   onClick={async () => {
-                    if (completedCrop && overlayImage) {
+                    if (croppedAreaPixels && overlayImage) {
                       await applyCrop();
                     }
                   }}
                   className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600'
-                  disabled={!completedCrop}
+                  disabled={!croppedAreaPixels}
                 >
                   Apply Crop
                 </button>
