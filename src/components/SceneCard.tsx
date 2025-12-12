@@ -1462,7 +1462,17 @@ export default function SceneCard({
     position: { x: number; y: number },
     size: { width: number; height: number },
     startTime: number,
-    endTime: number
+    endTime: number,
+    textStyling?: {
+      fontColor: string;
+      borderWidth: number;
+      borderColor: string;
+      shadowX: number;
+      shadowY: number;
+      shadowColor: string;
+      shadowOpacity: number;
+      fontFamily: string;
+    }
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1475,6 +1485,9 @@ export default function SceneCard({
       }
       if (overlayText) {
         formData.append('overlayText', overlayText);
+        if (textStyling) {
+          formData.append('textStyling', JSON.stringify(textStyling));
+        }
       }
       formData.append('positionX', position.x.toString());
       formData.append('positionY', position.y.toString());
