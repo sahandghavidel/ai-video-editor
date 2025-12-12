@@ -11,6 +11,7 @@ import {
   ZoomIn,
   ZoomOut,
   Camera,
+  onUpdateModalVideoUrl,
 } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
@@ -57,6 +58,7 @@ interface ImageOverlayModalProps {
     sceneData?: any,
     videoType?: 'original' | 'final'
   ) => Promise<void>;
+  onUpdateModalVideoUrl?: (videoUrl: string) => void;
 }
 
 export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
@@ -67,6 +69,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   onApply,
   isApplying = false,
   handleTranscribeScene,
+  onUpdateModalVideoUrl,
 }) => {
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
@@ -794,25 +797,79 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const handleApply = useCallback(async () => {
     if (!overlayImage && !selectedWordText) return;
 
-    await onApply(
-      sceneId,
-      overlayImage,
-      selectedWordText,
-      overlayImage ? overlayPosition : textOverlayPosition,
-      overlayImage ? overlaySize : textOverlaySize,
-      startTime,
-      endTime,
-      selectedWordText ? textStyling : undefined
-    );
-    onClose();
-    // Reset state
-    setOverlayImage(null);
-    setOverlayImageUrl(null);
-    setOverlayPosition({ x: 50, y: 50 });
-    setOverlaySize({ width: 40, height: 40 });
-    setPreviewUrl(null);
-    setSelectedWordText(null);
-    setCustomText('');
+    try {
+      // Apply overlay to the CURRENT video playing in the modal
+      await onApply(
+        sceneId,
+        overlayImage,
+        selectedWordText,
+        overlayImage ? overlayPosition : textOverlayPosition,
+        overlayImage ? overlaySize : textOverlaySize,
+        startTime,
+        endTime,
+        selectedWordText ? textStyling : undefined
+      );
+
+      // After applying, fetch the scene from the DB to get the updated video URL
+      // Retry a few times in case the DB update hasn't fully propagated
+      const maxRetries = 6;
+      let attempts = 0;
+      let sceneData: any = null;
+      let newUrl: string | undefined;
+      while (attempts < maxRetries) {
+        // eslint-disable-next-line no-await-in-loop
+        sceneData = await getSceneById(sceneId);
+        newUrl = sceneData?.field_6886 as string | undefined;
+        if (newUrl && newUrl !== originalVideoUrl) break;
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((res) => setTimeout(res, 500));
+        attempts++;
+      }
+
+      if (newUrl) {
+        setOriginalVideoUrl(newUrl);
+        // Notify parent so subsequent applies use the new video URL
+        if (onUpdateModalVideoUrl) {
+          onUpdateModalVideoUrl(newUrl);
+        }
+      }
+
+      // Force a refetch of transcription and other modal data
+      setRefetchTrigger((prev) => prev + 1);
+
+      // Reset overlay state to defaults (like opening a fresh modal) but keep it open
+      setOverlayImage(null);
+      setOverlayImageUrl(null);
+      setOverlayPosition({ x: 50, y: 50 });
+      setOverlaySize({ width: 40, height: 40 });
+      setPreviewUrl(null);
+      setSelectedWordText(null);
+      setCustomText('');
+      setStartTime(0);
+      setEndTime(0);
+      setIsCropping(false);
+      setOriginalImageAspectRatio(null);
+      setActualImageDimensions(null);
+      setTextOverlayPosition({ x: 50, y: 80 });
+      setTextOverlaySize({ width: 20, height: 10 });
+      setTextStyling(() => {
+        const saved = localStorage.getItem('defaultTextStyling');
+        return saved
+          ? JSON.parse(saved)
+          : {
+              fontColor: '#ffffff',
+              borderWidth: 3,
+              borderColor: '#000000',
+              shadowX: 8,
+              shadowY: 8,
+              shadowColor: '#000000',
+              shadowOpacity: 0.9,
+              fontFamily: 'Helvetica',
+            };
+      });
+    } catch (error) {
+      console.error('Failed to apply overlay and refresh modal:', error);
+    }
   }, [
     overlayImage,
     selectedWordText,
@@ -824,7 +881,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     startTime,
     endTime,
     onApply,
-    onClose,
+    originalVideoUrl,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1017,6 +1074,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           >
             {originalVideoUrl ? (
               <video
+                key={originalVideoUrl}
                 ref={videoRef}
                 src={originalVideoUrl}
                 className='w-full h-full object-contain rounded border'

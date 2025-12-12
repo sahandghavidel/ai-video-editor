@@ -4626,6 +4626,12 @@ export default function SceneCard({
         videoUrl={imageOverlayModal.videoUrl || ''}
         sceneId={imageOverlayModal.sceneId || 0}
         onApply={handleApplyImageOverlay}
+        onUpdateModalVideoUrl={(newUrl) =>
+          setImageOverlayModal((prev) => ({
+            ...prev,
+            videoUrl: newUrl,
+          }))
+        }
         isApplying={addingImageOverlay !== null}
         handleTranscribeScene={handleTranscribeScene}
       />
