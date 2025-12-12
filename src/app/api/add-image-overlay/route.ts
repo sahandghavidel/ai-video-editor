@@ -184,10 +184,12 @@ export async function POST(request: NextRequest) {
       'video/mp4'
     );
 
-    // Update the scene with the new video URL
-    await updateSceneRow(sceneId, {
-      field_6886: uploadUrl,
-    });
+    // Only update the scene with the new video URL if this is not a preview
+    if (!preview) {
+      await updateSceneRow(sceneId, {
+        field_6886: uploadUrl,
+      });
+    }
 
     return NextResponse.json({ success: true, url: uploadUrl });
   } catch (error) {

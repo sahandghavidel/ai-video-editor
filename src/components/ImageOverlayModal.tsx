@@ -135,6 +135,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     height: number;
   } | null>(null);
 
+  // Store the original video URL when the modal opens
+  const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -263,6 +266,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
     }
   }, [getVideoContentRect]);
+
+  // Ensure video element updates when videoUrl changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && originalVideoUrl && video.src !== originalVideoUrl) {
+      video.src = originalVideoUrl;
+      video.load();
+    }
+  }, [originalVideoUrl]);
 
   const handleMouseDown = useCallback(
     (event: React.PointerEvent) => {
@@ -673,9 +685,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const handlePreview = useCallback(async () => {
     if (!overlayImage && !selectedWordText) return;
+    if (!originalVideoUrl) return;
 
     const formData = new FormData();
-    formData.append('videoUrl', videoUrl);
+    formData.append('videoUrl', originalVideoUrl);
     formData.append('sceneId', sceneId.toString());
     if (overlayImage) {
       formData.append('overlayImage', overlayImage);
@@ -723,7 +736,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     overlayImage,
     selectedWordText,
-    videoUrl,
+    originalVideoUrl,
     sceneId,
     overlayPosition,
     textOverlayPosition,
@@ -789,6 +802,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   // Fetch transcription data
   useEffect(() => {
     if (isOpen && sceneId) {
+      // Clear any leftover preview state when modal opens
+      setPreviewUrl(null);
+      // Set the original video URL when we have a valid video URL
+      if (videoUrl && videoUrl.trim() !== '') {
+        setOriginalVideoUrl(videoUrl);
+      }
+
       const fetchTranscription = async () => {
         try {
           // Fetch scene data from Baserow to get the Captions URL
@@ -861,7 +881,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Modal is closed, clear transcription data
       setTranscriptionWords(null);
     }
-  }, [isOpen, sceneId, refetchTrigger]);
+  }, [isOpen, sceneId, refetchTrigger, videoUrl]);
 
   // Handle keyboard controls
   useEffect(() => {
@@ -980,13 +1000,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             onPointerMove={handlePointerMove}
             onPointerLeave={handlePointerLeave}
           >
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              className='w-full h-full object-contain rounded border'
-              controls
-              onLoadedMetadata={handleVideoLoad}
-            />
+            {originalVideoUrl ? (
+              <video
+                ref={videoRef}
+                src={originalVideoUrl}
+                className='w-full h-full object-contain rounded border'
+                controls
+                onLoadedMetadata={handleVideoLoad}
+              />
+            ) : (
+              <div className='w-full h-full flex items-center justify-center bg-gray-100 rounded border'>
+                <div className='text-gray-500 text-center'>
+                  <div className='text-lg mb-2'>📹</div>
+                  <div>Loading video...</div>
+                </div>
+              </div>
+            )}
             {/* Invisible overlay to capture clicks when there's an overlay - excludes controls area */}
             {overlayImageUrl && (
               <div
