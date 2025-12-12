@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, Upload, Loader2, RotateCcw, Maximize } from 'lucide-react';
+import { X, Upload, Loader2, RotateCcw, Maximize, Crop } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
+import ReactCrop, { Crop as CropType, PixelCrop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 
 // Helper function to convert hex color to RGB
 const hexToRgb = (hex: string) => {
@@ -105,9 +107,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     height: number;
   } | null>(null);
 
+  // Cropping state
+  const [isCropping, setIsCropping] = useState(false);
+  const [crop, setCrop] = useState<CropType>({});
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const [originalImageAspectRatio, setOriginalImageAspectRatio] = useState<
+    number | null
+  >(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const cropPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const getVideoContentRect = useCallback(() => {
     const video = videoRef.current;
@@ -130,6 +141,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         // Clear text overlay when adding image
         setSelectedWordText(null);
         setCustomText('');
+
+        // Calculate original aspect ratio
+        const img = new Image();
+        img.onload = () => {
+          const aspectRatio = img.width / img.height;
+          setOriginalImageAspectRatio(aspectRatio);
+
+          // Set initial overlay size based on aspect ratio to show real image proportions
+          const maxSize = 40; // Maximum percentage of video area
+          if (aspectRatio > 1) {
+            // Landscape image
+            setOverlaySize({ width: maxSize, height: maxSize / aspectRatio });
+          } else {
+            // Portrait or square image
+            setOverlaySize({ width: maxSize * aspectRatio, height: maxSize });
+          }
+        };
+        img.src = url;
       }
     },
     []
@@ -142,6 +171,60 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       fileInputRef.current.value = '';
     }
   }, []);
+
+  const applyCrop = useCallback(async () => {
+    if (!completedCrop || !overlayImageUrl) return;
+
+    const image = new Image();
+    image.src = overlayImageUrl;
+
+    await new Promise((resolve) => {
+      image.onload = resolve;
+    });
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+
+    canvas.width = completedCrop.width;
+    canvas.height = completedCrop.height;
+
+    ctx.drawImage(
+      image,
+      completedCrop.x * scaleX,
+      completedCrop.y * scaleY,
+      completedCrop.width * scaleX,
+      completedCrop.height * scaleY,
+      0,
+      0,
+      completedCrop.width,
+      completedCrop.height
+    );
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const croppedFile = new File([blob], 'cropped-image.png', {
+          type: 'image/png',
+        });
+        const croppedUrl = URL.createObjectURL(croppedFile);
+
+        setOverlayImage(croppedFile);
+        setOverlayImageUrl(croppedUrl);
+
+        // Update aspect ratio for the cropped image
+        const newAspectRatio = completedCrop.width / completedCrop.height;
+        setOriginalImageAspectRatio(newAspectRatio);
+
+        // Reset crop state
+        setIsCropping(false);
+        setCrop({});
+        setCompletedCrop(null);
+      }
+    }, 'image/png');
+  }, [completedCrop, overlayImageUrl]);
 
   const handleVideoLoad = useCallback(() => {
     const video = videoRef.current;
@@ -205,24 +288,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           let newX = startPos.x;
           let newY = startPos.y;
 
+          // Calculate aspect ratio from original image or current size
+          const aspectRatio =
+            originalImageAspectRatio || startSize.width / startSize.height;
+
           // Handle horizontal resizing
           if (nearLeftEdge) {
             const deltaX = ((e.clientX - startX) / rect.width) * 100;
             newWidth = Math.max(5, startSize.width - deltaX);
+            newHeight = newWidth / aspectRatio; // Maintain aspect ratio
             newX = startPos.x + deltaX / 2; // Move position to keep right edge in place
           } else if (nearRightEdge) {
             const deltaX = ((e.clientX - startX) / rect.width) * 100;
             newWidth = Math.max(5, startSize.width + deltaX);
+            newHeight = newWidth / aspectRatio; // Maintain aspect ratio
           }
 
           // Handle vertical resizing
           if (nearTopEdge) {
             const deltaY = ((e.clientY - startY) / rect.height) * 100;
             newHeight = Math.max(5, startSize.height - deltaY);
+            newWidth = newHeight * aspectRatio; // Maintain aspect ratio
             newY = startPos.y + deltaY / 2; // Move position to keep bottom edge in place
           } else if (nearBottomEdge) {
             const deltaY = ((e.clientY - startY) / rect.height) * 100;
             newHeight = Math.max(5, startSize.height + deltaY);
+            newWidth = newHeight * aspectRatio; // Maintain aspect ratio
           }
 
           setOverlaySize({
@@ -796,6 +887,38 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => window.removeEventListener('resize', updateContainerRect);
   }, [getVideoContentRect]);
 
+  // Update crop preview canvas when crop changes
+  useEffect(() => {
+    if (completedCrop && overlayImageUrl && cropPreviewCanvasRef.current) {
+      const canvas = cropPreviewCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const image = new Image();
+        image.onload = () => {
+          const scaleX = image.naturalWidth / image.width;
+          const scaleY = image.naturalHeight / image.height;
+
+          canvas.width = completedCrop.width;
+          canvas.height = completedCrop.height;
+
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(
+            image,
+            completedCrop.x * scaleX,
+            completedCrop.y * scaleY,
+            completedCrop.width * scaleX,
+            completedCrop.height * scaleY,
+            0,
+            0,
+            completedCrop.width,
+            completedCrop.height
+          );
+        };
+        image.src = overlayImageUrl;
+      }
+    }
+  }, [completedCrop, overlayImageUrl]);
+
   if (!isOpen) return null;
 
   return (
@@ -884,7 +1007,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <img
                   src={overlayImageUrl}
                   alt='Overlay'
-                  className='w-full h-full object-cover'
+                  className='w-full h-full object-contain'
                   draggable={false}
                   onPointerDown={handleMouseDown}
                 />
@@ -1057,10 +1180,26 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     <button
                       onClick={() => {
                         setOverlayPosition({ x: 50, y: 50 });
-                        setOverlaySize({ width: 40, height: 40 });
+                        // Reset to natural aspect ratio
+                        if (originalImageAspectRatio) {
+                          const maxSize = 40;
+                          if (originalImageAspectRatio > 1) {
+                            setOverlaySize({
+                              width: maxSize,
+                              height: maxSize / originalImageAspectRatio,
+                            });
+                          } else {
+                            setOverlaySize({
+                              width: maxSize * originalImageAspectRatio,
+                              height: maxSize,
+                            });
+                          }
+                        } else {
+                          setOverlaySize({ width: 40, height: 40 });
+                        }
                       }}
                       className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
-                      title='Center and reset size'
+                      title='Center and reset to natural size'
                     >
                       <RotateCcw className='h-3 w-3' />
                     </button>
@@ -1075,6 +1214,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       title='Center and maximize size'
                     >
                       <Maximize className='h-3 w-3' />
+                    </button>
+                  </div>
+                  <div className='flex-shrink-0 mt-4'>
+                    <button
+                      onClick={() => setIsCropping(true)}
+                      className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+                      title='Crop image'
+                    >
+                      <Crop className='h-3 w-3' />
                     </button>
                   </div>
                 </div>
@@ -1520,6 +1668,97 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Cropping Modal */}
+      {isCropping && overlayImageUrl && (
+        <div className='fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]'>
+          <div className='bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] w-full mx-4'>
+            <div className='flex justify-between items-center mb-4'>
+              <h3 className='text-lg font-semibold'>Crop Image</h3>
+              <button
+                onClick={() => {
+                  setIsCropping(false);
+                  setCrop({});
+                  setCompletedCrop(null);
+                }}
+                className='p-1 hover:bg-gray-100 rounded'
+              >
+                <X className='h-5 w-5' />
+              </button>
+            </div>
+            <div className='flex flex-col items-center space-y-4'>
+              <div className='flex space-x-4 w-full'>
+                {/* Crop Selection */}
+                <div className='flex-1'>
+                  <h4 className='text-sm font-medium mb-2'>Select Crop Area</h4>
+                  <div className='max-h-[50vh] overflow-auto border rounded'>
+                    <ReactCrop
+                      crop={crop}
+                      onChange={(c) => setCrop(c)}
+                      onComplete={(c) => setCompletedCrop(c)}
+                      aspect={undefined} // Allow free-form cropping
+                    >
+                      <img
+                        src={overlayImageUrl}
+                        alt='Crop preview'
+                        className='max-w-full max-h-full object-contain'
+                      />
+                    </ReactCrop>
+                  </div>
+                </div>
+
+                {/* Crop Preview */}
+                <div className='flex-1'>
+                  <h4 className='text-sm font-medium mb-2'>Crop Preview</h4>
+                  <div className='border rounded bg-gray-50 flex items-center justify-center min-h-[200px]'>
+                    {completedCrop ? (
+                      <canvas
+                        ref={cropPreviewCanvasRef}
+                        className='max-w-full max-h-full object-contain'
+                        style={{ maxWidth: '100%', maxHeight: '200px' }}
+                      />
+                    ) : (
+                      <div className='text-gray-500 text-center'>
+                        <Crop className='h-8 w-8 mx-auto mb-2' />
+                        <p className='text-sm'>Select an area to see preview</p>
+                      </div>
+                    )}
+                  </div>
+                  {completedCrop && (
+                    <div className='mt-2 text-xs text-gray-600 text-center'>
+                      {Math.round(completedCrop.width)} ×{' '}
+                      {Math.round(completedCrop.height)} pixels
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className='flex space-x-2'>
+                <button
+                  onClick={() => {
+                    setIsCropping(false);
+                    setCrop({});
+                    setCompletedCrop(null);
+                  }}
+                  className='px-4 py-2 border border-gray-300 rounded hover:bg-gray-50'
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (completedCrop && overlayImage) {
+                      await applyCrop();
+                    }
+                  }}
+                  className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600'
+                  disabled={!completedCrop}
+                >
+                  Apply Crop
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Preview Video Overlay */}
       {previewUrl && (
