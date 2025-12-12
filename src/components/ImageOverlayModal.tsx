@@ -115,6 +115,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     number | null
   >(null);
 
+  // Actual image dimensions in pixels
+  const [actualImageDimensions, setActualImageDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -124,10 +130,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const video = videoRef.current;
     if (!video) return null;
 
-    // Use the container rect for consistent positioning
-    const container = video.parentElement;
-    const rect =
-      container?.getBoundingClientRect() || video.getBoundingClientRect();
+    // Use the video element's rect for overlay positioning
+    const rect = video.getBoundingClientRect();
     return rect;
   }, []);
 
@@ -147,16 +151,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         img.onload = () => {
           const aspectRatio = img.width / img.height;
           setOriginalImageAspectRatio(aspectRatio);
+          setActualImageDimensions({ width: img.width, height: img.height });
 
-          // Set initial overlay size based on aspect ratio to show real image proportions
-          const maxSize = 40; // Maximum percentage of video area
-          if (aspectRatio > 1) {
-            // Landscape image
-            setOverlaySize({ width: maxSize, height: maxSize / aspectRatio });
-          } else {
-            // Portrait or square image
-            setOverlaySize({ width: maxSize * aspectRatio, height: maxSize });
-          }
+          // Set overlay size to show image at its actual pixel dimensions
+          // Assuming HD video (1920x1080), calculate percentage to show actual size
+          const videoWidth = 1920; // Assume HD width
+          const videoHeight = 1080; // Assume HD height
+
+          const widthPercent = (img.width / videoWidth) * 100;
+          const heightPercent = (img.height / videoHeight) * 100;
+
+          setOverlaySize({
+            width: Math.min(widthPercent, 100),
+            height: Math.min(heightPercent, 100),
+          });
         };
         img.src = url;
       }
@@ -217,6 +225,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         // Update aspect ratio for the cropped image
         const newAspectRatio = completedCrop.width / completedCrop.height;
         setOriginalImageAspectRatio(newAspectRatio);
+        setActualImageDimensions({
+          width: completedCrop.width,
+          height: completedCrop.height,
+        });
 
         // Reset crop state
         setIsCropping(false);
@@ -230,8 +242,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const video = videoRef.current;
     if (video && video.duration) {
       setEndTime(video.duration);
+
+      // Update container rect when video loads
+      const rect = getVideoContentRect();
+      if (rect) {
+        setContainerRect({ width: rect.width, height: rect.height });
+      }
     }
-  }, []);
+  }, [getVideoContentRect]);
 
   const handleMouseDown = useCallback(
     (event: React.PointerEvent) => {
@@ -288,32 +306,25 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           let newX = startPos.x;
           let newY = startPos.y;
 
-          // Calculate aspect ratio from original image or current size
-          const aspectRatio =
-            originalImageAspectRatio || startSize.width / startSize.height;
-
+          // Allow free resizing without maintaining aspect ratio
           // Handle horizontal resizing
           if (nearLeftEdge) {
             const deltaX = ((e.clientX - startX) / rect.width) * 100;
             newWidth = Math.max(5, startSize.width - deltaX);
-            newHeight = newWidth / aspectRatio; // Maintain aspect ratio
             newX = startPos.x + deltaX / 2; // Move position to keep right edge in place
           } else if (nearRightEdge) {
             const deltaX = ((e.clientX - startX) / rect.width) * 100;
             newWidth = Math.max(5, startSize.width + deltaX);
-            newHeight = newWidth / aspectRatio; // Maintain aspect ratio
           }
 
           // Handle vertical resizing
           if (nearTopEdge) {
             const deltaY = ((e.clientY - startY) / rect.height) * 100;
             newHeight = Math.max(5, startSize.height - deltaY);
-            newWidth = newHeight * aspectRatio; // Maintain aspect ratio
             newY = startPos.y + deltaY / 2; // Move position to keep bottom edge in place
           } else if (nearBottomEdge) {
             const deltaY = ((e.clientY - startY) / rect.height) * 100;
             newHeight = Math.max(5, startSize.height + deltaY);
-            newWidth = newHeight * aspectRatio; // Maintain aspect ratio
           }
 
           setOverlaySize({
@@ -919,6 +930,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [completedCrop, overlayImageUrl]);
 
+  // Update container dimensions
+  useEffect(() => {
+    const updateContainerRect = () => {
+      const rect = getVideoContentRect();
+      if (rect) {
+        setContainerRect({ width: rect.width, height: rect.height });
+      }
+    };
+
+    // Update immediately
+    updateContainerRect();
+
+    // Update on window resize
+    window.addEventListener('resize', updateContainerRect);
+    return () => window.removeEventListener('resize', updateContainerRect);
+  }, [getVideoContentRect]);
+
   if (!isOpen) return null;
 
   return (
@@ -1142,7 +1170,31 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </div>
                   <div className='flex-1'>
                     <label className='block text-xs text-gray-600'>
-                      Width (%)
+                      Image Width (px)
+                    </label>
+                    <input
+                      type='number'
+                      value={actualImageDimensions?.width || 0}
+                      readOnly
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-50'
+                    />
+                  </div>
+                  <div className='flex-1'>
+                    <label className='block text-xs text-gray-600'>
+                      Image Height (px)
+                    </label>
+                    <input
+                      type='number'
+                      value={actualImageDimensions?.height || 0}
+                      readOnly
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-50'
+                    />
+                  </div>
+                </div>
+                <div className='flex gap-2 items-end w-full'>
+                  <div className='flex-1'>
+                    <label className='block text-xs text-gray-600'>
+                      Overlay Width (%)
                     </label>
                     <input
                       type='number'
@@ -1160,7 +1212,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </div>
                   <div className='flex-1'>
                     <label className='block text-xs text-gray-600'>
-                      Height (%)
+                      Overlay Height (%)
                     </label>
                     <input
                       type='number'
@@ -1180,22 +1232,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     <button
                       onClick={() => {
                         setOverlayPosition({ x: 50, y: 50 });
-                        // Reset to natural aspect ratio
-                        if (originalImageAspectRatio) {
-                          const maxSize = 40;
-                          if (originalImageAspectRatio > 1) {
-                            setOverlaySize({
-                              width: maxSize,
-                              height: maxSize / originalImageAspectRatio,
-                            });
-                          } else {
-                            setOverlaySize({
-                              width: maxSize * originalImageAspectRatio,
-                              height: maxSize,
-                            });
-                          }
+                        // Reset to actual image size
+                        if (actualImageDimensions) {
+                          const videoWidth = 1920; // Assume HD width
+                          const videoHeight = 1080; // Assume HD height
+
+                          const widthPercent =
+                            (actualImageDimensions.width / videoWidth) * 100;
+                          const heightPercent =
+                            (actualImageDimensions.height / videoHeight) * 100;
+
+                          setOverlaySize({
+                            width: Math.min(widthPercent, 100),
+                            height: Math.min(heightPercent, 100),
+                          });
                         } else {
-                          setOverlaySize({ width: 40, height: 40 });
+                          setOverlaySize({ width: 25, height: 25 });
                         }
                       }}
                       className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
@@ -1208,7 +1260,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     <button
                       onClick={() => {
                         setOverlayPosition({ x: 50, y: 50 });
-                        setOverlaySize({ width: 100, height: 100 });
+                        // Maximize while maintaining aspect ratio
+                        if (originalImageAspectRatio) {
+                          if (originalImageAspectRatio > 1) {
+                            // Landscape - constrain by width
+                            setOverlaySize({
+                              width: 100,
+                              height: 100 / originalImageAspectRatio,
+                            });
+                          } else {
+                            // Portrait - constrain by height
+                            setOverlaySize({
+                              width: 100 * originalImageAspectRatio,
+                              height: 100,
+                            });
+                          }
+                        } else {
+                          setOverlaySize({ width: 100, height: 100 });
+                        }
                       }}
                       className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
                       title='Center and maximize size'
