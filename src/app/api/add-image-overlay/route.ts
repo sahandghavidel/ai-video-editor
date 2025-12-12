@@ -144,6 +144,21 @@ export async function POST(request: NextRequest) {
 
       // Use custom styling if provided, otherwise use defaults
       const fontColor = textStyling?.fontColor || 'white';
+      const textOpacity = textStyling?.textOpacity || undefined;
+      // Background params
+      const bgColor = textStyling?.bgColor || null;
+      const bgOpacity =
+        typeof textStyling?.bgOpacity === 'number'
+          ? textStyling?.bgOpacity
+          : textStyling?.bgOpacity
+          ? Number(textStyling?.bgOpacity)
+          : 1;
+      const bgSize =
+        typeof textStyling?.bgSize === 'number'
+          ? textStyling?.bgSize
+          : textStyling?.bgSize
+          ? Number(textStyling?.bgSize)
+          : 0;
       const borderWidth = textStyling?.borderWidth || 3;
       const borderColor = textStyling?.borderColor || 'black';
       const shadowX = textStyling?.shadowX || 8;
@@ -164,7 +179,56 @@ export async function POST(request: NextRequest) {
       const fontFile =
         fontFileMap[fontFamily] || '/System/Library/Fonts/Helvetica.ttc';
 
-      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColor}:fontsize=${fontSize}:fontcolor=${fontColor}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColor}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
+      // helper normalize hex #RRGGBB => 0xRRGGBB because FFmpeg drawtext accepts 0x notation
+      const normalizeColor = (c: string | undefined | null) => {
+        if (!c) return c;
+        const trimmed = c.trim();
+        if (trimmed.startsWith('#'))
+          return '0x' + trimmed.slice(1).toUpperCase();
+        return trimmed;
+      };
+
+      // include text opacity if provided
+      const fontColorWithOpacity = textOpacity
+        ? `${normalizeColor(fontColor)}@${Math.max(
+            0,
+            Math.min(1, Number(textOpacity))
+          )}`
+        : normalizeColor(fontColor) || fontColor;
+      let boxParams = '';
+      let drawboxFilter = '';
+      if (bgColor && bgSize > 0) {
+        const bgColorNormalized = normalizeColor(bgColor) || bgColor;
+        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
+          0,
+          Math.min(1, Number(bgOpacity))
+        )}`;
+        // Compute drawbox position and size based on estimated text dimensions
+        const posX = positionX / 100;
+        const posY = positionY / 100;
+        const boxX = Math.round(videoWidth * posX - textWidth / 2 - bgSize);
+        const boxY = Math.round(videoHeight * posY - textHeight / 2 - bgSize);
+        const boxW = Math.round(textWidth + bgSize * 2);
+        const boxH = Math.round(textHeight + bgSize * 2);
+        drawboxFilter = `drawbox=x=${boxX}:y=${boxY}:w=${boxW}:h=${boxH}:color=${boxColorWithOpacity}:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      } else if (bgColor && bgSize === 0) {
+        const bgColorNormalized = normalizeColor(bgColor) || bgColor;
+        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
+          0,
+          Math.min(1, Number(bgOpacity))
+        )}`;
+        boxParams = `:box=1:boxcolor=${boxColorWithOpacity}:boxborderw=${Math.max(
+          0,
+          Math.min(200, Number(bgSize))
+        )}`;
+      }
+
+      if (drawboxFilter) {
+        const vf = `${drawboxFilter},drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColor}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColor}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
+      } else {
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColor}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColor}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
+      }
     } else {
       throw new Error('No overlay content provided');
     }

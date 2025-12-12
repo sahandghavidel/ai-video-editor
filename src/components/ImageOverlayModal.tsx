@@ -43,16 +43,7 @@ interface ImageOverlayModalProps {
     size: { width: number; height: number },
     startTime: number,
     endTime: number,
-    textStyling?: {
-      fontColor: string;
-      borderWidth: number;
-      borderColor: string;
-      shadowX: number;
-      shadowY: number;
-      shadowColor: string;
-      shadowOpacity: number;
-      fontFamily: string;
-    }
+    textStyling?: TextStyling
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -62,6 +53,20 @@ interface ImageOverlayModalProps {
   ) => Promise<void>;
   onUpdateModalVideoUrl?: (videoUrl: string) => void;
 }
+
+type TextStyling = {
+  fontColor: string;
+  borderWidth: number;
+  borderColor: string;
+  shadowX: number;
+  shadowY: number;
+  shadowColor: string;
+  shadowOpacity: number;
+  fontFamily: string;
+  bgColor?: string;
+  bgOpacity?: number;
+  bgSize?: number;
+};
 
 export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   isOpen,
@@ -97,7 +102,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     width: 20,
     height: 10,
   }); // percentage
-  const [textStyling, setTextStyling] = useState(() => {
+  const [textStyling, setTextStyling] = useState<TextStyling>(() => {
     // Load default styling from localStorage, or use fallback defaults
     const saved = localStorage.getItem('defaultTextStyling');
     return saved
@@ -111,6 +116,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           shadowColor: '#000000',
           shadowOpacity: 0.9,
           fontFamily: 'Helvetica',
+          // Background (box) settings for text overlay
+          bgColor: '#000000',
+          bgOpacity: 0.65,
+          bgSize: 8, // px padding for background around text
         };
   });
   // Saved text styling presets, persisted in localStorage
@@ -804,6 +813,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const handlePreview = useCallback(async () => {
     if (!overlayImage && !selectedWordText) return;
     if (!originalVideoUrl) return;
+    console.log('handlePreview: textStyling', textStyling);
 
     const formData = new FormData();
     formData.append('videoUrl', originalVideoUrl);
@@ -869,6 +879,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (!overlayImage && !selectedWordText) return;
 
     try {
+      console.log(
+        'handleApply: sending textStyling',
+        selectedWordText ? textStyling : undefined
+      );
       // Apply overlay to the CURRENT video playing in the modal
       await onApply(
         sceneId,
@@ -936,6 +950,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               shadowColor: '#000000',
               shadowOpacity: 0.9,
               fontFamily: 'Helvetica',
+              bgColor: '#000000',
+              bgOpacity: 0.65,
+              bgSize: 8,
             };
       });
     } catch (error) {
@@ -1271,6 +1288,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         : 'none',
                     fontWeight: 'bold',
                     fontFamily: textStyling.fontFamily,
+                    backgroundColor: textStyling.bgColor
+                      ? `rgba(${hexToRgb(textStyling.bgColor)}, ${
+                          textStyling.bgOpacity ?? 1
+                        })`
+                      : undefined,
+                    padding: textStyling.bgSize
+                      ? `${textStyling.bgSize}px`
+                      : undefined,
+                    borderRadius: textStyling.bgSize ? '4px' : undefined,
                   }}
                 >
                   {selectedWordText}
@@ -1874,6 +1900,59 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         className='w-12 h-6 border border-gray-300 rounded cursor-pointer'
                       />
                     </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        BG Color
+                      </label>
+                      <input
+                        type='color'
+                        value={textStyling.bgColor ?? '#000000'}
+                        onChange={(e) =>
+                          setTextStyling((prev) => ({
+                            ...prev,
+                            bgColor: e.target.value,
+                          }))
+                        }
+                        className='w-12 h-6 border border-gray-300 rounded cursor-pointer'
+                      />
+                    </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        BG Opacity
+                      </label>
+                      <input
+                        type='number'
+                        value={textStyling.bgOpacity ?? 0.65}
+                        onChange={(e) =>
+                          setTextStyling((prev) => ({
+                            ...prev,
+                            bgOpacity: Number(e.target.value),
+                          }))
+                        }
+                        className='w-20 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                        min={0}
+                        max={1}
+                        step={0.05}
+                      />
+                    </div>
+                    <div className='flex flex-col'>
+                      <label className='text-xs text-gray-600 mb-1'>
+                        BG Size
+                      </label>
+                      <input
+                        type='number'
+                        value={textStyling.bgSize ?? 8}
+                        onChange={(e) =>
+                          setTextStyling((prev) => ({
+                            ...prev,
+                            bgSize: Number(e.target.value),
+                          }))
+                        }
+                        className='w-20 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                        min={0}
+                        max={200}
+                      />
+                    </div>
                     <button
                       onClick={() => {
                         const saved =
@@ -1890,6 +1969,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                                 shadowColor: '#000000',
                                 shadowOpacity: 0.9,
                                 fontFamily: 'Helvetica',
+                                bgColor: '#000000',
+                                bgOpacity: 0.65,
+                                bgSize: 8,
                               }
                         );
                       }}
