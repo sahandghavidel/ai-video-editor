@@ -11,7 +11,9 @@ import {
   ZoomIn,
   ZoomOut,
   Camera,
-  onUpdateModalVideoUrl,
+  Save,
+  List,
+  Trash,
 } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
@@ -111,6 +113,75 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           fontFamily: 'Helvetica',
         };
   });
+  // Saved text styling presets, persisted in localStorage
+  const [savedTextStyles, setSavedTextStyles] = useState<
+    { name: string; style: typeof textStyling }[]
+  >([]);
+  const [showSavedStyles, setShowSavedStyles] = useState(false);
+
+  // Load saved styles from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('savedTextStyles');
+      if (stored) {
+        console.log('Loading savedTextStyles from localStorage:', stored);
+        const parsed = JSON.parse(stored) as {
+          name: string;
+          style: typeof textStyling;
+        }[];
+        setSavedTextStyles(parsed);
+      }
+    } catch (e) {
+      console.error('Failed to load saved text styles:', e);
+    }
+  }, []);
+
+  // Previously we wrote savedTextStyles on every state change, which could
+  // overwrite loaded values on mount due to timing; we now only write to
+  // localStorage explicitly when saving/deleting presets so we avoid race conditions.
+
+  const saveCurrentTextStyle = useCallback(() => {
+    const name = prompt('Enter a name for this text style preset');
+    if (!name) return;
+    // avoid duplicates
+    if (savedTextStyles.some((s) => s.name === name)) {
+      alert('A preset with that name already exists');
+      return;
+    }
+    console.log('Saving preset', name, textStyling);
+    setSavedTextStyles((prev) => {
+      const next = [...prev, { name, style: textStyling }];
+      return next;
+    });
+    try {
+      const next = [...savedTextStyles, { name, style: textStyling }];
+      localStorage.setItem('savedTextStyles', JSON.stringify(next));
+      console.log('Saved preset to localStorage', next);
+    } catch (e) {
+      console.error('Failed to persist savedTextStyles during save', e);
+    }
+    setShowSavedStyles(false);
+  }, [savedTextStyles, textStyling]);
+
+  const applySavedTextStyle = useCallback(
+    (preset: { name: string; style: typeof textStyling }) => {
+      setTextStyling(preset.style);
+      setShowSavedStyles(false);
+    },
+    []
+  );
+
+  const deleteSavedTextStyle = useCallback((name: string) => {
+    if (!confirm(`Delete preset ${name}?`)) return;
+    const next = savedTextStyles.filter((s) => s.name !== name);
+    setSavedTextStyles(next);
+    try {
+      localStorage.setItem('savedTextStyles', JSON.stringify(next));
+      console.log('Updated localStorage after delete', next);
+    } catch (e) {
+      console.error('Failed to persist savedTextStyles during delete', e);
+    }
+  }, []);
   const [isDraggingText, setIsDraggingText] = useState(false);
   const [isResizingText, setIsResizingText] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -1838,6 +1909,59 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     >
                       Save Default
                     </button>
+                    <button
+                      onClick={saveCurrentTextStyle}
+                      className='px-2 py-0.5 text-xs bg-green-500 text-white rounded hover:bg-green-600 h-6 flex items-center gap-1'
+                      title='Save text styling as preset'
+                    >
+                      <Save className='h-4 w-4' />
+                      <span>Save</span>
+                    </button>
+                    <div className='relative'>
+                      <button
+                        onClick={() => setShowSavedStyles((s) => !s)}
+                        className='px-2 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 h-6 flex items-center gap-1'
+                        title='Saved presets'
+                      >
+                        <List className='h-4 w-4' />
+                        <span>Presets</span>
+                        <span className='ml-1 inline-flex items-center justify-center bg-gray-200 text-xs rounded-full w-5 h-5'>
+                          {savedTextStyles.length}
+                        </span>
+                      </button>
+                      {showSavedStyles && (
+                        <div className='absolute z-10 right-0 mt-1 bg-white border rounded shadow-md w-56 p-2'>
+                          {savedTextStyles.length === 0 ? (
+                            <div className='text-xs text-gray-500'>
+                              No presets saved
+                            </div>
+                          ) : (
+                            <ul className='space-y-1'>
+                              {savedTextStyles.map((s) => (
+                                <li
+                                  key={s.name}
+                                  className='flex items-center justify-between'
+                                >
+                                  <button
+                                    onClick={() => applySavedTextStyle(s)}
+                                    className='text-sm text-left text-gray-700 hover:text-black w-full'
+                                  >
+                                    {s.name}
+                                  </button>
+                                  <button
+                                    onClick={() => deleteSavedTextStyle(s.name)}
+                                    className='text-red-500 hover:text-red-700 ml-2'
+                                    title='Delete preset'
+                                  >
+                                    <Trash className='h-4 w-4' />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
