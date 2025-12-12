@@ -1266,24 +1266,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     <button
                       onClick={() => {
                         setOverlayPosition({ x: 50, y: 50 });
-                        // Maximize while maintaining aspect ratio
-                        if (originalImageAspectRatio) {
-                          if (originalImageAspectRatio > 1) {
-                            // Landscape - constrain by width
-                            setOverlaySize({
-                              width: 100,
-                              height: 100 / originalImageAspectRatio,
-                            });
-                          } else {
-                            // Portrait - constrain by height
-                            setOverlaySize({
-                              width: 100 * originalImageAspectRatio,
-                              height: 100,
-                            });
-                          }
-                        } else {
-                          setOverlaySize({ width: 100, height: 100 });
-                        }
+                        // Maximize to fill video
+                        setOverlaySize({ width: 100, height: 100 });
                       }}
                       className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
                       title='Center and maximize size'
