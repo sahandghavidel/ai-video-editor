@@ -1,7 +1,16 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, Upload, Loader2, RotateCcw, Maximize, Crop } from 'lucide-react';
+import {
+  X,
+  Upload,
+  Loader2,
+  RotateCcw,
+  Maximize,
+  Crop,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 import ReactCrop, { Crop as CropType, PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
@@ -1292,6 +1301,36 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       title='Crop image'
                     >
                       <Crop className='h-3 w-3' />
+                    </button>
+                  </div>
+                  <div className='flex-shrink-0 mt-4'>
+                    <button
+                      onClick={() => {
+                        // Zoom out - scale both dimensions by 0.9 (10% smaller)
+                        setOverlaySize((prev) => ({
+                          width: Math.max(5, prev.width * 0.9),
+                          height: Math.max(5, prev.height * 0.9),
+                        }));
+                      }}
+                      className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+                      title='Zoom out (scale down 10%)'
+                    >
+                      <ZoomOut className='h-3 w-3' />
+                    </button>
+                  </div>
+                  <div className='flex-shrink-0 mt-4'>
+                    <button
+                      onClick={() => {
+                        // Zoom in - scale both dimensions by 1.1 (10% larger)
+                        setOverlaySize((prev) => ({
+                          width: Math.min(100, prev.width * 1.1),
+                          height: Math.min(100, prev.height * 1.1),
+                        }));
+                      }}
+                      className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+                      title='Zoom in (scale up 10%)'
+                    >
+                      <ZoomIn className='h-3 w-3' />
                     </button>
                   </div>
                 </div>
