@@ -1332,12 +1332,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             )}
             {selectedWordText && (
               <div
-                className='absolute border-2 border-green-500 cursor-move pointer-events-auto z-10 rounded'
+                className='absolute border border-green-500 cursor-move pointer-events-auto z-10 rounded'
                 style={{
                   left: `${textOverlayPosition.x}%`,
                   top: `${textOverlayPosition.y}%`,
                   transform: 'translate(-50%, -50%)',
-                  width: `${
+                  width: `${Math.max(
+                    5,
                     Math.min(
                       95,
                       (selectedWordText.length <= 3
@@ -1348,11 +1349,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         ? 70
                         : 85) *
                         (textOverlaySize.width / 20)
-                    ) // Scale with font size
-                  }%`,
+                    ) * 0.5
+                  )}%`,
                   height: `${Math.max(
-                    10,
-                    Math.min(85, (textOverlaySize.width / 100) * 60)
+                    5,
+                    Math.max(
+                      10,
+                      Math.min(85, (textOverlaySize.width / 100) * 60)
+                    ) * 0.5
                   )}%`,
                   // Match server-side font sizing (in video pixels), then scale to CSS pixels.
                   fontSize: `${(() => {
