@@ -19,6 +19,7 @@ import {
   ZoomOut,
   Camera,
   Copy,
+  Clipboard,
   Save,
   List,
   Trash,
@@ -422,6 +423,72 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       );
     }
   }, [overlayImage]);
+
+  const handlePasteOverlayImageFromClipboard = useCallback(async () => {
+    try {
+      const clipboard = navigator.clipboard as any;
+      if (!clipboard?.read) {
+        alert(
+          'Pasting images from clipboard is not supported in this browser.'
+        );
+        return;
+      }
+
+      const items: any[] = await clipboard.read();
+      let imageType: string | undefined;
+      let imageBlob: Blob | null = null;
+
+      for (const item of items) {
+        const t = (item.types || []).find((x: string) =>
+          x.startsWith('image/')
+        );
+        if (!t) continue;
+        imageType = t;
+        imageBlob = await item.getType(t);
+        break;
+      }
+
+      if (!imageBlob || !imageType) {
+        alert('Clipboard does not contain an image.');
+        return;
+      }
+
+      const ext = imageType.split('/')[1] || 'png';
+      const file = new File([imageBlob], `clipboard-image.${ext}`, {
+        type: imageType,
+      });
+
+      setOverlayImage(file);
+      const url = URL.createObjectURL(file);
+      setOverlayImageUrl(url);
+      // Clear text overlay when adding image
+      setSelectedWordText(null);
+      setCustomText('');
+
+      // Calculate aspect ratio + overlay size similarly to upload/screenshot
+      const img = new Image();
+      img.onload = () => {
+        const aspectRatio = img.width / img.height;
+        setOriginalImageAspectRatio(aspectRatio);
+        setActualImageDimensions({ width: img.width, height: img.height });
+
+        const videoWidth = 1920;
+        const videoHeight = 1080;
+        const widthPercent = (img.width / videoWidth) * 100;
+        const heightPercent = (img.height / videoHeight) * 100;
+        setOverlaySize({
+          width: Math.min(widthPercent, 100),
+          height: Math.min(heightPercent, 100),
+        });
+      };
+      img.src = url;
+    } catch (e) {
+      console.error('Failed to paste overlay image from clipboard:', e);
+      alert(
+        'Failed to paste image from clipboard. Your browser may be blocking clipboard access.'
+      );
+    }
+  }, []);
 
   const applyCrop = useCallback(async () => {
     console.log('applyCrop called');
@@ -1479,6 +1546,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   aria-label='Copy image to clipboard'
                 >
                   <Copy className='h-4 w-4' />
+                </button>
+                <button
+                  type='button'
+                  onClick={handlePasteOverlayImageFromClipboard}
+                  className='flex items-center justify-center px-2 py-2 border border-gray-300 rounded hover:bg-gray-50 h-10 w-10'
+                  title='Paste image from clipboard'
+                  aria-label='Paste image from clipboard'
+                >
+                  <Clipboard className='h-4 w-4' />
                 </button>
                 {overlayImage && (
                   <button
