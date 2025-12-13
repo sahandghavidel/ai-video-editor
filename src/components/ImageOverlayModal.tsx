@@ -214,15 +214,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     console.log('Saving preset', name, textStyling);
     setSavedTextStyles((prev) => {
       const next = [...prev, { name, style: textStyling }];
+      try {
+        localStorage.setItem('savedTextStyles', JSON.stringify(next));
+        console.log('Saved preset to localStorage', next);
+      } catch (e) {
+        console.error('Failed to persist savedTextStyles during save', e);
+      }
       return next;
     });
-    try {
-      const next = [...savedTextStyles, { name, style: textStyling }];
-      localStorage.setItem('savedTextStyles', JSON.stringify(next));
-      console.log('Saved preset to localStorage', next);
-    } catch (e) {
-      console.error('Failed to persist savedTextStyles during save', e);
-    }
     setShowSavedStyles(false);
   }, [savedTextStyles, textStyling]);
 
@@ -236,14 +235,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const deleteSavedTextStyle = useCallback((name: string) => {
     if (!confirm(`Delete preset ${name}?`)) return;
-    const next = savedTextStyles.filter((s) => s.name !== name);
-    setSavedTextStyles(next);
-    try {
-      localStorage.setItem('savedTextStyles', JSON.stringify(next));
-      console.log('Updated localStorage after delete', next);
-    } catch (e) {
-      console.error('Failed to persist savedTextStyles during delete', e);
-    }
+    setSavedTextStyles((prev) => {
+      const next = prev.filter((s) => s.name !== name);
+      try {
+        localStorage.setItem('savedTextStyles', JSON.stringify(next));
+        console.log('Updated localStorage after delete', next);
+      } catch (e) {
+        console.error('Failed to persist savedTextStyles during delete', e);
+      }
+      return next;
+    });
   }, []);
   const [isDraggingText, setIsDraggingText] = useState(false);
   const [isResizingText, setIsResizingText] = useState(false);
@@ -2267,51 +2268,95 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       <Save className='h-4 w-4' />
                       <span className='sr-only'>Save</span>
                     </button>
-                    <div className='relative'>
-                      <button
-                        onClick={() => setShowSavedStyles((s) => !s)}
-                        className='flex items-center gap-1 justify-center px-2 py-1 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 h-7'
-                        title='Saved presets'
-                      >
-                        <List className='h-4 w-4' />
-                        <span className='sr-only'>Presets</span>
-                        <span className='ml-1 inline-flex items-center justify-center bg-gray-200 text-xs rounded-full w-5 h-5'>
-                          {savedTextStyles.length}
-                        </span>
-                      </button>
-                      {showSavedStyles && (
-                        <div className='absolute z-10 right-0 mt-1 bg-white border rounded shadow-md w-56 p-2'>
-                          {savedTextStyles.length === 0 ? (
-                            <div className='text-xs text-gray-500'>
-                              No presets saved
-                            </div>
-                          ) : (
-                            <ul className='space-y-1'>
-                              {savedTextStyles.map((s) => (
-                                <li
-                                  key={s.name}
-                                  className='flex items-center justify-between'
+                  </div>
+
+                  {/* Presets (inline, no dropdown) */}
+                  <div className='mt-2'>
+                    {savedTextStyles.length === 0 ? (
+                      <div className='text-xs text-gray-500'>
+                        No presets saved
+                      </div>
+                    ) : (
+                      <div className='grid grid-cols-2 sm:grid-cols-3 gap-2'>
+                        {savedTextStyles.map((s) => {
+                          const style = s.style;
+                          // Preset chips: show name + key colors (text/border/shadow).
+
+                          return (
+                            <div
+                              key={s.name}
+                              role='button'
+                              tabIndex={0}
+                              onClick={() => applySavedTextStyle(s)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  applySavedTextStyle(s);
+                                }
+                              }}
+                              className='group relative text-left rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 px-2 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500'
+                              title={s.name}
+                              aria-label={`Apply preset ${s.name}`}
+                            >
+                              <button
+                                type='button'
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteSavedTextStyle(s.name);
+                                }}
+                                className='absolute top-1 right-1 p-1 rounded text-red-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity'
+                                title='Delete preset'
+                                aria-label={`Delete preset ${s.name}`}
+                              >
+                                <Trash className='h-4 w-4' />
+                              </button>
+
+                              <div className='flex items-center justify-between gap-2 pr-6'>
+                                <div
+                                  className='min-w-0 whitespace-nowrap truncate'
+                                  style={{
+                                    fontFamily: style.fontFamily,
+                                    color: '#000000',
+                                    WebkitTextStroke: 'none',
+                                    textShadow: 'none',
+                                    lineHeight: 1.05,
+                                    fontSize: '14px',
+                                    fontWeight: 700,
+                                  }}
                                 >
-                                  <button
-                                    onClick={() => applySavedTextStyle(s)}
-                                    className='text-sm text-left text-gray-700 hover:text-black w-full'
-                                  >
-                                    {s.name}
-                                  </button>
-                                  <button
-                                    onClick={() => deleteSavedTextStyle(s.name)}
-                                    className='text-red-500 hover:text-red-700 ml-2'
-                                    title='Delete preset'
-                                  >
-                                    <Trash className='h-4 w-4' />
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                                  {s.name}
+                                </div>
+
+                                <div className='flex items-center gap-1 shrink-0'>
+                                  <span
+                                    className='h-3 w-3 rounded-sm border border-gray-300'
+                                    style={{ backgroundColor: style.fontColor }}
+                                    title='Text color'
+                                    aria-label='Text color'
+                                  />
+                                  <span
+                                    className='h-3 w-3 rounded-sm border border-gray-300'
+                                    style={{
+                                      backgroundColor: style.borderColor,
+                                    }}
+                                    title='Border color'
+                                    aria-label='Border color'
+                                  />
+                                  <span
+                                    className='h-3 w-3 rounded-sm border border-gray-300'
+                                    style={{
+                                      backgroundColor: style.shadowColor,
+                                    }}
+                                    title='Shadow color'
+                                    aria-label='Shadow color'
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
