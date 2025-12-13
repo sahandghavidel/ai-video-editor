@@ -18,6 +18,7 @@ import {
   ZoomIn,
   ZoomOut,
   Camera,
+  Copy,
   Save,
   List,
   Trash,
@@ -393,6 +394,34 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }, 'image/png');
     }
   }, []);
+
+  const handleCopyOverlayImageToClipboard = useCallback(async () => {
+    if (!overlayImage) return;
+
+    try {
+      const clipboard = navigator.clipboard;
+      const ClipboardItemCtor = (window as any).ClipboardItem as
+        | typeof ClipboardItem
+        | undefined;
+
+      if (!clipboard?.write || !ClipboardItemCtor) {
+        alert('Copying images to clipboard is not supported in this browser.');
+        return;
+      }
+
+      const mime = overlayImage.type || 'image/png';
+      await clipboard.write([
+        new ClipboardItemCtor({
+          [mime]: overlayImage,
+        }),
+      ]);
+    } catch (e) {
+      console.error('Failed to copy overlay image to clipboard:', e);
+      alert(
+        'Failed to copy image to clipboard. Your browser may be blocking clipboard access.'
+      );
+    }
+  }, [overlayImage]);
 
   const applyCrop = useCallback(async () => {
     console.log('applyCrop called');
@@ -1440,6 +1469,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   aria-label='Take screenshot from video'
                 >
                   <Camera className='h-4 w-4' />
+                </button>
+                <button
+                  type='button'
+                  onClick={handleCopyOverlayImageToClipboard}
+                  disabled={!overlayImage}
+                  className='flex items-center justify-center px-2 py-2 border border-gray-300 rounded hover:bg-gray-50 h-10 w-10 disabled:opacity-50 disabled:cursor-not-allowed'
+                  title='Copy image to clipboard'
+                  aria-label='Copy image to clipboard'
+                >
+                  <Copy className='h-4 w-4' />
                 </button>
                 {overlayImage && (
                   <button
