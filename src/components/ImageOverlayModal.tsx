@@ -16,6 +16,9 @@ import {
   List,
   Trash,
   Plus,
+  Clock,
+  Mic,
+  Settings,
 } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
@@ -1339,27 +1342,34 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               <div className='flex items-center space-x-2'>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className='flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50'
+                  className='flex items-center justify-center px-2 py-2 border border-gray-300 rounded hover:bg-gray-50 h-10 w-10'
+                  title={overlayImage ? 'Change Image' : 'Upload Image'}
+                  aria-label={overlayImage ? 'Change Image' : 'Upload Image'}
                 >
                   <Upload className='h-4 w-4' />
-                  <span>{overlayImage ? 'Change Image' : 'Upload Image'}</span>
                 </button>
                 <button
                   onClick={handleScreenshot}
-                  className='flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50'
+                  className='flex items-center justify-center px-2 py-2 border border-gray-300 rounded hover:bg-gray-50 h-10 w-10'
                   title='Take screenshot from video'
+                  aria-label='Take screenshot from video'
                 >
                   <Camera className='h-4 w-4' />
-                  <span>Screenshot</span>
                 </button>
                 {overlayImage && (
                   <button
                     onClick={handleRemoveImage}
-                    className='flex items-center space-x-2 px-3 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50 hover:border-red-400'
+                    className='flex items-center justify-center px-2 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50 hover:border-red-400 h-10 w-10'
                     title='Remove image'
+                    aria-label='Remove image'
                   >
                     <X className='h-4 w-4' />
                   </button>
+                )}
+                {overlayImage && (
+                  <p className='text-xs text-gray-600 ml-2 truncate max-w-[180px]'>
+                    {overlayImage.name}
+                  </p>
                 )}
               </div>
               {overlayImage && (
@@ -1554,56 +1564,65 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
             {/* Timing Controls */}
             {(overlayImageUrl || selectedWordText) && (
-              <div className='space-y-2'>
-                <label className='block text-sm font-medium'>Timing</label>
+              <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
+                <div className='flex items-center gap-2 mb-2'>
+                  <Clock className='h-4 w-4 text-gray-600' />
+                  <span className='sr-only'>Timing</span>
+                </div>
                 <div className='grid grid-cols-2 gap-2'>
                   <div>
-                    <label className='block text-xs text-gray-600'>
-                      Start Time (s)
-                    </label>
-                    <input
-                      type='number'
-                      value={startTime}
-                      onChange={(e) => setStartTime(Number(e.target.value))}
-                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
-                      min='0'
-                      step='0.1'
-                    />
-                    <button
-                      onClick={() => {
-                        const video = videoRef.current;
-                        if (video) {
-                          setStartTime(video.currentTime);
-                        }
-                      }}
-                      className='mt-1 w-full px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium'
-                    >
-                      Set Current Time
-                    </button>
+                    <label className='sr-only'>Start Time (s)</label>
+                    <div className='flex gap-2'>
+                      <input
+                        type='number'
+                        value={startTime}
+                        onChange={(e) => setStartTime(Number(e.target.value))}
+                        className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-white'
+                        min='0'
+                        step='0.1'
+                        placeholder='Start s'
+                      />
+                      <button
+                        onClick={() => {
+                          const video = videoRef.current;
+                          if (video) {
+                            setStartTime(video.currentTime);
+                          }
+                        }}
+                        className='px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8 w-8 flex items-center justify-center'
+                        title='Set start to current video time'
+                        aria-label='Set start to current video time'
+                      >
+                        <Clock className='h-4 w-4' />
+                      </button>
+                    </div>
                   </div>
                   <div>
-                    <label className='block text-xs text-gray-600'>
-                      End Time (s)
-                    </label>
-                    <input
-                      type='number'
-                      value={endTime}
-                      onChange={(e) => setEndTime(Number(e.target.value))}
-                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
-                      min='0'
-                      step='0.1'
-                    />
-                    <button
-                      onClick={() => {
-                        const video = videoRef.current;
-                        if (video) {
-                          setEndTime(video.currentTime);
-                        }
-                      }}
-                      className='mt-1 w-full px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium'
-                    >
-                      Set Current Time
-                    </button>
+                    <label className='sr-only'>End Time (s)</label>
+                    <div className='flex gap-2'>
+                      <input
+                        type='number'
+                        value={endTime}
+                        onChange={(e) => setEndTime(Number(e.target.value))}
+                        className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-white'
+                        min='0'
+                        step='0.1'
+                        placeholder='End s'
+                      />
+                      <button
+                        onClick={() => {
+                          const video = videoRef.current;
+                          if (video) {
+                            setEndTime(video.currentTime);
+                          }
+                        }}
+                        className='px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8 w-8 flex items-center justify-center'
+                        title='Set end to current video time'
+                        aria-label='Set end to current video time'
+                      >
+                        <Clock className='h-4 w-4' />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
