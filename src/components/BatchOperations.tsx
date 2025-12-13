@@ -9,6 +9,7 @@ import {
   handleGenerateAllVideos,
   handleConcatenateAllVideos,
   handleSpeedUpAllVideos,
+  handleTranscribeAllFinalScenes,
   cycleSpeed as cycleThroughSpeeds,
 } from '@/utils/batchOperations';
 import {
@@ -46,6 +47,13 @@ interface BatchOperationsProps {
     audioUrl: string,
     sceneData?: BaserowRow
   ) => Promise<void>;
+  handleTranscribeScene: (
+    sceneId: number,
+    sceneData?: BaserowRow,
+    videoType?: 'original' | 'final',
+    skipRefresh?: boolean,
+    skipSound?: boolean
+  ) => Promise<void>;
 }
 
 export default function BatchOperations({
@@ -55,6 +63,7 @@ export default function BatchOperations({
   handleSentenceImprovement,
   handleTTSProduce,
   handleVideoGenerate,
+  handleTranscribeScene,
 }: BatchOperationsProps) {
   const {
     batchOperations,
@@ -68,6 +77,7 @@ export default function BatchOperations({
     setImprovingSentence,
     setSpeedingUpVideo,
     setGeneratingVideo,
+    setTranscribingScene,
     mergedVideo,
     setMergedVideo,
     clearMergedVideo,
@@ -273,6 +283,17 @@ export default function BatchOperations({
       completeBatchOperation,
       setMergedVideo,
       selectedOriginalVideo.id
+    );
+  };
+
+  const onTranscribeAllFinal = () => {
+    handleTranscribeAllFinalScenes(
+      data,
+      handleTranscribeScene,
+      startBatchOperation,
+      completeBatchOperation,
+      setTranscribingScene,
+      onRefresh
     );
   };
 
@@ -814,9 +835,49 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-teal-900'>Sync Videos</h3>
               </div>
-              <p className='text-sm text-teal-700 mb-4 leading-relaxed'>
-                Create synchronized videos for scenes with video and TTS audio
-              </p>
+
+              {/* Transcribe Final Scenes */}
+              <div className='bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200'>
+                <div className='flex items-center gap-2 mb-3'>
+                  <div className='p-2 bg-emerald-500 rounded-lg'>
+                    <RefreshCw className='w-4 h-4 text-white' />
+                  </div>
+                  <h3 className='font-semibold text-emerald-900'>
+                    Transcribe Final
+                  </h3>
+                </div>
+                {/* Removed extra description text to keep UI concise */}
+                <button
+                  onClick={onTranscribeAllFinal}
+                  disabled={
+                    batchOperations.transcribingAllFinalScenes ||
+                    sceneLoading.transcribingScene !== null
+                  }
+                  className='w-full h-12 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                  title={
+                    batchOperations.transcribingAllFinalScenes
+                      ? 'Transcribing final scenes...'
+                      : sceneLoading.transcribingScene !== null
+                      ? `Transcribing scene ${sceneLoading.transcribingScene}`
+                      : 'Transcribe final scenes'
+                  }
+                >
+                  {(batchOperations.transcribingAllFinalScenes ||
+                    sceneLoading.transcribingScene !== null) && (
+                    <Loader2 className='w-4 h-4 animate-spin' />
+                  )}
+                  <span className='font-medium'>
+                    {batchOperations.transcribingAllFinalScenes
+                      ? sceneLoading.transcribingScene !== null
+                        ? `Scene #${sceneLoading.transcribingScene}`
+                        : 'Processing...'
+                      : sceneLoading.transcribingScene !== null
+                      ? `Busy (#${sceneLoading.transcribingScene})`
+                      : 'Transcribe All'}
+                  </span>
+                </button>
+              </div>
+              {/* Removed extra description text to keep the section concise */}
               <button
                 onClick={onGenerateAllVideos}
                 disabled={

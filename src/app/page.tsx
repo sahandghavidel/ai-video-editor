@@ -33,6 +33,10 @@ export default function Home() {
 
   // Get filtered data based on selected original video
   const filteredData = getFilteredData();
+  const transcribingAllFinalScenes = useAppStore(
+    (s) => s.batchOperations.transcribingAllFinalScenes
+  );
+  const displayData = transcribingAllFinalScenes ? data : filteredData;
 
   const [sceneHandlers, setSceneHandlers] = useState<{
     handleSentenceImprovement: (
@@ -56,6 +60,13 @@ export default function Home() {
       sceneId: number,
       sceneData?: BaserowRow,
       skipRefresh?: boolean
+    ) => Promise<void>;
+    handleTranscribeScene: (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      videoType?: 'original' | 'final',
+      skipRefresh?: boolean,
+      skipSound?: boolean
     ) => Promise<void>;
   } | null>(null);
 
@@ -118,6 +129,13 @@ export default function Home() {
         sceneId: number,
         sceneData?: BaserowRow,
         skipRefresh?: boolean
+      ) => Promise<void>;
+      handleTranscribeScene: (
+        sceneId: number,
+        sceneData?: BaserowRow,
+        videoType?: 'original' | 'final',
+        skipRefresh?: boolean,
+        skipSound?: boolean
       ) => Promise<void>;
     }) => {
       setSceneHandlers(handlers);
@@ -331,10 +349,10 @@ export default function Home() {
                 </div>
               )}
 
-            {/* Batch Operations - Only show when filtered data is available and handlers are ready */}
-            {!initialLoading && filteredData.length > 0 && sceneHandlers && (
+            {/* Batch Operations - Only show when data is available and handlers are ready */}
+            {!initialLoading && displayData.length > 0 && sceneHandlers && (
               <BatchOperations
-                data={filteredData}
+                data={displayData}
                 onRefresh={refreshData}
                 refreshing={refreshing}
                 handleSentenceImprovement={
@@ -342,13 +360,14 @@ export default function Home() {
                 }
                 handleTTSProduce={sceneHandlers.handleTTSProduce}
                 handleVideoGenerate={sceneHandlers.handleVideoGenerate}
+                handleTranscribeScene={sceneHandlers.handleTranscribeScene}
               />
             )}
 
             {/* Scene Cards - Only show when a video is selected */}
             {selectedOriginalVideo.id ? (
               <SceneCard
-                data={filteredData}
+                data={displayData}
                 refreshData={refreshData}
                 refreshing={refreshing}
                 onDataUpdate={handleDataUpdate}

@@ -359,6 +359,62 @@ export const handleSpeedUpAllVideos = async (
   }
 };
 
+// Batch operation: Transcribe final scene videos for all scenes that have a final video but no captions
+export const handleTranscribeAllFinalScenes = async (
+  data: BaserowRow[],
+  handleTranscribeScene: (
+    sceneId: number,
+    sceneData?: BaserowRow,
+    videoType?: 'original' | 'final',
+    skipRefresh?: boolean,
+    skipSound?: boolean
+  ) => Promise<void>,
+  startBatchOperation: (operation: 'transcribingAllFinalScenes') => void,
+  completeBatchOperation: (operation: 'transcribingAllFinalScenes') => void,
+  setTranscribingScene: (sceneId: number | null) => void,
+  onRefresh?: () => void
+) => {
+  startBatchOperation('transcribingAllFinalScenes');
+  try {
+    // Filter scenes that have final videos (field_6886) and missing captions (field_6910)
+    const scenesToTranscribe = data.filter((scene) => {
+      const finalVideo = scene['field_6886'];
+      const captions = scene['field_6910'];
+      return (
+        typeof finalVideo === 'string' &&
+        finalVideo.trim() &&
+        (!captions || (typeof captions === 'string' && !captions.trim()))
+      );
+    });
+
+    if (scenesToTranscribe.length === 0) {
+      console.log('No final scene videos found that need transcription');
+      return;
+    }
+
+    for (const scene of scenesToTranscribe) {
+      setTranscribingScene(scene.id);
+      try {
+        await handleTranscribeScene(scene.id, scene, 'final', true, true);
+        // Short delay between transcriptions to avoid rate limits
+        await wait(2000);
+      } catch (error) {
+        console.error(`Failed to transcribe scene ${scene.id}:`, error);
+      } finally {
+        setTranscribingScene(null);
+      }
+    }
+
+    // Refresh data to reflect updates
+    onRefresh?.();
+  } catch (error) {
+    console.error('Error transcribing final scenes:', error);
+  } finally {
+    completeBatchOperation('transcribingAllFinalScenes');
+    playSuccessSound();
+  }
+};
+
 // Utility function for cycling through speed options
 export const cycleSpeed = (
   currentSpeed: number,

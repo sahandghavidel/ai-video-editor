@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useAppStore } from '@/store/useAppStore';
 import {
   X,
   Upload,
@@ -49,7 +50,9 @@ interface ImageOverlayModalProps {
   handleTranscribeScene?: (
     sceneId: number,
     sceneData?: any,
-    videoType?: 'original' | 'final'
+    videoType?: 'original' | 'final',
+    skipRefresh?: boolean,
+    skipSound?: boolean
   ) => Promise<void>;
   onUpdateModalVideoUrl?: (videoUrl: string) => void;
 }
@@ -920,7 +923,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
 
       // Force a refetch of transcription and other modal data
-      setRefetchTrigger((prev) => prev + 1);
+      // but avoid triggering this refetch during batch operations to prevent
+      // per-loop data refreshes that lead to UI flicker.
+      if (!useAppStore.getState().batchOperations.transcribingAllFinalScenes) {
+        setRefetchTrigger((prev) => prev + 1);
+      }
 
       // Reset overlay state to defaults (like opening a fresh modal) but keep it open
       setOverlayImage(null);
@@ -1653,7 +1660,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                           'final'
                         );
                         // Refetch transcription after transcribing
-                        setRefetchTrigger((prev) => prev + 1);
+                        // but skip during batch to avoid per-loop refetch
+                        if (
+                          !useAppStore.getState().batchOperations
+                            .transcribingAllFinalScenes
+                        ) {
+                          setRefetchTrigger((prev) => prev + 1);
+                        }
                       } catch (error) {
                         console.error('Failed to transcribe:', error);
                       } finally {

@@ -66,7 +66,9 @@ interface SceneCardProps {
     handleTranscribeScene: (
       sceneId: number,
       sceneData?: BaserowRow,
-      videoType?: 'original' | 'final'
+      videoType?: 'original' | 'final',
+      skipRefresh?: boolean,
+      skipSound?: boolean
     ) => Promise<void>;
     handleTypingEffect: (
       sceneId: number,
@@ -235,6 +237,7 @@ export default function SceneCard({
     setImprovingSentence,
     setSpeedingUpVideo,
     setTranscribingScene,
+    setData,
     setGeneratingVideo,
     setConvertingToCFRVideo,
     setNormalizingAudio,
@@ -886,7 +889,9 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      videoType: 'original' | 'final' = 'original'
+      videoType: 'original' | 'final' = 'original',
+      skipRefresh: boolean = false,
+      skipSound: boolean = false
     ) => {
       const currentScene =
         sceneData || data.find((scene) => scene.id === sceneId);
@@ -1003,17 +1008,23 @@ export default function SceneCard({
               : scene
           );
           onDataUpdate?.(optimisticData);
+          // Update global store directly for optimistic update during batch
+          setData(optimisticData);
         }
 
-        // Refresh data from server to ensure consistency
-        refreshData?.();
+        // Refresh data from server to ensure consistency only when not skipped
+        if (!skipRefresh) {
+          refreshData?.();
+        }
 
-        // Play success sound
-        playSuccessSound();
+        // Play success sound (optional - suppress in batch)
+        if (!skipSound) {
+          playSuccessSound();
+        }
       } catch (error) {
         console.error('Error transcribing scene:', error);
 
-        // Play error sound
+        // Play error sound (we'll keep this audible)
         playErrorSound();
 
         let errorMessage = 'Failed to transcribe scene';

@@ -47,6 +47,7 @@ export interface BatchOperationsState {
   normalizingAllAudio: boolean;
   convertingAllToCFR: boolean;
   convertingAllFinalToCFR: boolean;
+  transcribingAllFinalScenes: boolean;
 }
 
 // Media player state interface
@@ -343,6 +344,7 @@ const defaultBatchOperations: BatchOperationsState = {
   normalizingAllAudio: false,
   convertingAllToCFR: false,
   convertingAllFinalToCFR: false,
+  transcribingAllFinalScenes: false,
 };
 
 // Default media player state
