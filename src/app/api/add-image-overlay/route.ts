@@ -144,8 +144,13 @@ export async function POST(request: NextRequest) {
         .replace(/\)/g, '\\)'); // Escape parentheses
 
       // Use custom styling if provided, otherwise use defaults
-      const fontColor = textStyling?.fontColor || 'white';
-      const textOpacity = textStyling?.textOpacity || undefined;
+      const fontColor = textStyling?.fontColor ?? 'white';
+      const textOpacityRaw =
+        typeof textStyling?.textOpacity === 'number'
+          ? textStyling.textOpacity
+          : textStyling?.textOpacity != null
+          ? Number(textStyling.textOpacity)
+          : undefined;
       // Background params
       const bgColor = textStyling?.bgColor || null;
       const bgOpacity =
@@ -160,13 +165,18 @@ export async function POST(request: NextRequest) {
           : textStyling?.bgSize
           ? Number(textStyling?.bgSize)
           : 0;
-      const borderWidth = textStyling?.borderWidth || 3;
-      const borderColor = textStyling?.borderColor || 'black';
-      const shadowX = textStyling?.shadowX || 8;
-      const shadowY = textStyling?.shadowY || 8;
-      const shadowColor = textStyling?.shadowColor || 'black';
-      const shadowOpacity = textStyling?.shadowOpacity || 0.9;
-      const fontFamily = textStyling?.fontFamily || 'Helvetica';
+      const borderWidth = textStyling?.borderWidth ?? 3;
+      const borderColor = textStyling?.borderColor ?? 'black';
+      const shadowX = textStyling?.shadowX ?? 8;
+      const shadowY = textStyling?.shadowY ?? 8;
+      const shadowColor = textStyling?.shadowColor ?? 'black';
+      const shadowOpacityRaw =
+        typeof textStyling?.shadowOpacity === 'number'
+          ? textStyling.shadowOpacity
+          : textStyling?.shadowOpacity != null
+          ? Number(textStyling.shadowOpacity)
+          : 0.9;
+      const fontFamily = textStyling?.fontFamily ?? 'Helvetica';
 
       // Map font family names to actual font files; use the generated mapping
       const mapping = Object.fromEntries(
@@ -204,13 +214,24 @@ export async function POST(request: NextRequest) {
         return trimmed;
       };
 
+      const clamp01 = (v: unknown, fallback: number) => {
+        const n = typeof v === 'number' ? v : Number(v);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(0, Math.min(1, n));
+      };
+
       // include text opacity if provided
-      const fontColorWithOpacity = textOpacity
-        ? `${normalizeColor(fontColor)}@${Math.max(
-            0,
-            Math.min(1, Number(textOpacity))
-          )}`
-        : normalizeColor(fontColor) || fontColor;
+      const fontColorNormalized = normalizeColor(fontColor) || fontColor;
+      const fontColorWithOpacity =
+        typeof textOpacityRaw === 'number' && Number.isFinite(textOpacityRaw)
+          ? `${fontColorNormalized}@${clamp01(textOpacityRaw, 1)}`
+          : fontColorNormalized;
+
+      const borderColorNormalized =
+        normalizeColor(borderColor) || borderColor || 'black';
+      const shadowColorNormalized =
+        normalizeColor(shadowColor) || shadowColor || 'black';
+      const shadowOpacity = clamp01(shadowOpacityRaw, 0.9);
       let boxParams = '';
       let drawboxFilter = '';
       if (bgColor && bgSize > 0) {
@@ -240,10 +261,10 @@ export async function POST(request: NextRequest) {
       }
 
       if (drawboxFilter) {
-        const vf = `${drawboxFilter},drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColor}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColor}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+        const vf = `${drawboxFilter},drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
         ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
       } else {
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColor}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColor}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
       }
     } else {
       throw new Error('No overlay content provided');
