@@ -1561,10 +1561,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             {/* Timing Controls */}
             {(overlayImageUrl || selectedWordText) && (
               <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
-                <div className='flex items-center gap-2 mb-2'>
-                  <Clock className='h-4 w-4 text-gray-600' />
-                  <span className='sr-only'>Timing</span>
-                </div>
+                <span className='sr-only'>Timing</span>
                 <div className='grid grid-cols-2 gap-2'>
                   <div>
                     <label className='sr-only'>Start Time (s)</label>
