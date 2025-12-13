@@ -18,5 +18,8 @@
   "Noto Sans": "/System/Library/Fonts/Supplemental/NotoSansLinearA-Regular.ttf",
   "Noto Serif": "/System/Library/Fonts/NotoSerifMyanmar.ttc",
   "Arial Unicode MS": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+  "Space Grotesk": "/Users/sahand/Desktop/projects-test/ultimate-video-editr/assets/fonts/SpaceGrotesk-Variable.ttf",
+  "JetBrains Mono": "/Users/sahand/Desktop/projects-test/ultimate-video-editr/assets/fonts/JetBrainsMono-Regular.ttf",
+  "IBM Plex Sans": "/Users/sahand/Desktop/projects-test/ultimate-video-editr/assets/fonts/IBMPlexSans-Regular.ttf",
   "user_fonts_dir": "/Users/sahand/Library/Fonts"
 }

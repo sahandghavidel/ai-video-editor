@@ -169,13 +169,31 @@ export async function POST(request: NextRequest) {
       const fontFamily = textStyling?.fontFamily || 'Helvetica';
 
       // Map font family names to actual font files; use the generated mapping
-      const mapping = (ffmpegFonts as Record<string, string>) || {};
+      const mapping = Object.fromEntries(
+        Object.entries(ffmpegFonts).filter(([_, value]) => value !== null)
+      ) as Record<string, string>;
       const fontFileMap: { [key: string]: string } = Object.fromEntries(
         Object.entries(mapping).filter(([k]) => k !== 'user_fonts_dir')
       );
 
-      const fontFile =
+      let fontFile =
         fontFileMap[fontFamily] || '/System/Library/Fonts/Helvetica.ttc';
+
+      // Resolve relative asset paths (like assets/fonts/...) to absolute file paths
+      if (fontFile && !path.isAbsolute(fontFile)) {
+        fontFile = path.join(process.cwd(), fontFile);
+      }
+
+      // Ensure the font file exists on disk. If not, fall back to system default.
+      try {
+        await fs.promises.access(fontFile, fs.constants.R_OK);
+      } catch (err) {
+        console.warn(
+          `Font file ${fontFile} is not readable or missing; falling back to default`,
+          err
+        );
+        fontFile = '/System/Library/Fonts/Helvetica.ttc';
+      }
 
       // helper normalize hex #RRGGBB => 0xRRGGBB because FFmpeg drawtext accepts 0x notation
       const normalizeColor = (c: string | undefined | null) => {

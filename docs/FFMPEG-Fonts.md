@@ -60,6 +60,8 @@ This is not a complete dump — `fc-list` will show everything. To search for a 
 
 A JSON mapping of common installed fonts and sample paths is available at `docs/ffmpeg-fonts.json` in this repository — feel free to use it for automation or CI tests.
 
+The UI font dropdown will now list the detected fonts plus these optional modern fonts when available: `Space Grotesk`, `JetBrains Mono`, `IBM Plex Sans`. If you want to bundle them in the repo, use `sh scripts/install_fonts.sh` and regenerate the JSON mapping.
+
 ### Popular fonts NOT installed (check and install if you need them)
 
 The Google-fonts/modern list you provided contains many great fonts that are _not_ installed by default on macOS (e.g., Inter, Roboto, Montserrat, Poppins, JetBrains Mono, Fira Code). These will not be found by `fc-list` until installed.
@@ -112,6 +114,18 @@ If you want, I can:
 ```bash
 python3 scripts/generate_ffmpeg_fonts.py > docs/ffmpeg-fonts.json
 ```
+
+### Install recommended fonts into repository (optional)
+
+If you'd like to bundle fonts with the repo and ensure consistent rendering across machines, run the helper to download three useful fonts (Space Grotesk, JetBrains Mono, IBM Plex Sans) into `assets/fonts/`:
+
+```bash
+sh scripts/install_fonts.sh
+python3 scripts/generate_ffmpeg_fonts.py > docs/ffmpeg-fonts.json
+# Restart dev server to pick up the new font mapping
+```
+
+Note: `install_fonts.sh` downloads fonts from the respective open-source repositories (Google Fonts and JetBrains releases). You should confirm the licenses and accept them in your environment before bundling fonts in production assets.
 
 --
 Generated on: 2025-12-13
