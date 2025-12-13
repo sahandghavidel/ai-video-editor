@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
+import ffmpegFonts from '../../../../docs/ffmpeg-fonts.json';
 import { updateSceneRow } from '@/lib/baserow-actions';
 
 const execAsync = promisify(exec);
@@ -147,8 +148,18 @@ export async function POST(request: NextRequest) {
       const textOpacity = textStyling?.textOpacity || undefined;
       // Background params
       const bgColor = textStyling?.bgColor || null;
-      const bgOpacity = typeof textStyling?.bgOpacity === 'number' ? textStyling?.bgOpacity : textStyling?.bgOpacity ? Number(textStyling?.bgOpacity) : 1;
-      const bgSize = typeof textStyling?.bgSize === 'number' ? textStyling?.bgSize : textStyling?.bgSize ? Number(textStyling?.bgSize) : 0;
+      const bgOpacity =
+        typeof textStyling?.bgOpacity === 'number'
+          ? textStyling?.bgOpacity
+          : textStyling?.bgOpacity
+          ? Number(textStyling?.bgOpacity)
+          : 1;
+      const bgSize =
+        typeof textStyling?.bgSize === 'number'
+          ? textStyling?.bgSize
+          : textStyling?.bgSize
+          ? Number(textStyling?.bgSize)
+          : 0;
       const borderWidth = textStyling?.borderWidth || 3;
       const borderColor = textStyling?.borderColor || 'black';
       const shadowX = textStyling?.shadowX || 8;
@@ -157,14 +168,11 @@ export async function POST(request: NextRequest) {
       const shadowOpacity = textStyling?.shadowOpacity || 0.9;
       const fontFamily = textStyling?.fontFamily || 'Helvetica';
 
-      // Map font family names to actual font files
-      const fontFileMap: { [key: string]: string } = {
-        Helvetica: '/System/Library/Fonts/Helvetica.ttc',
-        ArialHB: '/System/Library/Fonts/ArialHB.ttc',
-        Courier: '/System/Library/Fonts/Courier.ttc',
-        Geneva: '/System/Library/Fonts/Geneva.ttf',
-        Times: '/System/Library/Fonts/Times.ttc',
-      };
+      // Map font family names to actual font files; use the generated mapping
+      const mapping = (ffmpegFonts as Record<string, string>) || {};
+      const fontFileMap: { [key: string]: string } = Object.fromEntries(
+        Object.entries(mapping).filter(([k]) => k !== 'user_fonts_dir')
+      );
 
       const fontFile =
         fontFileMap[fontFamily] || '/System/Library/Fonts/Helvetica.ttc';
@@ -173,17 +181,26 @@ export async function POST(request: NextRequest) {
       const normalizeColor = (c: string | undefined | null) => {
         if (!c) return c;
         const trimmed = c.trim();
-        if (trimmed.startsWith('#')) return '0x' + trimmed.slice(1).toUpperCase();
+        if (trimmed.startsWith('#'))
+          return '0x' + trimmed.slice(1).toUpperCase();
         return trimmed;
       };
 
       // include text opacity if provided
-      const fontColorWithOpacity = textOpacity ? `${normalizeColor(fontColor)}@${Math.max(0, Math.min(1, Number(textOpacity)))}` : normalizeColor(fontColor) || fontColor;
+      const fontColorWithOpacity = textOpacity
+        ? `${normalizeColor(fontColor)}@${Math.max(
+            0,
+            Math.min(1, Number(textOpacity))
+          )}`
+        : normalizeColor(fontColor) || fontColor;
       let boxParams = '';
       let drawboxFilter = '';
       if (bgColor && bgSize > 0) {
         const bgColorNormalized = normalizeColor(bgColor) || bgColor;
-        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(0, Math.min(1, Number(bgOpacity)))}`;
+        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
+          0,
+          Math.min(1, Number(bgOpacity))
+        )}`;
         // Compute drawbox position and size based on estimated text dimensions
         const posX = positionX / 100;
         const posY = positionY / 100;
@@ -194,8 +211,14 @@ export async function POST(request: NextRequest) {
         drawboxFilter = `drawbox=x=${boxX}:y=${boxY}:w=${boxW}:h=${boxH}:color=${boxColorWithOpacity}:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
       } else if (bgColor && bgSize === 0) {
         const bgColorNormalized = normalizeColor(bgColor) || bgColor;
-        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(0, Math.min(1, Number(bgOpacity)))}`;
-        boxParams = `:box=1:boxcolor=${boxColorWithOpacity}:boxborderw=${Math.max(0, Math.min(200, Number(bgSize)))}`;
+        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
+          0,
+          Math.min(1, Number(bgOpacity))
+        )}`;
+        boxParams = `:box=1:boxcolor=${boxColorWithOpacity}:boxborderw=${Math.max(
+          0,
+          Math.min(200, Number(bgSize))
+        )}`;
       }
 
       if (drawboxFilter) {

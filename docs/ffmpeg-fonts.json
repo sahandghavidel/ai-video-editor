@@ -1,0 +1,22 @@
+{
+  "Arial": "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+  "Helvetica": "/System/Library/Fonts/HelveLTMM",
+  "Helvetica Neue": "/System/Library/Fonts/HelveticaNeue.ttc",
+  "Menlo": "/System/Library/Fonts/Menlo.ttc",
+  "Monaco": "/System/Library/Fonts/Monaco.ttf",
+  "Courier": "/System/Library/Fonts/Courier.ttc",
+  "Courier New": "/System/Library/Fonts/Supplemental/Courier New Bold.ttf",
+  "Times": "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+  "Times New Roman": "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+  "Avenir": "/System/Library/Fonts/Avenir Next Condensed.ttc",
+  "Avenir Next": "/System/Library/Fonts/Avenir Next Condensed.ttc",
+  "Palatino": "/System/Library/Fonts/Palatino.ttc",
+  "Optima": "/System/Library/Fonts/Optima.ttc",
+  "New York": "/System/Library/Fonts/ADTNumeric.ttc",
+  "SF Compact": "/System/Library/Fonts/SFCompactRounded.ttf",
+  "SF NS": "/System/Library/Fonts/SFNS.ttf",
+  "Noto Sans": "/System/Library/Fonts/Supplemental/NotoSansLinearA-Regular.ttf",
+  "Noto Serif": "/System/Library/Fonts/NotoSerifMyanmar.ttc",
+  "Arial Unicode MS": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+  "user_fonts_dir": "/Users/sahand/Library/Fonts"
+}
