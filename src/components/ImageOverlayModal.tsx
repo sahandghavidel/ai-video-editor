@@ -1354,10 +1354,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     10,
                     Math.min(85, (textOverlaySize.width / 100) * 60)
                   )}%`,
-                  fontSize: `${Math.max(
-                    8,
-                    (textOverlaySize.width / 100) * 120
-                  )}px`,
+                  // Match server-side font sizing (in video pixels), then scale to CSS pixels.
+                  fontSize: `${(() => {
+                    const v = videoRef.current;
+                    if (!v?.videoWidth || !v?.videoHeight) {
+                      return Math.max(8, (textOverlaySize.width / 100) * 120);
+                    }
+                    const fontSizeVideoPx = Math.max(
+                      16,
+                      Math.min(
+                        500,
+                        (textOverlaySize.width / 100) *
+                          Math.min(v.videoWidth, v.videoHeight) *
+                          0.2
+                      )
+                    );
+                    return Math.max(1, fontSizeVideoPx * videoToCssScale);
+                  })()}px`,
                 }}
                 onPointerDown={handleTextMouseDown}
               >
