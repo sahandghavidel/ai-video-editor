@@ -1638,6 +1638,21 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     type='text'
                     value={customText}
                     onChange={(e) => setCustomText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        // Prevent default 'Enter' behavior (like form submit)
+                        e.preventDefault();
+                        if (customText.trim()) {
+                          setSelectedWordText(customText.trim());
+                          // Clear image overlay when adding text
+                          setOverlayImage(null);
+                          setOverlayImageUrl(null);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = '';
+                          }
+                        }
+                      }
+                    }}
                     placeholder='Enter custom text for overlay...'
                     className='w-2/3 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                   />
