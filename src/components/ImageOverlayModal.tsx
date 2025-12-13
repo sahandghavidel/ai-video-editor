@@ -1163,6 +1163,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setEndTime(0);
       setVideoTintColor(null);
       setVideoTintOpacity(1);
+      setIsTintSectionOpen(false);
       setIsCropping(false);
       setOriginalImageAspectRatio(null);
       setActualImageDimensions(null);
@@ -1216,6 +1217,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setEndTime(0);
     setVideoTintColor(null);
     setVideoTintOpacity(1);
+    setIsTintSectionOpen(false);
     setPreviewUrl(null);
     setTranscriptionWords(null);
     setSelectedWordText(null);
@@ -1226,6 +1228,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   // Fetch transcription data
   useEffect(() => {
     if (isOpen && sceneId) {
+      setIsTintSectionOpen(false);
       // Clear any leftover preview state when modal opens
       setPreviewUrl(null);
       // Set the original video URL when we have a valid video URL
