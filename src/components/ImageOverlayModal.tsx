@@ -63,7 +63,8 @@ interface ImageOverlayModalProps {
     size: { width: number; height: number },
     startTime: number,
     endTime: number,
-    textStyling?: TextStyling
+    textStyling?: TextStyling,
+    videoTintColor?: string | null
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -106,6 +107,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlaySize, setOverlaySize] = useState({ width: 40, height: 40 }); // percentage
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(0);
+  const [videoTintColor, setVideoTintColor] = useState<string | null>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const VIDEO_TINT_OPACITY = 0.35;
+  const tintPalette = useMemo(
+    () => [
+      '#000000',
+      '#FFFFFF',
+      '#FF0000',
+      '#00FF00',
+      '#0000FF',
+      '#FFFF00',
+      '#FF00FF',
+      '#00FFFF',
+      '#FFA500',
+    ],
+    []
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -277,6 +295,29 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const update = () => setCurrentVideoTime(video.currentTime || 0);
+    video.addEventListener('timeupdate', update);
+    video.addEventListener('seeked', update);
+    update();
+
+    return () => {
+      video.removeEventListener('timeupdate', update);
+      video.removeEventListener('seeked', update);
+    };
+  }, [isOpen, originalVideoUrl]);
+
+  const isTintActive =
+    !!videoTintColor &&
+    Number.isFinite(startTime) &&
+    Number.isFinite(endTime) &&
+    currentVideoTime >= startTime &&
+    currentVideoTime <= endTime;
 
   // Keep a scale factor so CSS preview sizes (px) match FFmpeg drawtext sizes (video px).
   // Example: borderw=3 in FFmpeg should appear as ~3px on the source video, which is
@@ -980,7 +1021,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, []);
 
   const handlePreview = useCallback(async () => {
-    if (!overlayImage && !selectedWordText) return;
+    if (!overlayImage && !selectedWordText && !videoTintColor) return;
     if (!originalVideoUrl) return;
     console.log('handlePreview: textStyling', textStyling);
 
@@ -1012,6 +1053,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     formData.append('startTime', startTime.toString());
     formData.append('endTime', endTime.toString());
     formData.append('preview', 'true');
+    if (videoTintColor) {
+      formData.append('videoTintColor', videoTintColor);
+    }
     if (selectedWordText && textStyling) {
       formData.append('textStyling', JSON.stringify(textStyling));
     }
@@ -1033,6 +1077,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     overlayImage,
     selectedWordText,
+    videoTintColor,
     originalVideoUrl,
     sceneId,
     overlayPosition,
@@ -1045,7 +1090,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   ]);
 
   const handleApply = useCallback(async () => {
-    if (!overlayImage && !selectedWordText) return;
+    if (!overlayImage && !selectedWordText && !videoTintColor) return;
 
     try {
       console.log(
@@ -1061,7 +1106,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         overlayImage ? overlaySize : textOverlaySize,
         startTime,
         endTime,
-        selectedWordText ? textStyling : undefined
+        selectedWordText ? textStyling : undefined,
+        videoTintColor
       );
 
       // After applying, fetch the scene from the DB to get the updated video URL
@@ -1105,6 +1151,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setCustomText('');
       setStartTime(0);
       setEndTime(0);
+      setVideoTintColor(null);
       setIsCropping(false);
       setOriginalImageAspectRatio(null);
       setActualImageDimensions(null);
@@ -1134,6 +1181,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     overlayImage,
     selectedWordText,
+    videoTintColor,
     sceneId,
     overlayPosition,
     overlaySize,
@@ -1154,6 +1202,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlaySize({ width: 40, height: 40 });
     setStartTime(0);
     setEndTime(0);
+    setVideoTintColor(null);
     setPreviewUrl(null);
     setTranscriptionWords(null);
     setSelectedWordText(null);
@@ -1362,6 +1411,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   <div>Loading video...</div>
                 </div>
               </div>
+            )}
+            {isTintActive && videoTintColor && (
+              <div
+                className='absolute pointer-events-none'
+                style={{
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: videoTintColor,
+                  opacity: VIDEO_TINT_OPACITY,
+                }}
+              />
             )}
             {/* Invisible overlay to capture clicks when there's an overlay - excludes controls area */}
             {overlayImageUrl && (
@@ -1759,67 +1821,99 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             )}
 
             {/* Timing Controls */}
-            {(overlayImageUrl || selectedWordText) && (
-              <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
-                <span className='sr-only'>Timing</span>
-                <div className='grid grid-cols-2 gap-2'>
-                  <div>
-                    <label className='sr-only'>Start Time (s)</label>
-                    <div className='flex gap-2'>
-                      <input
-                        type='number'
-                        value={startTime}
-                        onChange={(e) => setStartTime(Number(e.target.value))}
-                        className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-white'
-                        min='0'
-                        step='0.1'
-                        placeholder='Start s'
-                      />
-                      <button
-                        onClick={() => {
-                          const video = videoRef.current;
-                          if (video) {
-                            setStartTime(video.currentTime);
-                          }
-                        }}
-                        className='px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8 w-8 flex items-center justify-center'
-                        title='Set start to current video time'
-                        aria-label='Set start to current video time'
-                      >
-                        <Clock className='h-4 w-4' />
-                      </button>
-                    </div>
+            <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
+              <span className='sr-only'>Timing</span>
+              <div className='grid grid-cols-2 gap-2'>
+                <div>
+                  <label className='sr-only'>Start Time (s)</label>
+                  <div className='flex gap-2'>
+                    <input
+                      type='number'
+                      value={startTime}
+                      onChange={(e) => setStartTime(Number(e.target.value))}
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-white'
+                      min='0'
+                      step='0.1'
+                      placeholder='Start s'
+                    />
+                    <button
+                      onClick={() => {
+                        const video = videoRef.current;
+                        if (video) {
+                          setStartTime(video.currentTime);
+                        }
+                      }}
+                      className='px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8 w-8 flex items-center justify-center'
+                      title='Set start to current video time'
+                      aria-label='Set start to current video time'
+                    >
+                      <Clock className='h-4 w-4' />
+                    </button>
                   </div>
-                  <div>
-                    <label className='sr-only'>End Time (s)</label>
-                    <div className='flex gap-2'>
-                      <input
-                        type='number'
-                        value={endTime}
-                        onChange={(e) => setEndTime(Number(e.target.value))}
-                        className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-white'
-                        min='0'
-                        step='0.1'
-                        placeholder='End s'
-                      />
-                      <button
-                        onClick={() => {
-                          const video = videoRef.current;
-                          if (video) {
-                            setEndTime(video.currentTime);
-                          }
-                        }}
-                        className='px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8 w-8 flex items-center justify-center'
-                        title='Set end to current video time'
-                        aria-label='Set end to current video time'
-                      >
-                        <Clock className='h-4 w-4' />
-                      </button>
-                    </div>
+                </div>
+                <div>
+                  <label className='sr-only'>End Time (s)</label>
+                  <div className='flex gap-2'>
+                    <input
+                      type='number'
+                      value={endTime}
+                      onChange={(e) => setEndTime(Number(e.target.value))}
+                      className='w-full px-2 py-1 border border-gray-300 rounded text-sm bg-white'
+                      min='0'
+                      step='0.1'
+                      placeholder='End s'
+                    />
+                    <button
+                      onClick={() => {
+                        const video = videoRef.current;
+                        if (video) {
+                          setEndTime(video.currentTime);
+                        }
+                      }}
+                      className='px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8 w-8 flex items-center justify-center'
+                      title='Set end to current video time'
+                      aria-label='Set end to current video time'
+                    >
+                      <Clock className='h-4 w-4' />
+                    </button>
                   </div>
                 </div>
               </div>
-            )}
+
+              <div className='mt-2 flex items-center justify-between gap-2'>
+                <span className='text-sm text-gray-700'>Tint</span>
+                <div className='flex items-center gap-2'>
+                  <button
+                    type='button'
+                    onClick={() => setVideoTintColor(null)}
+                    className={`px-2 py-1 text-xs rounded border ${
+                      !videoTintColor
+                        ? 'border-gray-500 text-gray-900'
+                        : 'border-gray-300 text-gray-600'
+                    } bg-white`}
+                    aria-label='No tint'
+                    title='No tint'
+                  >
+                    None
+                  </button>
+                  {tintPalette.map((c) => (
+                    <button
+                      key={c}
+                      type='button'
+                      onClick={() => setVideoTintColor(c)}
+                      className={`h-6 w-6 rounded border ${
+                        videoTintColor === c
+                          ? 'border-gray-700'
+                          : 'border-gray-300'
+                      }`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Tint ${c}`}
+                      title={`Tint ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
             {/* Transcription Words */}
             {transcriptionWords && transcriptionWords.length > 0 ? (
               <div className='space-y-2'>
@@ -2490,14 +2584,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </button>
           <button
             onClick={handlePreview}
-            disabled={!(overlayImage || selectedWordText) || isApplying}
+            disabled={
+              !(overlayImage || selectedWordText || videoTintColor) ||
+              isApplying
+            }
             className='px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
           >
             Preview
           </button>
           <button
             onClick={handleApply}
-            disabled={!(overlayImage || selectedWordText) || isApplying}
+            disabled={
+              !(overlayImage || selectedWordText || videoTintColor) ||
+              isApplying
+            }
             className='flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
           >
             {isApplying ? (

@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
     const startTime = parseFloat(formData.get('startTime') as string);
     const endTime = parseFloat(formData.get('endTime') as string);
     const preview = formData.get('preview') === 'true';
+    const videoTintColorRaw = formData.get('videoTintColor') as string | null;
     const textStyling = formData.get('textStyling')
       ? JSON.parse(formData.get('textStyling') as string)
       : null;
@@ -43,12 +44,13 @@ export async function POST(request: NextRequest) {
       startTime,
       endTime,
       preview,
+      videoTintColor: videoTintColorRaw,
     });
 
     if (
       isNaN(sceneId) ||
       !videoUrl ||
-      (!overlayImage && !overlayText) ||
+      (!overlayImage && !overlayText && !videoTintColorRaw) ||
       isNaN(positionX) ||
       isNaN(positionY) ||
       isNaN(sizeWidth) ||
@@ -61,6 +63,24 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const normalizeColor = (c: string | undefined | null) => {
+      if (!c) return c;
+      const trimmed = c.trim();
+      if (trimmed.startsWith('#')) return '0x' + trimmed.slice(1).toUpperCase();
+      return trimmed;
+    };
+
+    const clamp01 = (v: unknown, fallback: number) => {
+      const n = typeof v === 'number' ? v : Number(v);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(0, Math.min(1, n));
+    };
+
+    const tintColorNormalized = normalizeColor(videoTintColorRaw);
+    const tintFilter = tintColorNormalized
+      ? `drawbox=x=0:y=0:w=iw:h=ih:color=${tintColorNormalized}@0.35:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`
+      : null;
 
     // Create temporary directory
     tempDir = path.join(os.tmpdir(), `overlay-${Date.now()}`);
@@ -108,11 +128,19 @@ export async function POST(request: NextRequest) {
       const isGif = overlayImage.type === 'image/gif';
       const streamLoop = isGif ? '-stream_loop -1' : '';
 
-      ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay];[0:v][overlay]overlay=W*${
-        positionX / 100
-      }-(${overlayWidth})/2:H*${
-        positionY / 100
-      }-(${overlayHeight})/2:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+      if (tintFilter) {
+        ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay];[base][overlay]overlay=W*${
+          positionX / 100
+        }-(${overlayWidth})/2:H*${
+          positionY / 100
+        }-(${overlayHeight})/2:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+      } else {
+        ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay];[0:v][overlay]overlay=W*${
+          positionX / 100
+        }-(${overlayWidth})/2:H*${
+          positionY / 100
+        }-(${overlayHeight})/2:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+      }
     } else if (overlayText) {
       // Handle text overlay - sizeWidth controls font size (5-100%)
       const fontSize = Math.max(
@@ -203,21 +231,6 @@ export async function POST(request: NextRequest) {
         fontFile = '/System/Library/Fonts/Helvetica.ttc';
       }
 
-      // helper normalize hex #RRGGBB => 0xRRGGBB because FFmpeg drawtext accepts 0x notation
-      const normalizeColor = (c: string | undefined | null) => {
-        if (!c) return c;
-        const trimmed = c.trim();
-        if (trimmed.startsWith('#'))
-          return '0x' + trimmed.slice(1).toUpperCase();
-        return trimmed;
-      };
-
-      const clamp01 = (v: unknown, fallback: number) => {
-        const n = typeof v === 'number' ? v : Number(v);
-        if (!Number.isFinite(n)) return fallback;
-        return Math.max(0, Math.min(1, n));
-      };
-
       // include text opacity if provided
       const fontColorNormalized = normalizeColor(fontColor) || fontColor;
       const fontColorWithOpacity =
@@ -244,7 +257,12 @@ export async function POST(request: NextRequest) {
         )}`;
       }
 
-      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
+      const drawText = `drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      const vf = tintFilter ? `${tintFilter},${drawText}` : drawText;
+      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
+    } else if (tintFilter) {
+      // Tint-only
+      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${tintFilter}" -c:a copy ${durationLimit} "${outputPath}"`;
     } else {
       throw new Error('No overlay content provided');
     }

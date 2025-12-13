@@ -1483,7 +1483,8 @@ export default function SceneCard({
       shadowColor: string;
       shadowOpacity: number;
       fontFamily: string;
-    }
+    },
+    videoTintColor?: string | null
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1506,6 +1507,9 @@ export default function SceneCard({
       formData.append('sizeHeight', size.height.toString());
       formData.append('startTime', startTime.toString());
       formData.append('endTime', endTime.toString());
+      if (videoTintColor) {
+        formData.append('videoTintColor', videoTintColor);
+      }
 
       const response = await fetch('/api/add-image-overlay', {
         method: 'POST',
