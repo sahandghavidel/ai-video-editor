@@ -1902,19 +1902,26 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         <option value='Times'>Times</option>
                       </select>
                     </div>
-                    <div className='flex flex-col'>
+                    <div className='flex flex-col items-start'>
                       <label className='sr-only'>Color</label>
-                      <input
-                        type='color'
-                        value={textStyling.fontColor}
-                        onChange={(e) =>
-                          setTextStyling((prev) => ({
-                            ...prev,
-                            fontColor: e.target.value,
-                          }))
-                        }
-                        className='w-12 h-6 border border-gray-300 rounded cursor-pointer'
-                      />
+                      <div className='flex items-center gap-2'>
+                        <input
+                          type='color'
+                          value={textStyling.fontColor}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              fontColor: e.target.value,
+                            }))
+                          }
+                          className='w-10 h-6 border border-gray-300 rounded cursor-pointer p-0'
+                          title={`Font color: ${textStyling.fontColor}`}
+                          aria-label={`Font color: ${textStyling.fontColor}`}
+                        />
+                        <span className='text-xs text-gray-500 font-mono'>
+                          {textStyling.fontColor}
+                        </span>
+                      </div>
                     </div>
                     <div className='flex flex-col'>
                       <label className='sr-only'>Border</label>
@@ -1942,6 +1949,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                             }))
                           }
                           className='w-6 h-6 border border-gray-300 rounded cursor-pointer'
+                          title={`Border color: ${textStyling.borderColor}`}
+                          aria-label={`Border color: ${textStyling.borderColor}`}
                         />
                       </div>
                     </div>
@@ -2006,22 +2015,35 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                             shadowColor: e.target.value,
                           }))
                         }
-                        className='w-12 h-6 border border-gray-300 rounded cursor-pointer'
+                        className='w-10 h-6 border border-gray-300 rounded cursor-pointer'
+                        title={`Shadow color: ${textStyling.shadowColor}`}
+                        aria-label={`Shadow color: ${textStyling.shadowColor}`}
                       />
                     </div>
                     <div className='flex flex-col'>
                       <label className='sr-only'>BG Color</label>
-                      <input
-                        type='color'
-                        value={textStyling.bgColor ?? '#000000'}
-                        onChange={(e) =>
-                          setTextStyling((prev) => ({
-                            ...prev,
-                            bgColor: e.target.value,
-                          }))
-                        }
-                        className='w-12 h-6 border border-gray-300 rounded cursor-pointer'
-                      />
+                      <div className='flex items-center gap-2'>
+                        <input
+                          type='color'
+                          value={textStyling.bgColor ?? '#000000'}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              bgColor: e.target.value,
+                            }))
+                          }
+                          className='w-10 h-6 border border-gray-300 rounded cursor-pointer'
+                          title={`Background color: ${
+                            textStyling.bgColor ?? '#000000'
+                          }`}
+                          aria-label={`Background color: ${
+                            textStyling.bgColor ?? '#000000'
+                          }`}
+                        />
+                        <span className='text-xs text-gray-500 font-mono'>
+                          {textStyling.bgColor ?? '#000000'}
+                        </span>
+                      </div>
                     </div>
                     <div className='flex flex-col'>
                       <label className='sr-only'>BG Opacity</label>
@@ -2078,7 +2100,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                               }
                         );
                       }}
-                      className='flex items-center justify-center px-2 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 h-8'
+                      className='flex items-center justify-center px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 h-7 w-7'
+                      title='Reset text styling to default'
+                      aria-label='Reset text styling'
                     >
                       <RotateCcw className='h-4 w-4' />
                     </button>
@@ -2090,13 +2114,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         );
                         alert('Text styling saved as default!');
                       }}
-                      className='flex items-center justify-center px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8'
+                      className='flex items-center justify-center px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 h-7 w-7'
+                      title='Save as default text styling'
+                      aria-label='Save default text styling'
                     >
                       <Save className='h-4 w-4' />
                     </button>
                     <button
                       onClick={saveCurrentTextStyle}
-                      className='flex items-center justify-center px-2 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 h-8'
+                      className='flex items-center justify-center px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 h-7 w-7'
                       title='Save text styling as preset'
                     >
                       <Save className='h-4 w-4' />
@@ -2105,7 +2131,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     <div className='relative'>
                       <button
                         onClick={() => setShowSavedStyles((s) => !s)}
-                        className='flex items-center gap-1 justify-center px-2 py-1 text-sm bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 h-8'
+                        className='flex items-center gap-1 justify-center px-2 py-1 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 h-7'
                         title='Saved presets'
                       >
                         <List className='h-4 w-4' />

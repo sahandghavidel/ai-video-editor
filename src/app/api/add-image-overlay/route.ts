@@ -147,18 +147,8 @@ export async function POST(request: NextRequest) {
       const textOpacity = textStyling?.textOpacity || undefined;
       // Background params
       const bgColor = textStyling?.bgColor || null;
-      const bgOpacity =
-        typeof textStyling?.bgOpacity === 'number'
-          ? textStyling?.bgOpacity
-          : textStyling?.bgOpacity
-          ? Number(textStyling?.bgOpacity)
-          : 1;
-      const bgSize =
-        typeof textStyling?.bgSize === 'number'
-          ? textStyling?.bgSize
-          : textStyling?.bgSize
-          ? Number(textStyling?.bgSize)
-          : 0;
+      const bgOpacity = typeof textStyling?.bgOpacity === 'number' ? textStyling?.bgOpacity : textStyling?.bgOpacity ? Number(textStyling?.bgOpacity) : 1;
+      const bgSize = typeof textStyling?.bgSize === 'number' ? textStyling?.bgSize : textStyling?.bgSize ? Number(textStyling?.bgSize) : 0;
       const borderWidth = textStyling?.borderWidth || 3;
       const borderColor = textStyling?.borderColor || 'black';
       const shadowX = textStyling?.shadowX || 8;
@@ -183,26 +173,17 @@ export async function POST(request: NextRequest) {
       const normalizeColor = (c: string | undefined | null) => {
         if (!c) return c;
         const trimmed = c.trim();
-        if (trimmed.startsWith('#'))
-          return '0x' + trimmed.slice(1).toUpperCase();
+        if (trimmed.startsWith('#')) return '0x' + trimmed.slice(1).toUpperCase();
         return trimmed;
       };
 
       // include text opacity if provided
-      const fontColorWithOpacity = textOpacity
-        ? `${normalizeColor(fontColor)}@${Math.max(
-            0,
-            Math.min(1, Number(textOpacity))
-          )}`
-        : normalizeColor(fontColor) || fontColor;
+      const fontColorWithOpacity = textOpacity ? `${normalizeColor(fontColor)}@${Math.max(0, Math.min(1, Number(textOpacity)))}` : normalizeColor(fontColor) || fontColor;
       let boxParams = '';
       let drawboxFilter = '';
       if (bgColor && bgSize > 0) {
         const bgColorNormalized = normalizeColor(bgColor) || bgColor;
-        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
-          0,
-          Math.min(1, Number(bgOpacity))
-        )}`;
+        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(0, Math.min(1, Number(bgOpacity)))}`;
         // Compute drawbox position and size based on estimated text dimensions
         const posX = positionX / 100;
         const posY = positionY / 100;
@@ -213,14 +194,8 @@ export async function POST(request: NextRequest) {
         drawboxFilter = `drawbox=x=${boxX}:y=${boxY}:w=${boxW}:h=${boxH}:color=${boxColorWithOpacity}:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
       } else if (bgColor && bgSize === 0) {
         const bgColorNormalized = normalizeColor(bgColor) || bgColor;
-        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
-          0,
-          Math.min(1, Number(bgOpacity))
-        )}`;
-        boxParams = `:box=1:boxcolor=${boxColorWithOpacity}:boxborderw=${Math.max(
-          0,
-          Math.min(200, Number(bgSize))
-        )}`;
+        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(0, Math.min(1, Number(bgOpacity)))}`;
+        boxParams = `:box=1:boxcolor=${boxColorWithOpacity}:boxborderw=${Math.max(0, Math.min(200, Number(bgSize)))}`;
       }
 
       if (drawboxFilter) {
