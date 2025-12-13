@@ -1929,37 +1929,65 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     <Settings className='h-4 w-4 text-gray-600' />
                     <span className='sr-only'>Text Styling</span>
                   </div>
-                  <div className='flex flex-wrap gap-1 items-end'>
+                  <div className='flex flex-wrap gap-2 items-end'>
                     <div className='flex flex-col'>
                       <label className='sr-only'>Font</label>
-                      <select
-                        value={textStyling.fontFamily}
-                        onChange={(e) =>
-                          setTextStyling((prev) => ({
-                            ...prev,
-                            fontFamily: e.target.value,
-                          }))
-                        }
-                        className='w-28 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                        title={
-                          ffmpegFonts[
-                            textStyling.fontFamily as keyof typeof ffmpegFonts
-                          ] || ''
-                        }
-                      >
-                        {availableFontFamilies.map((family) => (
-                          <option
-                            key={family}
-                            value={family}
-                            title={(ffmpegFonts as any)[family] || ''}
+                      <div className='flex items-center gap-1'>
+                        <select
+                          value={textStyling.fontFamily}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              fontFamily: e.target.value,
+                            }))
+                          }
+                          className='w-32 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          title={
+                            ffmpegFonts[
+                              textStyling.fontFamily as keyof typeof ffmpegFonts
+                            ] || ''
+                          }
+                        >
+                          {availableFontFamilies.map((family) => (
+                            <option
+                              key={family}
+                              value={family}
+                              title={(ffmpegFonts as any)[family] || ''}
+                            >
+                              {family}
+                            </option>
+                          ))}
+                        </select>
+                        {ffmpegFonts[
+                          textStyling.fontFamily as keyof typeof ffmpegFonts
+                        ] ? (
+                          <span title='Font available'>
+                            <CheckCircle className='h-4 w-4 text-green-500' />
+                          </span>
+                        ) : (
+                          <span
+                            className='h-4 w-4 text-gray-400'
+                            title='Font not installed. Run scripts/install_fonts.sh to add fonts locally.'
                           >
-                            {family}
-                          </option>
-                        ))}
-                      </select>
+                            <DownloadCloud className='h-4 w-4' />
+                          </span>
+                        )}
+                        <button
+                          className='p-1 rounded hover:bg-gray-100'
+                          title={
+                            showFontPreview ? 'Hide preview' : 'Show preview'
+                          }
+                          onClick={() => setShowFontPreview((s) => !s)}
+                        >
+                          {showFontPreview ? (
+                            <EyeOff className='h-4 w-4 text-gray-600' />
+                          ) : (
+                            <Eye className='h-4 w-4 text-gray-600' />
+                          )}
+                        </button>
+                      </div>
                       {showFontPreview && (
-                        <div className='mt-1 flex items-center gap-3 items-center'>
-                          <div className='text-xs text-gray-600'>Preview:</div>
+                        <div className='mt-1 flex items-center gap-2'>
                           <div
                             className='text-sm font-semibold leading-5'
                             style={{
@@ -1969,7 +1997,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                           >
                             LAST WEEK
                           </div>
-                          <div className='ml-2 text-xs flex items-center gap-1'>
+                          <div className='text-xs flex items-center gap-1'>
                             {isFontLoaded ? (
                               <span title='Font loaded in browser'>
                                 <CheckCircle className='h-3 w-3 text-green-600' />
@@ -1984,35 +2012,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                           </div>
                         </div>
                       )}
-                      {ffmpegFonts[
-                        textStyling.fontFamily as keyof typeof ffmpegFonts
-                      ] ? (
-                        <span title='Font available'>
-                          <CheckCircle className='h-4 w-4 text-green-500' />
-                        </span>
-                      ) : (
-                        <span
-                          className='h-4 w-4 text-gray-400'
-                          title='Font not installed. Run scripts/install_fonts.sh to add fonts locally.'
-                        >
-                          <DownloadCloud className='h-4 w-4' />
-                        </span>
-                      )}
-                      <button
-                        className='ml-1 p-1 rounded hover:bg-gray-100'
-                        title={
-                          showFontPreview ? 'Hide preview' : 'Show preview'
-                        }
-                        onClick={() => setShowFontPreview((s) => !s)}
-                      >
-                        {showFontPreview ? (
-                          <EyeOff className='h-4 w-4 text-gray-600' />
-                        ) : (
-                          <Eye className='h-4 w-4 text-gray-600' />
-                        )}
-                      </button>
                     </div>
-                    <div className='flex flex-col items-start'>
+
+                    <div className='flex flex-col'>
                       <label className='sr-only'>Color</label>
                       <div className='flex items-center gap-2'>
                         <input
@@ -2024,7 +2026,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                               fontColor: e.target.value,
                             }))
                           }
-                          className='w-10 h-6 border border-gray-300 rounded cursor-pointer p-0'
+                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer p-0'
                           title={`Font color: ${textStyling.fontColor}`}
                           aria-label={`Font color: ${textStyling.fontColor}`}
                         />
@@ -2032,107 +2034,104 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                           {textStyling.fontColor}
                         </span>
                       </div>
-                      <div className='flex flex-col'>
-                        <label className='sr-only'>Border</label>
-                        <div className='flex gap-1'>
-                          <input
-                            type='number'
-                            value={textStyling.borderWidth}
-                            onChange={(e) =>
-                              setTextStyling((prev) => ({
-                                ...prev,
-                                borderWidth: Number(e.target.value),
-                              }))
-                            }
-                            className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                            min='0'
-                            max='10'
-                          />
-                          <input
-                            type='color'
-                            value={textStyling.borderColor}
-                            onChange={(e) =>
-                              setTextStyling((prev) => ({
-                                ...prev,
-                                borderColor: e.target.value,
-                              }))
-                            }
-                            className='w-6 h-6 border border-gray-300 rounded cursor-pointer'
-                            title={`Border color: ${textStyling.borderColor}`}
-                            aria-label={`Border color: ${textStyling.borderColor}`}
-                          />
-                        </div>
-                      </div>
-                      <div className='flex flex-col'>
-                        <label className='sr-only'>Shadow XY</label>
-                        <div className='flex gap-1'>
-                          <input
-                            type='number'
-                            value={textStyling.shadowX}
-                            onChange={(e) =>
-                              setTextStyling((prev) => ({
-                                ...prev,
-                                shadowX: Number(e.target.value),
-                              }))
-                            }
-                            className='w-10 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                            min='0'
-                            max='20'
-                            placeholder='X'
-                          />
-                          <input
-                            type='number'
-                            value={textStyling.shadowY}
-                            onChange={(e) =>
-                              setTextStyling((prev) => ({
-                                ...prev,
-                                shadowY: Number(e.target.value),
-                              }))
-                            }
-                            className='w-10 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                            min='0'
-                            max='20'
-                            placeholder='Y'
-                          />
-                        </div>
-                      </div>
-                      <div className='flex flex-col'>
-                        <label className='sr-only'>Opacity</label>
-                        <div className='flex items-center gap-2'>
-                          <input
-                            type='number'
-                            value={textStyling.shadowOpacity}
-                            onChange={(e) =>
-                              setTextStyling((prev) => ({
-                                ...prev,
-                                shadowOpacity: Number(e.target.value),
-                              }))
-                            }
-                            className='w-20 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                            min={0}
-                            max={1}
-                            step={0.1}
-                          />
-                        </div>
-                      </div>
-                      <label className='sr-only'>Shadow</label>
-                      <input
-                        type='color'
-                        value={textStyling.shadowColor}
-                        onChange={(e) =>
-                          setTextStyling((prev) => ({
-                            ...prev,
-                            shadowColor: e.target.value,
-                          }))
-                        }
-                        className='w-10 h-6 border border-gray-300 rounded cursor-pointer'
-                        title={`Shadow color: ${textStyling.shadowColor}`}
-                        aria-label={`Shadow color: ${textStyling.shadowColor}`}
-                      />
                     </div>
+
                     <div className='flex flex-col'>
-                      <label className='sr-only'>BG Color</label>
-                      <div className='flex items-center gap-2'>
+                      <label className='sr-only'>Border</label>
+                      <div className='flex items-center gap-1'>
+                        <input
+                          type='number'
+                          value={textStyling.borderWidth}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              borderWidth: Number(e.target.value),
+                            }))
+                          }
+                          className='w-14 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min='0'
+                          max='10'
+                        />
+                        <input
+                          type='color'
+                          value={textStyling.borderColor}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              borderColor: e.target.value,
+                            }))
+                          }
+                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
+                          title={`Border color: ${textStyling.borderColor}`}
+                          aria-label={`Border color: ${textStyling.borderColor}`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className='flex flex-col'>
+                      <label className='sr-only'>Shadow</label>
+                      <div className='flex items-center gap-1'>
+                        <input
+                          type='number'
+                          value={textStyling.shadowX}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              shadowX: Number(e.target.value),
+                            }))
+                          }
+                          className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min='0'
+                          max='20'
+                          placeholder='X'
+                        />
+                        <input
+                          type='number'
+                          value={textStyling.shadowY}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              shadowY: Number(e.target.value),
+                            }))
+                          }
+                          className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min='0'
+                          max='20'
+                          placeholder='Y'
+                        />
+                        <input
+                          type='number'
+                          value={textStyling.shadowOpacity}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              shadowOpacity: Number(e.target.value),
+                            }))
+                          }
+                          className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min={0}
+                          max={1}
+                          step={0.1}
+                        />
+                        <input
+                          type='color'
+                          value={textStyling.shadowColor}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              shadowColor: e.target.value,
+                            }))
+                          }
+                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
+                          title={`Shadow color: ${textStyling.shadowColor}`}
+                          aria-label={`Shadow color: ${textStyling.shadowColor}`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className='flex flex-col'>
+                      <label className='sr-only'>Background</label>
+                      <div className='flex items-center gap-1'>
                         <input
                           type='color'
                           value={textStyling.bgColor ?? '#000000'}
@@ -2142,7 +2141,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                               bgColor: e.target.value,
                             }))
                           }
-                          className='w-10 h-6 border border-gray-300 rounded cursor-pointer'
+                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
                           title={`Background color: ${
                             textStyling.bgColor ?? '#000000'
                           }`}
@@ -2150,43 +2149,36 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                             textStyling.bgColor ?? '#000000'
                           }`}
                         />
-                        <span className='text-xs text-gray-500 font-mono'>
-                          {textStyling.bgColor ?? '#000000'}
-                        </span>
+                        <input
+                          type='number'
+                          value={textStyling.bgOpacity ?? 0.65}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              bgOpacity: Number(e.target.value),
+                            }))
+                          }
+                          className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          title='Background opacity'
+                        />
+                        <input
+                          type='number'
+                          value={textStyling.bgSize ?? 8}
+                          onChange={(e) =>
+                            setTextStyling((prev) => ({
+                              ...prev,
+                              bgSize: Number(e.target.value),
+                            }))
+                          }
+                          className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                          min={0}
+                          max={200}
+                          title='Background padding'
+                        />
                       </div>
-                    </div>
-                    <div className='flex flex-col'>
-                      <label className='sr-only'>BG Opacity</label>
-                      <input
-                        type='number'
-                        value={textStyling.bgOpacity ?? 0.65}
-                        onChange={(e) =>
-                          setTextStyling((prev) => ({
-                            ...prev,
-                            bgOpacity: Number(e.target.value),
-                          }))
-                        }
-                        className='w-20 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                        min={0}
-                        max={1}
-                        step={0.05}
-                      />
-                    </div>
-                    <div className='flex flex-col'>
-                      <label className='sr-only'>BG Size</label>
-                      <input
-                        type='number'
-                        value={textStyling.bgSize ?? 8}
-                        onChange={(e) =>
-                          setTextStyling((prev) => ({
-                            ...prev,
-                            bgSize: Number(e.target.value),
-                          }))
-                        }
-                        className='w-20 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                        min={0}
-                        max={200}
-                      />
                     </div>
                     <button
                       onClick={() => {
