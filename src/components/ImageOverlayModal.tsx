@@ -1878,12 +1878,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
                 {/* Text Styling Controls */}
                 <div className='space-y-1 mt-2'>
-                  <h4 className='text-sm font-medium text-gray-700'>
-                    Text Styling
-                  </h4>
+                  <div className='flex items-center gap-2 mb-2'>
+                    <Settings className='h-4 w-4 text-gray-600' />
+                    <span className='sr-only'>Text Styling</span>
+                  </div>
                   <div className='flex flex-wrap gap-1 items-end'>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>Font</label>
+                      <label className='sr-only'>Font</label>
                       <select
                         value={textStyling.fontFamily}
                         onChange={(e) =>
@@ -1902,9 +1903,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       </select>
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        Color
-                      </label>
+                      <label className='sr-only'>Color</label>
                       <input
                         type='color'
                         value={textStyling.fontColor}
@@ -1918,9 +1917,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       />
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        Border
-                      </label>
+                      <label className='sr-only'>Border</label>
                       <div className='flex gap-1'>
                         <input
                           type='number'
@@ -1949,9 +1946,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       </div>
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        Shadow XY
-                      </label>
+                      <label className='sr-only'>Shadow XY</label>
                       <div className='flex gap-1'>
                         <input
                           type='number'
@@ -1984,9 +1979,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       </div>
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        Opacity
-                      </label>
+                      <label className='sr-only'>Opacity</label>
                       <input
                         type='number'
                         value={textStyling.shadowOpacity}
@@ -2003,9 +1996,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       />
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        Shadow
-                      </label>
+                      <label className='sr-only'>Shadow</label>
                       <input
                         type='color'
                         value={textStyling.shadowColor}
@@ -2019,9 +2010,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       />
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        BG Color
-                      </label>
+                      <label className='sr-only'>BG Color</label>
                       <input
                         type='color'
                         value={textStyling.bgColor ?? '#000000'}
@@ -2035,9 +2024,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       />
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        BG Opacity
-                      </label>
+                      <label className='sr-only'>BG Opacity</label>
                       <input
                         type='number'
                         value={textStyling.bgOpacity ?? 0.65}
@@ -2054,9 +2041,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       />
                     </div>
                     <div className='flex flex-col'>
-                      <label className='text-xs text-gray-600 mb-1'>
-                        BG Size
-                      </label>
+                      <label className='sr-only'>BG Size</label>
                       <input
                         type='number'
                         value={textStyling.bgSize ?? 8}
@@ -2093,9 +2078,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                               }
                         );
                       }}
-                      className='px-2 py-0.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 h-6'
+                      className='flex items-center justify-center px-2 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 h-8'
                     >
-                      Reset
+                      <RotateCcw className='h-4 w-4' />
                     </button>
                     <button
                       onClick={() => {
@@ -2105,26 +2090,26 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         );
                         alert('Text styling saved as default!');
                       }}
-                      className='px-2 py-0.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 h-6'
+                      className='flex items-center justify-center px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 h-8'
                     >
-                      Save Default
+                      <Save className='h-4 w-4' />
                     </button>
                     <button
                       onClick={saveCurrentTextStyle}
-                      className='px-2 py-0.5 text-xs bg-green-500 text-white rounded hover:bg-green-600 h-6 flex items-center gap-1'
+                      className='flex items-center justify-center px-2 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 h-8'
                       title='Save text styling as preset'
                     >
                       <Save className='h-4 w-4' />
-                      <span>Save</span>
+                      <span className='sr-only'>Save</span>
                     </button>
                     <div className='relative'>
                       <button
                         onClick={() => setShowSavedStyles((s) => !s)}
-                        className='px-2 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 h-6 flex items-center gap-1'
+                        className='flex items-center gap-1 justify-center px-2 py-1 text-sm bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 h-8'
                         title='Saved presets'
                       >
                         <List className='h-4 w-4' />
-                        <span>Presets</span>
+                        <span className='sr-only'>Presets</span>
                         <span className='ml-1 inline-flex items-center justify-center bg-gray-200 text-xs rounded-full w-5 h-5'>
                           {savedTextStyles.length}
                         </span>
