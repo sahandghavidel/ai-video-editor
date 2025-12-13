@@ -116,11 +116,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [customText, setCustomText] = useState<string>('');
   const [textOverlayPosition, setTextOverlayPosition] = useState({
     x: 50,
-    y: 80,
+    y: 50,
   }); // percentage
   const [textOverlaySize, setTextOverlaySize] = useState({
-    width: 20,
-    height: 10,
+    width: 100,
+    height: 100,
   }); // percentage
   const [textStyling, setTextStyling] = useState<TextStyling>(() => {
     // Load default styling from localStorage, or use fallback defaults
@@ -1012,8 +1012,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setIsCropping(false);
       setOriginalImageAspectRatio(null);
       setActualImageDimensions(null);
-      setTextOverlayPosition({ x: 50, y: 80 });
-      setTextOverlaySize({ width: 20, height: 10 });
+      setTextOverlayPosition({ x: 50, y: 50 });
+      setTextOverlaySize({ width: 100, height: 100 });
       setTextStyling(() => {
         const saved = localStorage.getItem('defaultTextStyling');
         return saved
@@ -1938,8 +1938,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   <div className='flex-shrink-0 mt-4'>
                     <button
                       onClick={() => {
-                        setTextOverlayPosition({ x: 50, y: 80 });
-                        setTextOverlaySize({ width: 20, height: 10 });
+                        setTextOverlayPosition({ x: 50, y: 50 });
+                        setTextOverlaySize({ width: 100, height: 100 });
                       }}
                       className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
                       title='Center and reset size'
