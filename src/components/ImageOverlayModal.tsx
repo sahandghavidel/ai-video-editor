@@ -1372,11 +1372,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </p>
                 )}
               </div>
-              {overlayImage && (
-                <p className='text-sm text-gray-600 mt-1'>
-                  {overlayImage.name}
-                </p>
-              )}
+              {/* Filename is shown inline next to the icons; duplicate bottom filename removed */}
             </div>
 
             {/* Position Controls */}
