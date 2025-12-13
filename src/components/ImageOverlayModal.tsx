@@ -15,6 +15,7 @@ import {
   Save,
   List,
   Trash,
+  Plus,
 } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
@@ -1620,13 +1621,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </div>
                 </div>
                 {/* Custom Text Input */}
-                <div className='flex gap-2 mt-3'>
+                <div className='flex gap-2 mt-3 items-center w-full'>
                   <input
                     type='text'
                     value={customText}
                     onChange={(e) => setCustomText(e.target.value)}
                     placeholder='Enter custom text for overlay...'
-                    className='flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                    className='w-2/3 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                   />
                   <button
                     onClick={() => {
@@ -1641,9 +1642,35 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       }
                     }}
                     disabled={!customText.trim()}
-                    className='px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                    className='p-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                    aria-label='Add text as overlay'
                   >
-                    Add Text
+                    <Plus className='h-4 w-4' />
+                  </button>
+                  {/* Insert All Text into input */}
+                  <button
+                    onClick={() => {
+                      if (transcriptionWords && transcriptionWords.length > 0) {
+                        const allText = transcriptionWords
+                          .map((w) => w.word)
+                          .join(' ');
+                        setCustomText(allText);
+                      }
+                    }}
+                    disabled={
+                      !transcriptionWords ||
+                      transcriptionWords.length === 0 ||
+                      customText.trim() ===
+                        (transcriptionWords || [])
+                          .map((w) => w.word)
+                          .join(' ')
+                          .trim()
+                    }
+                    className='p-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                    aria-label='Insert full transcription'
+                    title='Insert full transcription into the input field'
+                  >
+                    <List className='h-4 w-4' />
                   </button>
                   {/* Retranscribe Button - visible when a transcription handler is present */}
                   {handleTranscribeScene && (
@@ -1670,15 +1697,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         }
                       }}
                       disabled={isTranscribing}
-                      className='flex items-center space-x-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                      className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
                       title='Retranscribe final video for this scene'
+                      aria-label='Retranscribe final video for this scene'
                     >
                       {isTranscribing ? (
                         <Loader2 className='h-4 w-4 animate-spin' />
                       ) : (
                         <RotateCcw className='h-4 w-4' />
                       )}
-                      <span>Retranscribe</span>
                     </button>
                   )}
                 </div>
@@ -1710,14 +1737,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       }
                     }}
                     disabled={isTranscribing}
-                    className='flex items-center space-x-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                    className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                    title='Transcribe final video for this scene'
+                    aria-label='Transcribe final video for this scene'
                   >
                     {isTranscribing ? (
                       <Loader2 className='h-4 w-4 animate-spin' />
                     ) : (
                       <Upload className='h-4 w-4' />
                     )}
-                    <span>
+                    {/* keep sr-only text for accessibility */}
+                    <span className='sr-only'>
                       {isTranscribing
                         ? 'Transcribing...'
                         : 'Transcribe Final Video'}
