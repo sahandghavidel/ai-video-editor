@@ -1715,7 +1715,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         key={index}
                         onClick={() => {
                           setStartTime(wordData.start);
-                          setCustomText(wordData.word); // Add word to input field instead of directly selecting it
+                          setCustomText((wordData.word || '').toUpperCase()); // Add word to input field (uppercase)
                           // Also seek the video to this time
                           if (videoRef.current) {
                             videoRef.current.currentTime = wordData.start;
@@ -1778,7 +1778,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         const allText = transcriptionWords
                           .map((w) => w.word)
                           .join(' ');
-                        setCustomText(allText);
+                        setCustomText((allText || '').toUpperCase());
                       }
                     }}
                     disabled={
