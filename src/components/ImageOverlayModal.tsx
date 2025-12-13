@@ -25,6 +25,8 @@ import {
   Trash,
   Plus,
   Clock,
+  ChevronRight,
+  ChevronDown,
   Mic,
   Settings,
   DownloadCloud,
@@ -111,6 +113,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [videoTintColor, setVideoTintColor] = useState<string | null>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoTintOpacity, setVideoTintOpacity] = useState(1);
+  const [isTintSectionOpen, setIsTintSectionOpen] = useState(false);
   const tintPalette = useMemo(
     () => [
       '#000000',
@@ -1890,71 +1893,89 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 </div>
               </div>
 
-              <div className='mt-2 flex items-center justify-between gap-2'>
-                <span className='text-sm text-gray-700'>Tint</span>
-                <div className='flex items-center gap-2'>
-                  <button
-                    type='button'
-                    onClick={() => setVideoTintColor(null)}
-                    className={`px-2 py-1 text-xs rounded border ${
-                      !videoTintColor
-                        ? 'border-gray-500 text-gray-900'
-                        : 'border-gray-300 text-gray-600'
-                    } bg-white`}
-                    aria-label='No tint'
-                    title='No tint'
-                  >
-                    None
-                  </button>
-                  {tintPalette.map((c) => (
-                    <button
-                      key={c}
-                      type='button'
-                      onClick={() => setVideoTintColor(c)}
-                      className={`h-6 w-6 rounded border ${
-                        videoTintColor === c
-                          ? 'border-gray-700'
-                          : 'border-gray-300'
-                      }`}
-                      style={{ backgroundColor: c }}
-                      aria-label={`Tint ${c}`}
-                      title={`Tint ${c}`}
-                    />
-                  ))}
-                </div>
-              </div>
+              <button
+                type='button'
+                onClick={() => setIsTintSectionOpen((s) => !s)}
+                className='mt-2 w-full flex items-center justify-between text-sm text-gray-700'
+                aria-expanded={isTintSectionOpen}
+              >
+                <span>Tint</span>
+                {isTintSectionOpen ? (
+                  <ChevronDown className='h-4 w-4' />
+                ) : (
+                  <ChevronRight className='h-4 w-4' />
+                )}
+              </button>
 
-              <div className='mt-2 flex items-center justify-between gap-2'>
-                <span className='text-sm text-gray-700'>Strength</span>
-                <div className='flex items-center gap-2'>
-                  <input
-                    type='range'
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={videoTintOpacity}
-                    onChange={(e) =>
-                      setVideoTintOpacity(clamp01(Number(e.target.value)))
-                    }
-                    disabled={!videoTintColor}
-                    className='w-40'
-                    aria-label='Tint strength'
-                  />
-                  <input
-                    type='number'
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={videoTintOpacity}
-                    onChange={(e) =>
-                      setVideoTintOpacity(clamp01(Number(e.target.value)))
-                    }
-                    disabled={!videoTintColor}
-                    className='w-20 px-2 py-1 border border-gray-300 rounded text-sm bg-white'
-                    aria-label='Tint strength number'
-                  />
-                </div>
-              </div>
+              {isTintSectionOpen && (
+                <>
+                  <div className='mt-2 flex items-center justify-between gap-2'>
+                    <span className='text-sm text-gray-700'>Color</span>
+                    <div className='flex items-center gap-2'>
+                      <button
+                        type='button'
+                        onClick={() => setVideoTintColor(null)}
+                        className={`px-2 py-1 text-xs rounded border ${
+                          !videoTintColor
+                            ? 'border-gray-500 text-gray-900'
+                            : 'border-gray-300 text-gray-600'
+                        } bg-white`}
+                        aria-label='No tint'
+                        title='No tint'
+                      >
+                        None
+                      </button>
+                      {tintPalette.map((c) => (
+                        <button
+                          key={c}
+                          type='button'
+                          onClick={() => setVideoTintColor(c)}
+                          className={`h-6 w-6 rounded border ${
+                            videoTintColor === c
+                              ? 'border-gray-700'
+                              : 'border-gray-300'
+                          }`}
+                          style={{ backgroundColor: c }}
+                          aria-label={`Tint ${c}`}
+                          title={`Tint ${c}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className='mt-2 flex items-center justify-between gap-2'>
+                    <span className='text-sm text-gray-700'>Strength</span>
+                    <div className='flex items-center gap-2'>
+                      <input
+                        type='range'
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={videoTintOpacity}
+                        onChange={(e) =>
+                          setVideoTintOpacity(clamp01(Number(e.target.value)))
+                        }
+                        disabled={!videoTintColor}
+                        className='w-40'
+                        aria-label='Tint strength'
+                      />
+                      <input
+                        type='number'
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={videoTintOpacity}
+                        onChange={(e) =>
+                          setVideoTintOpacity(clamp01(Number(e.target.value)))
+                        }
+                        disabled={!videoTintColor}
+                        className='w-20 px-2 py-1 border border-gray-300 rounded text-sm bg-white'
+                        aria-label='Tint strength number'
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             {/* Transcription Words */}
             {transcriptionWords && transcriptionWords.length > 0 ? (
