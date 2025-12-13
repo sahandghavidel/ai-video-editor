@@ -1093,6 +1093,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
 
       if (event.code === 'Space') {
+        // If an input or editable element is focused, allow the spacebar to
+        // insert text rather than control player playback.
+        const target = event.target as Element | null;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return; // allow normal typing behavior
+        }
+
         event.preventDefault();
         const video = previewUrl ? previewVideoRef.current : videoRef.current;
         if (video) {
