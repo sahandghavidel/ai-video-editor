@@ -11,7 +11,7 @@ families_to_check = [
     "Arial","Helvetica","Helvetica Neue","Menlo","Monaco","Courier","Courier New",
     "Times","Times New Roman","Avenir","Avenir Next","Palatino","Optima","New York",
     "SF Compact","SF NS","Noto Sans","Noto Serif","Arial Unicode MS"
-    ,"Space Grotesk","JetBrains Mono","IBM Plex Sans"
+    ,"Space Grotesk","JetBrains Mono","IBM Plex Sans","Lilita One"
 ]
 
 def main():
@@ -49,6 +49,8 @@ def main():
                     mapping['JetBrains Mono'] = fname
                 if ('ibm' in lf or 'ibmplex' in lf) and 'IBM Plex Sans' in families_to_check:
                     mapping['IBM Plex Sans'] = fname
+                if 'lilita' in lf and 'Lilita One' in families_to_check:
+                    mapping['Lilita One'] = fname
     except Exception:
         # ignore asset lookup errors
         pass

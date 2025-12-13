@@ -62,6 +62,21 @@ A JSON mapping of common installed fonts and sample paths is available at `docs/
 
 The UI font dropdown will now list the detected fonts plus these optional modern fonts when available: `Space Grotesk`, `JetBrains Mono`, `IBM Plex Sans`. If you want to bundle them in the repo, use `sh scripts/install_fonts.sh` and regenerate the JSON mapping.
 
+`Lilita One` is now supported too — it can be installed using `scripts/install_fonts.sh` and will appear in the font dropdown for the overlay modal.
+
+If you prefer to use Google Fonts instead of the bundled version, you can still use the web CSS snippet in `app/layout.tsx`'s <head>:
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap"
+  rel="stylesheet"
+/>
+```
+
+But note: the server will still use the local `fontfile` mapping for deterministic rendering if `Lilita One` is present in `docs/ffmpeg-fonts.json` and the file exists on disk.
+
 ### Popular fonts NOT installed (check and install if you need them)
 
 The Google-fonts/modern list you provided contains many great fonts that are _not_ installed by default on macOS (e.g., Inter, Roboto, Montserrat, Poppins, JetBrains Mono, Fira Code). These will not be found by `fc-list` until installed.
