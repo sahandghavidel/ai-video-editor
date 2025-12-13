@@ -64,7 +64,8 @@ interface ImageOverlayModalProps {
     startTime: number,
     endTime: number,
     textStyling?: TextStyling,
-    videoTintColor?: string | null
+    videoTintColor?: string | null,
+    videoTintOpacity?: number
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -109,12 +110,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [endTime, setEndTime] = useState(0);
   const [videoTintColor, setVideoTintColor] = useState<string | null>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
-  const VIDEO_TINT_OPACITY = 0.35;
+  const [videoTintOpacity, setVideoTintOpacity] = useState(1);
   const tintPalette = useMemo(
     () => [
       '#000000',
       '#FFFFFF',
-      '#FF0000',
+      '#DDC57A',
       '#00FF00',
       '#0000FF',
       '#FFFF00',
@@ -318,6 +319,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     Number.isFinite(endTime) &&
     currentVideoTime >= startTime &&
     currentVideoTime <= endTime;
+
+  const clamp01 = useCallback((v: number) => Math.max(0, Math.min(1, v)), []);
 
   // Keep a scale factor so CSS preview sizes (px) match FFmpeg drawtext sizes (video px).
   // Example: borderw=3 in FFmpeg should appear as ~3px on the source video, which is
@@ -1055,6 +1058,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     formData.append('preview', 'true');
     if (videoTintColor) {
       formData.append('videoTintColor', videoTintColor);
+      formData.append('videoTintOpacity', clamp01(videoTintOpacity).toString());
     }
     if (selectedWordText && textStyling) {
       formData.append('textStyling', JSON.stringify(textStyling));
@@ -1078,6 +1082,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayImage,
     selectedWordText,
     videoTintColor,
+    videoTintOpacity,
     originalVideoUrl,
     sceneId,
     overlayPosition,
@@ -1087,6 +1092,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     startTime,
     endTime,
     textStyling,
+    clamp01,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -1107,7 +1113,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         startTime,
         endTime,
         selectedWordText ? textStyling : undefined,
-        videoTintColor
+        videoTintColor,
+        videoTintOpacity
       );
 
       // After applying, fetch the scene from the DB to get the updated video URL
@@ -1152,6 +1159,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setStartTime(0);
       setEndTime(0);
       setVideoTintColor(null);
+      setVideoTintOpacity(1);
       setIsCropping(false);
       setOriginalImageAspectRatio(null);
       setActualImageDimensions(null);
@@ -1182,6 +1190,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayImage,
     selectedWordText,
     videoTintColor,
+    videoTintOpacity,
     sceneId,
     overlayPosition,
     overlaySize,
@@ -1203,6 +1212,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setStartTime(0);
     setEndTime(0);
     setVideoTintColor(null);
+    setVideoTintOpacity(1);
     setPreviewUrl(null);
     setTranscriptionWords(null);
     setSelectedWordText(null);
@@ -1421,7 +1431,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   right: 0,
                   bottom: 0,
                   backgroundColor: videoTintColor,
-                  opacity: VIDEO_TINT_OPACITY,
+                  opacity: clamp01(videoTintOpacity),
                 }}
               />
             )}
@@ -1911,6 +1921,38 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       title={`Tint ${c}`}
                     />
                   ))}
+                </div>
+              </div>
+
+              <div className='mt-2 flex items-center justify-between gap-2'>
+                <span className='text-sm text-gray-700'>Strength</span>
+                <div className='flex items-center gap-2'>
+                  <input
+                    type='range'
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={videoTintOpacity}
+                    onChange={(e) =>
+                      setVideoTintOpacity(clamp01(Number(e.target.value)))
+                    }
+                    disabled={!videoTintColor}
+                    className='w-40'
+                    aria-label='Tint strength'
+                  />
+                  <input
+                    type='number'
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={videoTintOpacity}
+                    onChange={(e) =>
+                      setVideoTintOpacity(clamp01(Number(e.target.value)))
+                    }
+                    disabled={!videoTintColor}
+                    className='w-20 px-2 py-1 border border-gray-300 rounded text-sm bg-white'
+                    aria-label='Tint strength number'
+                  />
                 </div>
               </div>
             </div>

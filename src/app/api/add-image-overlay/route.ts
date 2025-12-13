@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
     const endTime = parseFloat(formData.get('endTime') as string);
     const preview = formData.get('preview') === 'true';
     const videoTintColorRaw = formData.get('videoTintColor') as string | null;
+    const videoTintOpacityRaw = formData.get('videoTintOpacity') as
+      | string
+      | null;
     const textStyling = formData.get('textStyling')
       ? JSON.parse(formData.get('textStyling') as string)
       : null;
@@ -45,6 +48,7 @@ export async function POST(request: NextRequest) {
       endTime,
       preview,
       videoTintColor: videoTintColorRaw,
+      videoTintOpacity: videoTintOpacityRaw,
     });
 
     if (
@@ -78,8 +82,9 @@ export async function POST(request: NextRequest) {
     };
 
     const tintColorNormalized = normalizeColor(videoTintColorRaw);
+    const tintOpacity = clamp01(videoTintOpacityRaw, 1);
     const tintFilter = tintColorNormalized
-      ? `drawbox=x=0:y=0:w=iw:h=ih:color=${tintColorNormalized}@0.35:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`
+      ? `drawbox=x=0:y=0:w=iw:h=ih:color=${tintColorNormalized}@${tintOpacity}:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`
       : null;
 
     // Create temporary directory
