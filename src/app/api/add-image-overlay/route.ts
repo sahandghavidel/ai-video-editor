@@ -123,13 +123,11 @@ export async function POST(request: NextRequest) {
         )
       );
 
-      // Estimate text dimensions (rough approximation)
-      const textWidth = overlayText.length * fontSize * 0.6; // approximate character width
-      const textHeight = fontSize * 1.2; // line height
-
-      // Position text to center it at the specified percentage
-      const xPos = `w*${positionX / 100}-(${textWidth}/2)`;
-      const yPos = `h*${positionY / 100}-(${textHeight}/2)`;
+      // Position text to center it at the specified percentage.
+      // Use FFmpeg's measured text width/height (text_w/text_h) instead of
+      // approximating based on string length, which drifts for spaces/punctuation.
+      const xPos = `w*${positionX / 100}-text_w/2`;
+      const yPos = `h*${positionY / 100}-text_h/2`;
 
       // Escape text properly for FFmpeg - handle special characters that can break FFmpeg
       const escapedText = overlayText
@@ -233,39 +231,20 @@ export async function POST(request: NextRequest) {
         normalizeColor(shadowColor) || shadowColor || 'black';
       const shadowOpacity = clamp01(shadowOpacityRaw, 0.9);
       let boxParams = '';
-      let drawboxFilter = '';
-      if (bgColor && bgSize > 0) {
+      if (bgColor) {
         const bgColorNormalized = normalizeColor(bgColor) || bgColor;
         const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
           0,
           Math.min(1, Number(bgOpacity))
         )}`;
-        // Compute drawbox position and size based on estimated text dimensions
-        const posX = positionX / 100;
-        const posY = positionY / 100;
-        const boxX = Math.round(videoWidth * posX - textWidth / 2 - bgSize);
-        const boxY = Math.round(videoHeight * posY - textHeight / 2 - bgSize);
-        const boxW = Math.round(textWidth + bgSize * 2);
-        const boxH = Math.round(textHeight + bgSize * 2);
-        drawboxFilter = `drawbox=x=${boxX}:y=${boxY}:w=${boxW}:h=${boxH}:color=${boxColorWithOpacity}:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
-      } else if (bgColor && bgSize === 0) {
-        const bgColorNormalized = normalizeColor(bgColor) || bgColor;
-        const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
-          0,
-          Math.min(1, Number(bgOpacity))
-        )}`;
+        // Use drawtext built-in box so padding follows measured text_w/text_h.
         boxParams = `:box=1:boxcolor=${boxColorWithOpacity}:boxborderw=${Math.max(
           0,
           Math.min(200, Number(bgSize))
         )}`;
       }
 
-      if (drawboxFilter) {
-        const vf = `${drawboxFilter},drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
-      } else {
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
-      }
+      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy ${durationLimit} "${outputPath}"`;
     } else {
       throw new Error('No overlay content provided');
     }
