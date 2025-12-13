@@ -2022,6 +2022,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   >
                     <Plus className='h-4 w-4' />
                   </button>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      setSelectedWordText(null);
+                      setCustomText('');
+                      setPreviewUrl(null);
+                    }}
+                    disabled={!selectedWordText && !customText.trim()}
+                    className='p-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                    aria-label='Clear text overlay'
+                    title='Clear text overlay'
+                  >
+                    <X className='h-4 w-4' />
+                  </button>
                   {/* Insert All Text into input */}
                   <button
                     onClick={() => {
