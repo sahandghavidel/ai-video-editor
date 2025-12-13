@@ -114,6 +114,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoTintOpacity, setVideoTintOpacity] = useState(1);
   const [isTintSectionOpen, setIsTintSectionOpen] = useState(false);
+  const [isTextStylingSectionOpen, setIsTextStylingSectionOpen] =
+    useState(false);
   const tintPalette = useMemo(
     () => [
       '#000000',
@@ -1164,6 +1166,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setVideoTintColor(null);
       setVideoTintOpacity(1);
       setIsTintSectionOpen(false);
+      setIsTextStylingSectionOpen(false);
       setIsCropping(false);
       setOriginalImageAspectRatio(null);
       setActualImageDimensions(null);
@@ -1218,6 +1221,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setVideoTintColor(null);
     setVideoTintOpacity(1);
     setIsTintSectionOpen(false);
+    setIsTextStylingSectionOpen(false);
     setPreviewUrl(null);
     setTranscriptionWords(null);
     setSelectedWordText(null);
@@ -1229,6 +1233,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   useEffect(() => {
     if (isOpen && sceneId) {
       setIsTintSectionOpen(false);
+      setIsTextStylingSectionOpen(false);
       // Clear any leftover preview state when modal opens
       setPreviewUrl(null);
       // Set the original video URL when we have a valid video URL
@@ -2252,312 +2257,330 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
                 {/* Text Styling Controls */}
                 <div className='space-y-1 mt-2'>
-                  <div className='flex items-center gap-2 mb-2'>
+                  <button
+                    type='button'
+                    onClick={() => setIsTextStylingSectionOpen((s) => !s)}
+                    className='flex items-center gap-2 mb-2 w-full text-left'
+                    aria-expanded={isTextStylingSectionOpen}
+                  >
                     <Settings className='h-4 w-4 text-gray-600' />
-                    <span className='sr-only'>Text Styling</span>
-                  </div>
-                  <div className='flex flex-wrap gap-2 items-end'>
-                    <div className='flex flex-col'>
-                      <label className='sr-only'>Font</label>
-                      <div className='flex items-center gap-1'>
-                        <select
-                          value={textStyling.fontFamily}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              fontFamily: e.target.value,
-                            }))
-                          }
-                          className='w-32 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                          title={
-                            ffmpegFonts[
-                              textStyling.fontFamily as keyof typeof ffmpegFonts
-                            ] || ''
-                          }
-                        >
-                          {availableFontFamilies.map((family) => (
-                            <option
-                              key={family}
-                              value={family}
-                              title={(ffmpegFonts as any)[family] || ''}
-                            >
-                              {family}
-                            </option>
-                          ))}
-                        </select>
-                        {ffmpegFonts[
-                          textStyling.fontFamily as keyof typeof ffmpegFonts
-                        ] ? (
-                          <span title='Font available'>
-                            <CheckCircle className='h-4 w-4 text-green-500' />
-                          </span>
-                        ) : (
-                          <span
-                            className='h-4 w-4 text-gray-400'
-                            title='Font not installed. Run scripts/install_fonts.sh to add fonts locally.'
-                          >
-                            <DownloadCloud className='h-4 w-4' />
-                          </span>
-                        )}
-                        <button
-                          className='p-1 rounded hover:bg-gray-100'
-                          title={
-                            showFontPreview ? 'Hide preview' : 'Show preview'
-                          }
-                          onClick={() => setShowFontPreview((s) => !s)}
-                        >
-                          {showFontPreview ? (
-                            <EyeOff className='h-4 w-4 text-gray-600' />
-                          ) : (
-                            <Eye className='h-4 w-4 text-gray-600' />
-                          )}
-                        </button>
-                      </div>
-                      {showFontPreview && (
-                        <div className='mt-1 flex items-center gap-2'>
-                          <div
-                            className='text-sm font-semibold leading-5'
-                            style={{
-                              fontFamily: textStyling.fontFamily,
-                              fontSize: '12px',
-                            }}
-                          >
-                            LAST WEEK
-                          </div>
-                          <div className='text-xs flex items-center gap-1'>
-                            {isFontLoaded ? (
-                              <span title='Font loaded in browser'>
-                                <CheckCircle className='h-3 w-3 text-green-600' />
-                                <span className='sr-only'>Loaded</span>
-                              </span>
-                            ) : (
-                              <span title='Font not loaded in browser'>
-                                <DownloadCloud className='h-3 w-3 text-gray-400' />
-                                <span className='sr-only'>Not loaded</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                    <span className='text-xs font-medium text-gray-700'>
+                      Text styling
+                    </span>
+                    <span className='ml-auto text-gray-600'>
+                      {isTextStylingSectionOpen ? (
+                        <ChevronDown className='h-4 w-4' />
+                      ) : (
+                        <ChevronRight className='h-4 w-4' />
                       )}
-                    </div>
+                    </span>
+                  </button>
 
-                    <div className='flex flex-col'>
-                      <label className='sr-only'>Color</label>
-                      <div className='flex items-center gap-2'>
-                        <input
-                          type='color'
-                          value={textStyling.fontColor}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              fontColor: e.target.value,
-                            }))
-                          }
-                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer p-0'
-                          title={`Font color: ${textStyling.fontColor}`}
-                          aria-label={`Font color: ${textStyling.fontColor}`}
-                        />
-                        <span className='text-xs text-gray-500 font-mono'>
-                          {textStyling.fontColor}
-                        </span>
+                  {isTextStylingSectionOpen && (
+                    <div className='flex flex-wrap gap-2 items-end'>
+                      <div className='flex flex-col'>
+                        <label className='sr-only'>Font</label>
+                        <div className='flex items-center gap-1'>
+                          <select
+                            value={textStyling.fontFamily}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                fontFamily: e.target.value,
+                              }))
+                            }
+                            className='w-32 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                            title={
+                              ffmpegFonts[
+                                textStyling.fontFamily as keyof typeof ffmpegFonts
+                              ] || ''
+                            }
+                          >
+                            {availableFontFamilies.map((family) => (
+                              <option
+                                key={family}
+                                value={family}
+                                title={(ffmpegFonts as any)[family] || ''}
+                              >
+                                {family}
+                              </option>
+                            ))}
+                          </select>
+                          {ffmpegFonts[
+                            textStyling.fontFamily as keyof typeof ffmpegFonts
+                          ] ? (
+                            <span title='Font available'>
+                              <CheckCircle className='h-4 w-4 text-green-500' />
+                            </span>
+                          ) : (
+                            <span
+                              className='h-4 w-4 text-gray-400'
+                              title='Font not installed. Run scripts/install_fonts.sh to add fonts locally.'
+                            >
+                              <DownloadCloud className='h-4 w-4' />
+                            </span>
+                          )}
+                          <button
+                            className='p-1 rounded hover:bg-gray-100'
+                            title={
+                              showFontPreview ? 'Hide preview' : 'Show preview'
+                            }
+                            onClick={() => setShowFontPreview((s) => !s)}
+                            type='button'
+                          >
+                            {showFontPreview ? (
+                              <EyeOff className='h-4 w-4 text-gray-600' />
+                            ) : (
+                              <Eye className='h-4 w-4 text-gray-600' />
+                            )}
+                          </button>
+                        </div>
+                        {showFontPreview && (
+                          <div className='mt-1 flex items-center gap-2'>
+                            <div
+                              className='text-sm font-semibold leading-5'
+                              style={{
+                                fontFamily: textStyling.fontFamily,
+                                fontSize: '12px',
+                              }}
+                            >
+                              LAST WEEK
+                            </div>
+                            <div className='text-xs flex items-center gap-1'>
+                              {isFontLoaded ? (
+                                <span title='Font loaded in browser'>
+                                  <CheckCircle className='h-3 w-3 text-green-600' />
+                                  <span className='sr-only'>Loaded</span>
+                                </span>
+                              ) : (
+                                <span title='Font not loaded in browser'>
+                                  <DownloadCloud className='h-3 w-3 text-gray-400' />
+                                  <span className='sr-only'>Not loaded</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
 
-                    <div className='flex flex-col'>
-                      <label className='sr-only'>Border</label>
-                      <div className='flex items-center gap-1'>
-                        <input
-                          type='number'
-                          value={textStyling.borderWidth}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              borderWidth: Number(e.target.value),
-                            }))
-                          }
-                          className='w-14 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                          min='0'
-                          max='10'
-                        />
-                        <input
-                          type='color'
-                          value={textStyling.borderColor}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              borderColor: e.target.value,
-                            }))
-                          }
-                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
-                          title={`Border color: ${textStyling.borderColor}`}
-                          aria-label={`Border color: ${textStyling.borderColor}`}
-                        />
+                      <div className='flex flex-col'>
+                        <label className='sr-only'>Color</label>
+                        <div className='flex items-center gap-2'>
+                          <input
+                            type='color'
+                            value={textStyling.fontColor}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                fontColor: e.target.value,
+                              }))
+                            }
+                            className='w-8 h-6 border border-gray-300 rounded cursor-pointer p-0'
+                            title={`Font color: ${textStyling.fontColor}`}
+                            aria-label={`Font color: ${textStyling.fontColor}`}
+                          />
+                          <span className='text-xs text-gray-500 font-mono'>
+                            {textStyling.fontColor}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className='flex flex-col'>
-                      <label className='sr-only'>Shadow</label>
-                      <div className='flex items-center gap-1'>
-                        <input
-                          type='number'
-                          value={textStyling.shadowX}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              shadowX: Number(e.target.value),
-                            }))
-                          }
-                          className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                          min='0'
-                          max='20'
-                          placeholder='X'
-                        />
-                        <input
-                          type='number'
-                          value={textStyling.shadowY}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              shadowY: Number(e.target.value),
-                            }))
-                          }
-                          className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                          min='0'
-                          max='20'
-                          placeholder='Y'
-                        />
-                        <input
-                          type='number'
-                          value={textStyling.shadowOpacity}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              shadowOpacity: Number(e.target.value),
-                            }))
-                          }
-                          className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                          min={0}
-                          max={1}
-                          step={0.1}
-                        />
-                        <input
-                          type='color'
-                          value={textStyling.shadowColor}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              shadowColor: e.target.value,
-                            }))
-                          }
-                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
-                          title={`Shadow color: ${textStyling.shadowColor}`}
-                          aria-label={`Shadow color: ${textStyling.shadowColor}`}
-                        />
+                      <div className='flex flex-col'>
+                        <label className='sr-only'>Border</label>
+                        <div className='flex items-center gap-1'>
+                          <input
+                            type='number'
+                            value={textStyling.borderWidth}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                borderWidth: Number(e.target.value),
+                              }))
+                            }
+                            className='w-14 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                            min='0'
+                            max='10'
+                          />
+                          <input
+                            type='color'
+                            value={textStyling.borderColor}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                borderColor: e.target.value,
+                              }))
+                            }
+                            className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
+                            title={`Border color: ${textStyling.borderColor}`}
+                            aria-label={`Border color: ${textStyling.borderColor}`}
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    <div className='flex flex-col'>
-                      <label className='sr-only'>Background</label>
-                      <div className='flex items-center gap-1'>
-                        <input
-                          type='color'
-                          value={textStyling.bgColor ?? '#000000'}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              bgColor: e.target.value,
-                            }))
-                          }
-                          className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
-                          title={`Background color: ${
-                            textStyling.bgColor ?? '#000000'
-                          }`}
-                          aria-label={`Background color: ${
-                            textStyling.bgColor ?? '#000000'
-                          }`}
-                        />
-                        <input
-                          type='number'
-                          value={textStyling.bgOpacity ?? 0.65}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              bgOpacity: Number(e.target.value),
-                            }))
-                          }
-                          className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          title='Background opacity'
-                        />
-                        <input
-                          type='number'
-                          value={textStyling.bgSize ?? 8}
-                          onChange={(e) =>
-                            setTextStyling((prev) => ({
-                              ...prev,
-                              bgSize: Number(e.target.value),
-                            }))
-                          }
-                          className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
-                          min={0}
-                          max={200}
-                          title='Background padding'
-                        />
+                      <div className='flex flex-col'>
+                        <label className='sr-only'>Shadow</label>
+                        <div className='flex items-center gap-1'>
+                          <input
+                            type='number'
+                            value={textStyling.shadowX}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                shadowX: Number(e.target.value),
+                              }))
+                            }
+                            className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                            min='0'
+                            max='20'
+                            placeholder='X'
+                          />
+                          <input
+                            type='number'
+                            value={textStyling.shadowY}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                shadowY: Number(e.target.value),
+                              }))
+                            }
+                            className='w-12 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                            min='0'
+                            max='20'
+                            placeholder='Y'
+                          />
+                          <input
+                            type='number'
+                            value={textStyling.shadowOpacity}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                shadowOpacity: Number(e.target.value),
+                              }))
+                            }
+                            className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                            min={0}
+                            max={1}
+                            step={0.1}
+                          />
+                          <input
+                            type='color'
+                            value={textStyling.shadowColor}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                shadowColor: e.target.value,
+                              }))
+                            }
+                            className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
+                            title={`Shadow color: ${textStyling.shadowColor}`}
+                            aria-label={`Shadow color: ${textStyling.shadowColor}`}
+                          />
+                        </div>
                       </div>
+
+                      <div className='flex flex-col'>
+                        <label className='sr-only'>Background</label>
+                        <div className='flex items-center gap-1'>
+                          <input
+                            type='color'
+                            value={textStyling.bgColor ?? '#000000'}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                bgColor: e.target.value,
+                              }))
+                            }
+                            className='w-8 h-6 border border-gray-300 rounded cursor-pointer'
+                            title={`Background color: ${
+                              textStyling.bgColor ?? '#000000'
+                            }`}
+                            aria-label={`Background color: ${
+                              textStyling.bgColor ?? '#000000'
+                            }`}
+                          />
+                          <input
+                            type='number'
+                            value={textStyling.bgOpacity ?? 0.65}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                bgOpacity: Number(e.target.value),
+                              }))
+                            }
+                            className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            title='Background opacity'
+                          />
+                          <input
+                            type='number'
+                            value={textStyling.bgSize ?? 8}
+                            onChange={(e) =>
+                              setTextStyling((prev) => ({
+                                ...prev,
+                                bgSize: Number(e.target.value),
+                              }))
+                            }
+                            className='w-16 px-1 py-0.5 border border-gray-300 rounded text-xs'
+                            min={0}
+                            max={200}
+                            title='Background padding'
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const saved =
+                            localStorage.getItem('defaultTextStyling');
+                          setTextStyling(
+                            saved
+                              ? JSON.parse(saved)
+                              : {
+                                  fontColor: '#ffffff',
+                                  borderWidth: 3,
+                                  borderColor: '#000000',
+                                  shadowX: 8,
+                                  shadowY: 8,
+                                  shadowColor: '#000000',
+                                  shadowOpacity: 0.9,
+                                  fontFamily: 'Helvetica',
+                                  bgColor: '#000000',
+                                  bgOpacity: 0.65,
+                                  bgSize: 8,
+                                }
+                          );
+                        }}
+                        className='flex items-center justify-center px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 h-7 w-7'
+                        title='Reset text styling to default'
+                        aria-label='Reset text styling'
+                      >
+                        <RotateCcw className='h-4 w-4' />
+                      </button>
+                      <button
+                        onClick={() => {
+                          localStorage.setItem(
+                            'defaultTextStyling',
+                            JSON.stringify(textStyling)
+                          );
+                          alert('Text styling saved as default!');
+                        }}
+                        className='flex items-center justify-center px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 h-7 w-7'
+                        title='Save as default text styling'
+                        aria-label='Save default text styling'
+                      >
+                        <Save className='h-4 w-4' />
+                      </button>
+                      <button
+                        onClick={saveCurrentTextStyle}
+                        className='flex items-center justify-center px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 h-7 w-7'
+                        title='Save text styling as preset'
+                      >
+                        <Save className='h-4 w-4' />
+                        <span className='sr-only'>Save</span>
+                      </button>
                     </div>
-                    <button
-                      onClick={() => {
-                        const saved =
-                          localStorage.getItem('defaultTextStyling');
-                        setTextStyling(
-                          saved
-                            ? JSON.parse(saved)
-                            : {
-                                fontColor: '#ffffff',
-                                borderWidth: 3,
-                                borderColor: '#000000',
-                                shadowX: 8,
-                                shadowY: 8,
-                                shadowColor: '#000000',
-                                shadowOpacity: 0.9,
-                                fontFamily: 'Helvetica',
-                                bgColor: '#000000',
-                                bgOpacity: 0.65,
-                                bgSize: 8,
-                              }
-                        );
-                      }}
-                      className='flex items-center justify-center px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 h-7 w-7'
-                      title='Reset text styling to default'
-                      aria-label='Reset text styling'
-                    >
-                      <RotateCcw className='h-4 w-4' />
-                    </button>
-                    <button
-                      onClick={() => {
-                        localStorage.setItem(
-                          'defaultTextStyling',
-                          JSON.stringify(textStyling)
-                        );
-                        alert('Text styling saved as default!');
-                      }}
-                      className='flex items-center justify-center px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 h-7 w-7'
-                      title='Save as default text styling'
-                      aria-label='Save default text styling'
-                    >
-                      <Save className='h-4 w-4' />
-                    </button>
-                    <button
-                      onClick={saveCurrentTextStyle}
-                      className='flex items-center justify-center px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 h-7 w-7'
-                      title='Save text styling as preset'
-                    >
-                      <Save className='h-4 w-4' />
-                      <span className='sr-only'>Save</span>
-                    </button>
-                  </div>
+                  )}
 
                   {/* Presets (inline, no dropdown) */}
                   <div className='mt-2'>
