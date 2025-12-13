@@ -253,6 +253,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     width: number;
     height: number;
   } | null>(null);
+  const [videoToCssScale, setVideoToCssScale] = useState(1);
 
   // Cropping state
   const [isCropping, setIsCropping] = useState(false);
@@ -273,6 +274,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Keep a scale factor so CSS preview sizes (px) match FFmpeg drawtext sizes (video px).
+  // Example: borderw=3 in FFmpeg should appear as ~3px on the source video, which is
+  // borderw * (displayedVideoPx / sourceVideoPx) in the browser preview.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const rect = containerRect ?? video.getBoundingClientRect();
+    if (!rect?.width || !rect?.height) return;
+    if (!video.videoWidth || !video.videoHeight) return;
+
+    const scaleX = rect.width / video.videoWidth;
+    const scaleY = rect.height / video.videoHeight;
+    const next = Math.min(scaleX, scaleY);
+    if (Number.isFinite(next) && next > 0) setVideoToCssScale(next);
+  }, [containerRect, originalVideoUrl]);
 
   const getVideoContentRect = useCallback(() => {
     const video = videoRef.current;
@@ -1347,14 +1365,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   className='w-full h-full flex items-center justify-center font-bold select-none whitespace-nowrap'
                   style={{
                     color: textStyling.fontColor,
-                    textShadow: `${textStyling.shadowX}px ${
-                      textStyling.shadowY
+                    textShadow: `${textStyling.shadowX * videoToCssScale}px ${
+                      textStyling.shadowY * videoToCssScale
                     }px 0px rgba(${hexToRgb(textStyling.shadowColor)}, ${
                       textStyling.shadowOpacity
                     })`,
                     WebkitTextStroke:
                       textStyling.borderWidth > 0
-                        ? `${textStyling.borderWidth}px ${textStyling.borderColor}`
+                        ? `${textStyling.borderWidth * videoToCssScale}px ${
+                            textStyling.borderColor
+                          }`
                         : 'none',
                     fontWeight: 'bold',
                     fontFamily: textStyling.fontFamily,
@@ -1364,7 +1384,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         })`
                       : undefined,
                     padding: textStyling.bgSize
-                      ? `${textStyling.bgSize}px`
+                      ? `${textStyling.bgSize * videoToCssScale}px`
                       : undefined,
                     borderRadius: textStyling.bgSize ? '4px' : undefined,
                   }}
