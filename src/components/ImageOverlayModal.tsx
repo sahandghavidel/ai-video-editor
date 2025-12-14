@@ -2516,140 +2516,142 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               setTintInvert={setTintInvert}
             />
 
-            <div className='mt-2 bg-gray-50 p-2 rounded-lg border border-gray-200'>
-              <button
-                type='button'
-                onClick={() => setIsSoundSectionOpen((s) => !s)}
-                className='w-full flex items-center justify-between gap-2 text-sm text-gray-700'
-                aria-expanded={isSoundSectionOpen}
-              >
-                <div className='flex items-center gap-2 min-w-0'>
-                  <span>Sound</span>
-                  {!isSoundSectionOpen && (
-                    <span className='text-xs text-gray-500 truncate'>
-                      {selectedSoundName ?? 'None'}
-                    </span>
-                  )}
-                </div>
+            <div className='mt-2 grid grid-cols-2 gap-2'>
+              <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
+                <button
+                  type='button'
+                  onClick={() => setIsSoundSectionOpen((s) => !s)}
+                  className='w-full flex items-center justify-between gap-2 text-sm text-gray-700'
+                  aria-expanded={isSoundSectionOpen}
+                >
+                  <div className='flex items-center gap-2 min-w-0'>
+                    <span>Sound</span>
+                    {!isSoundSectionOpen && (
+                      <span className='text-xs text-gray-500 truncate'>
+                        {selectedSoundName ?? 'None'}
+                      </span>
+                    )}
+                  </div>
 
-                <div className='flex items-center gap-2'>
-                  <button
-                    type='button'
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedSoundName(null);
-                    }}
-                    className={`px-2 py-1 text-xs rounded border bg-white ${
-                      !selectedSoundName
-                        ? 'border-gray-700 text-gray-900'
-                        : 'border-gray-300 text-gray-700'
-                    }`}
-                  >
-                    None
-                  </button>
-                  {isSoundSectionOpen ? (
-                    <ChevronDown className='h-4 w-4' />
-                  ) : (
-                    <ChevronRight className='h-4 w-4' />
-                  )}
-                </div>
-              </button>
-
-              {isSoundSectionOpen && (
-                <div className='mt-2 flex flex-wrap gap-2'>
-                  {availableSounds.map((s) => (
+                  <div className='flex items-center gap-2'>
                     <button
-                      key={s.name}
                       type='button'
-                      onClick={() => setSelectedSoundName(s.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSoundName(null);
+                      }}
                       className={`px-2 py-1 text-xs rounded border bg-white ${
-                        selectedSoundName === s.name
+                        !selectedSoundName
                           ? 'border-gray-700 text-gray-900'
                           : 'border-gray-300 text-gray-700'
                       }`}
-                      title={s.name}
                     >
-                      {s.name}
+                      None
                     </button>
-                  ))}
+                    {isSoundSectionOpen ? (
+                      <ChevronDown className='h-4 w-4' />
+                    ) : (
+                      <ChevronRight className='h-4 w-4' />
+                    )}
+                  </div>
+                </button>
 
-                  {availableSounds.length === 0 && (
-                    <span className='text-xs text-gray-500'>
-                      No sounds found in /public/sounds
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+                {isSoundSectionOpen && (
+                  <div className='mt-2 flex flex-wrap gap-2'>
+                    {availableSounds.map((s) => (
+                      <button
+                        key={s.name}
+                        type='button'
+                        onClick={() => setSelectedSoundName(s.name)}
+                        className={`px-2 py-1 text-xs rounded border bg-white ${
+                          selectedSoundName === s.name
+                            ? 'border-gray-700 text-gray-900'
+                            : 'border-gray-300 text-gray-700'
+                        }`}
+                        title={s.name}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
 
-            <div className='mt-2 bg-gray-50 p-2 rounded-lg border border-gray-200'>
-              <button
-                type='button'
-                onClick={() => setIsAnimationSectionOpen((s) => !s)}
-                className='w-full flex items-center justify-between gap-2 text-sm text-gray-700'
-                aria-expanded={isAnimationSectionOpen}
-              >
-                <div className='flex items-center gap-2 min-w-0'>
-                  <span>Animation</span>
-                  {!isAnimationSectionOpen && (
-                    <span className='text-xs text-gray-500 truncate'>
-                      {animationLabel}
-                    </span>
-                  )}
-                </div>
+                    {availableSounds.length === 0 && (
+                      <span className='text-xs text-gray-500'>
+                        No sounds found in /public/sounds
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                <div className='flex items-center gap-2'>
-                  <button
-                    type='button'
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOverlayAnimation('none');
-                    }}
-                    className={`px-2 py-1 text-xs rounded border bg-white ${
-                      overlayAnimation === 'none'
-                        ? 'border-gray-700 text-gray-900'
-                        : 'border-gray-300 text-gray-700'
-                    }`}
-                  >
-                    None
-                  </button>
-                  {isAnimationSectionOpen ? (
-                    <ChevronDown className='h-4 w-4' />
-                  ) : (
-                    <ChevronRight className='h-4 w-4' />
-                  )}
-                </div>
-              </button>
+              <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
+                <button
+                  type='button'
+                  onClick={() => setIsAnimationSectionOpen((s) => !s)}
+                  className='w-full flex items-center justify-between gap-2 text-sm text-gray-700'
+                  aria-expanded={isAnimationSectionOpen}
+                >
+                  <div className='flex items-center gap-2 min-w-0'>
+                    <span>Animation</span>
+                    {!isAnimationSectionOpen && (
+                      <span className='text-xs text-gray-500 truncate'>
+                        {animationLabel}
+                      </span>
+                    )}
+                  </div>
 
-              {isAnimationSectionOpen && (
-                <div className='mt-2 grid grid-cols-3 gap-2'>
-                  {(
-                    [
-                      { id: 'bounceIn', label: 'Bounce In' },
-                      { id: 'spring', label: 'Spring' },
-                      { id: 'fadeIn', label: 'Fade In' },
-                      { id: 'miniZoom', label: 'Mini Zoom' },
-                      { id: 'zoomIn', label: 'Zoom In' },
-                      { id: 'slideLeft', label: 'Slide Left' },
-                      { id: 'slideRight', label: 'Slide Right' },
-                      { id: 'slideUp', label: 'Slide Up' },
-                    ] as const
-                  ).map((opt) => (
+                  <div className='flex items-center gap-2'>
                     <button
-                      key={opt.id}
                       type='button'
-                      onClick={() => setOverlayAnimation(opt.id)}
-                      className={`px-2 py-2 text-xs rounded border bg-white text-left ${
-                        overlayAnimation === opt.id
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOverlayAnimation('none');
+                      }}
+                      className={`px-2 py-1 text-xs rounded border bg-white ${
+                        overlayAnimation === 'none'
                           ? 'border-gray-700 text-gray-900'
                           : 'border-gray-300 text-gray-700'
                       }`}
                     >
-                      {opt.label}
+                      None
                     </button>
-                  ))}
-                </div>
-              )}
+                    {isAnimationSectionOpen ? (
+                      <ChevronDown className='h-4 w-4' />
+                    ) : (
+                      <ChevronRight className='h-4 w-4' />
+                    )}
+                  </div>
+                </button>
+
+                {isAnimationSectionOpen && (
+                  <div className='mt-2 grid grid-cols-3 gap-2'>
+                    {(
+                      [
+                        { id: 'bounceIn', label: 'Bounce In' },
+                        { id: 'spring', label: 'Spring' },
+                        { id: 'fadeIn', label: 'Fade In' },
+                        { id: 'miniZoom', label: 'Mini Zoom' },
+                        { id: 'zoomIn', label: 'Zoom In' },
+                        { id: 'slideLeft', label: 'Slide Left' },
+                        { id: 'slideRight', label: 'Slide Right' },
+                        { id: 'slideUp', label: 'Slide Up' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type='button'
+                        onClick={() => setOverlayAnimation(opt.id)}
+                        className={`px-2 py-2 text-xs rounded border bg-white text-left ${
+                          overlayAnimation === opt.id
+                            ? 'border-gray-700 text-gray-900'
+                            : 'border-gray-300 text-gray-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <TranscriptionControls
