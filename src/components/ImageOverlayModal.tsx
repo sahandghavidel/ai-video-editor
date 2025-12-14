@@ -2092,7 +2092,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               selectedWordText={selectedWordText}
               onWordClick={(wordData) => {
                 setStartTime(wordData.start);
-                setCustomText((wordData.word || '').toUpperCase());
+                const raw = (wordData.word || '').trim();
+                const cleaned = raw.replace(/[，,]+$/g, '').trim();
+                setCustomText(cleaned.toUpperCase());
                 if (videoRef.current) {
                   videoRef.current.currentTime = wordData.start;
                 }
