@@ -616,44 +616,76 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       return;
     }
 
-    // Convert canvas to blob
+    const applyCroppedFile = (croppedFile: File, w: number, h: number) => {
+      const croppedUrl = URL.createObjectURL(croppedFile);
+
+      setOverlayImage(croppedFile);
+      setOverlayImageUrl(croppedUrl);
+
+      setActualImageDimensions({ width: w, height: h });
+
+      // Auto-reset overlay size to cropped image natural size
+      setOverlayPosition({ x: 50, y: 50 });
+      const videoWidth = 1920; // Assume HD width
+      const videoHeight = 1080; // Assume HD height
+      const widthPercent = (w / videoWidth) * 100;
+      const heightPercent = (h / videoHeight) * 100;
+      setOverlaySize({
+        width: Math.min(widthPercent, 100),
+        height: Math.min(heightPercent, 100),
+      });
+
+      setIsCropping(false);
+      console.log('Crop applied successfully');
+    };
+
+    // If the overlay is an animated GIF, canvas cropping will freeze it.
+    // For GIFs, crop server-side with FFmpeg to preserve animation.
+    if (overlayImage?.type === 'image/gif') {
+      const left = Math.round(coordinates.left);
+      const top = Math.round(coordinates.top);
+      const width = Math.round(coordinates.width);
+      const height = Math.round(coordinates.height);
+
+      const form = new FormData();
+      form.append('image', overlayImage);
+      form.append('left', String(Math.max(0, left)));
+      form.append('top', String(Math.max(0, top)));
+      form.append('width', String(Math.max(1, width)));
+      form.append('height', String(Math.max(1, height)));
+
+      const res = await fetch('/api/crop-gif', { method: 'POST', body: form });
+      if (!res.ok) {
+        let message = `Failed to crop GIF (${res.status})`;
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (j?.error) message = j.error;
+        } catch {
+          // ignore
+        }
+        alert(message);
+        return;
+      }
+
+      const blob = await res.blob();
+      const file = new File([blob], 'cropped-image.gif', { type: 'image/gif' });
+      applyCroppedFile(file, Math.max(1, width), Math.max(1, height));
+      return;
+    }
+
+    // Convert canvas to blob (non-GIF)
     canvas.toBlob((blob) => {
       if (blob) {
         console.log('Blob created, size:', blob.size);
         const croppedFile = new File([blob], 'cropped-image.png', {
           type: 'image/png',
         });
-        const croppedUrl = URL.createObjectURL(croppedFile);
-
-        setOverlayImage(croppedFile);
-        setOverlayImageUrl(croppedUrl);
-
-        setActualImageDimensions({
-          width: coordinates.width,
-          height: coordinates.height,
-        });
-
-        // Auto-reset overlay size to cropped image natural size
-        setOverlayPosition({ x: 50, y: 50 });
-        const videoWidth = 1920; // Assume HD width
-        const videoHeight = 1080; // Assume HD height
-
-        const widthPercent = (coordinates.width / videoWidth) * 100;
-        const heightPercent = (coordinates.height / videoHeight) * 100;
-
-        setOverlaySize({
-          width: Math.min(widthPercent, 100),
-          height: Math.min(heightPercent, 100),
-        });
-
-        // Reset crop state
-        setIsCropping(false);
-        console.log('Crop applied successfully');
+        applyCroppedFile(croppedFile, coordinates.width, coordinates.height);
       } else {
         console.log('Failed to create blob');
       }
     }, 'image/png');
-  }, [cropperRef, overlayImageUrl]);
+  }, [cropperRef, overlayImageUrl, overlayImage]);
 
   const handleVideoLoad = useCallback(() => {
     const video = videoRef.current;
