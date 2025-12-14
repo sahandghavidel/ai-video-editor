@@ -1489,7 +1489,17 @@ export default function SceneCard({
     tintPosition?: { x: number; y: number },
     tintSize?: { width: number; height: number },
     tintInvert?: boolean,
-    overlaySound?: string | null
+    overlaySound?: string | null,
+    overlayAnimation?:
+      | 'none'
+      | 'bounceIn'
+      | 'spring'
+      | 'fadeIn'
+      | 'miniZoom'
+      | 'zoomIn'
+      | 'slideLeft'
+      | 'slideRight'
+      | 'slideUp'
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1536,6 +1546,10 @@ export default function SceneCard({
 
       if (overlaySound) {
         formData.append('overlaySound', overlaySound);
+      }
+
+      if (overlayAnimation) {
+        formData.append('overlayAnimation', overlayAnimation);
       }
 
       const response = await fetch('/api/add-image-overlay', {

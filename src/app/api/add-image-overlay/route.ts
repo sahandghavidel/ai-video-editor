@@ -10,6 +10,22 @@ import { updateSceneRow } from '@/lib/baserow-actions';
 
 const execAsync = promisify(exec);
 
+type FFprobeStream = {
+  codec_type?: string;
+  width?: number;
+  height?: number;
+  avg_frame_rate?: string;
+  r_frame_rate?: string;
+  codec_name?: string;
+  bit_rate?: string | number;
+  sample_rate?: string | number;
+  channels?: number;
+};
+
+type FFprobeOutput = {
+  streams?: FFprobeStream[];
+};
+
 export async function POST(request: NextRequest) {
   let tempDir: string | null = null;
 
@@ -41,6 +57,9 @@ export async function POST(request: NextRequest) {
     const videoTintHeightRaw = formData.get('videoTintHeight') as string | null;
     const videoTintInvertRaw = formData.get('videoTintInvert') as string | null;
     const overlaySoundRaw = formData.get('overlaySound') as string | null;
+    const overlayAnimationRaw = formData.get('overlayAnimation') as
+      | string
+      | null;
     const textStyling = formData.get('textStyling')
       ? JSON.parse(formData.get('textStyling') as string)
       : null;
@@ -65,6 +84,7 @@ export async function POST(request: NextRequest) {
       videoTintHeight: videoTintHeightRaw,
       videoTintInvert: videoTintInvertRaw,
       overlaySound: overlaySoundRaw,
+      overlayAnimation: overlayAnimationRaw,
     });
 
     if (
@@ -117,6 +137,28 @@ export async function POST(request: NextRequest) {
     const rightPct = Math.max(0, Math.min(100, tintPosX + tintW / 2));
     const bottomPct = Math.max(0, Math.min(100, tintPosY + tintH / 2));
 
+    const overlayAnimation = (() => {
+      const v = (overlayAnimationRaw || 'none').trim();
+      const allowed = new Set([
+        'none',
+        'bounceIn',
+        'spring',
+        'fadeIn',
+        'miniZoom',
+        'zoomIn',
+        'slideLeft',
+        'slideRight',
+        'slideUp',
+      ]);
+      return allowed.has(v) ? v : 'none';
+    })();
+
+    const overlayWindowDuration = Math.max(0.001, endTime - startTime);
+    const entranceAnimDuration = Math.min(
+      0.6,
+      Math.max(0.15, overlayWindowDuration * 0.35)
+    );
+
     // Build tintFilter after probing video size so we can pixel-align boxes.
     // (Fractional iw*... math can leave 1px seams in invert mode.)
     let tintFilter: string | null = null;
@@ -141,18 +183,43 @@ export async function POST(request: NextRequest) {
     const { stdout: probeOutput } = await execAsync(
       `ffprobe -v quiet -print_format json -show_streams "${videoPath}"`
     );
-    const probeData = JSON.parse(probeOutput);
-    const videoStream = probeData.streams.find(
-      (s: any) => s.codec_type === 'video'
+    const probeData = JSON.parse(probeOutput) as FFprobeOutput;
+    const videoStream = probeData.streams?.find(
+      (s) => s.codec_type === 'video'
     );
     if (!videoStream) {
       throw new Error('No video stream found');
     }
+    if (
+      typeof videoStream.width !== 'number' ||
+      typeof videoStream.height !== 'number'
+    ) {
+      throw new Error('Video stream missing width/height');
+    }
     const videoWidth = videoStream.width;
     const videoHeight = videoStream.height;
-    const hasAudio = Array.isArray(probeData.streams)
-      ? probeData.streams.some((s: any) => s?.codec_type === 'audio')
-      : false;
+
+    const parseFps = (v?: string) => {
+      if (!v || typeof v !== 'string') return null;
+      const s = v.trim();
+      if (!s) return null;
+      const parts = s.split('/');
+      if (parts.length === 2) {
+        const n = Number(parts[0]);
+        const d = Number(parts[1]);
+        if (Number.isFinite(n) && Number.isFinite(d) && d !== 0) return n / d;
+        return null;
+      }
+      const f = Number(s);
+      return Number.isFinite(f) && f > 0 ? f : null;
+    };
+
+    const videoFps =
+      parseFps(videoStream.avg_frame_rate) ??
+      parseFps(videoStream.r_frame_rate) ??
+      30;
+    const hasAudio =
+      probeData.streams?.some((s) => s.codec_type === 'audio') ?? false;
 
     // Preserve original audio format for merge compatibility.
     // (When we mix SFX we must re-encode; match the source as closely as possible.)
@@ -162,8 +229,8 @@ export async function POST(request: NextRequest) {
     let originalAudioChannels = 2;
 
     if (hasAudio) {
-      const audioStream = probeData.streams.find(
-        (s: any) => s?.codec_type === 'audio'
+      const audioStream = probeData.streams?.find(
+        (s) => s.codec_type === 'audio'
       );
       if (audioStream) {
         if (typeof audioStream.codec_name === 'string') {
@@ -310,17 +377,70 @@ export async function POST(request: NextRequest) {
       await fs.promises.writeFile(imagePath, Buffer.from(imageBuffer));
 
       const isGif = overlayImage.type === 'image/gif';
-      const streamLoop = isGif ? '-stream_loop -1' : '';
+      // Loop still images so time-based filters (fade/scale) can animate.
+      const imageInputLoop = isGif ? '-stream_loop -1' : '-loop 1';
 
-      const overlayScale = `[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay]`;
       const overlayEnable = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+
+      const needsScaleAnim =
+        overlayAnimation === 'miniZoom' ||
+        overlayAnimation === 'zoomIn' ||
+        overlayAnimation === 'bounceIn' ||
+        overlayAnimation === 'spring';
+      const needsFadeAnim = overlayAnimation === 'fadeIn';
+
+      // FFmpeg expressions require escaping commas as `\,`.
+      // Avoid double-escaping when composing nested expressions.
+      const escExpr = (s: string) => s.replace(/(?<!\\),/g, '\\,');
+
+      // Global progress (main timeline) for entrance animations
+      const pGlobal = escExpr(
+        `min(max((t-${startTime})/${entranceAnimDuration},0),1)`
+      );
+      const easeGlobal = escExpr(`(1-pow(1-${pGlobal},3))`);
+
+      const scaleGlobal = (() => {
+        switch (overlayAnimation) {
+          case 'miniZoom':
+            return `(0.92+(1-0.92)*${easeGlobal})`;
+          case 'zoomIn':
+            return `(0.75+(1-0.75)*${easeGlobal})`;
+          case 'bounceIn':
+            return `((0.7+(1-0.7)*${easeGlobal})*(1+0.12*exp(-6*${pGlobal})*sin(12*${pGlobal})))`;
+          case 'spring':
+            return `((0.85+(1-0.85)*${easeGlobal})*(1+0.08*exp(-5*${pGlobal})*sin(16*${pGlobal})))`;
+          default:
+            return `1`;
+        }
+      })();
+
+      // Ensure the scale snaps to 1 after the entrance animation window.
+      const scaleExpr = escExpr(
+        `if(lt(t,${startTime + entranceAnimDuration}),${scaleGlobal},1)`
+      );
+
+      let overlayChain = `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight},format=rgba`;
+      if (needsScaleAnim) {
+        overlayChain += `,scale=iw*(${scaleExpr}):ih*(${scaleExpr}):eval=frame`;
+      }
+      if (needsFadeAnim) {
+        overlayChain += `,fade=t=in:st=${startTime}:d=${entranceAnimDuration}:alpha=1`;
+      }
+      const overlayScale = `[1:v]${overlayChain}[overlay]`;
+      const slideDX =
+        overlayAnimation === 'slideLeft'
+          ? `(W*0.25*(1-${easeGlobal}))`
+          : overlayAnimation === 'slideRight'
+          ? `(-W*0.25*(1-${easeGlobal}))`
+          : `0`;
+      const slideDY =
+        overlayAnimation === 'slideUp' ? `(H*0.25*(1-${easeGlobal}))` : `0`;
+      const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
+      const yExpr = `H*${positionY / 100}-overlay_h/2+(${slideDY})`;
+
       const overlayFilter = tintFilter
-        ? `[base][overlay]overlay=W*${positionX / 100}-(${overlayWidth})/2:H*${
-            positionY / 100
-          }-(${overlayHeight})/2:${overlayEnable}[vout]`
-        : `[0:v][overlay]overlay=W*${positionX / 100}-(${overlayWidth})/2:H*${
-            positionY / 100
-          }-(${overlayHeight})/2:${overlayEnable}[vout]`;
+        ? `[base][overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}[vout]`
+        : `[0:v][overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}[vout]`;
 
       if (overlaySoundPath) {
         const audio = buildAudioFilter(2);
@@ -328,16 +448,16 @@ export async function POST(request: NextRequest) {
         const parts = [baseVideo, overlayScale, overlayFilter, audio].filter(
           Boolean
         );
-        ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" ${imageInputLoop} -i "${imagePath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
           ';'
         )}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
           mixedAudioBitrate / 1000
         )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero -shortest ${durationLimit} "${outputPath}"`;
       } else {
         if (tintFilter) {
-          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+          ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" ${imageInputLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
         } else {
-          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+          ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" ${imageInputLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
         }
       }
     } else if (overlayText) {
@@ -360,11 +480,7 @@ export async function POST(request: NextRequest) {
           .replace(/'/g, "\\'")
           .replace(/ /g, '\\ ');
 
-      // Position text to center it at the specified percentage.
-      // Use FFmpeg's measured text width/height (text_w/text_h) instead of
-      // approximating based on string length, which drifts for spaces/punctuation.
-      const xPos = `w*${positionX / 100}-text_w/2`;
-      const yPos = `h*${positionY / 100}-text_h/2`;
+      const overlayEnable = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
 
       // Avoid filtergraph quoting issues (e.g. apostrophes in text) by using a text file.
       const textFilePath = path.join(tempDir, 'overlay-text.txt');
@@ -408,7 +524,7 @@ export async function POST(request: NextRequest) {
 
       // Map font family names to actual font files; use the generated mapping
       const mapping = Object.fromEntries(
-        Object.entries(ffmpegFonts).filter(([_, value]) => value !== null)
+        Object.entries(ffmpegFonts).filter(([, value]) => value !== null)
       ) as Record<string, string>;
       const fontFileMap: { [key: string]: string } = Object.fromEntries(
         Object.entries(mapping).filter(([k]) => k !== 'user_fonts_dir')
@@ -460,25 +576,102 @@ export async function POST(request: NextRequest) {
       }
 
       const fontFileArg = escapeFilterValue(fontFile);
-      const drawText = `drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
-      const vf = tintFilter ? `${tintFilter},${drawText}` : drawText;
+
+      // NOTE: On this FFmpeg build, time-varying drawtext fontsize expressions can
+      // crash FFmpeg. Implement animations by rendering text to a transparent
+      // canvas and animating that layer with scale/fade/overlay.
+
+      const canvasW = Math.max(2, overlayWidth);
+      const canvasH = Math.max(2, overlayHeight);
+
+      // FFmpeg expressions require escaping commas as `\,`.
+      // Avoid double-escaping when composing nested expressions.
+      const escExpr = (s: string) => s.replace(/(?<!\\),/g, '\\,');
+
+      const pGlobal = escExpr(
+        `min(max((t-${startTime})/${entranceAnimDuration},0),1)`
+      );
+      const easeGlobal = escExpr(`(1-pow(1-${pGlobal},3))`);
+
+      const needsScaleAnim =
+        overlayAnimation === 'miniZoom' ||
+        overlayAnimation === 'zoomIn' ||
+        overlayAnimation === 'bounceIn' ||
+        overlayAnimation === 'spring';
+      const needsFadeAnim = overlayAnimation === 'fadeIn';
+
+      const scaleGlobal = (() => {
+        switch (overlayAnimation) {
+          case 'miniZoom':
+            return `(0.92+(1-0.92)*${easeGlobal})`;
+          case 'zoomIn':
+            return `(0.75+(1-0.75)*${easeGlobal})`;
+          case 'bounceIn':
+            return `((0.7+(1-0.7)*${easeGlobal})*(1+0.12*exp(-6*${pGlobal})*sin(12*${pGlobal})))`;
+          case 'spring':
+            return `((0.85+(1-0.85)*${easeGlobal})*(1+0.08*exp(-5*${pGlobal})*sin(16*${pGlobal})))`;
+          default:
+            return `1`;
+        }
+      })();
+      const scaleExpr = escExpr(
+        `if(lt(t,${startTime + entranceAnimDuration}),${scaleGlobal},1)`
+      );
+
+      const slideDX =
+        overlayAnimation === 'slideLeft'
+          ? `(W*0.25*(1-${easeGlobal}))`
+          : overlayAnimation === 'slideRight'
+          ? `(-W*0.25*(1-${easeGlobal}))`
+          : `0`;
+      const slideDY =
+        overlayAnimation === 'slideUp' ? `(H*0.25*(1-${easeGlobal}))` : `0`;
+
+      const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
+      const yExpr = `H*${positionY / 100}-overlay_h/2+(${slideDY})`;
+
+      const baseVideo = tintFilter ? `[0:v]${tintFilter}[base]` : null;
+      const baseRef = tintFilter ? `[base]` : `[0:v]`;
+
+      const textLayerDuration = Math.max(
+        0.1,
+        Number.isFinite(endTime) ? endTime : 0
+      );
+      let textChain = `color=c=black@0.0:s=${canvasW}x${canvasH}:r=${videoFps}:d=${textLayerDuration}[txtbg];`;
+      textChain += `[txtbg]drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:x=(w-text_w)/2:y=(h-text_h)/2${boxParams}[txt0];`;
+
+      let animChain = `[txt0]format=rgba`;
+      if (needsScaleAnim) {
+        animChain += `,scale=iw*(${scaleExpr}):ih*(${scaleExpr}):eval=frame`;
+      }
+      if (needsFadeAnim) {
+        animChain += `,fade=t=in:st=${startTime}:d=${entranceAnimDuration}:alpha=1`;
+      }
+      animChain += `[txt];`;
+
+      const overlayChain = `${baseRef}[txt]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}:shortest=1[vout]`;
+
+      const filterComplex = [baseVideo, textChain + animChain + overlayChain]
+        .filter(Boolean)
+        .join(';');
+
       if (overlaySoundPath) {
         const audio = buildAudioFilter(1);
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${vf}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "${filterComplex};${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
           mixedAudioBitrate / 1000
-        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
+        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero -shortest ${durationLimit} "${outputPath}"`;
       } else {
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -filter_complex "${filterComplex}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
       }
     } else if (tintFilter) {
       // Tint-only
       if (overlaySoundPath) {
         const audio = buildAudioFilter(1);
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${tintFilter}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${tintFilter}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
           mixedAudioBitrate / 1000
         )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
       } else {
-        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${tintFilter}" -c:a copy ${durationLimit} "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -vf "${tintFilter}" -c:a copy ${durationLimit} "${outputPath}"`;
       }
     } else {
       throw new Error('No overlay content provided');
@@ -509,8 +702,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, url: uploadUrl });
   } catch (error) {
     console.error('Error adding overlay:', error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+        ? error
+        : null;
     return NextResponse.json(
-      { error: 'Failed to add overlay' },
+      { error: message || 'Failed to add overlay' },
       { status: 500 }
     );
   } finally {

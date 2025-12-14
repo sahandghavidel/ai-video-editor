@@ -275,6 +275,17 @@ const AdjustableCropperBackground = React.forwardRef<
 );
 AdjustableCropperBackground.displayName = 'AdjustableCropperBackground';
 
+type OverlayAnimation =
+  | 'none'
+  | 'bounceIn'
+  | 'spring'
+  | 'fadeIn'
+  | 'miniZoom'
+  | 'zoomIn'
+  | 'slideLeft'
+  | 'slideRight'
+  | 'slideUp';
+
 interface ImageOverlayModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -294,7 +305,8 @@ interface ImageOverlayModalProps {
     tintPosition?: { x: number; y: number },
     tintSize?: { width: number; height: number },
     tintInvert?: boolean,
-    overlaySound?: string | null
+    overlaySound?: string | null,
+    overlayAnimation?: OverlayAnimation
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -323,6 +335,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [selectedSoundName, setSelectedSoundName] = useState<string | null>(
     null
   );
+  const [overlayAnimation, setOverlayAnimation] =
+    useState<OverlayAnimation>('none');
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
   const [overlayPosition, setOverlayPosition] = useState({ x: 50, y: 50 }); // percentage
@@ -617,6 +631,79 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     Number.isFinite(endTime) &&
     currentVideoTime >= startTime &&
     currentVideoTime <= endTime;
+
+  const overlayEntrancePreview = useMemo(() => {
+    // Keep overlays editable (visible) outside the active window.
+    const isActive =
+      Number.isFinite(startTime) &&
+      Number.isFinite(endTime) &&
+      currentVideoTime >= startTime &&
+      currentVideoTime <= endTime;
+
+    if (!isActive || overlayAnimation === 'none') {
+      return { scale: 1, dx: 0, dy: 0, opacity: 1 };
+    }
+
+    const windowDuration = Math.max(0, endTime - startTime);
+    const animDur = Math.min(0.6, Math.max(0.15, windowDuration * 0.35));
+    const tRel = Math.max(0, currentVideoTime - startTime);
+    const p = animDur > 0 ? Math.min(1, tRel / animDur) : 1;
+    const ease = 1 - Math.pow(1 - p, 3);
+
+    const w = containerRect?.width ?? 0;
+    const h = containerRect?.height ?? 0;
+    const slideX = w * 0.25;
+    const slideY = h * 0.25;
+
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const bounce = (t: number) =>
+      1 + 0.12 * Math.exp(-6 * t) * Math.sin(12 * t);
+    const spring = (t: number) =>
+      1 + 0.08 * Math.exp(-5 * t) * Math.sin(16 * t);
+
+    let scale = 1;
+    let dx = 0;
+    let dy = 0;
+    let opacity = 1;
+
+    switch (overlayAnimation) {
+      case 'fadeIn':
+        opacity = ease;
+        break;
+      case 'miniZoom':
+        scale = lerp(0.92, 1, ease);
+        break;
+      case 'zoomIn':
+        scale = lerp(0.75, 1, ease);
+        break;
+      case 'bounceIn':
+        scale = lerp(0.7, 1, ease) * bounce(p);
+        break;
+      case 'spring':
+        scale = lerp(0.85, 1, ease) * spring(p);
+        break;
+      case 'slideLeft':
+        dx = slideX * (1 - ease);
+        break;
+      case 'slideRight':
+        dx = -slideX * (1 - ease);
+        break;
+      case 'slideUp':
+        dy = slideY * (1 - ease);
+        break;
+      default:
+        break;
+    }
+
+    return { scale, dx, dy, opacity };
+  }, [
+    containerRect?.height,
+    containerRect?.width,
+    currentVideoTime,
+    endTime,
+    overlayAnimation,
+    startTime,
+  ]);
 
   const shouldShowTintOverlay =
     !!videoTintColor && (isTintActive || isEditingTintArea);
@@ -1739,6 +1826,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (selectedSoundName) {
       formData.append('overlaySound', selectedSoundName);
     }
+    formData.append('overlayAnimation', overlayAnimation);
     if (selectedWordText && textStyling) {
       formData.append('textStyling', JSON.stringify(textStyling));
     }
@@ -1778,6 +1866,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     tintSize.height,
     tintSize.width,
     selectedSoundName,
+    overlayAnimation,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -1803,7 +1892,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         tintPosition,
         tintSize,
         tintInvert,
-        selectedSoundName
+        selectedSoundName,
+        overlayAnimation
       );
 
       // After applying, fetch the scene from the DB to get the updated video URL
@@ -1901,6 +1991,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     textOverlaySize,
     startTime,
     endTime,
+    overlayAnimation,
     onApply,
     onUpdateModalVideoUrl,
     originalVideoUrl,
@@ -2283,7 +2374,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   top: `${overlayPosition.y}%`,
                   width: `${overlaySize.width}%`,
                   height: `${overlaySize.height}%`,
-                  transform: 'translate(-50%, -50%)',
+                  transform: `translate(-50%, -50%) translate(${overlayEntrancePreview.dx}px, ${overlayEntrancePreview.dy}px) scale(${overlayEntrancePreview.scale})`,
+                  opacity: overlayEntrancePreview.opacity,
                 }}
                 onPointerDown={handleMouseDown}
               >
@@ -2302,7 +2394,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 style={{
                   left: `${textOverlayPosition.x}%`,
                   top: `${textOverlayPosition.y}%`,
-                  transform: 'translate(-50%, -50%)',
+                  transform: `translate(-50%, -50%) translate(${overlayEntrancePreview.dx}px, ${overlayEntrancePreview.dy}px) scale(${overlayEntrancePreview.scale})`,
+                  opacity: overlayEntrancePreview.opacity,
                   width: `${Math.max(
                     5,
                     Math.min(
@@ -2513,6 +2606,51 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     No sounds found in /public/sounds
                   </span>
                 )}
+              </div>
+            </div>
+
+            <div className='mt-2 bg-gray-50 p-2 rounded-lg border border-gray-200'>
+              <div className='flex items-center justify-between gap-2'>
+                <span className='text-sm text-gray-700'>Animation</span>
+                <button
+                  type='button'
+                  onClick={() => setOverlayAnimation('none')}
+                  className={`px-2 py-1 text-xs rounded border bg-white ${
+                    overlayAnimation === 'none'
+                      ? 'border-gray-700 text-gray-900'
+                      : 'border-gray-300 text-gray-700'
+                  }`}
+                >
+                  None
+                </button>
+              </div>
+
+              <div className='mt-2 grid grid-cols-3 gap-2'>
+                {(
+                  [
+                    { id: 'bounceIn', label: 'Bounce In' },
+                    { id: 'spring', label: 'Spring' },
+                    { id: 'fadeIn', label: 'Fade In' },
+                    { id: 'miniZoom', label: 'Mini Zoom' },
+                    { id: 'zoomIn', label: 'Zoom In' },
+                    { id: 'slideLeft', label: 'Slide Left' },
+                    { id: 'slideRight', label: 'Slide Right' },
+                    { id: 'slideUp', label: 'Slide Up' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type='button'
+                    onClick={() => setOverlayAnimation(opt.id)}
+                    className={`px-2 py-2 text-xs rounded border bg-white text-left ${
+                      overlayAnimation === opt.id
+                        ? 'border-gray-700 text-gray-900'
+                        : 'border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
 
