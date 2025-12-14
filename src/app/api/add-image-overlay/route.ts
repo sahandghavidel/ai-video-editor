@@ -16,6 +16,7 @@ type FFprobeStream = {
   height?: number;
   avg_frame_rate?: string;
   r_frame_rate?: string;
+  duration?: string | number;
   codec_name?: string;
   bit_rate?: string | number;
   sample_rate?: string | number;
@@ -24,6 +25,9 @@ type FFprobeStream = {
 
 type FFprobeOutput = {
   streams?: FFprobeStream[];
+  format?: {
+    duration?: string | number;
+  };
 };
 
 export async function POST(request: NextRequest) {
@@ -181,7 +185,7 @@ export async function POST(request: NextRequest) {
 
     // Get video dimensions
     const { stdout: probeOutput } = await execAsync(
-      `ffprobe -v quiet -print_format json -show_streams "${videoPath}"`
+      `ffprobe -v quiet -print_format json -show_format -show_streams "${videoPath}"`
     );
     const probeData = JSON.parse(probeOutput) as FFprobeOutput;
     const videoStream = probeData.streams?.find(
@@ -218,6 +222,18 @@ export async function POST(request: NextRequest) {
       parseFps(videoStream.avg_frame_rate) ??
       parseFps(videoStream.r_frame_rate) ??
       30;
+
+    const parseDuration = (v?: string | number) => {
+      if (v == null) return null;
+      const n = typeof v === 'number' ? v : Number(String(v).trim());
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+
+    const videoDuration =
+      parseDuration(probeData.format?.duration) ??
+      parseDuration(videoStream.duration) ??
+      // Fallback: at least cover the overlay window.
+      Math.max(0.1, endTime);
     const hasAudio =
       probeData.streams?.some((s) => s.codec_type === 'audio') ?? false;
 
@@ -363,7 +379,7 @@ export async function POST(request: NextRequest) {
         ? `[0:a]aresample=${originalAudioSampleRate}[a0]`
         : `anullsrc=r=${originalAudioSampleRate}:cl=${channelLayout},atrim=0:${Math.max(
             0,
-            Number.isFinite(endTime) ? endTime : 0
+            videoDuration
           )},asetpts=N/SR/TB[a0]`;
       const a1 = `[${soundInputIndex}:a]adelay=${soundDelayMs}:all=1,aresample=${originalAudioSampleRate}[a1]`;
       const amix = `[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
@@ -633,10 +649,8 @@ export async function POST(request: NextRequest) {
       const baseVideo = tintFilter ? `[0:v]${tintFilter}[base]` : null;
       const baseRef = tintFilter ? `[base]` : `[0:v]`;
 
-      const textLayerDuration = Math.max(
-        0.1,
-        Number.isFinite(endTime) ? endTime : 0
-      );
+      // Keep output duration equal to the base video duration (not endTime).
+      const textLayerDuration = Math.max(0.1, videoDuration);
       let textChain = `color=c=black@0.0:s=${canvasW}x${canvasH}:r=${videoFps}:d=${textLayerDuration}[txtbg];`;
       textChain += `[txtbg]drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:x=(w-text_w)/2:y=(h-text_h)/2${boxParams}[txt0];`;
 
@@ -649,7 +663,7 @@ export async function POST(request: NextRequest) {
       }
       animChain += `[txt];`;
 
-      const overlayChain = `${baseRef}[txt]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}:shortest=1[vout]`;
+      const overlayChain = `${baseRef}[txt]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}:eof_action=pass:repeatlast=0[vout]`;
 
       const filterComplex = [baseVideo, textChain + animChain + overlayChain]
         .filter(Boolean)
@@ -659,9 +673,9 @@ export async function POST(request: NextRequest) {
         const audio = buildAudioFilter(1);
         ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "${filterComplex};${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
           mixedAudioBitrate / 1000
-        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero -shortest ${durationLimit} "${outputPath}"`;
+        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
       } else {
-        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -filter_complex "${filterComplex}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -filter_complex "${filterComplex}" -map "[vout]" -map 0:a? -c:a copy ${durationLimit} "${outputPath}"`;
       }
     } else if (tintFilter) {
       // Tint-only
