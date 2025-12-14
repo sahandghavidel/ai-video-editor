@@ -13,6 +13,28 @@ function toInt(value: FormDataEntryValue | null): number | null {
   return Math.round(n);
 }
 
+function clampInt(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function buildRoundedAlphaExpr(radius: number): string {
+  // Alpha mask for a rounded rectangle with radius R (pixels)
+  // Variables available in FFmpeg expressions: X,Y,W,H
+  // Return 255 inside rounded rect else 0.
+  const r = clampInt(radius, 0, 1_000_000);
+  if (r <= 0) return '255';
+
+  // Note: We use (W-R) and (H-R) as corner centers for simplicity.
+  return [
+    `if(lt(${r},1),255,`,
+    `if(lt(X,${r})*lt(Y,${r}),if(lte((X-${r})*(X-${r})+(Y-${r})*(Y-${r}),${r}*${r}),255,0),`,
+    `if(gte(X,W-${r})*lt(Y,${r}),if(lte((X-(W-${r}))*(X-(W-${r}))+(Y-${r})*(Y-${r}),${r}*${r}),255,0),`,
+    `if(lt(X,${r})*gte(Y,H-${r}),if(lte((X-${r})*(X-${r})+(Y-(H-${r}))*(Y-(H-${r})),${r}*${r}),255,0),`,
+    `if(gte(X,W-${r})*gte(Y,H-${r}),if(lte((X-(W-${r}))*(X-(W-${r}))+(Y-(H-${r}))*(Y-(H-${r})),${r}*${r}),255,0),`,
+    `255)))))`,
+  ].join('');
+}
+
 function runFFmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -41,6 +63,7 @@ export async function POST(request: NextRequest) {
     const top = toInt(formData.get('top'));
     const width = toInt(formData.get('width'));
     const height = toInt(formData.get('height'));
+    const radiusPercent = toInt(formData.get('radius'));
 
     if (!file || file.type !== 'image/gif') {
       return NextResponse.json(
@@ -82,7 +105,21 @@ export async function POST(request: NextRequest) {
     // Crop while preserving animation.
     // Use palettegen/paletteuse to keep GIF colors stable after filtering.
     const cropExpr = `crop=${width}:${height}:${left}:${top}`;
-    const filterComplex = `[0:v]${cropExpr},split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse=alpha_threshold=128[out]`;
+
+    const percent = radiusPercent == null ? 0 : clampInt(radiusPercent, 0, 100);
+    const radiusPx = Math.round(
+      (Math.min(width, height) / 2) * (percent / 100)
+    );
+
+    const baseLabel = radiusPx > 0 ? 'cm' : 'c';
+    const roundedMask =
+      radiusPx > 0
+        ? `;nullsrc=s=${width}x${height},format=rgba,geq=r='0':g='0':b='0':a='${buildRoundedAlphaExpr(
+            radiusPx
+          )}'[m];[c][m]alphamerge[cm]`
+        : '';
+
+    const filterComplex = `[0:v]${cropExpr},format=rgba[c]${roundedMask};[${baseLabel}]split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse=alpha_threshold=128[out]`;
 
     await runFFmpeg([
       '-hide_banner',

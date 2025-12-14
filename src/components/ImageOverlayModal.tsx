@@ -37,6 +37,47 @@ const hexToRgb = (hex: string) => {
     : '0, 0, 0';
 };
 
+function roundedCanvasFromSource(
+  source: HTMLCanvasElement,
+  radiusPercent: number
+): HTMLCanvasElement {
+  if (!(radiusPercent > 0)) return source;
+
+  const w = source.width;
+  const h = source.height;
+  const ctxRadius = Math.round(
+    (Math.min(w, h) / 2) * Math.min(1, Math.max(0, radiusPercent / 100))
+  );
+  if (!(ctxRadius > 0)) return source;
+
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const ctx = out.getContext('2d');
+  if (!ctx) return source;
+
+  const r = Math.min(ctxRadius, Math.floor(Math.min(w, h) / 2));
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(w - r, 0);
+  ctx.quadraticCurveTo(w, 0, w, r);
+  ctx.lineTo(w, h - r);
+  ctx.quadraticCurveTo(w, h, w - r, h);
+  ctx.lineTo(r, h);
+  ctx.quadraticCurveTo(0, h, 0, h - r);
+  ctx.lineTo(0, r);
+  ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(source, 0, 0);
+  ctx.restore();
+
+  return out;
+}
+
 interface ImageOverlayModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -251,6 +292,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   // Cropping state
   const [isCropping, setIsCropping] = useState(false);
   const cropperRef = useRef<CropperRef>(null);
+  const [cropperModalKey, setCropperModalKey] = useState(0);
+  const [cropBorderRadius, setCropBorderRadius] = useState(0);
 
   // Actual image dimensions in pixels
   const [actualImageDimensions, setActualImageDimensions] = useState<{
@@ -653,6 +696,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       form.append('top', String(Math.max(0, top)));
       form.append('width', String(Math.max(1, width)));
       form.append('height', String(Math.max(1, height)));
+      if (cropBorderRadius > 0) {
+        form.append('radius', String(cropBorderRadius));
+      }
 
       const res = await fetch('/api/crop-gif', { method: 'POST', body: form });
       if (!res.ok) {
@@ -674,7 +720,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
 
     // Convert canvas to blob (non-GIF)
-    canvas.toBlob((blob) => {
+    const outCanvas = roundedCanvasFromSource(canvas, cropBorderRadius);
+    outCanvas.toBlob((blob) => {
       if (blob) {
         console.log('Blob created, size:', blob.size);
         const croppedFile = new File([blob], 'cropped-image.png', {
@@ -685,7 +732,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         console.log('Failed to create blob');
       }
     }, 'image/png');
-  }, [cropperRef, overlayImageUrl, overlayImage]);
+  }, [cropperRef, overlayImageUrl, overlayImage, cropBorderRadius]);
 
   const handleVideoLoad = useCallback(() => {
     const video = videoRef.current;
@@ -1707,7 +1754,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 overlaySize={overlaySize}
                 setOverlaySize={setOverlaySize}
                 actualImageDimensions={actualImageDimensions}
-                onCrop={() => setIsCropping(true)}
+                onCrop={() => {
+                  setCropBorderRadius(0);
+                  setCropperModalKey((k) => k + 1);
+                  setIsCropping(true);
+                }}
                 onCenterResetNatural={() => {
                   setOverlayPosition({ x: 50, y: 50 });
                   if (actualImageDimensions) {
@@ -1942,7 +1993,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       style={{ minHeight: '384px' }}
                     >
                       <Cropper
-                        key={overlayImageUrl}
+                        key={`${overlayImageUrl}-${cropperModalKey}`}
                         src={overlayImageUrl}
                         ref={cropperRef}
                         className={'w-full h-full'}
@@ -1964,6 +2015,58 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <div className='flex flex-wrap items-center justify-center gap-3 w-full'>
+                <button
+                  type='button'
+                  onClick={() => cropperRef.current?.rotateImage(-90)}
+                  disabled={overlayImage?.type === 'image/gif'}
+                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  Rotate Left
+                </button>
+                <button
+                  type='button'
+                  onClick={() => cropperRef.current?.rotateImage(90)}
+                  disabled={overlayImage?.type === 'image/gif'}
+                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  Rotate Right
+                </button>
+                <button
+                  type='button'
+                  onClick={() => cropperRef.current?.flipImage(true, false)}
+                  disabled={overlayImage?.type === 'image/gif'}
+                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  Flip Horizontal
+                </button>
+                <button
+                  type='button'
+                  onClick={() => cropperRef.current?.flipImage(false, true)}
+                  disabled={overlayImage?.type === 'image/gif'}
+                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  Flip Vertical
+                </button>
+
+                <div className='flex items-center gap-2 min-w-[280px]'>
+                  <label className='text-sm text-gray-700'>Border radius</label>
+                  <input
+                    type='range'
+                    min={0}
+                    max={100}
+                    value={cropBorderRadius}
+                    onChange={(e) =>
+                      setCropBorderRadius(Number(e.target.value))
+                    }
+                    className='flex-1'
+                  />
+                  <span className='text-sm text-gray-700 w-12 text-right'>
+                    {cropBorderRadius}%
+                  </span>
                 </div>
               </div>
 
