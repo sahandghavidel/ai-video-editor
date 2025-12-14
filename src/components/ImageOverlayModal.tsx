@@ -632,79 +632,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     currentVideoTime >= startTime &&
     currentVideoTime <= endTime;
 
-  const overlayEntrancePreview = useMemo(() => {
-    // Keep overlays editable (visible) outside the active window.
-    const isActive =
-      Number.isFinite(startTime) &&
-      Number.isFinite(endTime) &&
-      currentVideoTime >= startTime &&
-      currentVideoTime <= endTime;
-
-    if (!isActive || overlayAnimation === 'none') {
-      return { scale: 1, dx: 0, dy: 0, opacity: 1 };
-    }
-
-    const windowDuration = Math.max(0, endTime - startTime);
-    const animDur = Math.min(0.6, Math.max(0.15, windowDuration * 0.35));
-    const tRel = Math.max(0, currentVideoTime - startTime);
-    const p = animDur > 0 ? Math.min(1, tRel / animDur) : 1;
-    const ease = 1 - Math.pow(1 - p, 3);
-
-    const w = containerRect?.width ?? 0;
-    const h = containerRect?.height ?? 0;
-    const slideX = w * 0.25;
-    const slideY = h * 0.25;
-
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    const bounce = (t: number) =>
-      1 + 0.12 * Math.exp(-6 * t) * Math.sin(12 * t);
-    const spring = (t: number) =>
-      1 + 0.08 * Math.exp(-5 * t) * Math.sin(16 * t);
-
-    let scale = 1;
-    let dx = 0;
-    let dy = 0;
-    let opacity = 1;
-
-    switch (overlayAnimation) {
-      case 'fadeIn':
-        opacity = ease;
-        break;
-      case 'miniZoom':
-        scale = lerp(0.92, 1, ease);
-        break;
-      case 'zoomIn':
-        scale = lerp(0.75, 1, ease);
-        break;
-      case 'bounceIn':
-        scale = lerp(0.7, 1, ease) * bounce(p);
-        break;
-      case 'spring':
-        scale = lerp(0.85, 1, ease) * spring(p);
-        break;
-      case 'slideLeft':
-        dx = slideX * (1 - ease);
-        break;
-      case 'slideRight':
-        dx = -slideX * (1 - ease);
-        break;
-      case 'slideUp':
-        dy = slideY * (1 - ease);
-        break;
-      default:
-        break;
-    }
-
-    return { scale, dx, dy, opacity };
-  }, [
-    containerRect?.height,
-    containerRect?.width,
-    currentVideoTime,
-    endTime,
-    overlayAnimation,
-    startTime,
-  ]);
-
   const shouldShowTintOverlay =
     !!videoTintColor && (isTintActive || isEditingTintArea);
 
@@ -2374,8 +2301,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   top: `${overlayPosition.y}%`,
                   width: `${overlaySize.width}%`,
                   height: `${overlaySize.height}%`,
-                  transform: `translate(-50%, -50%) translate(${overlayEntrancePreview.dx}px, ${overlayEntrancePreview.dy}px) scale(${overlayEntrancePreview.scale})`,
-                  opacity: overlayEntrancePreview.opacity,
+                  transform: 'translate(-50%, -50%)',
                 }}
                 onPointerDown={handleMouseDown}
               >
@@ -2394,8 +2320,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 style={{
                   left: `${textOverlayPosition.x}%`,
                   top: `${textOverlayPosition.y}%`,
-                  transform: `translate(-50%, -50%) translate(${overlayEntrancePreview.dx}px, ${overlayEntrancePreview.dy}px) scale(${overlayEntrancePreview.scale})`,
-                  opacity: overlayEntrancePreview.opacity,
+                  transform: 'translate(-50%, -50%)',
                   width: `${Math.max(
                     5,
                     Math.min(
