@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
     const videoTintWidthRaw = formData.get('videoTintWidth') as string | null;
     const videoTintHeightRaw = formData.get('videoTintHeight') as string | null;
     const videoTintInvertRaw = formData.get('videoTintInvert') as string | null;
+    const overlaySoundRaw = formData.get('overlaySound') as string | null;
     const textStyling = formData.get('textStyling')
       ? JSON.parse(formData.get('textStyling') as string)
       : null;
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
       videoTintWidth: videoTintWidthRaw,
       videoTintHeight: videoTintHeightRaw,
       videoTintInvert: videoTintInvertRaw,
+      overlaySound: overlaySoundRaw,
     });
 
     if (
@@ -148,6 +150,66 @@ export async function POST(request: NextRequest) {
     }
     const videoWidth = videoStream.width;
     const videoHeight = videoStream.height;
+    const hasAudio = Array.isArray(probeData.streams)
+      ? probeData.streams.some((s: any) => s?.codec_type === 'audio')
+      : false;
+
+    // Preserve original audio format for merge compatibility.
+    // (When we mix SFX we must re-encode; match the source as closely as possible.)
+    let originalAudioCodec = 'aac';
+    let originalAudioBitrate = 128000;
+    let originalAudioSampleRate = 48000;
+    let originalAudioChannels = 2;
+
+    if (hasAudio) {
+      const audioStream = probeData.streams.find(
+        (s: any) => s?.codec_type === 'audio'
+      );
+      if (audioStream) {
+        if (typeof audioStream.codec_name === 'string') {
+          originalAudioCodec = audioStream.codec_name;
+        }
+        const br = Number(audioStream.bit_rate);
+        if (Number.isFinite(br) && br > 0) originalAudioBitrate = br;
+        const sr = Number(audioStream.sample_rate);
+        if (Number.isFinite(sr) && sr > 0) originalAudioSampleRate = sr;
+        const ch = Number(audioStream.channels);
+        if (Number.isFinite(ch) && ch > 0) originalAudioChannels = ch;
+      }
+    }
+
+    const channelLayout =
+      originalAudioChannels === 1
+        ? 'mono'
+        : originalAudioChannels === 2
+        ? 'stereo'
+        : 'stereo';
+
+    // Resolve optional overlay sound from /public/sounds
+    let overlaySoundPath: string | null = null;
+    if (overlaySoundRaw) {
+      const soundName = String(overlaySoundRaw);
+      const base = path.basename(soundName);
+      // Prevent path traversal
+      if (base !== soundName) {
+        return NextResponse.json(
+          { error: 'Invalid sound file' },
+          { status: 400 }
+        );
+      }
+
+      const soundsDir = path.join(process.cwd(), 'public', 'sounds');
+      const candidate = path.join(soundsDir, base);
+      try {
+        await fs.promises.access(candidate, fs.constants.R_OK);
+        overlaySoundPath = candidate;
+      } catch {
+        return NextResponse.json(
+          { error: 'Sound file not found' },
+          { status: 400 }
+        );
+      }
+    }
 
     if (tintColorNormalized) {
       const enableExpr = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
@@ -215,6 +277,21 @@ export async function POST(request: NextRequest) {
     let ffmpegCommand: string;
     const durationLimit = preview ? '-t 10' : '';
 
+    const soundDelayMs = Math.max(0, Math.round(startTime * 1000));
+
+    const buildAudioFilter = (soundInputIndex: number) => {
+      // If the source video has no audio stream, generate silence.
+      const a0 = hasAudio
+        ? `[0:a]aresample=${originalAudioSampleRate}[a0]`
+        : `anullsrc=r=${originalAudioSampleRate}:cl=${channelLayout},atrim=0:${Math.max(
+            0,
+            Number.isFinite(endTime) ? endTime : 0
+          )},asetpts=N/SR/TB[a0]`;
+      const a1 = `[${soundInputIndex}:a]adelay=${soundDelayMs}:all=1,aresample=${originalAudioSampleRate}[a1]`;
+      const amix = `[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
+      return `${a0};${a1};${amix}`;
+    };
+
     if (overlayImage) {
       // Handle image overlay
       const imageBuffer = await overlayImage.arrayBuffer();
@@ -224,18 +301,33 @@ export async function POST(request: NextRequest) {
       const isGif = overlayImage.type === 'image/gif';
       const streamLoop = isGif ? '-stream_loop -1' : '';
 
-      if (tintFilter) {
-        ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay];[base][overlay]overlay=W*${
-          positionX / 100
-        }-(${overlayWidth})/2:H*${
-          positionY / 100
-        }-(${overlayHeight})/2:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+      const overlayScale = `[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay]`;
+      const overlayEnable = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      const overlayFilter = tintFilter
+        ? `[base][overlay]overlay=W*${positionX / 100}-(${overlayWidth})/2:H*${
+            positionY / 100
+          }-(${overlayHeight})/2:${overlayEnable}[vout]`
+        : `[0:v][overlay]overlay=W*${positionX / 100}-(${overlayWidth})/2:H*${
+            positionY / 100
+          }-(${overlayHeight})/2:${overlayEnable}[vout]`;
+
+      if (overlaySoundPath) {
+        const audio = buildAudioFilter(2);
+        const baseVideo = tintFilter ? `[0:v]${tintFilter}[base]` : null;
+        const parts = [baseVideo, overlayScale, overlayFilter, audio].filter(
+          Boolean
+        );
+        ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
+          ';'
+        )}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+          originalAudioBitrate / 1000
+        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero -shortest ${durationLimit} "${outputPath}"`;
       } else {
-        ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[1:v]scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight}[overlay];[0:v][overlay]overlay=W*${
-          positionX / 100
-        }-(${overlayWidth})/2:H*${
-          positionY / 100
-        }-(${overlayHeight})/2:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+        if (tintFilter) {
+          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+        } else {
+          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+        }
       }
     } else if (overlayText) {
       // Handle text overlay - sizeWidth controls font size (5-100%)
@@ -355,10 +447,24 @@ export async function POST(request: NextRequest) {
 
       const drawText = `drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
       const vf = tintFilter ? `${tintFilter},${drawText}` : drawText;
-      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
+      if (overlaySoundPath) {
+        const audio = buildAudioFilter(1);
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${vf}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+          originalAudioBitrate / 1000
+        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
+      } else {
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
+      }
     } else if (tintFilter) {
       // Tint-only
-      ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${tintFilter}" -c:a copy ${durationLimit} "${outputPath}"`;
+      if (overlaySoundPath) {
+        const audio = buildAudioFilter(1);
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${tintFilter}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+          originalAudioBitrate / 1000
+        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
+      } else {
+        ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${tintFilter}" -c:a copy ${durationLimit} "${outputPath}"`;
+      }
     } else {
       throw new Error('No overlay content provided');
     }

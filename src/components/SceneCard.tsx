@@ -1488,7 +1488,8 @@ export default function SceneCard({
     videoTintOpacity?: number,
     tintPosition?: { x: number; y: number },
     tintSize?: { width: number; height: number },
-    tintInvert?: boolean
+    tintInvert?: boolean,
+    overlaySound?: string | null
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1531,6 +1532,10 @@ export default function SceneCard({
         if (typeof tintInvert === 'boolean') {
           formData.append('videoTintInvert', tintInvert ? 'true' : 'false');
         }
+      }
+
+      if (overlaySound) {
+        formData.append('overlaySound', overlaySound);
       }
 
       const response = await fetch('/api/add-image-overlay', {

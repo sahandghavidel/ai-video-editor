@@ -293,7 +293,8 @@ interface ImageOverlayModalProps {
     videoTintOpacity?: number,
     tintPosition?: { x: number; y: number },
     tintSize?: { width: number; height: number },
-    tintInvert?: boolean
+    tintInvert?: boolean,
+    overlaySound?: string | null
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -316,6 +317,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   handleTranscribeScene,
   onUpdateModalVideoUrl,
 }) => {
+  const [availableSounds, setAvailableSounds] = useState<
+    { name: string; url: string }[]
+  >([]);
+  const [selectedSoundName, setSelectedSoundName] = useState<string | null>(
+    null
+  );
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
   const [overlayPosition, setOverlayPosition] = useState({ x: 50, y: 50 }); // percentage
@@ -358,6 +365,27 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     x: 50,
     y: 50,
   }); // percentage
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/list-sounds');
+        const data = (await res.json()) as {
+          sounds?: { name: string; url: string }[];
+        };
+        if (cancelled) return;
+        setAvailableSounds(Array.isArray(data.sounds) ? data.sounds : []);
+      } catch {
+        if (cancelled) return;
+        setAvailableSounds([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
   const [textOverlaySize, setTextOverlaySize] = useState({
     width: 100,
     height: 100,
@@ -1695,6 +1723,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       formData.append('videoTintHeight', tintSize.height.toString());
       formData.append('videoTintInvert', tintInvert ? 'true' : 'false');
     }
+    if (selectedSoundName) {
+      formData.append('overlaySound', selectedSoundName);
+    }
     if (selectedWordText && textStyling) {
       formData.append('textStyling', JSON.stringify(textStyling));
     }
@@ -1733,6 +1764,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     tintPosition.y,
     tintSize.height,
     tintSize.width,
+    selectedSoundName,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -1757,7 +1789,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         videoTintOpacity,
         tintPosition,
         tintSize,
-        tintInvert
+        tintInvert,
+        selectedSoundName
       );
 
       // After applying, fetch the scene from the DB to get the updated video URL
@@ -1810,6 +1843,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setTintSize({ width: 100, height: 100 });
       setTintInvert(false);
       setIsEditingTintArea(false);
+      setSelectedSoundName(null);
       setIsTintSectionOpen(false);
       setIsTextStylingSectionOpen(false);
       setIsCropping(false);
@@ -1846,6 +1880,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     tintInvert,
     tintPosition,
     tintSize,
+    selectedSoundName,
     sceneId,
     overlayPosition,
     overlaySize,
@@ -1873,6 +1908,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setTintSize({ width: 100, height: 100 });
     setTintInvert(false);
     setIsEditingTintArea(false);
+    setSelectedSoundName(null);
     setIsTintSectionOpen(false);
     setIsTextStylingSectionOpen(false);
     setPreviewUrl(null);
@@ -2425,6 +2461,47 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               tintInvert={tintInvert}
               setTintInvert={setTintInvert}
             />
+
+            <div className='mt-2 bg-gray-50 p-2 rounded-lg border border-gray-200'>
+              <div className='flex items-center justify-between gap-2'>
+                <span className='text-sm text-gray-700'>Sound</span>
+                <button
+                  type='button'
+                  onClick={() => setSelectedSoundName(null)}
+                  className={`px-2 py-1 text-xs rounded border bg-white ${
+                    !selectedSoundName
+                      ? 'border-gray-700 text-gray-900'
+                      : 'border-gray-300 text-gray-700'
+                  }`}
+                >
+                  None
+                </button>
+              </div>
+
+              <div className='mt-2 flex flex-wrap gap-2'>
+                {availableSounds.map((s) => (
+                  <button
+                    key={s.name}
+                    type='button'
+                    onClick={() => setSelectedSoundName(s.name)}
+                    className={`px-2 py-1 text-xs rounded border bg-white ${
+                      selectedSoundName === s.name
+                        ? 'border-gray-700 text-gray-900'
+                        : 'border-gray-300 text-gray-700'
+                    }`}
+                    title={s.name}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+
+                {availableSounds.length === 0 && (
+                  <span className='text-xs text-gray-500'>
+                    No sounds found in /public/sounds
+                  </span>
+                )}
+              </div>
+            </div>
 
             <TranscriptionControls
               transcriptionWords={transcriptionWords}
