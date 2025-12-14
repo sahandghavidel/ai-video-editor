@@ -335,9 +335,9 @@ export async function POST(request: NextRequest) {
         )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero -shortest ${durationLimit} "${outputPath}"`;
       } else {
         if (tintFilter) {
-          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
         } else {
-          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}" -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+          ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
         }
       }
     } else if (overlayText) {
