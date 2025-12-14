@@ -1,7 +1,16 @@
 'use client';
 
 import React from 'react';
-import { Image, List, Loader2, Plus, RotateCcw, Upload, X } from 'lucide-react';
+import {
+  Gift,
+  Image,
+  List,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Upload,
+  X,
+} from 'lucide-react';
 import type { TranscriptionWord } from './types';
 
 type Props = {
@@ -48,6 +57,13 @@ export function TranscriptionControls({
     const url = `https://www.google.com/search?udm=2&q=${encodeURIComponent(
       q
     )}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openGiphySearch = () => {
+    const q = customText.trim();
+    if (!q) return;
+    const url = `https://giphy.com/search/${encodeURIComponent(q)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -116,6 +132,17 @@ export function TranscriptionControls({
           title='Search Google Images'
         >
           <Image className='h-4 w-4' />
+        </button>
+
+        <button
+          type='button'
+          onClick={openGiphySearch}
+          disabled={!customText.trim()}
+          className='p-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+          aria-label='Search Giphy for input text'
+          title='Search Giphy'
+        >
+          <Gift className='h-4 w-4' />
         </button>
 
         <button
