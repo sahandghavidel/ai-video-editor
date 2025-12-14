@@ -31,6 +31,15 @@ export async function POST(request: NextRequest) {
     const videoTintOpacityRaw = formData.get('videoTintOpacity') as
       | string
       | null;
+    const videoTintPositionXRaw = formData.get('videoTintPositionX') as
+      | string
+      | null;
+    const videoTintPositionYRaw = formData.get('videoTintPositionY') as
+      | string
+      | null;
+    const videoTintWidthRaw = formData.get('videoTintWidth') as string | null;
+    const videoTintHeightRaw = formData.get('videoTintHeight') as string | null;
+    const videoTintInvertRaw = formData.get('videoTintInvert') as string | null;
     const textStyling = formData.get('textStyling')
       ? JSON.parse(formData.get('textStyling') as string)
       : null;
@@ -49,6 +58,11 @@ export async function POST(request: NextRequest) {
       preview,
       videoTintColor: videoTintColorRaw,
       videoTintOpacity: videoTintOpacityRaw,
+      videoTintPositionX: videoTintPositionXRaw,
+      videoTintPositionY: videoTintPositionYRaw,
+      videoTintWidth: videoTintWidthRaw,
+      videoTintHeight: videoTintHeightRaw,
+      videoTintInvert: videoTintInvertRaw,
     });
 
     if (
@@ -83,8 +97,82 @@ export async function POST(request: NextRequest) {
 
     const tintColorNormalized = normalizeColor(videoTintColorRaw);
     const tintOpacity = clamp01(videoTintOpacityRaw, 1);
+
+    const clampPct = (v: unknown, fallback: number) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(0, Math.min(100, n));
+    };
+
+    const tintPosX = clampPct(videoTintPositionXRaw, 50);
+    const tintPosY = clampPct(videoTintPositionYRaw, 50);
+    const tintW = clampPct(videoTintWidthRaw, 100);
+    const tintH = clampPct(videoTintHeightRaw, 100);
+    const tintInvert = (videoTintInvertRaw || '').toLowerCase() === 'true';
+
+    const leftPct = Math.max(0, Math.min(100, tintPosX - tintW / 2));
+    const topPct = Math.max(0, Math.min(100, tintPosY - tintH / 2));
+    const rightPct = Math.max(0, Math.min(100, tintPosX + tintW / 2));
+    const bottomPct = Math.max(0, Math.min(100, tintPosY + tintH / 2));
+
+    const enableExpr = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+    const drawbox = (x: string, y: string, w: string, h: string) =>
+      `drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${tintColorNormalized}@${tintOpacity}:t=fill:${enableExpr}`;
+
     const tintFilter = tintColorNormalized
-      ? `drawbox=x=0:y=0:w=iw:h=ih:color=${tintColorNormalized}@${tintOpacity}:t=fill:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`
+      ? (() => {
+          if (!tintInvert) {
+            const wPct = Math.max(0, rightPct - leftPct);
+            const hPct = Math.max(0, bottomPct - topPct);
+            return drawbox(
+              `iw*${leftPct / 100}`,
+              `ih*${topPct / 100}`,
+              `iw*${wPct / 100}`,
+              `ih*${hPct / 100}`
+            );
+          }
+
+          const filters: string[] = [];
+
+          if (topPct > 0) {
+            filters.push(drawbox('0', '0', 'iw', `ih*${topPct / 100}`));
+          }
+
+          if (bottomPct < 100) {
+            filters.push(
+              drawbox(
+                '0',
+                `ih*${bottomPct / 100}`,
+                'iw',
+                `ih*${(100 - bottomPct) / 100}`
+              )
+            );
+          }
+
+          if (leftPct > 0 && bottomPct > topPct) {
+            filters.push(
+              drawbox(
+                '0',
+                `ih*${topPct / 100}`,
+                `iw*${leftPct / 100}`,
+                `ih*${(bottomPct - topPct) / 100}`
+              )
+            );
+          }
+
+          if (rightPct < 100 && bottomPct > topPct) {
+            filters.push(
+              drawbox(
+                `iw*${rightPct / 100}`,
+                `ih*${topPct / 100}`,
+                `iw*${(100 - rightPct) / 100}`,
+                `ih*${(bottomPct - topPct) / 100}`
+              )
+            );
+          }
+
+          return filters.join(',');
+        })()
       : null;
 
     // Create temporary directory

@@ -1485,7 +1485,10 @@ export default function SceneCard({
       fontFamily: string;
     },
     videoTintColor?: string | null,
-    videoTintOpacity?: number
+    videoTintOpacity?: number,
+    tintPosition?: { x: number; y: number },
+    tintSize?: { width: number; height: number },
+    tintInvert?: boolean
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1515,6 +1518,18 @@ export default function SceneCard({
           Number.isFinite(videoTintOpacity)
         ) {
           formData.append('videoTintOpacity', videoTintOpacity.toString());
+        }
+
+        if (tintPosition) {
+          formData.append('videoTintPositionX', tintPosition.x.toString());
+          formData.append('videoTintPositionY', tintPosition.y.toString());
+        }
+        if (tintSize) {
+          formData.append('videoTintWidth', tintSize.width.toString());
+          formData.append('videoTintHeight', tintSize.height.toString());
+        }
+        if (typeof tintInvert === 'boolean') {
+          formData.append('videoTintInvert', tintInvert ? 'true' : 'false');
         }
       }
 

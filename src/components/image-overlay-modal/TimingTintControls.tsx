@@ -21,6 +21,11 @@ type Props = {
   videoTintOpacity: number;
   setVideoTintOpacity: (v: number) => void;
   clamp01: (v: number) => number;
+
+  isEditingTintArea: boolean;
+  setIsEditingTintArea: React.Dispatch<React.SetStateAction<boolean>>;
+  tintInvert: boolean;
+  setTintInvert: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 export function TimingTintControls({
@@ -38,6 +43,10 @@ export function TimingTintControls({
   videoTintOpacity,
   setVideoTintOpacity,
   clamp01,
+  isEditingTintArea,
+  setIsEditingTintArea,
+  tintInvert,
+  setTintInvert,
 }: Props) {
   return (
     <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
@@ -134,6 +143,43 @@ export function TimingTintControls({
                   title={`Tint ${c}`}
                 />
               ))}
+            </div>
+          </div>
+
+          <div className='mt-2 flex items-center justify-between gap-2'>
+            <span className='text-sm text-gray-700'>Area</span>
+            <div className='flex items-center gap-3'>
+              <button
+                type='button'
+                onClick={() => setIsEditingTintArea((s) => !s)}
+                className={`px-2 py-1 text-xs rounded border bg-white ${
+                  isEditingTintArea
+                    ? 'border-gray-700 text-gray-900'
+                    : 'border-gray-300 text-gray-700'
+                }`}
+                title={
+                  isEditingTintArea
+                    ? 'Finish editing tint area'
+                    : 'Edit tint area'
+                }
+                aria-label={
+                  isEditingTintArea
+                    ? 'Finish editing tint area'
+                    : 'Edit tint area'
+                }
+              >
+                {isEditingTintArea ? 'Done' : 'Edit'}
+              </button>
+
+              <label className='flex items-center gap-2 text-sm text-gray-700 select-none'>
+                <input
+                  type='checkbox'
+                  checked={tintInvert}
+                  onChange={(e) => setTintInvert(e.target.checked)}
+                  className='h-4 w-4'
+                />
+                Invert
+              </label>
             </div>
           </div>
 

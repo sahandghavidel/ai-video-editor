@@ -290,7 +290,10 @@ interface ImageOverlayModalProps {
     endTime: number,
     textStyling?: TextStyling,
     videoTintColor?: string | null,
-    videoTintOpacity?: number
+    videoTintOpacity?: number,
+    tintPosition?: { x: number; y: number },
+    tintSize?: { width: number; height: number },
+    tintInvert?: boolean
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -322,6 +325,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [videoTintColor, setVideoTintColor] = useState<string | null>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoTintOpacity, setVideoTintOpacity] = useState(1);
+  const [tintPosition, setTintPosition] = useState({ x: 50, y: 50 }); // percentage
+  const [tintSize, setTintSize] = useState({ width: 100, height: 100 }); // percentage
+  const [tintInvert, setTintInvert] = useState(false);
+  const [isEditingTintArea, setIsEditingTintArea] = useState(false);
   const [isTintSectionOpen, setIsTintSectionOpen] = useState(false);
   const [isTextStylingSectionOpen, setIsTextStylingSectionOpen] =
     useState(false);
@@ -582,6 +589,27 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     Number.isFinite(endTime) &&
     currentVideoTime >= startTime &&
     currentVideoTime <= endTime;
+
+  const shouldShowTintOverlay =
+    !!videoTintColor && (isTintActive || isEditingTintArea);
+
+  const tintRect = useMemo(() => {
+    const clampPct = (v: number) => Math.max(0, Math.min(100, v));
+    const safeW = Math.max(0, Math.min(100, tintSize.width));
+    const safeH = Math.max(0, Math.min(100, tintSize.height));
+    const left = clampPct(tintPosition.x - safeW / 2);
+    const top = clampPct(tintPosition.y - safeH / 2);
+    const right = clampPct(tintPosition.x + safeW / 2);
+    const bottom = clampPct(tintPosition.y + safeH / 2);
+    return {
+      left,
+      top,
+      right,
+      bottom,
+      width: Math.max(0, right - left),
+      height: Math.max(0, bottom - top),
+    };
+  }, [tintPosition, tintSize]);
 
   const clamp01 = useCallback((v: number) => Math.max(0, Math.min(1, v)), []);
 
@@ -1425,6 +1453,206 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     document.body.style.cursor = 'default';
   }, []);
 
+  const handleTintMouseDown = useCallback(
+    (event: React.PointerEvent) => {
+      if (!isEditingTintArea) return;
+
+      event.stopPropagation();
+
+      const contentRect = getVideoContentRect();
+      if (!contentRect) return;
+
+      const x = event.clientX - contentRect.left;
+      const y = event.clientY - contentRect.top;
+
+      const rectLeft_px = (tintRect.left / 100) * contentRect.width;
+      const rectTop_px = (tintRect.top / 100) * contentRect.height;
+      const rectW_px = (tintRect.width / 100) * contentRect.width;
+      const rectH_px = (tintRect.height / 100) * contentRect.height;
+
+      const edgeThreshold = 10;
+      const nearLeftEdge =
+        x >= rectLeft_px - edgeThreshold && x <= rectLeft_px + edgeThreshold;
+      const nearRightEdge =
+        x >= rectLeft_px + rectW_px - edgeThreshold &&
+        x <= rectLeft_px + rectW_px + edgeThreshold;
+      const nearTopEdge =
+        y >= rectTop_px - edgeThreshold && y <= rectTop_px + edgeThreshold;
+      const nearBottomEdge =
+        y >= rectTop_px + rectH_px - edgeThreshold &&
+        y <= rectTop_px + rectH_px + edgeThreshold;
+
+      const isNearEdge =
+        nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
+
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startSize = { ...tintSize };
+      const startPos = { ...tintPosition };
+      const pointerId = event.pointerId;
+
+      const minSizePct = 5;
+
+      if (isNearEdge) {
+        const handleGlobalPointerMove = (e: PointerEvent) => {
+          const rect = getVideoContentRect();
+          if (!rect) return;
+
+          let newWidth = startSize.width;
+          let newHeight = startSize.height;
+          let newX = startPos.x;
+          let newY = startPos.y;
+
+          if (nearLeftEdge) {
+            const deltaX = ((e.clientX - startX) / rect.width) * 100;
+            newWidth = Math.max(minSizePct, startSize.width - deltaX);
+            newX = startPos.x + deltaX / 2;
+          } else if (nearRightEdge) {
+            const deltaX = ((e.clientX - startX) / rect.width) * 100;
+            newWidth = Math.max(minSizePct, startSize.width + deltaX);
+          }
+
+          if (nearTopEdge) {
+            const deltaY = ((e.clientY - startY) / rect.height) * 100;
+            newHeight = Math.max(minSizePct, startSize.height - deltaY);
+            newY = startPos.y + deltaY / 2;
+          } else if (nearBottomEdge) {
+            const deltaY = ((e.clientY - startY) / rect.height) * 100;
+            newHeight = Math.max(minSizePct, startSize.height + deltaY);
+          }
+
+          setTintSize({
+            width: Math.min(100, Math.max(minSizePct, newWidth)),
+            height: Math.min(100, Math.max(minSizePct, newHeight)),
+          });
+
+          if (nearLeftEdge || nearTopEdge) {
+            setTintPosition({
+              x: Math.max(0, Math.min(100, newX)),
+              y: Math.max(0, Math.min(100, newY)),
+            });
+          }
+        };
+
+        const handleGlobalPointerUp = () => {
+          document.removeEventListener('pointermove', handleGlobalPointerMove);
+          document.removeEventListener('pointerup', handleGlobalPointerUp);
+          try {
+            (event.target as Element)?.releasePointerCapture(pointerId);
+          } catch {
+            // Ignore
+          }
+        };
+
+        document.addEventListener('pointermove', handleGlobalPointerMove);
+        document.addEventListener('pointerup', handleGlobalPointerUp);
+
+        (event.target as Element).setPointerCapture(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+
+      // Drag when clicking inside the rect
+      if (
+        x >= rectLeft_px &&
+        x <= rectLeft_px + rectW_px &&
+        y >= rectTop_px &&
+        y <= rectTop_px + rectH_px
+      ) {
+        const handleGlobalPointerMove = (e: PointerEvent) => {
+          const rect = getVideoContentRect();
+          if (!rect) return;
+          const deltaX = ((e.clientX - startX) / rect.width) * 100;
+          const deltaY = ((e.clientY - startY) / rect.height) * 100;
+          setTintPosition({
+            x: Math.max(0, Math.min(100, startPos.x + deltaX)),
+            y: Math.max(0, Math.min(100, startPos.y + deltaY)),
+          });
+        };
+
+        const handleGlobalPointerUp = () => {
+          document.removeEventListener('pointermove', handleGlobalPointerMove);
+          document.removeEventListener('pointerup', handleGlobalPointerUp);
+          try {
+            (event.target as Element)?.releasePointerCapture(pointerId);
+          } catch {
+            // Ignore
+          }
+        };
+
+        document.addEventListener('pointermove', handleGlobalPointerMove);
+        document.addEventListener('pointerup', handleGlobalPointerUp);
+
+        (event.target as Element).setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }
+    },
+    [
+      getVideoContentRect,
+      isEditingTintArea,
+      tintPosition,
+      tintRect.bottom,
+      tintRect.height,
+      tintRect.left,
+      tintRect.right,
+      tintRect.top,
+      tintRect.width,
+      tintSize,
+    ]
+  );
+
+  const handleTintPointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      if (!isEditingTintArea) return;
+      const contentRect = getVideoContentRect();
+      if (!contentRect) return;
+
+      const x = event.clientX - contentRect.left;
+      const y = event.clientY - contentRect.top;
+
+      const rectLeft_px = (tintRect.left / 100) * contentRect.width;
+      const rectTop_px = (tintRect.top / 100) * contentRect.height;
+      const rectW_px = (tintRect.width / 100) * contentRect.width;
+      const rectH_px = (tintRect.height / 100) * contentRect.height;
+
+      const edgeThreshold = 10;
+      const nearLeftEdge =
+        x >= rectLeft_px - edgeThreshold && x <= rectLeft_px + edgeThreshold;
+      const nearRightEdge =
+        x >= rectLeft_px + rectW_px - edgeThreshold &&
+        x <= rectLeft_px + rectW_px + edgeThreshold;
+      const nearTopEdge =
+        y >= rectTop_px - edgeThreshold && y <= rectTop_px + edgeThreshold;
+      const nearBottomEdge =
+        y >= rectTop_px + rectH_px - edgeThreshold &&
+        y <= rectTop_px + rectH_px + edgeThreshold;
+
+      if (nearLeftEdge && nearTopEdge) {
+        document.body.style.cursor = 'nw-resize';
+      } else if (nearRightEdge && nearTopEdge) {
+        document.body.style.cursor = 'ne-resize';
+      } else if (nearLeftEdge && nearBottomEdge) {
+        document.body.style.cursor = 'sw-resize';
+      } else if (nearRightEdge && nearBottomEdge) {
+        document.body.style.cursor = 'se-resize';
+      } else if (nearLeftEdge || nearRightEdge) {
+        document.body.style.cursor = 'ew-resize';
+      } else if (nearTopEdge || nearBottomEdge) {
+        document.body.style.cursor = 'ns-resize';
+      } else if (
+        x >= rectLeft_px &&
+        x <= rectLeft_px + rectW_px &&
+        y >= rectTop_px &&
+        y <= rectTop_px + rectH_px
+      ) {
+        document.body.style.cursor = 'move';
+      } else {
+        document.body.style.cursor = 'default';
+      }
+    },
+    [getVideoContentRect, isEditingTintArea, tintRect]
+  );
+
   const handlePreview = useCallback(async () => {
     if (!overlayImage && !selectedWordText && !videoTintColor) return;
     if (!originalVideoUrl) return;
@@ -1461,6 +1689,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (videoTintColor) {
       formData.append('videoTintColor', videoTintColor);
       formData.append('videoTintOpacity', clamp01(videoTintOpacity).toString());
+      formData.append('videoTintPositionX', tintPosition.x.toString());
+      formData.append('videoTintPositionY', tintPosition.y.toString());
+      formData.append('videoTintWidth', tintSize.width.toString());
+      formData.append('videoTintHeight', tintSize.height.toString());
+      formData.append('videoTintInvert', tintInvert ? 'true' : 'false');
     }
     if (selectedWordText && textStyling) {
       formData.append('textStyling', JSON.stringify(textStyling));
@@ -1495,6 +1728,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     endTime,
     textStyling,
     clamp01,
+    tintInvert,
+    tintPosition.x,
+    tintPosition.y,
+    tintSize.height,
+    tintSize.width,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -1516,7 +1754,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         endTime,
         selectedWordText ? textStyling : undefined,
         videoTintColor,
-        videoTintOpacity
+        videoTintOpacity,
+        tintPosition,
+        tintSize,
+        tintInvert
       );
 
       // After applying, fetch the scene from the DB to get the updated video URL
@@ -1565,6 +1806,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setEndTime(0);
       setVideoTintColor(null);
       setVideoTintOpacity(1);
+      setTintPosition({ x: 50, y: 50 });
+      setTintSize({ width: 100, height: 100 });
+      setTintInvert(false);
+      setIsEditingTintArea(false);
       setIsTintSectionOpen(false);
       setIsTextStylingSectionOpen(false);
       setIsCropping(false);
@@ -1598,6 +1843,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     textStyling,
     videoTintColor,
     videoTintOpacity,
+    tintInvert,
+    tintPosition,
+    tintSize,
     sceneId,
     overlayPosition,
     overlaySize,
@@ -1621,6 +1869,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setEndTime(0);
     setVideoTintColor(null);
     setVideoTintOpacity(1);
+    setTintPosition({ x: 50, y: 50 });
+    setTintSize({ width: 100, height: 100 });
+    setTintInvert(false);
+    setIsEditingTintArea(false);
     setIsTintSectionOpen(false);
     setIsTextStylingSectionOpen(false);
     setPreviewUrl(null);
@@ -1812,8 +2064,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           {/* Video Preview */}
           <div
             className='relative lg:col-span-2'
-            onPointerDown={handleMouseDown}
-            onPointerMove={handlePointerMove}
+            onPointerDown={isEditingTintArea ? undefined : handleMouseDown}
+            onPointerMove={isEditingTintArea ? undefined : handlePointerMove}
             onPointerLeave={handlePointerLeave}
           >
             {originalVideoUrl ? (
@@ -1834,18 +2086,102 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 </div>
               </div>
             )}
-            {isTintActive && videoTintColor && (
+            {shouldShowTintOverlay && videoTintColor && (
+              <>
+                {!tintInvert ? (
+                  <div
+                    className='absolute pointer-events-none'
+                    style={{
+                      left: `${tintRect.left}%`,
+                      top: `${tintRect.top}%`,
+                      width: `${tintRect.width}%`,
+                      height: `${tintRect.height}%`,
+                      backgroundColor: videoTintColor,
+                      opacity: clamp01(videoTintOpacity),
+                    }}
+                  />
+                ) : (
+                  <>
+                    {tintRect.top > 0 && (
+                      <div
+                        className='absolute pointer-events-none'
+                        style={{
+                          left: 0,
+                          top: 0,
+                          right: 0,
+                          height: `${tintRect.top}%`,
+                          backgroundColor: videoTintColor,
+                          opacity: clamp01(videoTintOpacity),
+                        }}
+                      />
+                    )}
+                    {tintRect.bottom < 100 && (
+                      <div
+                        className='absolute pointer-events-none'
+                        style={{
+                          left: 0,
+                          top: `${tintRect.bottom}%`,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: videoTintColor,
+                          opacity: clamp01(videoTintOpacity),
+                        }}
+                      />
+                    )}
+                    {tintRect.left > 0 && tintRect.height > 0 && (
+                      <div
+                        className='absolute pointer-events-none'
+                        style={{
+                          left: 0,
+                          top: `${tintRect.top}%`,
+                          width: `${tintRect.left}%`,
+                          height: `${tintRect.height}%`,
+                          backgroundColor: videoTintColor,
+                          opacity: clamp01(videoTintOpacity),
+                        }}
+                      />
+                    )}
+                    {tintRect.right < 100 && tintRect.height > 0 && (
+                      <div
+                        className='absolute pointer-events-none'
+                        style={{
+                          left: `${tintRect.right}%`,
+                          top: `${tintRect.top}%`,
+                          right: 0,
+                          height: `${tintRect.height}%`,
+                          backgroundColor: videoTintColor,
+                          opacity: clamp01(videoTintOpacity),
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {isEditingTintArea && (
               <div
-                className='absolute pointer-events-none'
+                className='absolute pointer-events-auto z-30'
                 style={{
                   top: 0,
                   left: 0,
                   right: 0,
-                  bottom: 0,
-                  backgroundColor: videoTintColor,
-                  opacity: clamp01(videoTintOpacity),
+                  bottom: '40px',
                 }}
-              />
+                onPointerDown={handleTintMouseDown}
+                onPointerMove={handleTintPointerMove}
+                onPointerLeave={handlePointerLeave}
+              >
+                <div
+                  className='absolute border-2 border-blue-500'
+                  style={{
+                    left: `${tintRect.left}%`,
+                    top: `${tintRect.top}%`,
+                    width: `${tintRect.width}%`,
+                    height: `${tintRect.height}%`,
+                  }}
+                />
+              </div>
             )}
             {/* Invisible overlay to capture clicks when there's an overlay - excludes controls area */}
             {overlayImageUrl && (
@@ -2084,6 +2420,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               videoTintOpacity={videoTintOpacity}
               setVideoTintOpacity={setVideoTintOpacity}
               clamp01={clamp01}
+              isEditingTintArea={isEditingTintArea}
+              setIsEditingTintArea={setIsEditingTintArea}
+              tintInvert={tintInvert}
+              setTintInvert={setTintInvert}
             />
 
             <TranscriptionControls
