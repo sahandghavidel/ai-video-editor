@@ -854,7 +854,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         return m ? m[0] : null;
       };
 
-      const fetchImageAsFile = async (url: string) => {
+      const fetchImageAsFile = async (url: string): Promise<File | null> => {
         const res = await fetch(
           `/api/fetch-image?url=${encodeURIComponent(url)}`
         );
@@ -867,10 +867,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           } catch {
             // ignore
           }
+
+          // If the URL resolves but is not an image (e.g. video/mp4), silently ignore.
+          if (/did not return an image|content-type/i.test(message)) {
+            return null;
+          }
+
           throw new Error(message);
         }
 
         const blob = await res.blob();
+        if (blob.type && !blob.type.startsWith('image/')) {
+          return null;
+        }
         const type = blob.type || 'image/png';
         const ext = type.split('/')[1] || 'png';
         return new File([blob], `pasted-url-image.${ext}`, { type });
@@ -911,7 +920,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     });
                 })()
               : fetchImageAsFile(src);
-            setOverlayFromFile(await file);
+            const resolved = await file;
+            if (!resolved) return;
+            setOverlayFromFile(resolved);
             return;
           }
         }
@@ -941,6 +952,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         }
 
         const file = await fetchImageAsFile(manualUrl);
+        if (!file) return;
         setOverlayFromFile(file);
         return;
       }
@@ -957,9 +969,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       // http(s) URL
       const file = await fetchImageAsFile(maybeUrl);
+      if (!file) return;
       setOverlayFromFile(file);
     } catch (e) {
-      console.error('Failed to paste overlay image from clipboard:', e);
+      // Avoid noisy console errors; show a user-facing message only.
       alert(
         'Failed to paste image from clipboard. Your browser may be blocking clipboard access.'
       );
