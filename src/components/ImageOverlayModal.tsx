@@ -438,57 +438,133 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const handlePasteOverlayImageFromClipboard = useCallback(async () => {
     try {
       const clipboard = navigator.clipboard;
-      if (!clipboard?.read) {
-        alert(
-          'Pasting images from clipboard is not supported in this browser.'
+      const setOverlayFromFile = (file: File) => {
+        setOverlayImage(file);
+        const url = URL.createObjectURL(file);
+        setOverlayImageUrl(url);
+
+        // Clear text overlay when adding image
+        setSelectedWordText(null);
+        setCustomText('');
+
+        // Calculate overlay size similarly to upload/screenshot
+        const img = new Image();
+        img.onload = () => {
+          setActualImageDimensions({ width: img.width, height: img.height });
+
+          const videoWidth = 1920;
+          const videoHeight = 1080;
+          const widthPercent = (img.width / videoWidth) * 100;
+          const heightPercent = (img.height / videoHeight) * 100;
+          setOverlaySize({
+            width: Math.min(widthPercent, 100),
+            height: Math.min(heightPercent, 100),
+          });
+        };
+        img.src = url;
+      };
+
+      const extractFirstUrl = (text: string): string | null => {
+        const trimmed = text.trim();
+        if (!trimmed) return null;
+
+        // Handle data URLs
+        if (trimmed.startsWith('data:image/')) return trimmed;
+
+        // Extract first http(s) URL from any text blob
+        const m = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
+        return m ? m[0] : null;
+      };
+
+      const fetchImageAsFile = async (url: string) => {
+        const res = await fetch(
+          `/api/fetch-image?url=${encodeURIComponent(url)}`
+        );
+        if (!res.ok) {
+          // Try to surface server error JSON if present
+          let message = `Failed to fetch image URL (${res.status})`;
+          try {
+            const j = (await res.json()) as { error?: string };
+            if (j?.error) message = j.error;
+          } catch {
+            // ignore
+          }
+          throw new Error(message);
+        }
+
+        const blob = await res.blob();
+        const type = blob.type || 'image/png';
+        const ext = type.split('/')[1] || 'png';
+        return new File([blob], `pasted-url-image.${ext}`, { type });
+      };
+
+      // 1) Prefer true clipboard image blobs when available
+      if (clipboard?.read) {
+        const items = await clipboard.read();
+        for (const item of items) {
+          const t = (item.types || []).find((x) => x.startsWith('image/'));
+          if (!t) continue;
+          const imageBlob = await item.getType(t);
+          const ext = t.split('/')[1] || 'png';
+          setOverlayFromFile(
+            new File([imageBlob], `clipboard-image.${ext}`, { type: t })
+          );
+          return;
+        }
+
+        // 2) If clipboard includes HTML, try extracting <img src="...">
+        for (const item of items) {
+          if (!item.types?.includes('text/html')) continue;
+          const htmlBlob = await item.getType('text/html');
+          const html = await htmlBlob.text();
+          const srcMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+          const src = srcMatch?.[1] ? extractFirstUrl(srcMatch[1]) : null;
+          if (src) {
+            const file = src.startsWith('data:image/')
+              ? (() => {
+                  return fetch(src)
+                    .then((r) => r.blob())
+                    .then((blob) => {
+                      const type = blob.type || 'image/png';
+                      const ext = type.split('/')[1] || 'png';
+                      return new File([blob], `pasted-html-image.${ext}`, {
+                        type,
+                      });
+                    });
+                })()
+              : fetchImageAsFile(src);
+            setOverlayFromFile(await file);
+            return;
+          }
+        }
+      }
+
+      // 3) Fall back to text (URL) paste
+      if (!clipboard?.readText) {
+        alert('Clipboard paste is not supported in this browser.');
+        return;
+      }
+
+      const text = await clipboard.readText();
+      const maybeUrl = extractFirstUrl(text);
+      if (!maybeUrl) {
+        alert('Clipboard does not contain an image or image URL.');
+        return;
+      }
+
+      if (maybeUrl.startsWith('data:image/')) {
+        const blob = await (await fetch(maybeUrl)).blob();
+        const type = blob.type || 'image/png';
+        const ext = type.split('/')[1] || 'png';
+        setOverlayFromFile(
+          new File([blob], `pasted-data-image.${ext}`, { type })
         );
         return;
       }
 
-      const items = await clipboard.read();
-      let imageType: string | undefined;
-      let imageBlob: Blob | null = null;
-
-      for (const item of items) {
-        const t = (item.types || []).find((x) => x.startsWith('image/'));
-        if (!t) continue;
-        imageType = t;
-        imageBlob = await item.getType(t);
-        break;
-      }
-
-      if (!imageBlob || !imageType) {
-        alert('Clipboard does not contain an image.');
-        return;
-      }
-
-      const ext = imageType.split('/')[1] || 'png';
-      const file = new File([imageBlob], `clipboard-image.${ext}`, {
-        type: imageType,
-      });
-
-      setOverlayImage(file);
-      const url = URL.createObjectURL(file);
-      setOverlayImageUrl(url);
-      // Clear text overlay when adding image
-      setSelectedWordText(null);
-      setCustomText('');
-
-      // Calculate aspect ratio + overlay size similarly to upload/screenshot
-      const img = new Image();
-      img.onload = () => {
-        setActualImageDimensions({ width: img.width, height: img.height });
-
-        const videoWidth = 1920;
-        const videoHeight = 1080;
-        const widthPercent = (img.width / videoWidth) * 100;
-        const heightPercent = (img.height / videoHeight) * 100;
-        setOverlaySize({
-          width: Math.min(widthPercent, 100),
-          height: Math.min(heightPercent, 100),
-        });
-      };
-      img.src = url;
+      // http(s) URL
+      const file = await fetchImageAsFile(maybeUrl);
+      setOverlayFromFile(file);
     } catch (e) {
       console.error('Failed to paste overlay image from clipboard:', e);
       alert(
