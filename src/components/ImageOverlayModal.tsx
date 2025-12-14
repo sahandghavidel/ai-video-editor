@@ -15,6 +15,7 @@ import { getSceneById } from '@/lib/baserow-actions';
 import ffmpegFonts from '../../docs/ffmpeg-fonts.json';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
 import 'react-advanced-cropper/dist/style.css';
+import { getBackgroundStyle } from 'advanced-cropper';
 
 import { ImageUploadRow } from './image-overlay-modal/ImageUploadRow';
 import { ImagePositionControls } from './image-overlay-modal/ImagePositionControls';
@@ -25,6 +26,15 @@ import type {
   TextStyling,
   TranscriptionWord,
 } from './image-overlay-modal/types';
+
+type CropEditorMode = 'crop' | 'brightness' | 'contrast' | 'saturation' | 'hue';
+
+type CropAdjustments = {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  hue: number;
+};
 
 // Helper function to convert hex color to RGB
 const hexToRgb = (hex: string) => {
@@ -77,6 +87,164 @@ function roundedCanvasFromSource(
 
   return out;
 }
+
+function mergeRefs<T>(refs: Array<React.Ref<T> | undefined>) {
+  return (value: T | null) => {
+    for (const ref of refs) {
+      if (!ref) continue;
+      if (typeof ref === 'function') {
+        ref(value);
+      } else {
+        try {
+          (ref as React.MutableRefObject<T | null>).current = value;
+        } catch {
+          // ignore
+        }
+      }
+    }
+  };
+}
+
+const AdjustableImage = React.forwardRef<
+  HTMLCanvasElement,
+  {
+    src?: string;
+    className?: string;
+    crossOrigin?: 'anonymous' | 'use-credentials' | boolean;
+    brightness?: number;
+    saturation?: number;
+    hue?: number;
+    contrast?: number;
+    style?: React.CSSProperties;
+  }
+>(
+  (
+    {
+      src,
+      className,
+      crossOrigin,
+      brightness = 0,
+      saturation = 0,
+      hue = 0,
+      contrast = 0,
+      style,
+    },
+    ref
+  ) => {
+    const imageRef = useRef<HTMLImageElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    const drawImage = useCallback(() => {
+      const image = imageRef.current;
+      const canvas = canvasRef.current;
+      if (!canvas || !image || !image.complete) return;
+
+      const w = image.naturalWidth;
+      const h = image.naturalHeight;
+      if (!(w > 0 && h > 0)) return;
+
+      const ctx = canvas.getContext('2d');
+      canvas.width = w;
+      canvas.height = h;
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.filter = [
+        `brightness(${100 + brightness * 100}%)`,
+        `contrast(${100 + contrast * 100}%)`,
+        `saturate(${100 + saturation * 100}%)`,
+        `hue-rotate(${hue * 360}deg)`,
+      ].join(' ');
+      ctx.drawImage(image, 0, 0, w, h);
+    }, [brightness, contrast, saturation, hue]);
+
+    useEffect(() => {
+      if (!src) {
+        imageRef.current = null;
+        return;
+      }
+
+      const img = new Image();
+      if (crossOrigin) {
+        img.crossOrigin = crossOrigin === true ? 'anonymous' : crossOrigin;
+      }
+      img.onload = () => {
+        imageRef.current = img;
+        drawImage();
+      };
+      img.src = src;
+      imageRef.current = img;
+
+      // Attempt a draw in case it was cached.
+      drawImage();
+
+      return () => {
+        if (imageRef.current === img) {
+          imageRef.current = null;
+        }
+      };
+    }, [drawImage, src, crossOrigin]);
+
+    return (
+      <>
+        <canvas
+          key={`${src || 'no-src'}-canvas`}
+          ref={mergeRefs([ref, canvasRef])}
+          className={className}
+          style={style}
+        />
+      </>
+    );
+  }
+);
+AdjustableImage.displayName = 'AdjustableImage';
+
+const AdjustableCropperBackground = React.forwardRef<
+  HTMLCanvasElement,
+  {
+    className?: string;
+    cropper: CropperRef;
+    crossOrigin?: 'anonymous' | 'use-credentials' | boolean;
+    brightness?: number;
+    saturation?: number;
+    hue?: number;
+    contrast?: number;
+  }
+>(
+  (
+    {
+      className,
+      cropper,
+      crossOrigin,
+      brightness = 0,
+      saturation = 0,
+      hue = 0,
+      contrast = 0,
+    },
+    ref
+  ) => {
+    const state = cropper.getState();
+    const transitions = cropper.getTransitions();
+    const image = cropper.getImage();
+    const style =
+      image && state ? getBackgroundStyle(image, state, transitions) : {};
+
+    return (
+      <AdjustableImage
+        src={image?.src}
+        crossOrigin={crossOrigin}
+        brightness={brightness}
+        saturation={saturation}
+        hue={hue}
+        contrast={contrast}
+        ref={ref}
+        className={className}
+        style={style}
+      />
+    );
+  }
+);
+AdjustableCropperBackground.displayName = 'AdjustableCropperBackground';
 
 interface ImageOverlayModalProps {
   isOpen: boolean;
@@ -295,12 +463,35 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [cropperModalKey, setCropperModalKey] = useState(0);
   const [cropBorderRadius, setCropBorderRadius] = useState(0);
 
+  const [cropEditorMode, setCropEditorMode] = useState<CropEditorMode>('crop');
+  const [cropAdjustments, setCropAdjustments] = useState<CropAdjustments>({
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    hue: 0,
+  });
+
   const isGifOverlay = overlayImage?.type === 'image/gif';
+
+  // Safari needs a polyfill for CanvasRenderingContext2D.filter.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    void import('context-filter-polyfill').catch(() => {
+      // ignore
+    });
+  }, []);
 
   // Border radius isn't reliably supported for GIF output; keep it disabled.
   useEffect(() => {
     if (isGifOverlay) {
       setCropBorderRadius(0);
+      setCropEditorMode('crop');
+      setCropAdjustments({
+        brightness: 0,
+        contrast: 0,
+        saturation: 0,
+        hue: 0,
+      });
     }
   }, [isGifOverlay]);
 
@@ -1762,6 +1953,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 actualImageDimensions={actualImageDimensions}
                 onCrop={() => {
                   setCropBorderRadius(0);
+                  setCropEditorMode('crop');
+                  setCropAdjustments({
+                    brightness: 0,
+                    contrast: 0,
+                    saturation: 0,
+                    hue: 0,
+                  });
                   setCropperModalKey((k) => k + 1);
                   setIsCropping(true);
                 }}
@@ -2010,7 +2208,25 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         }}
                         stencilProps={{
                           aspectRatio: undefined,
+                          movable: cropEditorMode === 'crop',
+                          resizable: cropEditorMode === 'crop',
+                          lines: cropEditorMode === 'crop',
+                          handlers: cropEditorMode === 'crop',
+                          overlayClassName:
+                            cropEditorMode === 'crop'
+                              ? undefined
+                              : 'opacity-50',
                         }}
+                        backgroundWrapperProps={{
+                          scaleImage: cropEditorMode === 'crop',
+                          moveImage: cropEditorMode === 'crop',
+                        }}
+                        {...(!isGifOverlay
+                          ? {
+                              backgroundComponent: AdjustableCropperBackground,
+                              backgroundProps: cropAdjustments,
+                            }
+                          : {})}
                         checkOrientation={false}
                         onReady={() => {
                           console.log(
@@ -2024,58 +2240,123 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 </div>
               </div>
 
-              <div className='flex flex-wrap items-center justify-center gap-3 w-full'>
+              <div className='flex flex-wrap items-center justify-center gap-2 w-full'>
                 <button
                   type='button'
-                  onClick={() => cropperRef.current?.rotateImage(-90)}
-                  disabled={isGifOverlay}
-                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                  onClick={() => setCropEditorMode('crop')}
+                  className={`px-3 py-2 border rounded hover:bg-gray-50 ${
+                    cropEditorMode === 'crop'
+                      ? 'bg-gray-100'
+                      : 'border-gray-300'
+                  }`}
                 >
-                  Rotate Left
+                  Crop
                 </button>
-                <button
-                  type='button'
-                  onClick={() => cropperRef.current?.rotateImage(90)}
-                  disabled={isGifOverlay}
-                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
-                >
-                  Rotate Right
-                </button>
-                <button
-                  type='button'
-                  onClick={() => cropperRef.current?.flipImage(true, false)}
-                  disabled={isGifOverlay}
-                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
-                >
-                  Flip Horizontal
-                </button>
-                <button
-                  type='button'
-                  onClick={() => cropperRef.current?.flipImage(false, true)}
-                  disabled={isGifOverlay}
-                  className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
-                >
-                  Flip Vertical
-                </button>
+                {(
+                  [
+                    ['brightness', 'Brightness'],
+                    ['contrast', 'Contrast'],
+                    ['saturation', 'Saturation'],
+                    ['hue', 'Hue'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type='button'
+                    onClick={() => setCropEditorMode(key)}
+                    disabled={isGifOverlay}
+                    className={`px-3 py-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      cropEditorMode === key ? 'bg-gray-100' : 'border-gray-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-                <div className='flex items-center gap-2 min-w-[280px]'>
-                  <label className='text-sm text-gray-700'>Border radius</label>
+              {cropEditorMode !== 'crop' && !isGifOverlay && (
+                <div className='flex items-center gap-3 w-full'>
+                  <label className='text-sm text-gray-700 w-24'>
+                    {cropEditorMode.charAt(0).toUpperCase() +
+                      cropEditorMode.slice(1)}
+                  </label>
                   <input
                     type='range'
-                    min={0}
-                    max={100}
-                    value={cropBorderRadius}
-                    onChange={(e) =>
-                      setCropBorderRadius(Number(e.target.value))
-                    }
-                    disabled={isGifOverlay}
-                    className='flex-1 disabled:opacity-50 disabled:cursor-not-allowed'
+                    min={-1}
+                    max={1}
+                    step={0.01}
+                    value={cropAdjustments[cropEditorMode]}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setCropAdjustments((prev) => ({
+                        ...prev,
+                        [cropEditorMode]: v,
+                      }));
+                    }}
+                    className='flex-1'
                   />
-                  <span className='text-sm text-gray-700 w-12 text-right'>
-                    {cropBorderRadius}%
+                  <span className='text-sm text-gray-700 w-16 text-right'>
+                    {Math.round(cropAdjustments[cropEditorMode] * 100)}%
                   </span>
                 </div>
-              </div>
+              )}
+
+              {cropEditorMode === 'crop' && (
+                <div className='flex flex-wrap items-center justify-center gap-3 w-full'>
+                  <button
+                    type='button'
+                    onClick={() => cropperRef.current?.rotateImage(-90)}
+                    disabled={isGifOverlay}
+                    className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                  >
+                    Rotate Left
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => cropperRef.current?.rotateImage(90)}
+                    disabled={isGifOverlay}
+                    className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                  >
+                    Rotate Right
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => cropperRef.current?.flipImage(true, false)}
+                    disabled={isGifOverlay}
+                    className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                  >
+                    Flip Horizontal
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => cropperRef.current?.flipImage(false, true)}
+                    disabled={isGifOverlay}
+                    className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                  >
+                    Flip Vertical
+                  </button>
+
+                  <div className='flex items-center gap-2 min-w-[280px]'>
+                    <label className='text-sm text-gray-700'>
+                      Border radius
+                    </label>
+                    <input
+                      type='range'
+                      min={0}
+                      max={100}
+                      value={cropBorderRadius}
+                      onChange={(e) =>
+                        setCropBorderRadius(Number(e.target.value))
+                      }
+                      disabled={isGifOverlay}
+                      className='flex-1 disabled:opacity-50 disabled:cursor-not-allowed'
+                    />
+                    <span className='text-sm text-gray-700 w-12 text-right'>
+                      {cropBorderRadius}%
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className='flex space-x-2'>
                 <button
