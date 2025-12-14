@@ -2139,7 +2139,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   return (
     <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
-      <div className='bg-white rounded-lg p-8 w-full mx-2 h-[95vh] overflow-hidden'>
+      <div className='bg-white rounded-lg p-8 w-full mx-2 h-[95vh] overflow-hidden flex flex-col'>
         <div className='flex justify-between items-center mb-4'>
           <h2 className='text-xl font-semibold'>Add Image Overlay</h2>
           <button
@@ -2150,10 +2150,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </button>
         </div>
 
-        <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+        <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 items-start'>
           {/* Video Preview */}
           <div
-            className='relative lg:col-span-2'
+            className='relative lg:col-span-2 w-full aspect-video self-start'
             onPointerDown={isEditingTintArea ? undefined : handleMouseDown}
             onPointerMove={isEditingTintArea ? undefined : handlePointerMove}
             onPointerLeave={handlePointerLeave}
@@ -2163,7 +2163,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 key={originalVideoUrl}
                 ref={videoRef}
                 src={originalVideoUrl}
-                className='w-full h-full object-contain rounded border'
+                className='w-full h-full object-contain object-top rounded border'
                 controls
                 crossOrigin='anonymous'
                 onLoadedMetadata={handleVideoLoad}
@@ -2420,7 +2420,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </div>
 
           {/* Controls */}
-          <div className='space-y-4'>
+          <div className='space-y-4 overflow-y-auto min-h-0'>
             {/* Image Upload */}
             <ImageUploadRow
               fileInputRef={fileInputRef}
