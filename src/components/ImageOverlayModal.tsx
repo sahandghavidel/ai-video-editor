@@ -611,6 +611,55 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return rect;
   }, []);
 
+  const getVideoNaturalDimensions = useCallback(() => {
+    const video = videoRef.current;
+    const vw = video?.videoWidth;
+    const vh = video?.videoHeight;
+    return {
+      videoWidth: typeof vw === 'number' && vw > 0 ? vw : 1920,
+      videoHeight: typeof vh === 'number' && vh > 0 ? vh : 1080,
+    };
+  }, []);
+
+  const setOverlaySizeFromPixels = useCallback(
+    (w: number, h: number) => {
+      const { videoWidth, videoHeight } = getVideoNaturalDimensions();
+      const widthPercent = (w / videoWidth) * 100;
+      const heightPercent = (h / videoHeight) * 100;
+      setOverlaySize({
+        width: Math.min(widthPercent, 100),
+        height: Math.min(heightPercent, 100),
+      });
+    },
+    [getVideoNaturalDimensions, setOverlaySize]
+  );
+
+  const ensureOverlayImageDimensions = useCallback(async () => {
+    if (actualImageDimensions) return actualImageDimensions;
+    if (!overlayImageUrl) return null;
+
+    const img = new Image();
+    img.src = overlayImageUrl;
+    try {
+      // decode() is more reliable than onload timing for some images
+      if (typeof img.decode === 'function') {
+        await img.decode();
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Failed to load image'));
+        });
+      }
+    } catch {
+      return null;
+    }
+
+    if (!(img.width > 0 && img.height > 0)) return null;
+    const dims = { width: img.width, height: img.height };
+    setActualImageDimensions(dims);
+    return dims;
+  }, [actualImageDimensions, overlayImageUrl]);
+
   const handleImageUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -625,24 +674,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         const img = new Image();
         img.onload = () => {
           setActualImageDimensions({ width: img.width, height: img.height });
-
-          // Set overlay size to show image at its actual pixel dimensions
-          // Assuming HD video (1920x1080), calculate percentage to show actual size
-          const videoWidth = 1920; // Assume HD width
-          const videoHeight = 1080; // Assume HD height
-
-          const widthPercent = (img.width / videoWidth) * 100;
-          const heightPercent = (img.height / videoHeight) * 100;
-
-          setOverlaySize({
-            width: Math.min(widthPercent, 100),
-            height: Math.min(heightPercent, 100),
-          });
+          setOverlaySizeFromPixels(img.width, img.height);
         };
         img.src = url;
       }
     },
-    []
+    [setOverlaySizeFromPixels]
   );
 
   const handleRemoveImage = useCallback(() => {
@@ -679,23 +716,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             width: canvas.width,
             height: canvas.height,
           });
-
-          // Set overlay size to show image at its actual pixel dimensions
-          // Assuming HD video (1920x1080), calculate percentage to show actual size
-          const videoWidth = 1920; // Assume HD width
-          const videoHeight = 1080; // Assume HD height
-
-          const widthPercent = (canvas.width / videoWidth) * 100;
-          const heightPercent = (canvas.height / videoHeight) * 100;
-
-          setOverlaySize({
-            width: Math.min(widthPercent, 100),
-            height: Math.min(heightPercent, 100),
-          });
+          setOverlaySizeFromPixels(canvas.width, canvas.height);
         }
       }, 'image/png');
     }
-  }, []);
+  }, [setOverlaySizeFromPixels]);
 
   const handleCopyOverlayImageToClipboard = useCallback(async () => {
     if (!overlayImage) return;
@@ -756,15 +781,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         const img = new Image();
         img.onload = () => {
           setActualImageDimensions({ width: img.width, height: img.height });
-
-          const videoWidth = 1920;
-          const videoHeight = 1080;
-          const widthPercent = (img.width / videoWidth) * 100;
-          const heightPercent = (img.height / videoHeight) * 100;
-          setOverlaySize({
-            width: Math.min(widthPercent, 100),
-            height: Math.min(heightPercent, 100),
-          });
+          setOverlaySizeFromPixels(img.width, img.height);
         };
         img.src = url;
       };
@@ -921,14 +938,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       // Auto-reset overlay size to cropped image natural size
       setOverlayPosition({ x: 50, y: 50 });
-      const videoWidth = 1920; // Assume HD width
-      const videoHeight = 1080; // Assume HD height
-      const widthPercent = (w / videoWidth) * 100;
-      const heightPercent = (h / videoHeight) * 100;
-      setOverlaySize({
-        width: Math.min(widthPercent, 100),
-        height: Math.min(heightPercent, 100),
-      });
+      setOverlaySizeFromPixels(w, h);
 
       setIsCropping(false);
       console.log('Crop applied successfully');
@@ -2022,20 +2032,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
                 onCenterResetNatural={() => {
                   setOverlayPosition({ x: 50, y: 50 });
-                  if (actualImageDimensions) {
-                    const videoWidth = 1920;
-                    const videoHeight = 1080;
-                    const widthPercent =
-                      (actualImageDimensions.width / videoWidth) * 100;
-                    const heightPercent =
-                      (actualImageDimensions.height / videoHeight) * 100;
-                    setOverlaySize({
-                      width: Math.min(widthPercent, 100),
-                      height: Math.min(heightPercent, 100),
-                    });
-                  } else {
+                  void (async () => {
+                    const dims =
+                      actualImageDimensions ??
+                      (await ensureOverlayImageDimensions());
+                    if (dims) {
+                      setOverlaySizeFromPixels(dims.width, dims.height);
+                      return;
+                    }
                     setOverlaySize({ width: 25, height: 25 });
-                  }
+                  })();
                 }}
                 onCenterMaximize={() => {
                   setOverlayPosition({ x: 50, y: 50 });
