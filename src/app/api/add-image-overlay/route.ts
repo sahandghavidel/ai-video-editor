@@ -115,65 +115,9 @@ export async function POST(request: NextRequest) {
     const rightPct = Math.max(0, Math.min(100, tintPosX + tintW / 2));
     const bottomPct = Math.max(0, Math.min(100, tintPosY + tintH / 2));
 
-    const enableExpr = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
-    const drawbox = (x: string, y: string, w: string, h: string) =>
-      `drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${tintColorNormalized}@${tintOpacity}:t=fill:${enableExpr}`;
-
-    const tintFilter = tintColorNormalized
-      ? (() => {
-          if (!tintInvert) {
-            const wPct = Math.max(0, rightPct - leftPct);
-            const hPct = Math.max(0, bottomPct - topPct);
-            return drawbox(
-              `iw*${leftPct / 100}`,
-              `ih*${topPct / 100}`,
-              `iw*${wPct / 100}`,
-              `ih*${hPct / 100}`
-            );
-          }
-
-          const filters: string[] = [];
-
-          if (topPct > 0) {
-            filters.push(drawbox('0', '0', 'iw', `ih*${topPct / 100}`));
-          }
-
-          if (bottomPct < 100) {
-            filters.push(
-              drawbox(
-                '0',
-                `ih*${bottomPct / 100}`,
-                'iw',
-                `ih*${(100 - bottomPct) / 100}`
-              )
-            );
-          }
-
-          if (leftPct > 0 && bottomPct > topPct) {
-            filters.push(
-              drawbox(
-                '0',
-                `ih*${topPct / 100}`,
-                `iw*${leftPct / 100}`,
-                `ih*${(bottomPct - topPct) / 100}`
-              )
-            );
-          }
-
-          if (rightPct < 100 && bottomPct > topPct) {
-            filters.push(
-              drawbox(
-                `iw*${rightPct / 100}`,
-                `ih*${topPct / 100}`,
-                `iw*${(100 - rightPct) / 100}`,
-                `ih*${(bottomPct - topPct) / 100}`
-              )
-            );
-          }
-
-          return filters.join(',');
-        })()
-      : null;
+    // Build tintFilter after probing video size so we can pixel-align boxes.
+    // (Fractional iw*... math can leave 1px seams in invert mode.)
+    let tintFilter: string | null = null;
 
     // Create temporary directory
     tempDir = path.join(os.tmpdir(), `overlay-${Date.now()}`);
@@ -204,6 +148,65 @@ export async function POST(request: NextRequest) {
     }
     const videoWidth = videoStream.width;
     const videoHeight = videoStream.height;
+
+    if (tintColorNormalized) {
+      const enableExpr = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      const drawboxPx = (x: number, y: number, w: number, h: number) => {
+        // Ensure FFmpeg always gets valid ints and non-negative sizes.
+        const xi = Math.max(0, Math.floor(x));
+        const yi = Math.max(0, Math.floor(y));
+        const wi = Math.max(0, Math.floor(w));
+        const hi = Math.max(0, Math.floor(h));
+        return `drawbox=x=${xi}:y=${yi}:w=${wi}:h=${hi}:color=${tintColorNormalized}@${tintOpacity}:t=fill:${enableExpr}`;
+      };
+
+      // Convert % rect to pixel-aligned edges. Use floor for start and ceil for end
+      // so adjacent strips meet cleanly with no gaps.
+      const x0 = Math.max(
+        0,
+        Math.min(videoWidth, Math.floor((leftPct / 100) * videoWidth))
+      );
+      const y0 = Math.max(
+        0,
+        Math.min(videoHeight, Math.floor((topPct / 100) * videoHeight))
+      );
+      const x1 = Math.max(
+        0,
+        Math.min(videoWidth, Math.ceil((rightPct / 100) * videoWidth))
+      );
+      const y1 = Math.max(
+        0,
+        Math.min(videoHeight, Math.ceil((bottomPct / 100) * videoHeight))
+      );
+
+      const rectW = Math.max(0, x1 - x0);
+      const rectH = Math.max(0, y1 - y0);
+
+      if (!tintInvert) {
+        tintFilter = drawboxPx(x0, y0, rectW, rectH);
+      } else {
+        const filters: string[] = [];
+
+        // Top strip
+        if (y0 > 0) {
+          filters.push(drawboxPx(0, 0, videoWidth, y0));
+        }
+        // Bottom strip
+        if (y1 < videoHeight) {
+          filters.push(drawboxPx(0, y1, videoWidth, videoHeight - y1));
+        }
+        // Left strip between y0..y1
+        if (x0 > 0 && rectH > 0) {
+          filters.push(drawboxPx(0, y0, x0, rectH));
+        }
+        // Right strip between y0..y1
+        if (x1 < videoWidth && rectH > 0) {
+          filters.push(drawboxPx(x1, y0, videoWidth - x1, rectH));
+        }
+
+        tintFilter = filters.join(',');
+      }
+    }
 
     // Calculate overlay dimensions in pixels
     const overlayWidth = Math.round((sizeWidth / 100) * videoWidth);
