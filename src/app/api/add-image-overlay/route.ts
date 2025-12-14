@@ -185,6 +185,17 @@ export async function POST(request: NextRequest) {
         ? 'stereo'
         : 'stereo';
 
+    // When mixing (amix), audio must be re-encoded; using the source bitrate can
+    // cause noticeable generational loss after multiple renders, especially if
+    // the source bitrate is low. Keep a reasonable floor while staying close to
+    // the original for merge compatibility.
+    const minMixedAudioBitrate = originalAudioChannels === 1 ? 96000 : 192000;
+    const maxMixedAudioBitrate = 512000;
+    const mixedAudioBitrate = Math.min(
+      maxMixedAudioBitrate,
+      Math.max(originalAudioBitrate, minMixedAudioBitrate)
+    );
+
     // Resolve optional overlay sound from /public/sounds
     let overlaySoundPath: string | null = null;
     if (overlaySoundRaw) {
@@ -320,7 +331,7 @@ export async function POST(request: NextRequest) {
         ffmpegCommand = `ffmpeg -i "${videoPath}" ${streamLoop} -i "${imagePath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
           ';'
         )}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-          originalAudioBitrate / 1000
+          mixedAudioBitrate / 1000
         )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero -shortest ${durationLimit} "${outputPath}"`;
       } else {
         if (tintFilter) {
@@ -339,23 +350,26 @@ export async function POST(request: NextRequest) {
         )
       );
 
+      const escapeFilterValue = (value: string) =>
+        value
+          .replace(/\\/g, '\\\\')
+          .replace(/:/g, '\\:')
+          .replace(/,/g, '\\,')
+          .replace(/\[/g, '\\[')
+          .replace(/\]/g, '\\]')
+          .replace(/'/g, "\\'")
+          .replace(/ /g, '\\ ');
+
       // Position text to center it at the specified percentage.
       // Use FFmpeg's measured text width/height (text_w/text_h) instead of
       // approximating based on string length, which drifts for spaces/punctuation.
       const xPos = `w*${positionX / 100}-text_w/2`;
       const yPos = `h*${positionY / 100}-text_h/2`;
 
-      // Escape text properly for FFmpeg - handle special characters that can break FFmpeg
-      const escapedText = overlayText
-        .replace(/\\/g, '\\\\') // Escape backslashes first
-        .replace(/'/g, "\\'") // Escape single quotes
-        .replace(/:/g, '\\:') // Escape colons
-        .replace(/\[/g, '\\[') // Escape square brackets
-        .replace(/\]/g, '\\]') // Escape square brackets
-        .replace(/,/g, '\\,') // Escape commas
-        .replace(/;/g, '\\;') // Escape semicolons
-        .replace(/\(/g, '\\(') // Escape parentheses
-        .replace(/\)/g, '\\)'); // Escape parentheses
+      // Avoid filtergraph quoting issues (e.g. apostrophes in text) by using a text file.
+      const textFilePath = path.join(tempDir, 'overlay-text.txt');
+      await fs.promises.writeFile(textFilePath, overlayText, 'utf8');
+      const textFileArg = escapeFilterValue(textFilePath);
 
       // Use custom styling if provided, otherwise use defaults
       const fontColor = textStyling?.fontColor ?? 'white';
@@ -445,12 +459,13 @@ export async function POST(request: NextRequest) {
         )}`;
       }
 
-      const drawText = `drawtext=text='${escapedText}':borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFile}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      const fontFileArg = escapeFilterValue(fontFile);
+      const drawText = `drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:x=${xPos}:y=${yPos}${boxParams}:enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
       const vf = tintFilter ? `${tintFilter},${drawText}` : drawText;
       if (overlaySoundPath) {
         const audio = buildAudioFilter(1);
         ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${vf}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-          originalAudioBitrate / 1000
+          mixedAudioBitrate / 1000
         )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
       } else {
         ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${vf}" -c:a copy ${durationLimit} "${outputPath}"`;
@@ -460,7 +475,7 @@ export async function POST(request: NextRequest) {
       if (overlaySoundPath) {
         const audio = buildAudioFilter(1);
         ffmpegCommand = `ffmpeg -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${tintFilter}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-          originalAudioBitrate / 1000
+          mixedAudioBitrate / 1000
         )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
       } else {
         ffmpegCommand = `ffmpeg -i "${videoPath}" -vf "${tintFilter}" -c:a copy ${durationLimit} "${outputPath}"`;
