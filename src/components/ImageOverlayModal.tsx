@@ -2518,10 +2518,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
             <div className='mt-2 grid grid-cols-2 gap-2'>
               <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
-                <button
-                  type='button'
+                <div
+                  role='button'
+                  tabIndex={0}
                   onClick={() => setIsSoundSectionOpen((s) => !s)}
-                  className='w-full flex items-center justify-between gap-2 text-sm text-gray-700'
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsSoundSectionOpen((s) => !s);
+                    }
+                  }}
+                  className='w-full flex items-center justify-between gap-2 text-sm text-gray-700 cursor-pointer select-none'
                   aria-expanded={isSoundSectionOpen}
                 >
                   <div className='flex items-center gap-2 min-w-0'>
@@ -2554,7 +2561,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       <ChevronRight className='h-4 w-4' />
                     )}
                   </div>
-                </button>
+                </div>
 
                 {isSoundSectionOpen && (
                   <div className='mt-2 flex flex-wrap gap-2'>
@@ -2584,10 +2591,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               </div>
 
               <div className='bg-gray-50 p-2 rounded-lg border border-gray-200'>
-                <button
-                  type='button'
+                <div
+                  role='button'
+                  tabIndex={0}
                   onClick={() => setIsAnimationSectionOpen((s) => !s)}
-                  className='w-full flex items-center justify-between gap-2 text-sm text-gray-700'
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsAnimationSectionOpen((s) => !s);
+                    }
+                  }}
+                  className='w-full flex items-center justify-between gap-2 text-sm text-gray-700 cursor-pointer select-none'
                   aria-expanded={isAnimationSectionOpen}
                 >
                   <div className='flex items-center gap-2 min-w-0'>
@@ -2620,7 +2634,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       <ChevronRight className='h-4 w-4' />
                     )}
                   </div>
-                </button>
+                </div>
 
                 {isAnimationSectionOpen && (
                   <div className='mt-2 grid grid-cols-3 gap-2'>

@@ -649,8 +649,17 @@ export async function POST(request: NextRequest) {
       const baseVideo = tintFilter ? `[0:v]${tintFilter}[base]` : null;
       const baseRef = tintFilter ? `[base]` : `[0:v]`;
 
-      // Keep output duration equal to the base video duration (not endTime).
-      const textLayerDuration = Math.max(0.1, videoDuration);
+      // Keep output duration equal to the base video duration, but ensure the
+      // generated text layer lasts long enough to cover the requested endTime.
+      // Otherwise, if the browser-derived duration/endTime is slightly larger
+      // than ffprobe's `format.duration`, the overlay input can hit EOF early
+      // and the text disappears before the last frames.
+      const oneFrame = 1 / Math.max(1, videoFps);
+      const textLayerDuration = Math.max(
+        0.1,
+        videoDuration,
+        endTime + oneFrame
+      );
       let textChain = `color=c=black@0.0:s=${canvasW}x${canvasH}:r=${videoFps}:d=${textLayerDuration}[txtbg];`;
       textChain += `[txtbg]drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:x=(w-text_w)/2:y=(h-text_h)/2${boxParams}[txt0];`;
 
