@@ -438,6 +438,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const handlePasteOverlayImageFromClipboard = useCallback(async () => {
     try {
       const clipboard = navigator.clipboard;
+      if (!clipboard) {
+        alert('Clipboard is not available in this browser.');
+        return;
+      }
+
+      // Some browsers can lose “user activation” after awaiting other clipboard
+      // operations; start readText() immediately so it stays tied to the click.
+      const textPromise: Promise<string | null> = clipboard.readText
+        ? clipboard.readText().catch(() => null)
+        : Promise.resolve(null);
       const setOverlayFromFile = (file: File) => {
         setOverlayImage(file);
         const url = URL.createObjectURL(file);
@@ -540,15 +550,30 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
 
       // 3) Fall back to text (URL) paste
-      if (!clipboard?.readText) {
-        alert('Clipboard paste is not supported in this browser.');
-        return;
-      }
-
-      const text = await clipboard.readText();
-      const maybeUrl = extractFirstUrl(text);
+      const text = await textPromise;
+      const maybeUrl = text ? extractFirstUrl(text) : null;
       if (!maybeUrl) {
-        alert('Clipboard does not contain an image or image URL.');
+        const manual = prompt(
+          'Clipboard access was blocked or did not contain an image.\nPaste an image URL instead:'
+        );
+        const manualUrl = manual ? extractFirstUrl(manual) : null;
+        if (!manualUrl) {
+          alert('No image URL provided.');
+          return;
+        }
+
+        if (manualUrl.startsWith('data:image/')) {
+          const blob = await (await fetch(manualUrl)).blob();
+          const type = blob.type || 'image/png';
+          const ext = type.split('/')[1] || 'png';
+          setOverlayFromFile(
+            new File([blob], `pasted-data-image.${ext}`, { type })
+          );
+          return;
+        }
+
+        const file = await fetchImageAsFile(manualUrl);
+        setOverlayFromFile(file);
         return;
       }
 

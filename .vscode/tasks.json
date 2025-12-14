@@ -8,6 +8,21 @@
 			"isBackground": true,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Lint overlay paste + fetch-image",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint",
+				"--",
+				"src/components/ImageOverlayModal.tsx",
+				"src/app/api/fetch-image/route.ts"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }
