@@ -295,6 +295,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [cropperModalKey, setCropperModalKey] = useState(0);
   const [cropBorderRadius, setCropBorderRadius] = useState(0);
 
+  const isGifOverlay = overlayImage?.type === 'image/gif';
+
+  // Border radius isn't reliably supported for GIF output; keep it disabled.
+  useEffect(() => {
+    if (isGifOverlay) {
+      setCropBorderRadius(0);
+    }
+  }, [isGifOverlay]);
+
   // Actual image dimensions in pixels
   const [actualImageDimensions, setActualImageDimensions] = useState<{
     width: number;
@@ -696,9 +705,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       form.append('top', String(Math.max(0, top)));
       form.append('width', String(Math.max(1, width)));
       form.append('height', String(Math.max(1, height)));
-      if (cropBorderRadius > 0) {
-        form.append('radius', String(cropBorderRadius));
-      }
 
       const res = await fetch('/api/crop-gif', { method: 'POST', body: form });
       if (!res.ok) {
@@ -2022,7 +2028,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <button
                   type='button'
                   onClick={() => cropperRef.current?.rotateImage(-90)}
-                  disabled={overlayImage?.type === 'image/gif'}
+                  disabled={isGifOverlay}
                   className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                 >
                   Rotate Left
@@ -2030,7 +2036,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <button
                   type='button'
                   onClick={() => cropperRef.current?.rotateImage(90)}
-                  disabled={overlayImage?.type === 'image/gif'}
+                  disabled={isGifOverlay}
                   className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                 >
                   Rotate Right
@@ -2038,7 +2044,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <button
                   type='button'
                   onClick={() => cropperRef.current?.flipImage(true, false)}
-                  disabled={overlayImage?.type === 'image/gif'}
+                  disabled={isGifOverlay}
                   className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                 >
                   Flip Horizontal
@@ -2046,7 +2052,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <button
                   type='button'
                   onClick={() => cropperRef.current?.flipImage(false, true)}
-                  disabled={overlayImage?.type === 'image/gif'}
+                  disabled={isGifOverlay}
                   className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                 >
                   Flip Vertical
@@ -2062,7 +2068,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     onChange={(e) =>
                       setCropBorderRadius(Number(e.target.value))
                     }
-                    className='flex-1'
+                    disabled={isGifOverlay}
+                    className='flex-1 disabled:opacity-50 disabled:cursor-not-allowed'
                   />
                   <span className='text-sm text-gray-700 w-12 text-right'>
                     {cropBorderRadius}%
