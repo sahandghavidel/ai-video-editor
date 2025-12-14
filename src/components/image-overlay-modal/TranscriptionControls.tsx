@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { List, Loader2, Plus, RotateCcw, Upload, X } from 'lucide-react';
+import { Image, List, Loader2, Plus, RotateCcw, Upload, X } from 'lucide-react';
 import type { TranscriptionWord } from './types';
 
 type Props = {
@@ -41,6 +41,15 @@ export function TranscriptionControls({
   isInsertFullDisabled,
 }: Props) {
   const hasWords = !!transcriptionWords && transcriptionWords.length > 0;
+
+  const openGoogleImages = () => {
+    const q = customText.trim();
+    if (!q) return;
+    const url = `https://www.google.com/search?udm=2&q=${encodeURIComponent(
+      q
+    )}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   if (!hasWords) {
     if (!canTranscribe) return null;
@@ -98,6 +107,17 @@ export function TranscriptionControls({
           placeholder='Enter custom text for overlay...'
           className='w-2/3 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
         />
+        <button
+          type='button'
+          onClick={openGoogleImages}
+          disabled={!customText.trim()}
+          className='p-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+          aria-label='Search Google Images for input text'
+          title='Search Google Images'
+        >
+          <Image className='h-4 w-4' />
+        </button>
+
         <button
           onClick={onAddText}
           disabled={!customText.trim()}
