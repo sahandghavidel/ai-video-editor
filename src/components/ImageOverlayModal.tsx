@@ -2102,11 +2102,26 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       if (event.code === 'Escape') {
         stopAll();
+        // 1) Exit preview if open
         if (previewUrl) {
           setPreviewUrl(null);
-        } else {
-          handleClose();
+          return;
         }
+
+        // 2) Clear overlays on canvas first (image/text)
+        if (overlayImageUrl || selectedWordText) {
+          if (overlayImageUrl) {
+            handleRemoveImage();
+          }
+          if (selectedWordText) {
+            setSelectedWordText(null);
+            setCustomText('');
+          }
+          return;
+        }
+
+        // 3) Nothing to clear -> close modal
+        handleClose();
         return;
       }
 
@@ -2169,7 +2184,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         capture: true,
       });
     };
-  }, [previewUrl, handleClose]);
+  }, [
+    previewUrl,
+    handleClose,
+    overlayImageUrl,
+    selectedWordText,
+    handleRemoveImage,
+  ]);
 
   // Update container dimensions
   useEffect(() => {
