@@ -659,6 +659,42 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null!);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
 
+  const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0);
+  const [previewCurrentTimeSeconds, setPreviewCurrentTimeSeconds] = useState(0);
+  const [isPreviewPaused, setIsPreviewPaused] = useState(true);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    const video = previewVideoRef.current;
+    if (!video) return;
+
+    const updateTime = () =>
+      setPreviewCurrentTimeSeconds(video.currentTime || 0);
+    const updateDuration = () =>
+      setPreviewDurationSeconds(
+        Number.isFinite(video.duration) ? Math.max(0, video.duration) : 0
+      );
+    const updatePaused = () => setIsPreviewPaused(video.paused);
+
+    updateDuration();
+    updateTime();
+    updatePaused();
+
+    video.addEventListener('timeupdate', updateTime);
+    video.addEventListener('durationchange', updateDuration);
+    video.addEventListener('loadedmetadata', updateDuration);
+    video.addEventListener('play', updatePaused);
+    video.addEventListener('pause', updatePaused);
+
+    return () => {
+      video.removeEventListener('timeupdate', updateTime);
+      video.removeEventListener('durationchange', updateDuration);
+      video.removeEventListener('loadedmetadata', updateDuration);
+      video.removeEventListener('play', updatePaused);
+      video.removeEventListener('pause', updatePaused);
+    };
+  }, [previewUrl]);
+
   useEffect(() => {
     if (!isOpen) return;
     const video = videoRef.current;
@@ -3441,18 +3477,102 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             >
               ✕
             </button>
-            <video
-              src={previewUrl as string}
-              controls
-              autoPlay
-              crossOrigin='anonymous'
-              className='w-full h-full rounded-lg'
-              onClick={(e) => e.stopPropagation()}
-              ref={previewVideoRef}
-              onCanPlay={() => setIsPreviewLoading(false)}
-              onLoadedData={() => setIsPreviewLoading(false)}
-              onError={() => setIsPreviewLoading(false)}
-            />
+            <div className='w-full' onClick={(e) => e.stopPropagation()}>
+              <div className='relative w-full rounded-lg overflow-hidden'>
+                <video
+                  src={previewUrl as string}
+                  autoPlay
+                  playsInline
+                  disablePictureInPicture
+                  crossOrigin='anonymous'
+                  className='w-full h-full'
+                  ref={previewVideoRef}
+                  onCanPlay={() => setIsPreviewLoading(false)}
+                  onLoadedData={() => setIsPreviewLoading(false)}
+                  onError={() => setIsPreviewLoading(false)}
+                />
+
+                {/* Interaction layer: prevents native video double-click fullscreen and
+                    turns double-click into Apply Overlay. */}
+                <div
+                  className='absolute inset-0'
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDoubleClickCapture={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (!isApplying) {
+                      void handleApply();
+                    }
+
+                    // Close preview immediately (and revoke blob URLs) to avoid the
+                    // perception that nothing happened.
+                    setPreviewUrl((prev) => {
+                      if (prev && prev.startsWith('blob:')) {
+                        try {
+                          URL.revokeObjectURL(prev);
+                        } catch {
+                          // ignore
+                        }
+                      }
+                      return null;
+                    });
+                    setIsPreviewLoading(false);
+                  }}
+                />
+              </div>
+
+              {/* Minimal player controls under the video */}
+              <div className='mt-3 flex items-center gap-3 text-white select-none'>
+                <button
+                  type='button'
+                  className='px-3 py-1 rounded bg-white/10 hover:bg-white/20'
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const v = previewVideoRef.current;
+                    if (!v) return;
+                    if (v.paused) {
+                      v.play().catch(() => {
+                        // ignore
+                      });
+                    } else {
+                      v.pause();
+                    }
+                  }}
+                >
+                  {isPreviewPaused ? 'Play' : 'Pause'}
+                </button>
+
+                <input
+                  type='range'
+                  min={0}
+                  max={Math.max(0, previewDurationSeconds)}
+                  step={0.01}
+                  value={Math.min(
+                    previewCurrentTimeSeconds,
+                    previewDurationSeconds || 0
+                  )}
+                  className='flex-1'
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    const v = previewVideoRef.current;
+                    if (!v) return;
+                    const next = Number(e.currentTarget.value);
+                    if (Number.isFinite(next)) v.currentTime = next;
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+
+                <div className='tabular-nums text-sm text-white/90 w-28 text-right'>
+                  {previewCurrentTimeSeconds.toFixed(1)}s /{' '}
+                  {previewDurationSeconds.toFixed(1)}s
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
