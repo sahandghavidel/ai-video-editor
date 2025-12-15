@@ -2779,6 +2779,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   videoRef.current.currentTime = wordData.start;
                 }
               }}
+              onWordRightClick={(wordData) => {
+                const t = Number.isFinite(wordData.end)
+                  ? Math.max(0, wordData.end)
+                  : 0;
+                setEndTime(t);
+              }}
               onCustomTextChange={setCustomText}
               onCustomTextEnter={() => {
                 if (customText.trim()) {
