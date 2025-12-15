@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+
 // Helper function to get JWT token for Baserow API
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;

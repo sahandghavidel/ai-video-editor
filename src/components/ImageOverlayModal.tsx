@@ -654,6 +654,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   // Store the original video URL when the modal opens
   const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(null);
+  const [previousVideoUrl, setPreviousVideoUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null!);
@@ -1962,6 +1963,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const handleApply = useCallback(async () => {
     if (!overlayImage && !selectedWordText && !videoTintColor) return;
 
+    const undoKey = sceneId ? `scene-undo-video-url:${sceneId}` : null;
+    const urlBeforeApply = originalVideoUrl;
+
     try {
       console.log(
         'handleApply: sending textStyling',
@@ -2000,12 +2004,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           typeof sceneData?.field_6886 === 'string'
             ? sceneData.field_6886
             : undefined;
-        if (newUrl && newUrl !== originalVideoUrl) break;
+        if (newUrl && newUrl !== urlBeforeApply) break;
         await new Promise((res) => setTimeout(res, 500));
         attempts++;
       }
 
       if (newUrl) {
+        // Save previous URL for undo (best-effort, client-side persistence).
+        if (urlBeforeApply && urlBeforeApply !== newUrl) {
+          setPreviousVideoUrl(urlBeforeApply);
+          if (undoKey && typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(undoKey, urlBeforeApply);
+            } catch {
+              // ignore
+            }
+          }
+        }
+
         setOriginalVideoUrl(newUrl);
         // Notify parent so subsequent applies use the new video URL
         if (onUpdateModalVideoUrl) {
@@ -2089,7 +2105,64 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     onApply,
     onUpdateModalVideoUrl,
     originalVideoUrl,
+    videoUrl,
   ]);
+
+  const handleReturnToPreviousUrl = useCallback(async () => {
+    if (!sceneId) return;
+    if (!previousVideoUrl) return;
+    if (isApplying) return;
+
+    const undoKey = `scene-undo-video-url:${sceneId}`;
+
+    try {
+      const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ field_6886: previousVideoUrl }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        alert(`Failed to return video URL (${res.status}) ${t}`);
+        return;
+      }
+
+      const updated = (await res.json().catch(() => null)) as {
+        field_6886?: unknown;
+      } | null;
+      const updatedUrl =
+        updated && typeof updated.field_6886 === 'string'
+          ? updated.field_6886
+          : null;
+      if (updatedUrl && updatedUrl !== previousVideoUrl) {
+        alert(
+          'Undo request succeeded, but Baserow returned a different URL than expected.'
+        );
+      }
+
+      setOriginalVideoUrl(previousVideoUrl);
+      onUpdateModalVideoUrl?.(previousVideoUrl);
+
+      // Clear undo state after returning.
+      setPreviousVideoUrl(null);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem(undoKey);
+        } catch {
+          // ignore
+        }
+      }
+
+      // Refresh transcription/modal data for the restored scene.
+      setRefetchTrigger((prev) => prev + 1);
+    } catch (err) {
+      console.error('Failed to return to previous video URL:', err);
+      alert('Failed to return to previous video URL');
+    }
+  }, [sceneId, previousVideoUrl, isApplying, onUpdateModalVideoUrl]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -2131,6 +2204,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Set the original video URL when we have a valid video URL
       if (videoUrl && videoUrl.trim() !== '') {
         setOriginalVideoUrl(videoUrl);
+
+        // Load previous URL for undo if present.
+        if (typeof window !== 'undefined') {
+          try {
+            const undoKey = `scene-undo-video-url:${sceneId}`;
+            const saved = localStorage.getItem(undoKey);
+            setPreviousVideoUrl(saved && saved.trim() ? saved : null);
+          } catch {
+            setPreviousVideoUrl(null);
+          }
+        }
 
         // Best-effort: warm the server-side cache so previews don't repeatedly
         // download/stream from MinIO across requests.
@@ -3118,6 +3202,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               <Loader2 className='animate-spin h-4 w-4' />
             ) : null}
             <span>{isPreviewLoading ? 'Loading...' : 'Preview'}</span>
+          </button>
+          <button
+            onClick={handleReturnToPreviousUrl}
+            disabled={!previousVideoUrl || isApplying}
+            className='flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            title={
+              previousVideoUrl
+                ? 'Return to previous video URL'
+                : 'No previous URL saved yet'
+            }
+          >
+            <span>Return</span>
           </button>
           <button
             onClick={handleApply}
