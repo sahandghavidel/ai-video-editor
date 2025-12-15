@@ -875,6 +875,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [overlayImage]);
 
+  const openCropModal = useCallback(() => {
+    if (!overlayImageUrl) return;
+    setCropBorderRadius(0);
+    setCropEditorMode('crop');
+    setCropShape('rectangle');
+    setCropRotationDegrees(0);
+    setCropAdjustments({
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      hue: 0,
+    });
+    setCropperModalKey((k) => k + 1);
+    setIsCropping(true);
+  }, [overlayImageUrl]);
+
   const handlePasteOverlayImageFromClipboard = useCallback(async () => {
     try {
       const clipboard = navigator.clipboard;
@@ -2452,6 +2468,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
                 onPointerDown={handleMouseDown}
                 onWheel={handleOverlayWheelZoom}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openCropModal();
+                }}
               >
                 <img
                   src={overlayImageUrl}
@@ -2568,20 +2589,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 overlaySize={overlaySize}
                 setOverlaySize={setOverlaySize}
                 actualImageDimensions={actualImageDimensions}
-                onCrop={() => {
-                  setCropBorderRadius(0);
-                  setCropEditorMode('crop');
-                  setCropShape('rectangle');
-                  setCropRotationDegrees(0);
-                  setCropAdjustments({
-                    brightness: 0,
-                    contrast: 0,
-                    saturation: 0,
-                    hue: 0,
-                  });
-                  setCropperModalKey((k) => k + 1);
-                  setIsCropping(true);
-                }}
+                onCrop={openCropModal}
                 onCenterResetNatural={() => {
                   setOverlayPosition({ x: 50, y: 50 });
                   void (async () => {
