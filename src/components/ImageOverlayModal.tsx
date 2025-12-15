@@ -2305,17 +2305,28 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const stopAll = () => {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      };
+    let tabKeyDown = false;
+    let tabHoldTriggered = false;
+    let tabHoldTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const stopAll = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+
+    const clearTabHoldTimer = () => {
+      if (tabHoldTimer) {
+        clearTimeout(tabHoldTimer);
+        tabHoldTimer = null;
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Tab') {
         // When the preview overlay is open, Tab should close it.
         if (previewUrl) {
-          stopAll();
+          stopAll(event);
           setPreviewUrl(null);
           setIsPreviewLoading(false);
           return;
@@ -2323,7 +2334,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
         // Otherwise, in the main modal, Tab triggers Preview.
         if (!isCropping) {
-          stopAll();
+          stopAll(event);
           const isPreviewDisabled =
             !(overlayImage || selectedWordText || videoTintColor) ||
             isApplying ||
@@ -2332,11 +2343,27 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           if (!isPreviewDisabled) {
             void handlePreview();
           } else {
-            const video = videoRef.current;
-            if (video) {
-              video.play().catch(() => {
-                // Ignore autoplay/gesture errors; user explicitly pressed a key.
-              });
+            // Preview is disabled: Tab controls the main player.
+            // - Tap Tab: toggle play/pause (handled on keyup)
+            // - Hold Tab: restart from the beginning and play
+            if (!tabKeyDown) {
+              tabKeyDown = true;
+              tabHoldTriggered = false;
+              clearTabHoldTimer();
+              tabHoldTimer = setTimeout(() => {
+                tabHoldTriggered = true;
+                const video = videoRef.current;
+                if (video) {
+                  try {
+                    video.currentTime = 0;
+                  } catch {
+                    // Ignore seek errors
+                  }
+                  video.play().catch(() => {
+                    // Ignore autoplay/gesture errors; user explicitly pressed a key.
+                  });
+                }
+              }, 300);
             }
           }
           return;
@@ -2344,7 +2371,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
 
       if (event.code === 'Escape') {
-        stopAll();
+        stopAll(event);
         // If the crop popup is open, Esc should only close that.
         if (isCropping) {
           setIsCropping(false);
@@ -2392,7 +2419,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           return;
         }
 
-        stopAll();
+        stopAll(event);
         const video = previewUrl ? previewVideoRef.current : videoRef.current;
         if (video) {
           video.currentTime = 0;
@@ -2416,7 +2443,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           return; // allow normal typing behavior
         }
 
-        stopAll();
+        stopAll(event);
         const video = previewUrl ? previewVideoRef.current : videoRef.current;
         if (video) {
           if (video.paused) {
@@ -2428,9 +2455,56 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
     };
 
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Tab') return;
+      if (!tabKeyDown) return;
+
+      stopAll(event);
+
+      tabKeyDown = false;
+      clearTabHoldTimer();
+
+      // If the hold action already fired, do nothing on keyup.
+      if (tabHoldTriggered) {
+        tabHoldTriggered = false;
+        return;
+      }
+
+      tabHoldTriggered = false;
+
+      // Tap-to-toggle only applies when Preview is disabled.
+      if (previewUrl) return;
+      if (isCropping) return;
+
+      const isPreviewDisabled =
+        !(overlayImage || selectedWordText || videoTintColor) ||
+        isApplying ||
+        isPreviewLoading;
+
+      if (!isPreviewDisabled) return;
+
+      const video = videoRef.current;
+      if (video) {
+        if (video.paused) {
+          video.play().catch(() => {
+            // Ignore autoplay/gesture errors; user explicitly pressed a key.
+          });
+        } else {
+          video.pause();
+        }
+      }
+    };
+
     document.addEventListener('keydown', handleKeyDown, { capture: true });
+    document.addEventListener('keyup', handleKeyUp, { capture: true });
     return () => {
+      clearTabHoldTimer();
+      tabKeyDown = false;
+      tabHoldTriggered = false;
       document.removeEventListener('keydown', handleKeyDown, {
+        capture: true,
+      });
+      document.removeEventListener('keyup', handleKeyUp, {
         capture: true,
       });
     };
