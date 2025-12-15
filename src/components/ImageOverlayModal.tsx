@@ -721,6 +721,39 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     [getVideoNaturalDimensions, setOverlaySize]
   );
 
+  const handleOverlayWheelZoom = useCallback(
+    (e: React.WheelEvent) => {
+      // Ignore browser pinch-zoom (trackpad pinch typically sets ctrlKey=true on macOS).
+      if (e.ctrlKey) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      setOverlaySize((prev) => ({
+        width: Math.min(100, Math.max(5, prev.width * factor)),
+        height: Math.min(100, Math.max(5, prev.height * factor)),
+      }));
+    },
+    [setOverlaySize]
+  );
+
+  const handleTextOverlayWheelZoom = useCallback(
+    (e: React.WheelEvent) => {
+      if (e.ctrlKey) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      setTextOverlaySize((prev) => ({
+        width: Math.min(100, Math.max(5, prev.width * factor)),
+        height: Math.min(100, Math.max(5, prev.height * factor)),
+      }));
+    },
+    [setTextOverlaySize]
+  );
+
   const ensureOverlayImageDimensions = useCallback(async () => {
     if (actualImageDimensions) return actualImageDimensions;
     if (!overlayImageUrl) return null;
@@ -2118,6 +2151,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => window.removeEventListener('resize', updateContainerRect);
   }, [getVideoContentRect]);
 
+  // Prevent scrolling the page behind the modal.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevBodyPaddingRight = body.style.paddingRight;
+
+    const scrollbarWidth = Math.max(0, window.innerWidth - html.clientWidth);
+
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      body.style.paddingRight = prevBodyPaddingRight;
+    };
+  }, [isOpen]);
+
   // Update container dimensions
   useEffect(() => {
     const updateContainerRect = () => {
@@ -2327,6 +2386,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   transform: 'translate(-50%, -50%)',
                 }}
                 onPointerDown={handleMouseDown}
+                onWheel={handleOverlayWheelZoom}
               >
                 <img
                   src={overlayImageUrl}
@@ -2384,6 +2444,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   })()}px`,
                 }}
                 onPointerDown={handleTextMouseDown}
+                onWheel={handleTextOverlayWheelZoom}
               >
                 <div
                   className='w-full h-full flex items-center justify-center font-bold select-none whitespace-nowrap'
