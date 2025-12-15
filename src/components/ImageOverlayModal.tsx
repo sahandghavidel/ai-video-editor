@@ -329,6 +329,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   handleTranscribeScene,
   onUpdateModalVideoUrl,
 }) => {
+  const previewButtonRef = useRef<HTMLButtonElement | null>(null);
   const [availableSounds, setAvailableSounds] = useState<
     { name: string; url: string }[]
   >([]);
@@ -387,6 +388,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [, setIsDragging] = useState(false);
   const [, setIsResizing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
   >(null);
@@ -1810,6 +1812,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (!originalVideoUrl) return;
     console.log('handlePreview: textStyling', textStyling);
 
+    setIsPreviewLoading(true);
+    setPreviewUrl(null);
+
     const formData = new FormData();
     formData.append('videoUrl', originalVideoUrl);
     formData.append('sceneId', sceneId.toString());
@@ -1864,9 +1869,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       if (data.success) {
         setPreviewUrl(data.url);
       } else {
+        setIsPreviewLoading(false);
         alert('Preview failed: ' + data.error);
       }
     } catch {
+      setIsPreviewLoading(false);
       alert('Error generating preview');
     }
   }, [
@@ -1960,6 +1967,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOverlayPosition({ x: 50, y: 50 });
       setOverlaySize({ width: 40, height: 40 });
       setPreviewUrl(null);
+      setIsPreviewLoading(false);
       setSelectedWordText(null);
       setCustomText('');
       setStartTime(0);
@@ -2046,6 +2054,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsSoundSectionOpen(false);
     setIsAnimationSectionOpen(false);
     setPreviewUrl(null);
+    setIsPreviewLoading(false);
     setTranscriptionWords(null);
     setSelectedWordText(null);
     setCustomText('');
@@ -2059,6 +2068,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setIsTextStylingSectionOpen(false);
       // Clear any leftover preview state when modal opens
       setPreviewUrl(null);
+      setIsPreviewLoading(false);
       // Set the original video URL when we have a valid video URL
       if (videoUrl && videoUrl.trim() !== '') {
         setOriginalVideoUrl(videoUrl);
@@ -2140,12 +2150,39 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   // Handle keyboard controls
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const stopAll = () => {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
       };
+
+      if (event.code === 'Tab') {
+        // When the preview overlay is open, Tab should close it.
+        if (previewUrl) {
+          stopAll();
+          setPreviewUrl(null);
+          setIsPreviewLoading(false);
+          return;
+        }
+
+        // Otherwise, in the main modal, Tab triggers Preview.
+        if (!isCropping) {
+          stopAll();
+          const canPreview =
+            !!(overlayImage || selectedWordText || videoTintColor) &&
+            !isApplying;
+
+          if (canPreview) {
+            void handlePreview();
+          } else {
+            previewButtonRef.current?.focus();
+          }
+          return;
+        }
+      }
 
       if (event.code === 'Escape') {
         stopAll();
@@ -2158,6 +2195,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         // 1) Exit preview if open
         if (previewUrl) {
           setPreviewUrl(null);
+          setIsPreviewLoading(false);
           return;
         }
 
@@ -2238,12 +2276,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       });
     };
   }, [
+    isOpen,
     previewUrl,
     handleClose,
     overlayImageUrl,
     selectedWordText,
     handleRemoveImage,
     isCropping,
+    overlayImage,
+    videoTintColor,
+    isApplying,
+    handlePreview,
   ]);
 
   // Update container dimensions
@@ -2895,6 +2938,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 setSelectedWordText(null);
                 setCustomText('');
                 setPreviewUrl(null);
+                setIsPreviewLoading(false);
               }}
               onInsertFull={() => {
                 if (transcriptionWords && transcriptionWords.length > 0) {
@@ -2986,13 +3030,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </button>
           <button
             onClick={handlePreview}
+            ref={previewButtonRef}
             disabled={
               !(overlayImage || selectedWordText || videoTintColor) ||
-              isApplying
+              isApplying ||
+              isPreviewLoading
             }
-            className='px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            className='flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
           >
-            Preview
+            {isPreviewLoading ? (
+              <Loader2 className='animate-spin h-4 w-4' />
+            ) : null}
+            <span>{isPreviewLoading ? 'Loading...' : 'Preview'}</span>
           </button>
           <button
             onClick={handleApply}
@@ -3318,13 +3367,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       {previewUrl && (
         <div
           className='fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]'
-          onClick={() => setPreviewUrl(null)}
+          onClick={() => {
+            setPreviewUrl(null);
+            setIsPreviewLoading(false);
+          }}
         >
           <div className='relative max-w-4xl max-h-[80vh] w-full mx-4'>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setPreviewUrl(null);
+                setIsPreviewLoading(false);
               }}
               className='absolute -top-10 right-0 text-white hover:text-gray-300 text-xl font-bold'
             >
@@ -3338,6 +3391,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               className='w-full h-full rounded-lg'
               onClick={(e) => e.stopPropagation()}
               ref={previewVideoRef}
+              onCanPlay={() => setIsPreviewLoading(false)}
+              onLoadedData={() => setIsPreviewLoading(false)}
+              onError={() => setIsPreviewLoading(false)}
             />
           </div>
         </div>
