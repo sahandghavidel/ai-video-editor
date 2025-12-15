@@ -2102,6 +2102,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       if (event.code === 'Escape') {
         stopAll();
+        // If the crop popup is open, Esc should only close that.
+        if (isCropping) {
+          setIsCropping(false);
+          return;
+        }
+
         // 1) Exit preview if open
         if (previewUrl) {
           setPreviewUrl(null);
@@ -2190,6 +2196,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayImageUrl,
     selectedWordText,
     handleRemoveImage,
+    isCropping,
   ]);
 
   // Update container dimensions
