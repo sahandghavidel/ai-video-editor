@@ -2420,7 +2420,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </div>
 
           {/* Controls */}
-          <div className='space-y-4 overflow-y-auto min-h-0'>
+          <div className='space-y-4 overflow-y-auto min-h-0 self-stretch h-full pr-1'>
             {/* Image Upload */}
             <ImageUploadRow
               fileInputRef={fileInputRef}
