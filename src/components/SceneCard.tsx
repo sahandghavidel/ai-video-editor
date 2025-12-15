@@ -249,6 +249,9 @@ export default function SceneCard({
   // Keyboard shortcuts for player speed
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // When the image overlay modal is open, don't let homepage shortcuts run.
+      if (imageOverlayModal.isOpen) return;
+
       // Only handle shortcuts when not typing in input fields
       if (
         event.target instanceof HTMLInputElement ||
@@ -333,6 +336,7 @@ export default function SceneCard({
     updateVideoSettings,
     mediaPlayer.playingVideoId,
     mediaPlayer.playingProducedVideoId,
+    imageOverlayModal.isOpen,
   ]);
 
   // Click outside handler for time adjustment and settings dropdowns

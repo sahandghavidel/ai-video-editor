@@ -2094,11 +2094,46 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   // Handle keyboard controls
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const stopAll = () => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      };
+
       if (event.code === 'Escape') {
+        stopAll();
         if (previewUrl) {
           setPreviewUrl(null);
         } else {
           handleClose();
+        }
+        return;
+      }
+
+      if (
+        event.key === '1' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        // If an input or editable element is focused, allow typing.
+        const target = event.target as Element | null;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return;
+        }
+
+        stopAll();
+        const video = previewUrl ? previewVideoRef.current : videoRef.current;
+        if (video) {
+          video.currentTime = 0;
+          video.play().catch(() => {
+            // Ignore autoplay/gesture errors; user explicitly pressed a key.
+          });
         }
         return;
       }
@@ -2116,7 +2151,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           return; // allow normal typing behavior
         }
 
-        event.preventDefault();
+        stopAll();
         const video = previewUrl ? previewVideoRef.current : videoRef.current;
         if (video) {
           if (video.paused) {
@@ -2128,9 +2163,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, {
+        capture: true,
+      });
     };
   }, [previewUrl, handleClose]);
 
