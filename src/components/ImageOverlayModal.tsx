@@ -330,6 +330,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   onUpdateModalVideoUrl,
 }) => {
   const previewButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pasteSinkRef = useRef<HTMLTextAreaElement | null>(null);
+  const forceHandleOverlayPasteRef = useRef(false);
   const [availableSounds, setAvailableSounds] = useState<
     { name: string; url: string }[]
   >([]);
@@ -340,6 +342,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     useState<OverlayAnimation>('miniZoom');
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
+  const [isPastingOverlayFromClipboard, setIsPastingOverlayFromClipboard] =
+    useState(false);
   const [overlayPosition, setOverlayPosition] = useState({ x: 50, y: 50 }); // percentage
   const [overlaySize, setOverlaySize] = useState({ width: 40, height: 40 }); // percentage
   const [startTime, setStartTime] = useState(0);
@@ -945,6 +949,180 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [overlayImage]);
 
+  const setOverlayFromFile = useCallback(
+    (file: File) => {
+      setOverlayImage(file);
+      const url = URL.createObjectURL(file);
+      setOverlayImageUrl(url);
+
+      // Clear text overlay when adding image
+      setSelectedWordText(null);
+      setCustomText('');
+
+      // Calculate overlay size similarly to upload/screenshot
+      const img = new Image();
+      img.onload = () => {
+        setActualImageDimensions({ width: img.width, height: img.height });
+        setOverlaySizeFromPixels(img.width, img.height);
+      };
+      img.src = url;
+    },
+    [setOverlaySizeFromPixels]
+  );
+
+  // Allow Cmd+V / paste to apply an overlay image without triggering the
+  // async Clipboard API (which causes Safari/iOS to show a system "Paste"
+  // confirmation bubble that requires an extra click).
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const extractFirstUrl = (text: string): string | null => {
+      const trimmed = text.trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith('data:image/')) return trimmed;
+      const m = trimmed.match(/https?:\/\/[\w\W]*?/i);
+      if (!m) return null;
+      // Tighten to the first URL-like token
+      const token = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
+      return token ? token[0] : null;
+    };
+
+    const fetchImageAsFile = async (url: string): Promise<File | null> => {
+      const res = await fetch(
+        `/api/fetch-image?url=${encodeURIComponent(url)}`
+      );
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (blob.type && !blob.type.startsWith('image/')) return null;
+      const type = blob.type || 'image/png';
+      const ext = type.split('/')[1] || 'png';
+      return new File([blob], `pasted-url-image.${ext}`, { type });
+    };
+
+    const handlePaste = (event: ClipboardEvent) => {
+      const forceHandle = forceHandleOverlayPasteRef.current;
+      if (forceHandle) {
+        forceHandleOverlayPasteRef.current = false;
+      }
+
+      const finishLoadingIfNeeded = () => {
+        if (forceHandle || isPastingOverlayFromClipboard) {
+          setIsPastingOverlayFromClipboard(false);
+        }
+      };
+
+      // If an input or editable element is focused, allow normal typing paste,
+      // unless Ctrl+1 explicitly requested an overlay paste.
+      const target = event.target as Element | null;
+      const targetIsPasteSink =
+        target instanceof HTMLTextAreaElement &&
+        target === pasteSinkRef.current;
+
+      if (
+        !forceHandle &&
+        !targetIsPasteSink &&
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          (target instanceof HTMLElement && target.isContentEditable))
+      ) {
+        return;
+      }
+
+      const data = event.clipboardData;
+      if (!data) return;
+
+      // 1) Prefer direct image files
+      const items = Array.from(data.items || []);
+      const imageItem = items.find(
+        (it) => it.kind === 'file' && it.type.startsWith('image/')
+      );
+      if (imageItem) {
+        const file = imageItem.getAsFile();
+        if (!file) return;
+        event.preventDefault();
+        setOverlayFromFile(file);
+        finishLoadingIfNeeded();
+        return;
+      }
+
+      // 2) Try HTML <img src>
+      const html = data.getData('text/html');
+      if (html) {
+        const srcMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+        const src = srcMatch?.[1] ? extractFirstUrl(srcMatch[1]) : null;
+        if (src) {
+          event.preventDefault();
+          if (src.startsWith('data:image/')) {
+            void fetch(src)
+              .then((r) => r.blob())
+              .then((blob) => {
+                const type = blob.type || 'image/png';
+                const ext = type.split('/')[1] || 'png';
+                setOverlayFromFile(
+                  new File([blob], `pasted-data-image.${ext}`, { type })
+                );
+              })
+              .finally(finishLoadingIfNeeded)
+              .catch(() => {
+                // ignore
+              });
+            return;
+          }
+
+          void fetchImageAsFile(src)
+            .then((file) => {
+              if (file) setOverlayFromFile(file);
+            })
+            .finally(finishLoadingIfNeeded)
+            .catch(() => {
+              // ignore
+            });
+          return;
+        }
+      }
+
+      // 3) Try plain text URL
+      const text = data.getData('text/plain');
+      const maybeUrl = text ? extractFirstUrl(text) : null;
+      if (!maybeUrl) return;
+
+      event.preventDefault();
+      if (maybeUrl.startsWith('data:image/')) {
+        void fetch(maybeUrl)
+          .then((r) => r.blob())
+          .then((blob) => {
+            const type = blob.type || 'image/png';
+            const ext = type.split('/')[1] || 'png';
+            setOverlayFromFile(
+              new File([blob], `pasted-data-image.${ext}`, { type })
+            );
+          })
+          .finally(finishLoadingIfNeeded)
+          .catch(() => {
+            // ignore
+          });
+        return;
+      }
+
+      void fetchImageAsFile(maybeUrl)
+        .then((file) => {
+          if (file) setOverlayFromFile(file);
+        })
+        .finally(finishLoadingIfNeeded)
+        .catch(() => {
+          // ignore
+        });
+
+      // If we got here, we kicked off an async path and will finish later.
+    };
+
+    document.addEventListener('paste', handlePaste, { capture: true });
+    return () => {
+      document.removeEventListener('paste', handlePaste, { capture: true });
+    };
+  }, [isOpen, setOverlayFromFile, isPastingOverlayFromClipboard]);
+
   const openCropModal = useCallback(() => {
     if (!overlayImageUrl) return;
     setCropBorderRadius(0);
@@ -962,35 +1140,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [overlayImageUrl]);
 
   const handlePasteOverlayImageFromClipboard = useCallback(async () => {
+    setIsPastingOverlayFromClipboard(true);
     try {
       const clipboard = navigator.clipboard;
       if (!clipboard) {
         alert('Clipboard is not available in this browser.');
         return;
       }
-
-      // Some browsers can lose “user activation” after awaiting other clipboard
-      // operations; start readText() immediately so it stays tied to the click.
-      const textPromise: Promise<string | null> = clipboard.readText
-        ? clipboard.readText().catch(() => null)
-        : Promise.resolve(null);
-      const setOverlayFromFile = (file: File) => {
-        setOverlayImage(file);
-        const url = URL.createObjectURL(file);
-        setOverlayImageUrl(url);
-
-        // Clear text overlay when adding image
-        setSelectedWordText(null);
-        setCustomText('');
-
-        // Calculate overlay size similarly to upload/screenshot
-        const img = new Image();
-        img.onload = () => {
-          setActualImageDimensions({ width: img.width, height: img.height });
-          setOverlaySizeFromPixels(img.width, img.height);
-        };
-        img.src = url;
-      };
 
       const extractFirstUrl = (text: string): string | null => {
         const trimmed = text.trim();
@@ -1035,6 +1191,37 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         return new File([blob], `pasted-url-image.${ext}`, { type });
       };
 
+      // Prefer text paste first (URL/data URL). On Safari/iOS this usually yields
+      // a single system “Paste” confirmation, instead of multiple prompts.
+      const tryReadTextUrl = async (): Promise<string | null> => {
+        if (!clipboard.readText) return null;
+        try {
+          const text = await clipboard.readText();
+          return text ? extractFirstUrl(text) : null;
+        } catch {
+          return null;
+        }
+      };
+
+      const maybeUrlFromText = await tryReadTextUrl();
+      if (maybeUrlFromText) {
+        if (maybeUrlFromText.startsWith('data:image/')) {
+          const blob = await (await fetch(maybeUrlFromText)).blob();
+          const type = blob.type || 'image/png';
+          const ext = type.split('/')[1] || 'png';
+          setOverlayFromFile(
+            new File([blob], `pasted-data-image.${ext}`, { type })
+          );
+          return;
+        }
+
+        // http(s) URL
+        const file = await fetchImageAsFile(maybeUrlFromText);
+        if (!file) return;
+        setOverlayFromFile(file);
+        return;
+      }
+
       // 1) Prefer true clipboard image blobs when available
       if (clipboard?.read) {
         const items = await clipboard.read();
@@ -1078,37 +1265,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         }
       }
 
-      // 3) Fall back to text (URL) paste
-      const text = await textPromise;
-      const maybeUrl = text ? extractFirstUrl(text) : null;
-      if (!maybeUrl) {
-        const manual = prompt(
-          'Clipboard access was blocked or did not contain an image.\nPaste an image URL instead:'
-        );
-        const manualUrl = manual ? extractFirstUrl(manual) : null;
-        if (!manualUrl) {
-          alert('No image URL provided.');
-          return;
-        }
-
-        if (manualUrl.startsWith('data:image/')) {
-          const blob = await (await fetch(manualUrl)).blob();
-          const type = blob.type || 'image/png';
-          const ext = type.split('/')[1] || 'png';
-          setOverlayFromFile(
-            new File([blob], `pasted-data-image.${ext}`, { type })
-          );
-          return;
-        }
-
-        const file = await fetchImageAsFile(manualUrl);
-        if (!file) return;
-        setOverlayFromFile(file);
+      // 3) Fall back to manual URL paste
+      const manual = prompt('Paste an image URL:');
+      const manualUrl = manual ? extractFirstUrl(manual) : null;
+      if (!manualUrl) {
+        alert('No image URL provided.');
         return;
       }
 
-      if (maybeUrl.startsWith('data:image/')) {
-        const blob = await (await fetch(maybeUrl)).blob();
+      if (manualUrl.startsWith('data:image/')) {
+        const blob = await (await fetch(manualUrl)).blob();
         const type = blob.type || 'image/png';
         const ext = type.split('/')[1] || 'png';
         setOverlayFromFile(
@@ -1117,17 +1283,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         return;
       }
 
-      // http(s) URL
-      const file = await fetchImageAsFile(maybeUrl);
+      const file = await fetchImageAsFile(manualUrl);
       if (!file) return;
       setOverlayFromFile(file);
+      return;
     } catch (e) {
       // Avoid noisy console errors; show a user-facing message only.
       alert(
         'Failed to paste image from clipboard. Your browser may be blocking clipboard access.'
       );
+    } finally {
+      setIsPastingOverlayFromClipboard(false);
     }
-  }, []);
+  }, [setOverlayFromFile]);
 
   const applyCrop = useCallback(async () => {
     console.log('applyCrop called');
@@ -2402,6 +2570,71 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         return;
       }
 
+      // Alt+1: paste overlay image from clipboard
+      if (
+        event.key === '1' &&
+        event.altKey &&
+        !event.metaKey &&
+        !event.ctrlKey
+      ) {
+        // If an input or editable element is focused, allow typing.
+        const target = event.target as Element | null;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return;
+        }
+
+        stopAll(event);
+
+        const ua =
+          typeof navigator !== 'undefined' && navigator.userAgent
+            ? navigator.userAgent
+            : '';
+        const isSafari =
+          /Safari\//.test(ua) &&
+          !/Chrome\//.test(ua) &&
+          !/Chromium\//.test(ua) &&
+          !/Edg\//.test(ua) &&
+          !/OPR\//.test(ua);
+
+        // Best-effort: trigger a real paste event (Cmd/Ctrl+V equivalent)
+        // without using the async Clipboard API (Safari tends to show a system
+        // paste UI and may block clipboard reads).
+        setIsPastingOverlayFromClipboard(true);
+        forceHandleOverlayPasteRef.current = true;
+
+        const sink = pasteSinkRef.current;
+        if (sink) {
+          sink.focus();
+          sink.select();
+        }
+
+        let ok = false;
+        try {
+          ok =
+            typeof document.execCommand === 'function' &&
+            document.execCommand('paste');
+        } catch {
+          ok = false;
+        }
+
+        if (!ok) {
+          // Firefox/Chrome block execCommand('paste'); fall back to async clipboard
+          // reads (these browsers usually present a permission prompt once).
+          forceHandleOverlayPasteRef.current = false;
+          if (isSafari) {
+            setIsPastingOverlayFromClipboard(false);
+          } else {
+            void handlePasteOverlayImageFromClipboard();
+          }
+        }
+        return;
+      }
+
       if (
         event.key === '1' &&
         !event.ctrlKey &&
@@ -2521,6 +2754,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     isApplying,
     isPreviewLoading,
     handlePreview,
+    handlePasteOverlayImageFromClipboard,
   ]);
 
   // Update container dimensions
@@ -2881,6 +3115,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
           {/* Controls */}
           <div className='space-y-4 overflow-y-auto min-h-0 self-stretch h-full pr-1'>
+            {/* Hidden paste sink for Ctrl+1 programmatic paste */}
+            <textarea
+              ref={pasteSinkRef}
+              tabIndex={-1}
+              aria-hidden='true'
+              className='sr-only'
+              value=''
+              readOnly
+            />
             {/* Image Upload */}
             <ImageUploadRow
               fileInputRef={fileInputRef}
@@ -2890,6 +3133,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               onScreenshot={handleScreenshot}
               onCopyToClipboard={handleCopyOverlayImageToClipboard}
               onPasteFromClipboard={handlePasteOverlayImageFromClipboard}
+              isPastingFromClipboard={isPastingOverlayFromClipboard}
               onRemoveImage={handleRemoveImage}
             />
 

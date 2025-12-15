@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Camera, Clipboard, Copy, Upload, X } from 'lucide-react';
+import { Camera, Clipboard, Copy, Loader2, Upload, X } from 'lucide-react';
 
 type Props = {
   fileInputRef: React.RefObject<HTMLInputElement>;
@@ -11,6 +11,7 @@ type Props = {
   onScreenshot: () => void;
   onCopyToClipboard: () => void;
   onPasteFromClipboard: () => void;
+  isPastingFromClipboard?: boolean;
   onRemoveImage: () => void;
 };
 
@@ -22,6 +23,7 @@ export function ImageUploadRow({
   onScreenshot,
   onCopyToClipboard,
   onPasteFromClipboard,
+  isPastingFromClipboard,
   onRemoveImage,
 }: Props) {
   return (
@@ -63,11 +65,16 @@ export function ImageUploadRow({
         <button
           type='button'
           onClick={onPasteFromClipboard}
-          className='flex items-center justify-center px-2 py-2 border border-gray-300 rounded hover:bg-gray-50 h-10 w-10'
+          disabled={isPastingFromClipboard}
+          className='flex items-center justify-center px-2 py-2 border border-gray-300 rounded hover:bg-gray-50 h-10 w-10 disabled:opacity-50 disabled:cursor-not-allowed'
           title='Paste image from clipboard'
           aria-label='Paste image from clipboard'
         >
-          <Clipboard className='h-4 w-4' />
+          {isPastingFromClipboard ? (
+            <Loader2 className='h-4 w-4 animate-spin' />
+          ) : (
+            <Clipboard className='h-4 w-4' />
+          )}
         </button>
         {overlayImage && (
           <button
