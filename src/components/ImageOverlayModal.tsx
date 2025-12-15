@@ -2995,7 +2995,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               <div className='flex space-x-4 w-full'>
                 <div className='flex-1'>
                   <h4 className='text-sm font-medium mb-2'>Select Crop Area</h4>
-                  <div className='max-h-[50vh] overflow-auto border rounded'>
+                  <div
+                    className='max-h-[50vh] overflow-auto border rounded'
+                    onDoubleClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (cropperRef.current && overlayImage) {
+                        await applyCrop();
+                      }
+                    }}
+                    title='Double-click to apply crop'
+                  >
                     <div
                       className='relative h-96 w-full border bg-gray-100'
                       style={{ minHeight: '384px' }}
