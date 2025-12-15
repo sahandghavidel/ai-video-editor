@@ -529,6 +529,37 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     []
   );
 
+  const cycleNextTextPreset = useCallback(() => {
+    if (!savedTextStyles || savedTextStyles.length === 0) return;
+
+    const stableStringify = (value: unknown): string => {
+      if (value === null) return 'null';
+      const t = typeof value;
+      if (t === 'string') return JSON.stringify(value);
+      if (t === 'number' || t === 'boolean') return String(value);
+      if (Array.isArray(value)) {
+        return `[${value.map(stableStringify).join(',')}]`;
+      }
+      if (t === 'object') {
+        const obj = value as Record<string, unknown>;
+        const keys = Object.keys(obj).sort();
+        return `{${keys
+          .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
+          .join(',')}}`;
+      }
+      return JSON.stringify(String(value));
+    };
+
+    const currentKey = stableStringify(textStyling);
+    const currentIndex = savedTextStyles.findIndex(
+      (p) => stableStringify(p.style) === currentKey
+    );
+    const nextIndex =
+      currentIndex >= 0 ? (currentIndex + 1) % savedTextStyles.length : 0;
+
+    applySavedTextStyle(savedTextStyles[nextIndex]);
+  }, [applySavedTextStyle, savedTextStyles, textStyling]);
+
   const deleteSavedTextStyle = useCallback((name: string) => {
     if (!confirm(`Delete preset ${name}?`)) return;
     setSavedTextStyles((prev) => {
@@ -2531,6 +2562,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
                 onPointerDown={handleTextMouseDown}
                 onWheel={handleTextOverlayWheelZoom}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  cycleNextTextPreset();
+                }}
               >
                 <div
                   className='w-full h-full flex items-center justify-center font-bold select-none whitespace-nowrap'
