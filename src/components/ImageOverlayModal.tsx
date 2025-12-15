@@ -2204,14 +2204,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         // Otherwise, in the main modal, Tab triggers Preview.
         if (!isCropping) {
           stopAll();
-          const canPreview =
-            !!(overlayImage || selectedWordText || videoTintColor) &&
-            !isApplying;
+          const isPreviewDisabled =
+            !(overlayImage || selectedWordText || videoTintColor) ||
+            isApplying ||
+            isPreviewLoading;
 
-          if (canPreview) {
+          if (!isPreviewDisabled) {
             void handlePreview();
           } else {
-            previewButtonRef.current?.focus();
+            const video = videoRef.current;
+            if (video) {
+              video.play().catch(() => {
+                // Ignore autoplay/gesture errors; user explicitly pressed a key.
+              });
+            }
           }
           return;
         }
@@ -2319,6 +2325,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayImage,
     videoTintColor,
     isApplying,
+    isPreviewLoading,
     handlePreview,
   ]);
 
