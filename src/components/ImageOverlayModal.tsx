@@ -1813,7 +1813,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     console.log('handlePreview: textStyling', textStyling);
 
     setIsPreviewLoading(true);
-    setPreviewUrl(null);
+    setPreviewUrl((prev) => {
+      if (prev && prev.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(prev);
+        } catch {
+          // ignore
+        }
+      }
+      return null;
+    });
 
     const formData = new FormData();
     formData.append('videoUrl', originalVideoUrl);
@@ -1865,6 +1874,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         method: 'POST',
         body: formData,
       });
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('video/')) {
+        if (!response.ok) {
+          setIsPreviewLoading(false);
+          alert('Preview failed');
+          return;
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+        return;
+      }
+
       const data = await response.json();
       if (data.success) {
         setPreviewUrl(data.url);
@@ -2072,6 +2095,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Set the original video URL when we have a valid video URL
       if (videoUrl && videoUrl.trim() !== '') {
         setOriginalVideoUrl(videoUrl);
+
+        // Best-effort: warm the server-side cache so previews don't repeatedly
+        // download/stream from MinIO across requests.
+        void fetch('/api/warm-video-cache', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoUrl }),
+        }).catch(() => {
+          // ignore
+        });
       }
 
       const fetchTranscription = async () => {
@@ -3368,7 +3401,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         <div
           className='fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]'
           onClick={() => {
-            setPreviewUrl(null);
+            setPreviewUrl((prev) => {
+              if (prev && prev.startsWith('blob:')) {
+                try {
+                  URL.revokeObjectURL(prev);
+                } catch {
+                  // ignore
+                }
+              }
+              return null;
+            });
             setIsPreviewLoading(false);
           }}
         >
@@ -3376,7 +3418,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setPreviewUrl(null);
+                setPreviewUrl((prev) => {
+                  if (prev && prev.startsWith('blob:')) {
+                    try {
+                      URL.revokeObjectURL(prev);
+                    } catch {
+                      // ignore
+                    }
+                  }
+                  return null;
+                });
                 setIsPreviewLoading(false);
               }}
               className='absolute -top-10 right-0 text-white hover:text-gray-300 text-xl font-bold'

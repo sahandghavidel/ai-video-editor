@@ -5,8 +5,14 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
+import {
+  ensureVideoCached,
+  getCachedVideoPathIfFresh,
+} from '@/utils/video-cache';
 import ffmpegFonts from '../../../../docs/ffmpeg-fonts.json';
 import { updateSceneRow } from '@/lib/baserow-actions';
+
+export const runtime = 'nodejs';
 
 const execAsync = promisify(exec);
 
@@ -34,6 +40,7 @@ export async function POST(request: NextRequest) {
   let tempDir: string | null = null;
 
   try {
+    const requestStartMs = Date.now();
     const formData = await request.formData();
     const sceneIdString = formData.get('sceneId') as string;
     const sceneId = parseInt(sceneIdString, 10);
@@ -163,6 +170,25 @@ export async function POST(request: NextRequest) {
       Math.max(0.15, overlayWindowDuration * 0.35)
     );
 
+    // Preview performance tuning
+    const previewHeadPadSeconds = 1.35;
+    const previewTailPadSeconds = 0.6;
+    const previewOutputHeight = 720;
+    const previewOutputFps = 24;
+    const previewMaxSeconds = 4;
+    const videoCacheMaxAgeMs = 30 * 60 * 1000;
+
+    // NOTE: We apply fps/scale early for preview (on the base video) to reduce
+    // the amount of work overlay filters do.
+    const previewPostFilter: string | null = null;
+
+    const previewVideoEncodeArgs = preview
+      ? '-c:v libx264 -preset ultrafast -crf 33 -tune zerolatency -pix_fmt yuv420p -movflags +faststart'
+      : '';
+    const previewAudioEncodeArgs = preview
+      ? '-c:a aac -b:a 96k -ar 44100 -ac 2'
+      : '';
+
     // Build tintFilter after probing video size so we can pixel-align boxes.
     // (Fractional iw*... math can leave 1px seams in invert mode.)
     let tintFilter: string | null = null;
@@ -174,19 +200,66 @@ export async function POST(request: NextRequest) {
     // Apply overlay
     const outputPath = path.join(tempDir, 'output.mp4');
 
-    // Download video
-    const videoResponse = await fetch(videoUrl);
-    if (!videoResponse.ok) {
-      throw new Error('Failed to download video');
-    }
-    const videoBuffer = await videoResponse.arrayBuffer();
     const videoPath = path.join(tempDir, 'input.mp4');
-    await fs.promises.writeFile(videoPath, Buffer.from(videoBuffer));
+    let videoInput: string = videoPath;
+    const canUseRemoteInput =
+      preview && typeof videoUrl === 'string' && /^https?:\/\//i.test(videoUrl);
+
+    // Probe the video. For preview: prefer cached local file (if already warmed),
+    // else remote probe. Fall back to caching+probing locally.
+    let probeOutput: string;
+    try {
+      const probeStartMs = Date.now();
+      if (canUseRemoteInput) {
+        const cached = await getCachedVideoPathIfFresh(videoUrl, {
+          maxAgeMs: videoCacheMaxAgeMs,
+        });
+        if (cached) {
+          videoInput = cached;
+          ({ stdout: probeOutput } = await execAsync(
+            `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`
+          ));
+        } else {
+          videoInput = videoUrl;
+          ({ stdout: probeOutput } = await execAsync(
+            `ffprobe -v quiet -print_format json -show_format -show_streams "${videoUrl}"`
+          ));
+        }
+      } else {
+        // Non-preview (or non-http URL): use cached local file to avoid repeated downloads.
+        const cached = await ensureVideoCached(videoUrl, {
+          maxAgeMs: videoCacheMaxAgeMs,
+        });
+        videoInput = cached;
+        ({ stdout: probeOutput } = await execAsync(
+          `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`
+        ));
+      }
+      if (preview) {
+        console.log(
+          `[preview] ffprobe done in ${Date.now() - probeStartMs}ms (remote=${
+            canUseRemoteInput && videoInput === videoUrl
+          }, cached=${videoInput !== videoUrl})`
+        );
+      }
+    } catch (err) {
+      // Fallback: download and probe locally.
+      if (!preview) throw err;
+      const cached = await ensureVideoCached(videoUrl, {
+        maxAgeMs: videoCacheMaxAgeMs,
+      });
+      videoInput = cached;
+      ({ stdout: probeOutput } = await execAsync(
+        `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`
+      ));
+      if (preview) {
+        console.log(
+          `[preview] ffprobe fallback cache+probe completed (remote failed)`
+        );
+      }
+    }
 
     // Get video dimensions
-    const { stdout: probeOutput } = await execAsync(
-      `ffprobe -v quiet -print_format json -show_format -show_streams "${videoPath}"`
-    );
     const probeData = JSON.parse(probeOutput) as FFprobeOutput;
     const videoStream = probeData.streams?.find(
       (s) => s.codec_type === 'video'
@@ -202,6 +275,25 @@ export async function POST(request: NextRequest) {
     }
     const videoWidth = videoStream.width;
     const videoHeight = videoStream.height;
+
+    // Preview base dimensions after downscaling (match the scale we apply early).
+    const previewScaleFactor =
+      preview && videoHeight > previewOutputHeight
+        ? previewOutputHeight / videoHeight
+        : 1;
+    const previewBaseW =
+      preview && previewScaleFactor !== 1
+        ? Math.max(2, Math.floor((videoWidth * previewScaleFactor) / 2) * 2)
+        : videoWidth;
+    const previewBaseH =
+      preview && previewScaleFactor !== 1 ? previewOutputHeight : videoHeight;
+
+    const baseVideoWidth = preview ? previewBaseW : videoWidth;
+    const baseVideoHeight = preview ? previewBaseH : videoHeight;
+
+    const previewBaseFilter = preview
+      ? `fps=${previewOutputFps},scale=${previewBaseW}:${previewBaseH}:flags=fast_bilinear`
+      : '';
 
     const parseFps = (v?: string) => {
       if (!v || typeof v !== 'string') return null;
@@ -236,6 +328,33 @@ export async function POST(request: NextRequest) {
       Math.max(0.1, endTime);
     const hasAudio =
       probeData.streams?.some((s) => s.codec_type === 'audio') ?? false;
+
+    // Preview: render only a tight window around the overlay.
+    // We trim the input via -ss/-t, so time-based filters must be shifted.
+    const segmentStart = preview
+      ? Math.max(0, startTime - previewHeadPadSeconds)
+      : 0;
+    const segmentDuration = preview
+      ? Math.max(
+          0.1,
+          Math.min(
+            Math.max(0.1, videoDuration - segmentStart),
+            Math.max(0.1, endTime - segmentStart + previewTailPadSeconds),
+            previewMaxSeconds
+          )
+        )
+      : Math.max(0.1, videoDuration);
+    const tStart = preview ? Math.max(0, startTime - segmentStart) : startTime;
+    const tEndUncapped = preview
+      ? Math.max(0, endTime - segmentStart)
+      : endTime;
+    const tEnd = preview
+      ? Math.min(tEndUncapped, segmentDuration)
+      : tEndUncapped;
+
+    const ffmpegPreviewInputArgs = preview
+      ? `-ss ${segmentStart} -t ${segmentDuration} -probesize 1000000 -analyzeduration 1000000`
+      : '';
 
     // Preserve original audio format for merge compatibility.
     // (When we mix SFX we must re-encode; match the source as closely as possible.)
@@ -306,7 +425,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (tintColorNormalized) {
-      const enableExpr = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      const enableExpr = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
       const drawboxPx = (x: number, y: number, w: number, h: number) => {
         // Ensure FFmpeg always gets valid ints and non-negative sizes.
         const xi = Math.max(0, Math.floor(x));
@@ -365,23 +484,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate overlay dimensions in pixels
-    const overlayWidth = Math.round((sizeWidth / 100) * videoWidth);
-    const overlayHeight = Math.round((sizeHeight / 100) * videoHeight);
+    const overlayWidth = Math.round((sizeWidth / 100) * baseVideoWidth);
+    const overlayHeight = Math.round((sizeHeight / 100) * baseVideoHeight);
 
     let ffmpegCommand: string;
-    const durationLimit = preview ? '-t 10' : '';
+    const soundDelayMs = Math.max(0, Math.round(tStart * 1000));
 
-    const soundDelayMs = Math.max(0, Math.round(startTime * 1000));
+    const audioSampleRateOut = preview ? 44100 : originalAudioSampleRate;
+    const audioChannelsOut = preview ? 2 : originalAudioChannels;
+    const audioChannelLayoutOut = audioChannelsOut === 1 ? 'mono' : 'stereo';
 
     const buildAudioFilter = (soundInputIndex: number) => {
+      const baseAudioDuration = preview ? segmentDuration : videoDuration;
       // If the source video has no audio stream, generate silence.
       const a0 = hasAudio
-        ? `[0:a]aresample=${originalAudioSampleRate}[a0]`
-        : `anullsrc=r=${originalAudioSampleRate}:cl=${channelLayout},atrim=0:${Math.max(
+        ? `[0:a]aresample=${audioSampleRateOut}[a0]`
+        : `anullsrc=r=${audioSampleRateOut}:cl=${audioChannelLayoutOut},atrim=0:${Math.max(
             0,
-            videoDuration
+            baseAudioDuration
           )},asetpts=N/SR/TB[a0]`;
-      const a1 = `[${soundInputIndex}:a]adelay=${soundDelayMs}:all=1,aresample=${originalAudioSampleRate}[a1]`;
+      const a1 = `[${soundInputIndex}:a]adelay=${soundDelayMs}:all=1,aresample=${audioSampleRateOut}[a1]`;
       const amix = `[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
       return `${a0};${a1};${amix}`;
     };
@@ -396,7 +518,7 @@ export async function POST(request: NextRequest) {
       // Loop still images so time-based filters (fade/scale) can animate.
       const imageInputLoop = isGif ? '-stream_loop -1' : '-loop 1';
 
-      const overlayEnable = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      const overlayEnable = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
 
       const needsScaleAnim =
         overlayAnimation === 'miniZoom' ||
@@ -411,7 +533,7 @@ export async function POST(request: NextRequest) {
 
       // Global progress (main timeline) for entrance animations
       const pGlobal = escExpr(
-        `min(max((t-${startTime})/${entranceAnimDuration},0),1)`
+        `min(max((t-${tStart})/${entranceAnimDuration},0),1)`
       );
       const easeGlobal = escExpr(`(1-pow(1-${pGlobal},3))`);
 
@@ -432,7 +554,7 @@ export async function POST(request: NextRequest) {
 
       // Ensure the scale snaps to 1 after the entrance animation window.
       const scaleExpr = escExpr(
-        `if(lt(t,${startTime + entranceAnimDuration}),${scaleGlobal},1)`
+        `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`
       );
 
       let overlayChain = `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight},format=rgba`;
@@ -440,7 +562,7 @@ export async function POST(request: NextRequest) {
         overlayChain += `,scale=iw*(${scaleExpr}):ih*(${scaleExpr}):eval=frame`;
       }
       if (needsFadeAnim) {
-        overlayChain += `,fade=t=in:st=${startTime}:d=${entranceAnimDuration}:alpha=1`;
+        overlayChain += `,fade=t=in:st=${tStart}:d=${entranceAnimDuration}:alpha=1`;
       }
       const overlayScale = `[1:v]${overlayChain}[overlay]`;
       const slideDX =
@@ -454,26 +576,46 @@ export async function POST(request: NextRequest) {
       const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
       const yExpr = `H*${positionY / 100}-overlay_h/2+(${slideDY})`;
 
-      const overlayFilter = tintFilter
-        ? `[base][overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}[vout]`
-        : `[0:v][overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}[vout]`;
+      const baseVideo = preview
+        ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
+        : tintFilter
+        ? `[0:v]${tintFilter}[base]`
+        : null;
+      const baseRef = preview || tintFilter ? `[base]` : `[0:v]`;
+
+      const overlayFilter = `${baseRef}[overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}[vout]`;
+
+      const videoPost =
+        preview && previewPostFilter
+          ? `;[vout]${previewPostFilter}[voutp]`
+          : '';
+      const vmap = preview && previewPostFilter ? '[voutp]' : '[vout]';
 
       if (overlaySoundPath) {
         const audio = buildAudioFilter(2);
-        const baseVideo = tintFilter ? `[0:v]${tintFilter}[base]` : null;
         const parts = [baseVideo, overlayScale, overlayFilter, audio].filter(
           Boolean
         );
-        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" ${imageInputLoop} -i "${imagePath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
           ';'
-        )}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-          mixedAudioBitrate / 1000
-        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero -shortest ${durationLimit} "${outputPath}"`;
+        )}${videoPost}" -map "${vmap}" -map "[aout]" ${
+          preview
+            ? previewAudioEncodeArgs
+            : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+                mixedAudioBitrate / 1000
+              )}k -ac ${originalAudioChannels}`
+        } ${
+          preview ? previewVideoEncodeArgs : ''
+        } -avoid_negative_ts make_zero -shortest "${outputPath}"`;
       } else {
         if (tintFilter) {
-          ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" ${imageInputLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+          ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}${videoPost}" -map "${vmap}" -map 0:a? ${
+            preview ? previewAudioEncodeArgs : '-c:a copy'
+          } ${preview ? previewVideoEncodeArgs : ''} -shortest "${outputPath}"`;
         } else {
-          ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" ${imageInputLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}" -map "[vout]" -map 0:a? -c:a copy -shortest ${durationLimit} "${outputPath}"`;
+          ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}${videoPost}" -map "${vmap}" -map 0:a? ${
+            preview ? previewAudioEncodeArgs : '-c:a copy'
+          } ${preview ? previewVideoEncodeArgs : ''} -shortest "${outputPath}"`;
         }
       }
     } else if (overlayText) {
@@ -482,7 +624,7 @@ export async function POST(request: NextRequest) {
         16,
         Math.min(
           500,
-          (sizeWidth / 100) * Math.min(videoWidth, videoHeight) * 0.2
+          (sizeWidth / 100) * Math.min(baseVideoWidth, baseVideoHeight) * 0.2
         )
       );
 
@@ -496,7 +638,7 @@ export async function POST(request: NextRequest) {
           .replace(/'/g, "\\'")
           .replace(/ /g, '\\ ');
 
-      const overlayEnable = `enable='gte(t\\,${startTime})*lte(t\\,${endTime})'`;
+      const overlayEnable = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
 
       // Avoid filtergraph quoting issues (e.g. apostrophes in text) by using a text file.
       const textFilePath = path.join(tempDir, 'overlay-text.txt');
@@ -605,7 +747,7 @@ export async function POST(request: NextRequest) {
       const escExpr = (s: string) => s.replace(/(?<!\\),/g, '\\,');
 
       const pGlobal = escExpr(
-        `min(max((t-${startTime})/${entranceAnimDuration},0),1)`
+        `min(max((t-${tStart})/${entranceAnimDuration},0),1)`
       );
       const easeGlobal = escExpr(`(1-pow(1-${pGlobal},3))`);
 
@@ -631,7 +773,7 @@ export async function POST(request: NextRequest) {
         }
       })();
       const scaleExpr = escExpr(
-        `if(lt(t,${startTime + entranceAnimDuration}),${scaleGlobal},1)`
+        `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`
       );
 
       const slideDX =
@@ -646,21 +788,26 @@ export async function POST(request: NextRequest) {
       const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
       const yExpr = `H*${positionY / 100}-overlay_h/2+(${slideDY})`;
 
-      const baseVideo = tintFilter ? `[0:v]${tintFilter}[base]` : null;
-      const baseRef = tintFilter ? `[base]` : `[0:v]`;
+      const baseVideo = preview
+        ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
+        : tintFilter
+        ? `[0:v]${tintFilter}[base]`
+        : null;
+      const baseRef = preview || tintFilter ? `[base]` : `[0:v]`;
 
       // Keep output duration equal to the base video duration, but ensure the
       // generated text layer lasts long enough to cover the requested endTime.
       // Otherwise, if the browser-derived duration/endTime is slightly larger
       // than ffprobe's `format.duration`, the overlay input can hit EOF early
       // and the text disappears before the last frames.
-      const oneFrame = 1 / Math.max(1, videoFps);
+      const outFps = preview ? previewOutputFps : videoFps;
+      const oneFrame = 1 / Math.max(1, outFps);
       const textLayerDuration = Math.max(
         0.1,
-        videoDuration,
-        endTime + oneFrame
+        preview ? segmentDuration : videoDuration,
+        tEnd + oneFrame
       );
-      let textChain = `color=c=black@0.0:s=${canvasW}x${canvasH}:r=${videoFps}:d=${textLayerDuration}[txtbg];`;
+      let textChain = `color=c=black@0.0:s=${canvasW}x${canvasH}:r=${outFps}:d=${textLayerDuration}[txtbg];`;
       textChain += `[txtbg]drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:x=(w-text_w)/2:y=(h-text_h)/2${boxParams}[txt0];`;
 
       let animChain = `[txt0]format=rgba`;
@@ -668,7 +815,7 @@ export async function POST(request: NextRequest) {
         animChain += `,scale=iw*(${scaleExpr}):ih*(${scaleExpr}):eval=frame`;
       }
       if (needsFadeAnim) {
-        animChain += `,fade=t=in:st=${startTime}:d=${entranceAnimDuration}:alpha=1`;
+        animChain += `,fade=t=in:st=${tStart}:d=${entranceAnimDuration}:alpha=1`;
       }
       animChain += `[txt];`;
 
@@ -678,49 +825,92 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .join(';');
 
+      const filterComplexWithPost =
+        preview && previewPostFilter
+          ? `${filterComplex};[vout]${previewPostFilter}[voutp]`
+          : filterComplex;
+      const vmap = preview && previewPostFilter ? '[voutp]' : '[vout]';
+
       if (overlaySoundPath) {
         const audio = buildAudioFilter(1);
-        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "${filterComplex};${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-          mixedAudioBitrate / 1000
-        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -i "${overlaySoundPath}" -filter_complex "${filterComplexWithPost};${audio}" -map "${vmap}" -map "[aout]" ${
+          preview
+            ? previewAudioEncodeArgs
+            : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+                mixedAudioBitrate / 1000
+              )}k -ac ${originalAudioChannels}`
+        } ${
+          preview ? previewVideoEncodeArgs : ''
+        } -avoid_negative_ts make_zero "${outputPath}"`;
       } else {
-        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -filter_complex "${filterComplex}" -map "[vout]" -map 0:a? -c:a copy ${durationLimit} "${outputPath}"`;
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -filter_complex "${filterComplexWithPost}" -map "${vmap}" -map 0:a? ${
+          preview ? previewAudioEncodeArgs : '-c:a copy'
+        } ${preview ? previewVideoEncodeArgs : ''} "${outputPath}"`;
       }
     } else if (tintFilter) {
       // Tint-only
       if (overlaySoundPath) {
         const audio = buildAudioFilter(1);
-        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -i "${overlaySoundPath}" -filter_complex "[0:v]${tintFilter}[vout];${audio}" -map "[vout]" -map "[aout]" -ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-          mixedAudioBitrate / 1000
-        )}k -ac ${originalAudioChannels} -avoid_negative_ts make_zero ${durationLimit} "${outputPath}"`;
+        const tintV = preview
+          ? `[0:v]${tintFilter},${previewBaseFilter}[vout]`
+          : `[0:v]${tintFilter}[vout]`;
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -i "${overlaySoundPath}" -filter_complex "${tintV};${audio}" -map "[vout]" -map "[aout]" ${
+          preview
+            ? previewAudioEncodeArgs
+            : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+                mixedAudioBitrate / 1000
+              )}k -ac ${originalAudioChannels}`
+        } ${
+          preview ? previewVideoEncodeArgs : ''
+        } -avoid_negative_ts make_zero "${outputPath}"`;
       } else {
-        ffmpegCommand = `ffmpeg -hide_banner -loglevel error -i "${videoPath}" -vf "${tintFilter}" -c:a copy ${durationLimit} "${outputPath}"`;
+        const vf = preview ? `${tintFilter},${previewBaseFilter}` : tintFilter;
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -vf "${vf}" -map 0:v:0 -map 0:a? ${
+          preview ? previewAudioEncodeArgs : '-c:a copy'
+        } ${preview ? previewVideoEncodeArgs : ''} "${outputPath}"`;
       }
     } else {
       throw new Error('No overlay content provided');
     }
 
+    const ffmpegStartMs = Date.now();
     await execAsync(ffmpegCommand);
+    if (preview) {
+      console.log(`[preview] ffmpeg done in ${Date.now() - ffmpegStartMs}ms`);
+    }
 
-    // Upload to MinIO
+    // PREVIEW: return the MP4 directly (avoid MinIO upload + re-download)
+    if (preview) {
+      const outputBuffer = await fs.promises.readFile(outputPath);
+      const body = new Uint8Array(outputBuffer);
+      console.log(
+        `[preview] total request time ${Date.now() - requestStartMs}ms (bytes=${
+          body.byteLength
+        })`
+      );
+      return new NextResponse(body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'video/mp4',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
+    // NON-PREVIEW: upload to MinIO and update DB
     const outputBuffer = await fs.promises.readFile(outputPath);
     const tempUploadPath = path.join(tempDir, 'upload.mp4');
     await fs.promises.writeFile(tempUploadPath, outputBuffer);
-    const fileName = preview
-      ? `temp-preview-${sceneId}-${Date.now()}.mp4`
-      : `scene-${sceneId}-overlay-${Date.now()}.mp4`;
+    const fileName = `scene-${sceneId}-overlay-${Date.now()}.mp4`;
     const uploadUrl = await uploadToMinio(
       tempUploadPath,
       fileName,
       'video/mp4'
     );
 
-    // Only update the scene with the new video URL if this is not a preview
-    if (!preview) {
-      await updateSceneRow(sceneId, {
-        field_6886: uploadUrl,
-      });
-    }
+    await updateSceneRow(sceneId, {
+      field_6886: uploadUrl,
+    });
 
     return NextResponse.json({ success: true, url: uploadUrl });
   } catch (error) {
