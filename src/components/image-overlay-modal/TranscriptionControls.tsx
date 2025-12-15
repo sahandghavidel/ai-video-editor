@@ -20,6 +20,7 @@ type Props = {
 
   onWordClick: (word: TranscriptionWord) => void;
   onWordRightClick: (word: TranscriptionWord) => void;
+  onWordDoubleClick: (word: TranscriptionWord) => void;
   onCustomTextChange: (v: string) => void;
   onCustomTextEnter: () => void;
   onAddText: () => void;
@@ -40,6 +41,7 @@ export function TranscriptionControls({
   selectedWordText,
   onWordClick,
   onWordRightClick,
+  onWordDoubleClick,
   onCustomTextChange,
   onCustomTextEnter,
   onAddText,
@@ -101,13 +103,18 @@ export function TranscriptionControls({
             <button
               key={index}
               onClick={() => onWordClick(wordData)}
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onWordDoubleClick(wordData);
+              }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onWordRightClick(wordData);
               }}
               className='px-3 py-1.5 text-sm font-medium rounded transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-blue-50 hover:border-blue-300'
-              title={`Click to set start time to ${wordData.start}s. Right-click to set end time to ${wordData.end}s.`}
+              title={`Click to set start time to ${wordData.start}s. Double-click to add as overlay. Right-click to set end time to ${wordData.end}s.`}
             >
               {wordData.word}
             </button>

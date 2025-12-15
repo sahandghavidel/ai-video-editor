@@ -2785,6 +2785,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   : 0;
                 setEndTime(t);
               }}
+              onWordDoubleClick={(wordData) => {
+                setStartTime(wordData.start);
+                const raw = (wordData.word || '').trim();
+                const cleaned = raw.replace(/[，,]+$/g, '').trim();
+                const text = cleaned.toUpperCase();
+
+                // Match + button behavior: set input and add to canvas (text overlay), and clear image overlay.
+                setCustomText(text);
+                setSelectedWordText(text);
+                setOverlayImage(null);
+                setOverlayImageUrl(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+
+                if (videoRef.current) {
+                  videoRef.current.currentTime = wordData.start;
+                }
+              }}
               onCustomTextChange={setCustomText}
               onCustomTextEnter={() => {
                 if (customText.trim()) {
