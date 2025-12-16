@@ -4565,6 +4565,37 @@ export default function SceneCard({
                       </button>
                     )}
 
+                  {/* Image Overlay Button */}
+                  {typeof scene['field_6886'] === 'string' &&
+                    scene['field_6886'] && (
+                      <button
+                        onClick={() =>
+                          handleOpenImageOverlayModal(
+                            scene.id,
+                            scene['field_6886'] as string
+                          )
+                        }
+                        disabled={addingImageOverlay === scene.id}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
+                          addingImageOverlay === scene.id
+                            ? 'bg-gray-100 text-gray-500'
+                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title='Add image overlay to final video'
+                      >
+                        {addingImageOverlay === scene.id ? (
+                          <Loader2 className='animate-spin h-3 w-3' />
+                        ) : (
+                          <ImageIcon className='h-3 w-3' />
+                        )}
+                        <span>
+                          {addingImageOverlay === scene.id
+                            ? 'Adding...'
+                            : 'Add Image'}
+                        </span>
+                      </button>
+                    )}
+
                   {/* Produced Video Button - LAST */}
                   {typeof scene['field_6886'] === 'string' &&
                     scene['field_6886'] && (
@@ -4598,37 +4629,6 @@ export default function SceneCard({
                           {mediaPlayer.playingProducedVideoId === scene.id
                             ? 'Stop'
                             : 'Final Vid'}
-                        </span>
-                      </button>
-                    )}
-
-                  {/* Image Overlay Button */}
-                  {typeof scene['field_6886'] === 'string' &&
-                    scene['field_6886'] && (
-                      <button
-                        onClick={() =>
-                          handleOpenImageOverlayModal(
-                            scene.id,
-                            scene['field_6886'] as string
-                          )
-                        }
-                        disabled={addingImageOverlay === scene.id}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
-                          addingImageOverlay === scene.id
-                            ? 'bg-gray-100 text-gray-500'
-                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title='Add image overlay to final video'
-                      >
-                        {addingImageOverlay === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : (
-                          <ImageIcon className='h-3 w-3' />
-                        )}
-                        <span>
-                          {addingImageOverlay === scene.id
-                            ? 'Adding...'
-                            : 'Add Image'}
                         </span>
                       </button>
                     )}
