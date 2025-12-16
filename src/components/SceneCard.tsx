@@ -4659,12 +4659,22 @@ export default function SceneCard({
                   )
                 }
                 onContextMenu={(e) => {
-                  // Right-click on the non-edit container clears the editable sentence (field_6890)
+                  // Right-click on the non-edit container:
+                  // - If the editable sentence (field_6890) is empty, restore from original (field_6901)
+                  // - Otherwise, clear the editable sentence
                   e.preventDefault();
                   if (isUpdating) return;
-                  void handleClearSentenceField(scene.id);
+                  const currentScene = data.find((s) => s.id === scene.id);
+                  const editable = String(currentScene?.field_6890 || '');
+                  const original = String(currentScene?.field_6901 || '');
+                  if (!editable && original) {
+                    // Restore original into editable (same as revert button)
+                    void handleRevertToOriginal(scene.id);
+                  } else {
+                    void handleClearSentenceField(scene.id);
+                  }
                 }}
-                title='Click to edit (Right-click to clear sentence)'
+                title='Click to edit (Right-click to clear sentence; if empty, restore original)'
               >
                 {String(
                   scene['field_6890'] ||
