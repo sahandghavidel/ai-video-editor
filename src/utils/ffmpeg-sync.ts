@@ -6,6 +6,21 @@ import { uploadToMinio } from './ffmpeg-direct';
 
 const execAsync = promisify(exec);
 
+function computeTargetAudioBitrate(
+  originalBitrate: number,
+  channels: number
+): number {
+  // Match the strategy used by Apply (non-preview) when adding a sound effect:
+  // keep codec/sample rate/channels for merge compatibility, but avoid too-low
+  // bitrates that cause generational loss after multiple renders.
+  const minBitrate = channels === 1 ? 96_000 : 192_000;
+  const maxBitrate = 512_000;
+  const safeOriginal = Number.isFinite(originalBitrate) && originalBitrate > 0
+    ? originalBitrate
+    : 128_000;
+  return Math.min(maxBitrate, Math.max(safeOriginal, minBitrate));
+}
+
 export interface SyncOptions {
   videoUrl: string;
   audioUrl: string;
@@ -66,6 +81,16 @@ export async function syncVideoWithAudio(
   console.log(
     `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
   );
+
+  const targetAudioBitrate = computeTargetAudioBitrate(
+    originalBitrate,
+    originalChannels
+  );
+  if (targetAudioBitrate !== originalBitrate) {
+    console.log(
+      `[SYNC] Bumping output audio bitrate to ${targetAudioBitrate}bps for quality (original: ${originalBitrate}bps)`
+    );
+  }
 
   // Try hardware acceleration first, then fallback to software
   const attempts = useHardwareAcceleration
@@ -137,7 +162,7 @@ export async function syncVideoWithAudio(
         '-c:a',
         originalCodec,
         '-b:a',
-        `${Math.round(originalBitrate / 1000)}k`,
+        `${Math.round(targetAudioBitrate / 1000)}k`,
         '-ac',
         originalChannels.toString(),
         '-avoid_negative_ts',
@@ -246,6 +271,16 @@ export async function syncVideoWithAudioAdvanced(
   console.log(
     `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
   );
+
+  const targetAudioBitrate = computeTargetAudioBitrate(
+    originalBitrate,
+    originalChannels
+  );
+  if (targetAudioBitrate !== originalBitrate) {
+    console.log(
+      `[SYNC] Bumping output audio bitrate to ${targetAudioBitrate}bps for quality (original: ${originalBitrate}bps)`
+    );
+  }
 
   try {
     console.log('[SYNC] Getting video and audio durations...');
@@ -397,8 +432,14 @@ export async function syncVideoWithAudioAdvanced(
             'fast',
             '-crf',
             '18',
+            '-ar',
+            originalSampleRate.toString(),
             '-c:a',
-            'aac',
+            originalCodec,
+            '-b:a',
+            `${Math.round(targetAudioBitrate / 1000)}k`,
+            '-ac',
+            originalChannels.toString(),
             '-shortest',
             `"${tempSyncedPath}"`,
           ];
@@ -538,7 +579,7 @@ export async function syncVideoWithAudioAdvanced(
           '-c:a',
           originalCodec,
           '-b:a',
-          `${Math.round(originalBitrate / 1000)}k`,
+          `${Math.round(targetAudioBitrate / 1000)}k`,
           '-ac',
           originalChannels.toString(),
           '-avoid_negative_ts',
