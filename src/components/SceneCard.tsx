@@ -170,6 +170,8 @@ export default function SceneCard({
     'asc' | 'desc' | null
   >(null);
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
+  const [showOnlyNotEmptyText, setShowOnlyNotEmptyText] =
+    useState<boolean>(false);
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null
   );
@@ -2919,6 +2921,19 @@ export default function SceneCard({
       });
     }
 
+    // Filter by not-empty original fields: field_6901 or field_6900 (either can be present)
+    if (showOnlyNotEmptyText) {
+      filtered = filtered.filter((scene) => {
+        const orig = String(
+          scene['field_6901'] || scene.field_6901 || ''
+        ).trim();
+        const other = String(
+          scene['field_6900'] || scene.field_6900 || ''
+        ).trim();
+        return !!orig || !!other;
+      });
+    }
+
     // Filter by recently modified TTS (last 24 hours)
     if (showRecentlyModifiedTTS) {
       const oneDayAgo = Date.now() - 10 * 24 * 60 * 60 * 1000;
@@ -2995,6 +3010,7 @@ export default function SceneCard({
   }, [
     data,
     showOnlyEmptyText,
+    showOnlyNotEmptyText,
     sortByDuration,
     sortByLastModified,
     showRecentlyModifiedTTS,
@@ -3108,7 +3124,11 @@ export default function SceneCard({
               {/* Filter Buttons */}
               <div className='flex flex-wrap items-center gap-2'>
                 <button
-                  onClick={() => setShowOnlyEmptyText(!showOnlyEmptyText)}
+                  onClick={() => {
+                    // Make Empty / Not Empty mutually exclusive
+                    if (!showOnlyEmptyText) setShowOnlyNotEmptyText(false);
+                    setShowOnlyEmptyText(!showOnlyEmptyText);
+                  }}
                   className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
                     showOnlyEmptyText
                       ? 'bg-green-500 text-white'
@@ -3116,6 +3136,21 @@ export default function SceneCard({
                   }`}
                 >
                   {showOnlyEmptyText ? '✓ ' : ''}Empty
+                </button>
+                <button
+                  onClick={() => {
+                    // Make Not Empty / Empty mutually exclusive
+                    if (!showOnlyNotEmptyText) setShowOnlyEmptyText(false);
+                    setShowOnlyNotEmptyText(!showOnlyNotEmptyText);
+                  }}
+                  title='Show scenes where either original (field_6901) or field_6900 has value'
+                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                    showOnlyNotEmptyText
+                      ? 'bg-purple-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  }`}
+                >
+                  {showOnlyNotEmptyText ? '✓ ' : ''}Not Empty
                 </button>
                 <button
                   onClick={() =>
