@@ -128,6 +128,7 @@ export default function SceneCard({
   const [editingText, setEditingText] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isCanceling, setIsCanceling] = useState<boolean>(false);
+  // NOTE: no clearing ref needed now — clearing is triggered from non-edit view
   const [loadingAudio, setLoadingAudio] = useState<number | null>(null);
   const [loadingVideo, setLoadingVideo] = useState<number | null>(null);
   const [loadingProducedVideo, setLoadingProducedVideo] = useState<
@@ -1161,9 +1162,9 @@ export default function SceneCard({
   };
 
   const handleEditSave = async (sceneId: number) => {
-    if (!editingText.trim()) {
-      return;
-    }
+    // Allow saving an empty text (clearing the sentence). Previously we
+    // prevented saving when the field was empty; remove that to allow
+    // explicit clearing.
 
     const currentScene = data.find((scene) => scene.id === sceneId);
     if (editingText === currentScene?.field_6890) {
@@ -1216,9 +1217,7 @@ export default function SceneCard({
   };
 
   const handleEditSaveWithoutTTS = async (sceneId: number) => {
-    if (!editingText.trim()) {
-      return;
-    }
+    // Allow saving an empty text (clear without generating TTS).
 
     const currentScene = data.find((scene) => scene.id === sceneId);
     if (editingText === currentScene?.field_6890) {
@@ -1269,6 +1268,40 @@ export default function SceneCard({
     setEditingText('');
     setTimeout(() => setIsCanceling(false), 100); // Reset after a short delay
   };
+
+  const handleClearSentenceField = useCallback(
+    async (sceneId: number) => {
+      if (isUpdating) return;
+      setIsUpdating(true);
+
+      try {
+        // Optimistic update: clear only field_6890 (the editable sentence)
+        const optimisticData = data.map((scene) => {
+          if (scene.id === sceneId) {
+            return { ...scene, field_6890: '' };
+          }
+          return scene;
+        });
+        onDataUpdate?.(optimisticData);
+
+        // Persist change to Baserow (only field_6890)
+        await updateSceneRow(sceneId, { field_6890: '' });
+
+        // Close editor and clear editingText if open
+        setEditingId(null);
+        setEditingText('');
+
+        refreshData?.();
+      } catch (error) {
+        console.error('Failed to clear sentence field:', error);
+        // Revert optimistic update on error
+        onDataUpdate?.(data);
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    [data, onDataUpdate, refreshData, isUpdating]
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent, sceneId: number) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -4625,7 +4658,13 @@ export default function SceneCard({
                     String(scene['field_6890'] || scene.field_6890 || '')
                   )
                 }
-                title='Click to edit'
+                onContextMenu={(e) => {
+                  // Right-click on the non-edit container clears the editable sentence (field_6890)
+                  e.preventDefault();
+                  if (isUpdating) return;
+                  void handleClearSentenceField(scene.id);
+                }}
+                title='Click to edit (Right-click to clear sentence)'
               >
                 {String(
                   scene['field_6890'] ||
