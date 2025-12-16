@@ -18,6 +18,7 @@
     "react": "19.1.0",
     "react-advanced-cropper": "^0.20.1",
     "react-dom": "19.1.0",
+    "sharp": "^0.34.3",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

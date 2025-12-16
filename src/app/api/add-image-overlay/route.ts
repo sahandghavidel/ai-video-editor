@@ -11,10 +11,60 @@ import {
 } from '@/utils/video-cache';
 import ffmpegFonts from '../../../../docs/ffmpeg-fonts.json';
 import { updateSceneRow } from '@/lib/baserow-actions';
+import sharp from 'sharp';
 
 export const runtime = 'nodejs';
 
 const execAsync = promisify(exec);
+
+function sniffImageType(buf: Buffer): { mime: string; ext: string } | null {
+  if (buf.length < 12) return null;
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47 &&
+    buf[4] === 0x0d &&
+    buf[5] === 0x0a &&
+    buf[6] === 0x1a &&
+    buf[7] === 0x0a
+  ) {
+    return { mime: 'image/png', ext: 'png' };
+  }
+
+  // GIF: "GIF8"
+  if (
+    buf[0] === 0x47 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x38
+  ) {
+    return { mime: 'image/gif', ext: 'gif' };
+  }
+
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+    return { mime: 'image/jpeg', ext: 'jpg' };
+  }
+
+  // WebP: RIFF....WEBP
+  if (
+    buf[0] === 0x52 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x46 &&
+    buf[8] === 0x57 &&
+    buf[9] === 0x45 &&
+    buf[10] === 0x42 &&
+    buf[11] === 0x50
+  ) {
+    return { mime: 'image/webp', ext: 'webp' };
+  }
+
+  return null;
+}
 
 type FFprobeStream = {
   codec_type?: string;
@@ -511,11 +561,49 @@ export async function POST(request: NextRequest) {
     if (overlayImage) {
       // Handle image overlay
       const imageBuffer = await overlayImage.arrayBuffer();
-      const imagePath = path.join(tempDir, 'overlay.png');
-      await fs.promises.writeFile(imagePath, Buffer.from(imageBuffer));
+      const imageBytes = Buffer.from(imageBuffer);
 
-      const isGif = overlayImage.type === 'image/gif';
-      // Loop still images so time-based filters (fade/scale) can animate.
+      const declaredType = (overlayImage.type || '').toLowerCase();
+      const sniffed = sniffImageType(imageBytes);
+      const mime = declaredType || sniffed?.mime || 'image/png';
+      const ext =
+        mime === 'image/png'
+          ? 'png'
+          : mime === 'image/gif'
+          ? 'gif'
+          : mime === 'image/webp'
+          ? 'webp'
+          : mime === 'image/jpeg'
+          ? 'jpg'
+          : sniffed?.ext || 'png';
+
+      let imagePath = path.join(tempDir, `overlay.${ext}`);
+      let effectiveMime = mime;
+      await fs.promises.writeFile(imagePath, imageBytes);
+
+      // Our local FFmpeg build cannot decode some animated WebP files (including
+      // certain Noto Emoji WebPs), which causes huge stderr spam and maxBuffer errors.
+      // Convert WebP -> GIF (animated) via sharp so FFmpeg receives a supported input.
+      if (effectiveMime === 'image/webp') {
+        try {
+          const gifPath = path.join(tempDir, 'overlay.gif');
+          await sharp(imageBytes, { animated: true })
+            .gif({ effort: 3 })
+            .toFile(gifPath);
+          imagePath = gifPath;
+          effectiveMime = 'image/gif';
+        } catch (e) {
+          // Fallback: at least extract a static PNG frame.
+          const pngPath = path.join(tempDir, 'overlay.png');
+          await sharp(imageBytes).png().toFile(pngPath);
+          imagePath = pngPath;
+          effectiveMime = 'image/png';
+        }
+      }
+
+      const isGif = effectiveMime === 'image/gif';
+      // For animated sources (gif), loop the stream. For single-frame images,
+      // loop the single frame so time-based filters can animate.
       const imageInputLoop = isGif ? '-stream_loop -1' : '-loop 1';
 
       const overlayEnable = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
@@ -874,7 +962,11 @@ export async function POST(request: NextRequest) {
     }
 
     const ffmpegStartMs = Date.now();
-    await execAsync(ffmpegCommand);
+    await execAsync(ffmpegCommand, {
+      // Some FFmpeg failures can be extremely noisy on stderr (e.g. bad/unsupported image frames).
+      // Increase the buffer to avoid `ERR_CHILD_PROCESS_STDIO_MAXBUFFER`.
+      maxBuffer: 32 * 1024 * 1024,
+    });
     if (preview) {
       console.log(`[preview] ffmpeg done in ${Date.now() - ffmpegStartMs}ms`);
     }
