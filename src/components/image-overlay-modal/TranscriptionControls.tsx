@@ -8,6 +8,7 @@ import {
   Loader2,
   Plus,
   RotateCcw,
+  Smile,
   Upload,
   X,
 } from 'lucide-react';
@@ -68,6 +69,15 @@ export function TranscriptionControls({
     const q = customText.trim();
     if (!q) return;
     const url = `https://giphy.com/search/${encodeURIComponent(q)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openNotoEmojiSearch = () => {
+    const q = customText.trim();
+    if (!q) return;
+    const url = `https://googlefonts.github.io/noto-emoji-animation/?icon.query=${encodeURIComponent(
+      q
+    )}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -157,6 +167,17 @@ export function TranscriptionControls({
           title='Search Giphy'
         >
           <Gift className='h-4 w-4' />
+        </button>
+
+        <button
+          type='button'
+          onClick={openNotoEmojiSearch}
+          disabled={!customText.trim()}
+          className='p-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+          aria-label='Search Noto Emoji for input text'
+          title='Search Noto Emoji'
+        >
+          <Smile className='h-4 w-4' />
         </button>
 
         <button
