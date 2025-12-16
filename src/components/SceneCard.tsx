@@ -4674,7 +4674,14 @@ export default function SceneCard({
                     void handleClearSentenceField(scene.id);
                   }
                 }}
-                title='Click to edit (Right-click to clear sentence; if empty, restore original)'
+                title={(() => {
+                  const original = String(
+                    scene?.field_6901 || scene.field_6901 || ''
+                  );
+                  const base =
+                    'Click to edit (Right-click to clear sentence; if empty, restore original)';
+                  return original ? `Original: ${original}\n${base}` : base;
+                })()}
               >
                 {String(
                   scene['field_6890'] ||
