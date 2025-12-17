@@ -65,7 +65,7 @@ interface SceneCardProps {
     ) => Promise<void>;
     handleTranscribeScene: (
       sceneId: number,
-      sceneData?: BaserowRow,
+      sceneData?: unknown,
       videoType?: 'original' | 'final',
       skipRefresh?: boolean,
       skipSound?: boolean
@@ -895,13 +895,14 @@ export default function SceneCard({
   const handleTranscribeScene = useCallback(
     async (
       sceneId: number,
-      sceneData?: BaserowRow,
+      sceneData?: unknown,
       videoType: 'original' | 'final' = 'original',
       skipRefresh: boolean = false,
       skipSound: boolean = false
     ) => {
       const currentScene =
-        sceneData || data.find((scene) => scene.id === sceneId);
+        (sceneData as BaserowRow | undefined) ||
+        data.find((scene) => scene.id === sceneId);
       if (!currentScene) return;
 
       // Determine which video URL to use
@@ -4579,7 +4580,7 @@ export default function SceneCard({
                         className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
                           addingImageOverlay === scene.id
                             ? 'bg-gray-100 text-gray-500'
-                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                            : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                         title='Add image overlay to final video'
                       >
