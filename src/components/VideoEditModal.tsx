@@ -183,19 +183,19 @@ export function VideoEditModal({
               style={{
                 width:
                   videoDimensions.width > 0
-                    ? Math.min(videoDimensions.width, 900)
+                    ? Math.min(videoDimensions.width, 1100)
                     : '90%',
                 height:
                   videoDimensions.height > 0
                     ? Math.min(
                         videoDimensions.height *
-                          (Math.min(videoDimensions.width, 900) /
+                          (Math.min(videoDimensions.width, 1100) /
                             videoDimensions.width),
-                        800
+                        900
                       )
                     : 'auto',
                 maxWidth: '100%',
-                maxHeight: '80vh',
+                maxHeight: '85vh',
               }}
             />
           </div>
