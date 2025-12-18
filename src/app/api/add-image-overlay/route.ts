@@ -645,7 +645,22 @@ export async function POST(request: NextRequest) {
         `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`
       );
 
-      let overlayChain = `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase,crop=${overlayWidth}:${overlayHeight},format=rgba`;
+      // Build overlay filter chain.
+      // Important for GIFs:
+      // - Decode from the beginning, but shift timestamps so the first GIF frame has PTS=tStart.
+      // - This makes the GIF *visually* start from its beginning when the overlay becomes active.
+      // Note: setpts expressions are in timebase units, so shifting by seconds must use `/TB`.
+      const overlayFilters: string[] = [];
+      if (isGif) {
+        overlayFilters.push(`setpts=PTS-STARTPTS+(${tStart})/TB`);
+      }
+      overlayFilters.push(
+        `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase`
+      );
+      overlayFilters.push(`crop=${overlayWidth}:${overlayHeight}`);
+      overlayFilters.push('format=rgba');
+
+      let overlayChain = overlayFilters.join(',');
       if (needsScaleAnim) {
         overlayChain += `,scale=iw*(${scaleExpr}):ih*(${scaleExpr}):eval=frame`;
       }
