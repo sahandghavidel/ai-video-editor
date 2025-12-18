@@ -65,10 +65,14 @@ export function VideoEditModal({
 
   const handleTrim = () => {
     setStartTime(currentTime);
+    // Refocus the video so keyboard controls still work
+    setTimeout(() => videoRef.current?.focus(), 0);
   };
 
   const handleTrimEnd = () => {
     setEndTime(currentTime);
+    // Refocus the video so keyboard controls still work
+    setTimeout(() => videoRef.current?.focus(), 0);
   };
 
   const convertToGif = useCallback(async () => {
