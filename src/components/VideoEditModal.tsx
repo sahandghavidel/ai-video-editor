@@ -43,14 +43,54 @@ export function VideoEditModal({
         video.focus();
       };
 
+      // Keep controls always visible
+      const keepControlsVisible = () => {
+        const controls = video.querySelector(
+          'div[aria-label*="controls"], .video-controls, [part*="controls"]'
+        ) as HTMLElement;
+        if (controls) {
+          controls.style.display = 'flex';
+          controls.style.opacity = '1';
+          controls.style.visibility = 'visible';
+        }
+      };
+
       video.addEventListener('timeupdate', updateTime);
       video.addEventListener('loadedmetadata', updateDuration);
       video.addEventListener('loadeddata', handleLoadedData);
+      video.addEventListener('mouseenter', keepControlsVisible);
+      video.addEventListener('mousemove', keepControlsVisible);
+      video.addEventListener('mouseleave', keepControlsVisible);
+
+      // Force controls to stay visible
+      const style = document.createElement('style');
+      style.textContent = `
+        video::-webkit-media-controls-panel {
+          display: flex !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+        }
+        video::-webkit-media-controls {
+          display: flex !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+        }
+        video::-moz-media-controls {
+          display: flex !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+        }
+      `;
+      document.head.appendChild(style);
 
       return () => {
         video.removeEventListener('timeupdate', updateTime);
         video.removeEventListener('loadedmetadata', updateDuration);
         video.removeEventListener('loadeddata', handleLoadedData);
+        video.removeEventListener('mouseenter', keepControlsVisible);
+        video.removeEventListener('mousemove', keepControlsVisible);
+        video.removeEventListener('mouseleave', keepControlsVisible);
+        document.head.removeChild(style);
       };
     }
   }, [videoUrl]);
