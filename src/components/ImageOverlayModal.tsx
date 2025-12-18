@@ -27,6 +27,7 @@ import { ImagePositionControls } from './image-overlay-modal/ImagePositionContro
 import { TimingTintControls } from './image-overlay-modal/TimingTintControls';
 import { TranscriptionControls } from './image-overlay-modal/TranscriptionControls';
 import { TextOverlayControls } from './image-overlay-modal/TextOverlayControls';
+import { VideoEditModal } from './VideoEditModal';
 import type {
   TextStyling,
   TranscriptionWord,
@@ -347,6 +348,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     useState<OverlayAnimation>('miniZoom');
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
+  const [overlayVideo, setOverlayVideo] = useState<File | null>(null);
+  const [overlayVideoUrl, setOverlayVideoUrl] = useState<string | null>(null);
   const [isPastingOverlayFromClipboard, setIsPastingOverlayFromClipboard] =
     useState(false);
   const [cropperViewportPx, setCropperViewportPx] = useState<{
@@ -607,6 +610,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [cropShape, setCropShape] = useState<CropShape>('rectangle');
   const [cropRotationDegrees, setCropRotationDegrees] = useState(0);
 
+  // Video editing state
+  const [isVideoEditModalOpen, setIsVideoEditModalOpen] = useState(false);
+
   const [cropEditorMode, setCropEditorMode] = useState<CropEditorMode>('crop');
   const [cropAdjustments, setCropAdjustments] = useState<CropAdjustments>({
     brightness: 0,
@@ -673,6 +679,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null!);
+  const videoFileInputRef = useRef<HTMLInputElement>(null!);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0);
@@ -885,6 +892,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
     },
     [setOverlaySizeFromPixels]
+  );
+
+  const handleVideoUpload = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file && file.type.startsWith('video/')) {
+        setOverlayVideo(file);
+        const url = URL.createObjectURL(file);
+        setOverlayVideoUrl(url);
+        // Open video editing modal
+        setIsVideoEditModalOpen(true);
+      }
+    },
+    []
   );
 
   const handleRemoveImage = useCallback(() => {
@@ -3207,6 +3228,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               onPasteFromClipboard={handlePasteOverlayImageFromClipboard}
               isPastingFromClipboard={isPastingOverlayFromClipboard}
               onRemoveImage={handleRemoveImage}
+              videoFileInputRef={videoFileInputRef}
+              onVideoUpload={handleVideoUpload}
+              onPickVideoFile={() => videoFileInputRef.current?.click()}
             />
 
             {/* Position Controls */}
@@ -4140,6 +4164,25 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </div>
         </div>
       )}
+
+      {/* Video Edit Modal */}
+      <VideoEditModal
+        isOpen={isVideoEditModalOpen}
+        onClose={() => setIsVideoEditModalOpen(false)}
+        videoFile={overlayVideo}
+        videoUrl={overlayVideoUrl}
+        onSaveGif={(gifBlob) => {
+          // Convert blob to file and set as overlay image
+          const gifFile = new File([gifBlob], 'video-gif.gif', {
+            type: 'image/gif',
+          });
+          setOverlayImage(gifFile);
+          setOverlayImageUrl(URL.createObjectURL(gifFile));
+          setOverlayVideo(null);
+          setOverlayVideoUrl(null);
+          setIsVideoEditModalOpen(false);
+        }}
+      />
     </div>
   );
 };

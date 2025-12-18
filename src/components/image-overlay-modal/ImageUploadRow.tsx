@@ -1,7 +1,15 @@
 'use client';
 
 import React from 'react';
-import { Camera, Clipboard, Copy, Loader2, Upload, X } from 'lucide-react';
+import {
+  Camera,
+  Clipboard,
+  Copy,
+  Loader2,
+  Upload,
+  Video,
+  X,
+} from 'lucide-react';
 
 type Props = {
   fileInputRef: React.RefObject<HTMLInputElement>;
@@ -13,6 +21,9 @@ type Props = {
   onPasteFromClipboard: () => void;
   isPastingFromClipboard?: boolean;
   onRemoveImage: () => void;
+  videoFileInputRef: React.RefObject<HTMLInputElement>;
+  onVideoUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onPickVideoFile: () => void;
 };
 
 export function ImageUploadRow({
@@ -25,6 +36,9 @@ export function ImageUploadRow({
   onPasteFromClipboard,
   isPastingFromClipboard,
   onRemoveImage,
+  videoFileInputRef,
+  onVideoUpload,
+  onPickVideoFile,
 }: Props) {
   return (
     <div>
@@ -35,6 +49,13 @@ export function ImageUploadRow({
         onChange={onImageUpload}
         className='hidden'
       />
+      <input
+        ref={videoFileInputRef}
+        type='file'
+        accept='video/*'
+        onChange={onVideoUpload}
+        className='hidden'
+      />
       <div className='flex items-center space-x-2'>
         <button
           onClick={onPickFile}
@@ -43,6 +64,14 @@ export function ImageUploadRow({
           aria-label={overlayImage ? 'Change Image' : 'Upload Image'}
         >
           <Upload className='h-4 w-4' />
+        </button>
+        <button
+          onClick={onPickVideoFile}
+          className='flex items-center justify-center px-2 py-2 border border-gray-300 rounded hover:bg-gray-50 h-10 w-10'
+          title='Upload Video'
+          aria-label='Upload Video'
+        >
+          <Video className='h-4 w-4' />
         </button>
         <button
           onClick={onScreenshot}
