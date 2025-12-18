@@ -2584,6 +2584,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // If VideoEditModal is open, don't handle keyboard events in this modal
+      if (isVideoEditModalOpen) {
+        return;
+      }
+
       if (event.code === 'Tab') {
         // When the preview overlay is open, Tab should close it.
         if (previewUrl) {
@@ -2848,6 +2853,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     isPreviewLoading,
     handlePreview,
     handlePasteOverlayImageFromClipboard,
+    isVideoEditModalOpen,
   ]);
 
   // Update container dimensions

@@ -38,12 +38,19 @@ export function VideoEditModal({
         setEndTime(video.duration);
       };
 
+      const handleLoadedData = () => {
+        // Auto-focus the video when it's loaded so keyboard controls work immediately
+        video.focus();
+      };
+
       video.addEventListener('timeupdate', updateTime);
       video.addEventListener('loadedmetadata', updateDuration);
+      video.addEventListener('loadeddata', handleLoadedData);
 
       return () => {
         video.removeEventListener('timeupdate', updateTime);
         video.removeEventListener('loadedmetadata', updateDuration);
+        video.removeEventListener('loadeddata', handleLoadedData);
       };
     }
   }, [videoUrl]);
