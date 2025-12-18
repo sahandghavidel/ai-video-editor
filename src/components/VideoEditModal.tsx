@@ -24,6 +24,10 @@ export function VideoEditModal({
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [videoDimensions, setVideoDimensions] = useState({
+    width: 0,
+    height: 0,
+  });
 
   useEffect(() => {
     if (videoUrl && videoRef.current) {
@@ -36,6 +40,13 @@ export function VideoEditModal({
           return;
         setDuration(video.duration);
         setEndTime(video.duration);
+        // Set video dimensions for aspect ratio
+        if (video.videoWidth && video.videoHeight) {
+          setVideoDimensions({
+            width: video.videoWidth,
+            height: video.videoHeight,
+          });
+        }
       };
 
       const handleLoadedData = () => {
@@ -154,7 +165,7 @@ export function VideoEditModal({
       onKeyDown={handleModalKeyDown}
       tabIndex={-1}
     >
-      <div className='bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] w-full mx-4 overflow-y-auto'>
+      <div className='bg-white rounded-lg p-4 max-w-6xl max-h-[95vh] w-full mx-4 overflow-y-auto'>
         <div className='flex justify-between items-center mb-4'>
           <h3 className='text-lg font-semibold'>Edit Video</h3>
           <button onClick={onClose} className='p-1 hover:bg-gray-100 rounded'>
@@ -164,11 +175,28 @@ export function VideoEditModal({
 
         <div className='space-y-4'>
           {/* Video Player */}
-          <div className='relative'>
+          <div className='relative w-full flex justify-center'>
             <video
               ref={videoRef}
-              className='w-full max-h-96 bg-black rounded'
+              className='bg-black rounded'
               controls={true}
+              style={{
+                width:
+                  videoDimensions.width > 0
+                    ? Math.min(videoDimensions.width, 900)
+                    : '90%',
+                height:
+                  videoDimensions.height > 0
+                    ? Math.min(
+                        videoDimensions.height *
+                          (Math.min(videoDimensions.width, 900) /
+                            videoDimensions.width),
+                        800
+                      )
+                    : 'auto',
+                maxWidth: '100%',
+                maxHeight: '80vh',
+              }}
             />
           </div>
 
