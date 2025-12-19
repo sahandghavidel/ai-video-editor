@@ -5,18 +5,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import { Agent } from 'undici';
 
 // TTS Server management - optimized for fast API-only server
 let ttsServerProcess: ReturnType<typeof spawn> | null = null;
 let ttsServerPid: number | null = null; // Track PID for reliable killing
 let serverTimeout: NodeJS.Timeout | null = null;
 let timeoutScheduledAt: number = 0; // Track when timeout was scheduled
-let shutdownInitiated: boolean = false; // Prevent multiple shutdown attempts
+const shutdownInitiated: boolean = false; // Prevent multiple shutdown attempts
 const SERVER_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 const SERVER_HOST = 'host.docker.internal';
 const SERVER_PORT = 8004;
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
 const TIMEOUT_STATE_FILE = path.join(process.cwd(), 'tts-timeout-state.json'); // Shared state file
+
+// Network timeouts for long TTS generations.
+// Node/Next fetch is backed by undici; the error you hit (`UND_ERR_HEADERS_TIMEOUT`)
+// is controlled by undici's headers/body timeouts (not AbortController alone).
+const TTS_HEADERS_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+const TTS_BODY_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+const TTS_FETCH_ABORT_MS = 65 * 60 * 1000; // 65 minutes (safety cap)
+
+const ttsFetchDispatcher = new Agent({
+  headersTimeout: TTS_HEADERS_TIMEOUT_MS,
+  bodyTimeout: TTS_BODY_TIMEOUT_MS,
+});
 
 // Shared timeout state management across requests
 function readTimeoutState(): {
@@ -775,13 +788,28 @@ export async function POST(request: NextRequest) {
       reference_audio_filename: settings.reference_audio_filename,
     };
 
+    const ttsController = new AbortController();
+    const ttsAbortTimer = setTimeout(() => {
+      try {
+        ttsController.abort();
+      } catch {
+        // ignore
+      }
+    }, TTS_FETCH_ABORT_MS);
+
     const ttsResponse = await fetch(`${SERVER_URL}/tts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(ttsPayload),
-    });
+      signal: ttsController.signal,
+      // `dispatcher` is an undici-specific extension used by Node's fetch.
+      // TypeScript's DOM types don't include it.
+      dispatcher: ttsFetchDispatcher,
+    } as unknown as RequestInit);
+
+    clearTimeout(ttsAbortTimer);
 
     if (!ttsResponse.ok) {
       throw new Error(`TTS service error: ${ttsResponse.status}`);
