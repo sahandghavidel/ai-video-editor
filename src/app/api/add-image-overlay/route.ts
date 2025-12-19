@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
     const overlayAnimationRaw = formData.get('overlayAnimation') as
       | string
       | null;
+    const gifLoopRaw = formData.get('gifLoop') as string | null;
     const textStyling = formData.get('textStyling')
       ? JSON.parse(formData.get('textStyling') as string)
       : null;
@@ -146,6 +147,7 @@ export async function POST(request: NextRequest) {
       videoTintInvert: videoTintInvertRaw,
       overlaySound: overlaySoundRaw,
       overlayAnimation: overlayAnimationRaw,
+      gifLoop: gifLoopRaw,
     });
 
     if (
@@ -602,9 +604,20 @@ export async function POST(request: NextRequest) {
       }
 
       const isGif = effectiveMime === 'image/gif';
+      const gifLoop = (() => {
+        if (gifLoopRaw == null) return true;
+        const v = String(gifLoopRaw).trim().toLowerCase();
+        if (v === 'false' || v === '0' || v === 'no' || v === 'off')
+          return false;
+        return true;
+      })();
       // For animated sources (gif), loop the stream. For single-frame images,
       // loop the single frame so time-based filters can animate.
-      const imageInputLoop = isGif ? '-stream_loop -1' : '-loop 1';
+      // Also force GIFs to play once at the demuxer level (ignore internal loop
+      // metadata), then optionally re-loop via -stream_loop.
+      const imageInputLoop = isGif
+        ? `${gifLoop ? '-stream_loop -1 ' : ''}-ignore_loop 1`
+        : '-loop 1';
 
       const overlayEnable = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
 
@@ -686,7 +699,9 @@ export async function POST(request: NextRequest) {
         : null;
       const baseRef = preview || tintFilter ? `[base]` : `[0:v]`;
 
-      const overlayFilter = `${baseRef}[overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}[vout]`;
+      // If the overlay stream ends early (e.g. non-looping GIF), repeat the last
+      // frame so it stays visible until endTime.
+      const overlayFilter = `${baseRef}[overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}:eof_action=repeat:repeatlast=1[vout]`;
 
       const videoPost =
         preview && previewPostFilter

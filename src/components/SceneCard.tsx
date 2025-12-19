@@ -1539,7 +1539,8 @@ export default function SceneCard({
       | 'zoomIn'
       | 'slideLeft'
       | 'slideRight'
-      | 'slideUp'
+      | 'slideUp',
+    gifLoop?: boolean
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1549,6 +1550,9 @@ export default function SceneCard({
       formData.append('videoUrl', imageOverlayModal.videoUrl!);
       if (overlayImage) {
         formData.append('overlayImage', overlayImage);
+        if (overlayImage.type === 'image/gif') {
+          formData.append('gifLoop', gifLoop === false ? 'false' : 'true');
+        }
       }
       if (overlayText) {
         formData.append('overlayText', overlayText);
