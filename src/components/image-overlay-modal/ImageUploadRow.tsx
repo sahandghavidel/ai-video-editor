@@ -14,6 +14,9 @@ import {
 type Props = {
   fileInputRef: React.RefObject<HTMLInputElement>;
   overlayImage: File | null;
+  isGifOverlay?: boolean;
+  loopGif?: boolean;
+  onChangeLoopGif?: (next: boolean) => void;
   onImageUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onPickFile: () => void;
   onScreenshot: () => void;
@@ -29,6 +32,9 @@ type Props = {
 export function ImageUploadRow({
   fileInputRef,
   overlayImage,
+  isGifOverlay,
+  loopGif,
+  onChangeLoopGif,
   onImageUpload,
   onPickFile,
   onScreenshot,
@@ -114,6 +120,17 @@ export function ImageUploadRow({
           >
             <X className='h-4 w-4' />
           </button>
+        )}
+        {overlayImage && isGifOverlay && onChangeLoopGif && (
+          <label className='flex items-center gap-2 text-sm select-none ml-2'>
+            <input
+              type='checkbox'
+              checked={!!loopGif}
+              onChange={(e) => onChangeLoopGif(e.target.checked)}
+              className='h-4 w-4'
+            />
+            <span>Loop GIF</span>
+          </label>
         )}
         {overlayImage && (
           <p className='text-xs text-gray-600 ml-2 truncate max-w-[180px]'>

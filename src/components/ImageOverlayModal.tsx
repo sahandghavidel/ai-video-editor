@@ -624,12 +624,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isCropStencilLocked, setIsCropStencilLocked] = useState(true);
 
   const isGifOverlay = overlayImage?.type === 'image/gif';
-  // When checked: GIF does NOT loop and freezes on its last frame.
-  const [dontLoopGif, setDontLoopGif] = useState(false);
+  const [loopGif, setLoopGif] = useState(false);
 
+  // Default: if a GIF is selected, loop is ON.
+  // Only set this when the selected file changes, so it won't override the
+  // user's checkbox toggle while keeping the same GIF selected.
   useEffect(() => {
-    if (!isGifOverlay) setDontLoopGif(false);
-  }, [isGifOverlay]);
+    if (!overlayImage) {
+      setLoopGif(false);
+      return;
+    }
+    if (overlayImage.type === 'image/gif') {
+      setLoopGif(true);
+    } else {
+      setLoopGif(false);
+    }
+  }, [overlayImage]);
 
   const setCropRotationAbsolute = useCallback((nextDegrees: number) => {
     const next = Math.max(-180, Math.min(180, Math.round(nextDegrees)));
@@ -2135,7 +2145,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (overlayImage) {
       formData.append('overlayImage', overlayImage);
       if (overlayImage.type === 'image/gif') {
-        formData.append('gifLoop', dontLoopGif ? 'false' : 'true');
+        formData.append('gifLoop', loopGif ? 'true' : 'false');
       }
     }
     if (selectedWordText) {
@@ -2209,7 +2219,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [
     overlayImage,
-    dontLoopGif,
+    loopGif,
     selectedWordText,
     videoTintColor,
     videoTintOpacity,
@@ -2260,7 +2270,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         tintInvert,
         selectedSoundName,
         overlayAnimation,
-        dontLoopGif ? false : true
+        loopGif
       );
 
       // After applying, fetch the scene from the DB to get the updated video URL
@@ -2332,7 +2342,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setIsTextStylingSectionOpen(false);
       setIsSoundSectionOpen(false);
       setIsAnimationSectionOpen(false);
-      setDontLoopGif(false);
+      setLoopGif(false);
       setIsCropping(false);
       setActualImageDimensions(null);
       setTextOverlayPosition({ x: 50, y: 50 });
@@ -2360,7 +2370,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [
     overlayImage,
-    dontLoopGif,
+    loopGif,
     selectedWordText,
     textStyling,
     videoTintColor,
@@ -3241,6 +3251,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             <ImageUploadRow
               fileInputRef={fileInputRef}
               overlayImage={overlayImage}
+              isGifOverlay={isGifOverlay}
+              loopGif={loopGif}
+              onChangeLoopGif={setLoopGif}
               onImageUpload={handleImageUpload}
               onPickFile={() => fileInputRef.current?.click()}
               onScreenshot={handleScreenshot}
@@ -3293,20 +3306,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   }));
                 }}
               />
-            )}
-
-            {overlayImageUrl && isGifOverlay && (
-              <div className='bg-gray-50 p-3 rounded-lg border border-gray-200'>
-                <label className='flex items-center gap-2 text-sm cursor-pointer select-none'>
-                  <input
-                    type='checkbox'
-                    checked={dontLoopGif}
-                    onChange={(e) => setDontLoopGif(e.target.checked)}
-                    className='h-4 w-4'
-                  />
-                  <span>Don’t loop GIF (freeze on last frame)</span>
-                </label>
-              </div>
             )}
 
             {/* Timing Controls */}
