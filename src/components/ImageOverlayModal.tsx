@@ -436,6 +436,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       cancelled = true;
     };
   }, [isOpen]);
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (!isOpen) {
+      setTimerSeconds(120); // Reset timer when modal closes
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setTimerSeconds((prev) => {
+        if (prev <= 1) {
+          // Timer reached 0, play sound
+          const audio = new Audio('/sounds/pop.wav');
+          audio.play().catch(() => {
+            // Ignore audio play errors
+          });
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
   const [textOverlaySize, setTextOverlaySize] = useState({
     width: 100,
     height: 100,
@@ -466,6 +492,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   >([]);
   const [isFontLoaded, setIsFontLoaded] = useState<boolean>(false);
   const [showFontPreview, setShowFontPreview] = useState<boolean>(false);
+  const [timerSeconds, setTimerSeconds] = useState(120); // 2 minutes countdown
 
   // Load saved styles from localStorage on mount
   useEffect(() => {
@@ -2947,12 +2974,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       <div className='bg-white rounded-lg p-8 w-full mx-2 h-[95vh] overflow-hidden flex flex-col'>
         <div className='flex justify-between items-center mb-4'>
           <h2 className='text-xl font-semibold'>Add Image Overlay</h2>
-          <button
-            onClick={handleClose}
-            className='p-1 hover:bg-gray-100 rounded'
-          >
-            <X className='h-5 w-5' />
-          </button>
+          <div className='flex items-center gap-4'>
+            <div className='text-sm font-mono bg-gray-100 px-3 py-1 rounded'>
+              {Math.floor(timerSeconds / 60)}:
+              {(timerSeconds % 60).toString().padStart(2, '0')}
+            </div>
+            <button
+              onClick={handleClose}
+              className='p-1 hover:bg-gray-100 rounded'
+            >
+              <X className='h-5 w-5' />
+            </button>
+          </div>
         </div>
 
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 items-start'>
