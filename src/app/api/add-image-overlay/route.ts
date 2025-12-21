@@ -760,7 +760,7 @@ export async function POST(request: NextRequest) {
 
       // Avoid filtergraph quoting issues (e.g. apostrophes in text) by using a text file.
       const textFilePath = path.join(tempDir, 'overlay-text.txt');
-      await fs.promises.writeFile(textFilePath, overlayText, 'utf8');
+      // We'll write the file after applying server-side wrapping.
       const textFileArg = escapeFilterValue(textFilePath);
 
       // Use custom styling if provided, otherwise use defaults
@@ -857,6 +857,83 @@ export async function POST(request: NextRequest) {
       // crash FFmpeg. Implement animations by rendering text to a transparent
       // canvas and animating that layer with scale/fade/overlay.
 
+      // Padding used for WRAPPING calculations only. Keep this conservative but
+      // not so large that it forces early wrapping and creates huge side gutters.
+      // drawtext's `fix_bounds=1` handles the final on-canvas safety.
+      const paddingFromBorder = Math.ceil(Number(borderWidth) || 0);
+      const paddingFromBg = Math.ceil(Number(bgSize) || 0);
+      const paddingFromShadow = Math.ceil(
+        Math.max(Math.abs(Number(shadowX) || 0), Math.abs(Number(shadowY) || 0))
+      );
+      const wrapPadPx = Math.min(
+        120,
+        Math.max(2, paddingFromBorder + paddingFromBg + paddingFromShadow + 2)
+      );
+
+      // Server-side wrapping: drawtext doesn't auto-wrap, so insert newlines.
+      // We estimate characters-per-line from available pixel width + font size.
+      const avgCharPx = Math.max(6, fontSize * 0.62);
+      const maxLinePx = Math.max(20, overlayWidth - wrapPadPx * 2);
+      const maxCharsPerLine = Math.max(4, Math.floor(maxLinePx / avgCharPx));
+
+      const wrapText = (input: string, maxChars: number) => {
+        const normalized = String(input ?? '')
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n');
+
+        const wrapSingleLine = (line: string) => {
+          const out: string[] = [];
+          const words = line.split(/\s+/).filter(Boolean);
+          let current = '';
+
+          const pushCurrent = () => {
+            if (current) out.push(current);
+            current = '';
+          };
+
+          for (const word of words) {
+            if (word.length > maxChars) {
+              pushCurrent();
+              for (let i = 0; i < word.length; i += maxChars) {
+                out.push(word.slice(i, i + maxChars));
+              }
+              continue;
+            }
+
+            if (!current) {
+              current = word;
+              continue;
+            }
+
+            if ((current + ' ' + word).length <= maxChars) {
+              current += ' ' + word;
+            } else {
+              pushCurrent();
+              current = word;
+            }
+          }
+
+          pushCurrent();
+          return out;
+        };
+
+        const rawLines = normalized.split('\n');
+        const wrapped: string[] = [];
+        for (const raw of rawLines) {
+          const trimmed = raw.trim();
+          if (!trimmed) {
+            wrapped.push('');
+            continue;
+          }
+          wrapped.push(...wrapSingleLine(trimmed));
+        }
+
+        return wrapped.join('\n');
+      };
+
+      const wrappedOverlayText = wrapText(overlayText, maxCharsPerLine);
+      await fs.promises.writeFile(textFilePath, wrappedOverlayText, 'utf8');
+
       const canvasW = Math.max(2, overlayWidth);
       const canvasH = Math.max(2, overlayHeight);
 
@@ -925,8 +1002,10 @@ export async function POST(request: NextRequest) {
         preview ? segmentDuration : videoDuration,
         tEnd + oneFrame
       );
+
+      const lineSpacing = Math.max(0, Math.round(fontSize * 0.22));
       let textChain = `color=c=black@0.0:s=${canvasW}x${canvasH}:r=${outFps}:d=${textLayerDuration}[txtbg];`;
-      textChain += `[txtbg]drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:x=(w-text_w)/2:y=(h-text_h)/2${boxParams}[txt0];`;
+      textChain += `[txtbg]drawtext=textfile=${textFileArg}:borderw=${borderWidth}:bordercolor=${borderColorNormalized}:fontsize=${fontSize}:fontcolor=${fontColorWithOpacity}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColorNormalized}@${shadowOpacity}:fontfile=${fontFileArg}:text_align=C:line_spacing=${lineSpacing}:fix_bounds=1:x=(w-text_w)/2:y=(h-text_h)/2${boxParams}[txt0];`;
 
       let animChain = `[txt0]format=rgba`;
       if (needsScaleAnim) {

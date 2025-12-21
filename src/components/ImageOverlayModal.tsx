@@ -3189,7 +3189,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   top: `${textOverlayPosition.y}%`,
                   transform: 'translate(-50%, -50%)',
                   width: `${Math.max(
-                    5,
+                    10,
                     Math.min(
                       95,
                       (selectedWordText.length <= 3
@@ -3200,14 +3200,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         ? 70
                         : 85) *
                         (textOverlaySize.width / 20)
-                    ) * 0.5
+                    )
                   )}%`,
                   height: `${Math.max(
-                    5,
-                    Math.max(
-                      10,
-                      Math.min(85, (textOverlaySize.width / 100) * 60)
-                    ) * 0.5
+                    8,
+                    Math.min(85, (textOverlaySize.width / 100) * 60)
                   )}%`,
                   // Match server-side font sizing (in video pixels), then scale to CSS pixels.
                   fontSize: `${(() => {
@@ -3236,7 +3233,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
               >
                 <div
-                  className='w-full h-full flex items-center justify-center font-bold select-none whitespace-nowrap'
+                  className='w-full h-full flex items-center justify-center font-bold select-none whitespace-normal break-words text-center'
                   style={{
                     color: textStyling.fontColor,
                     textShadow: `${textStyling.shadowX * videoToCssScale}px ${
