@@ -343,7 +343,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     { name: string; url: string }[]
   >([]);
   const [selectedSoundName, setSelectedSoundName] = useState<string | null>(
-    'pop.wav'
+    null
   );
   const [overlayAnimation, setOverlayAnimation] =
     useState<OverlayAnimation>('miniZoom');
@@ -2363,7 +2363,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setTintSize({ width: 100, height: 100 });
       setTintInvert(false);
       setIsEditingTintArea(false);
-      setSelectedSoundName('pop.wav');
+      setSelectedSoundName(null);
       setOverlayAnimation('miniZoom');
       setIsTintSectionOpen(false);
       setIsTextStylingSectionOpen(false);
@@ -2491,7 +2491,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setTintSize({ width: 100, height: 100 });
     setTintInvert(false);
     setIsEditingTintArea(false);
-    setSelectedSoundName('pop.wav');
+    setSelectedSoundName(null);
     setOverlayAnimation('miniZoom');
     setIsTintSectionOpen(false);
     setIsTextStylingSectionOpen(false);
