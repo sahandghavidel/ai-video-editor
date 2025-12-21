@@ -339,6 +339,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const previewButtonRef = useRef<HTMLButtonElement | null>(null);
   const pasteSinkRef = useRef<HTMLTextAreaElement | null>(null);
   const forceHandleOverlayPasteRef = useRef(false);
+  const soundPreviewRef = useRef<HTMLAudioElement | null>(null);
   const [availableSounds, setAvailableSounds] = useState<
     { name: string; url: string }[]
   >([]);
@@ -436,6 +437,50 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       cancelled = true;
     };
   }, [isOpen]);
+
+  const playOverlaySoundPreview = useCallback(
+    (soundName: string | null) => {
+      if (!soundName) return;
+
+      const match = availableSounds.find((s) => s.name === soundName);
+      const url = match?.url || `/sounds/${encodeURIComponent(soundName)}`;
+
+      try {
+        if (soundPreviewRef.current) {
+          try {
+            soundPreviewRef.current.pause();
+            soundPreviewRef.current.currentTime = 0;
+          } catch {
+            // ignore
+          }
+        }
+
+        const audio = new Audio(url);
+        soundPreviewRef.current = audio;
+        audio.play().catch(() => {
+          // ignore autoplay/user-gesture restrictions
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [availableSounds]
+  );
+
+  const cycleOverlaySound = useCallback(() => {
+    const ordered: (string | null)[] = [
+      null,
+      ...availableSounds.map((s) => s.name),
+    ];
+    if (ordered.length <= 1) return;
+
+    const currentIndex = ordered.findIndex((n) => n === selectedSoundName);
+    const nextIndex =
+      currentIndex >= 0 ? (currentIndex + 1) % ordered.length : 0;
+    const next = ordered[nextIndex] ?? null;
+    setSelectedSoundName(next);
+    playOverlaySoundPreview(next);
+  }, [availableSounds, selectedSoundName, playOverlaySoundPreview]);
 
   // Timer countdown effect
   useEffect(() => {
@@ -3166,6 +3211,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
                 onPointerDown={handleMouseDown}
                 onWheel={handleOverlayWheelZoom}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  cycleOverlaySound();
+                }}
                 onDoubleClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -3226,6 +3276,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
                 onPointerDown={handleTextMouseDown}
                 onWheel={handleTextOverlayWheelZoom}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  cycleOverlaySound();
+                }}
                 onDoubleClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
