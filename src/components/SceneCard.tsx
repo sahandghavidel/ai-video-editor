@@ -456,6 +456,99 @@ export default function SceneCard({
     }
   };
 
+  // State for combining scenes
+  const [combiningId, setCombiningId] = useState<number | null>(null);
+
+  // Combine this scene with the next scene (remove next scene, append its text, update timings)
+  const handleCombineWithNext = async (sceneId: number) => {
+    // Prevent multiple simultaneous combines
+    if (combiningId !== null) return;
+
+    const index = filteredAndSortedData.findIndex((s) => s.id === sceneId);
+    if (index === -1) return;
+    if (index === filteredAndSortedData.length - 1) {
+      alert('No next scene to combine with.');
+      return;
+    }
+
+    const currentScene = filteredAndSortedData[index];
+    const nextScene = filteredAndSortedData[index + 1];
+    if (!currentScene || !nextScene) return;
+
+    // Prepare new text fields
+    const currSentence = String(currentScene.field_6890 || '').trim();
+    const nextSentence = String(
+      nextScene.field_6890 || nextScene.field_6901 || ''
+    ).trim();
+    const sep = currSentence && nextSentence ? ' ' : '';
+    const newSentence = (currSentence + sep + nextSentence).trim();
+
+    const currOriginal = String(
+      currentScene.field_6901 || currentScene.field_6890 || ''
+    ).trim();
+    const nextOriginal = String(
+      nextScene.field_6901 || nextScene.field_6890 || ''
+    ).trim();
+    const newOriginal = (currOriginal + sep + nextOriginal).trim();
+
+    const newEndTime = Number(nextScene.field_6897) || 0;
+    const currentStart = Number(currentScene.field_6896) || 0;
+    const newDuration = Math.max(
+      0,
+      Number((newEndTime - currentStart).toFixed(2))
+    );
+
+    setCombiningId(sceneId);
+
+    // Optimistic update: update current scene and remove next one from local copy
+    const optimisticData = data
+      .map((s) =>
+        s.id === sceneId
+          ? {
+              ...s,
+              field_6890: newSentence,
+              field_6901: newOriginal,
+              field_6897: newEndTime,
+              field_6884: newDuration,
+            }
+          : s
+      )
+      .filter((s) => s.id !== nextScene.id);
+
+    onDataUpdate?.(optimisticData);
+
+    try {
+      // Update current scene in Baserow
+      await updateSceneRow(sceneId, {
+        field_6890: newSentence,
+        field_6901: newOriginal,
+        field_6897: newEndTime,
+        field_6884: newDuration,
+      });
+
+      // Delete the next scene row via API
+      const res = await fetch(`/api/baserow/scenes/${nextScene.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`Failed to delete next scene: ${res.status} ${t}`);
+      }
+
+      playSuccessSound();
+      refreshData?.();
+    } catch (error) {
+      console.error('Failed to combine scenes:', error);
+      playErrorSound();
+      alert('Failed to combine scenes. Please try again.');
+      // Revert optimistic update
+      onDataUpdate?.(data);
+    } finally {
+      setCombiningId(null);
+    }
+  };
+
   // Calculate dropdown position based on available space
   const calculateDropdownPosition = (sceneId: number) => {
     const dropdownRef = dropdownRefs.current[sceneId];
@@ -4600,6 +4693,30 @@ export default function SceneCard({
                         </span>
                       </button>
                     )}
+
+                  {/* Combine Next Scene Button */}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm('Combine the next scene into this one?'))
+                        return;
+                      await handleCombineWithNext(scene.id);
+                    }}
+                    disabled={combiningId === scene.id}
+                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
+                      combiningId === scene.id
+                        ? 'bg-gray-100 text-gray-500'
+                        : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title='Combine this scene with the next scene'
+                  >
+                    {combiningId === scene.id ? (
+                      <Loader2 className='animate-spin h-3 w-3' />
+                    ) : (
+                      <FastForward className='h-3 w-3' />
+                    )}
+                    <span>Combine Next</span>
+                  </button>
 
                   {/* Produced Video Button - LAST */}
                   {typeof scene['field_6886'] === 'string' &&

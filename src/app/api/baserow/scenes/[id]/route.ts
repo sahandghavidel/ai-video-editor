@@ -84,3 +84,57 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const sceneId = parseInt(id);
+    if (isNaN(sceneId)) {
+      return NextResponse.json({ error: 'Invalid scene ID' }, { status: 400 });
+    }
+
+    const baserowUrl = process.env.BASEROW_API_URL;
+    const scenesTableId = '714'; // Scenes table
+
+    if (!baserowUrl) {
+      return NextResponse.json(
+        { error: 'Missing Baserow URL' },
+        { status: 500 }
+      );
+    }
+
+    // Get JWT token
+    const token = await getJWTToken();
+
+    // Delete the scene in Baserow
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/${scenesTableId}/${sceneId}/`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `JWT ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to delete scene:', errorText);
+      return NextResponse.json(
+        { error: `Failed to delete scene: ${response.status} ${errorText}` },
+        { status: response.status }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting scene:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
