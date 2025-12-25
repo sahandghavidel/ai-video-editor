@@ -64,6 +64,7 @@ export interface ModelSelectionState {
   modelsLoading: boolean;
   modelsError: string | null;
   modelSearch: string;
+  enforceLongerSentences: boolean;
 }
 
 // Scene loading state interface
@@ -361,6 +362,7 @@ const defaultModelSelection: ModelSelectionState = {
   modelsLoading: false,
   modelsError: null,
   modelSearch: 'free',
+  enforceLongerSentences: false,
 };
 
 // Default scene loading state
@@ -655,6 +657,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       const newModelSelection = {
         ...state.modelSelection,
         modelSearch: search,
+      };
+      // Save to localStorage whenever updated
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
+
+  setEnforceLongerSentences: (enforce: boolean) =>
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        enforceLongerSentences: enforce,
       };
       // Save to localStorage whenever updated
       localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));

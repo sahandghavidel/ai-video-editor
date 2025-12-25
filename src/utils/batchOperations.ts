@@ -11,7 +11,10 @@ export const handleImproveAllSentences = async (
   handleSentenceImprovement: (
     sceneId: number,
     sentence: string,
-    model?: string
+    model?: string,
+    sceneData?: BaserowRow,
+    skipRefresh?: boolean,
+    enforceLongerSentences?: boolean
   ) => Promise<void>,
   selectedModel: string | null,
   startBatchOperation: (operation: 'improvingAll') => void,
@@ -29,7 +32,8 @@ export const handleImproveAllSentences = async (
       await handleSentenceImprovement(
         scene.id,
         currentSentence,
-        selectedModel || undefined
+        selectedModel || undefined,
+        scene
       );
       await wait(10000); // 10 seconds delay
     }

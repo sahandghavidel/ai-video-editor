@@ -17,7 +17,6 @@ import {
   Pause,
   Video,
   Square,
-  RotateCcw,
   CheckCircle,
   Monitor,
   Settings,
@@ -46,7 +45,9 @@ interface SceneCardProps {
       sceneId: number,
       sentence: string,
       model?: string,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
+      skipRefresh?: boolean,
+      enforceLongerSentences?: boolean
     ) => Promise<void>;
     handleTTSProduce: (
       sceneId: number,
@@ -1912,7 +1913,8 @@ export default function SceneCard({
       currentSentence: string,
       modelOverride?: string,
       sceneData?: BaserowRow,
-      skipRefresh = false
+      skipRefresh = false,
+      enforceLongerSentences?: boolean
     ) => {
       setImprovingSentence(sceneId);
 
@@ -1930,6 +1932,8 @@ export default function SceneCard({
           currentSentence,
           sceneId,
           model: modelOverride || modelSelection.selectedModel,
+          enforceLongerSentences:
+            enforceLongerSentences ?? modelSelection.enforceLongerSentences,
         }),
       });
 
@@ -1994,6 +1998,7 @@ export default function SceneCard({
     [
       setImprovingSentence,
       modelSelection.selectedModel,
+      modelSelection.enforceLongerSentences,
       videoSettings.autoGenerateTTS,
     ]
   );
@@ -4276,7 +4281,7 @@ export default function SceneCard({
                         scene['field_6890'] || scene.field_6890 || ''
                       ).trim()
                     }
-                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 rounded-full text-xs font-medium transition-colors ${
+                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                       sceneLoading.improvingSentence === scene.id
                         ? 'bg-gray-100 text-gray-500'
                         : sceneLoading.improvingSentence !== null ||
@@ -4298,28 +4303,29 @@ export default function SceneCard({
                   >
                     {sceneLoading.improvingSentence === scene.id ? (
                       <Loader2 className='animate-spin h-3 w-3' />
-                    ) : typeof scene['field_6901'] === 'string' &&
-                      scene['field_6901'] &&
-                      scene['field_6901'] !== scene['field_6890'] ? (
+                    ) : (
                       <div className='flex items-center space-x-1'>
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleRevertToOriginal(scene.id);
+                            handleSentenceImprovement(
+                              scene.id,
+                              String(
+                                scene['field_6890'] || scene.field_6890 || ''
+                              ),
+                              modelSelection.selectedModel || undefined,
+                              scene,
+                              false,
+                              true // enforce longer sentences
+                            );
                           }}
                           className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
-                          title='Revert to original sentence'
+                          title='Detailed AI improvement with longer sentences'
                         >
-                          {revertingId === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <RotateCcw className='h-3 w-3 text-indigo-700' />
-                          )}
+                          <Sparkles className='h-3 w-3 text-purple-600' />
                         </div>
                         <Sparkles className='h-3 w-3' />
                       </div>
-                    ) : (
-                      <Sparkles className='h-3 w-3' />
                     )}
                     <span>
                       {sceneLoading.improvingSentence === scene.id

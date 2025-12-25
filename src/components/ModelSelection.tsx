@@ -4,8 +4,13 @@ import { useAppStore } from '@/store/useAppStore';
 import { RefreshCw, Bot, Search } from 'lucide-react';
 
 export default function ModelSelection() {
-  const { modelSelection, setSelectedModel, setModelSearch, fetchModels } =
-    useAppStore();
+  const {
+    modelSelection,
+    setSelectedModel,
+    setModelSearch,
+    setEnforceLongerSentences,
+    fetchModels,
+  } = useAppStore();
 
   return (
     <div className='p-3 rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200'>
@@ -63,7 +68,6 @@ export default function ModelSelection() {
             {/* Search Input - Compact */}
             <div className='space-y-1'>
               <div className='relative'>
-             
                 <input
                   type='text'
                   className='w-full pl-8 p-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors'
@@ -130,6 +134,23 @@ export default function ModelSelection() {
             </p>
           </div>
         )}
+
+        {/* Enforce Longer Sentences Checkbox */}
+        <div className='flex items-center space-x-2'>
+          <input
+            type='checkbox'
+            id='enforceLongerSentences'
+            checked={modelSelection.enforceLongerSentences}
+            onChange={(e) => setEnforceLongerSentences(e.target.checked)}
+            className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
+          />
+          <label
+            htmlFor='enforceLongerSentences'
+            className='text-xs text-gray-700'
+          >
+            Enforce longer sentences with more detail
+          </label>
+        </div>
       </div>
     </div>
   );

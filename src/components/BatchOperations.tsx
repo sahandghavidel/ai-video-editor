@@ -38,7 +38,10 @@ interface BatchOperationsProps {
   handleSentenceImprovement: (
     sceneId: number,
     sentence: string,
-    model?: string
+    model?: string,
+    sceneData?: BaserowRow,
+    skipRefresh?: boolean,
+    enforceLongerSentences?: boolean
   ) => Promise<void>;
   handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
   handleVideoGenerate: (

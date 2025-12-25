@@ -44,7 +44,8 @@ export default function Home() {
       sentence: string,
       model?: string,
       sceneData?: BaserowRow,
-      skipRefresh?: boolean
+      skipRefresh?: boolean,
+      enforceLongerSentences?: boolean
     ) => Promise<void>;
     handleTTSProduce: (
       sceneId: number,

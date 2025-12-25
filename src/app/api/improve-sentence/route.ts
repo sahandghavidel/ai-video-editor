@@ -33,7 +33,12 @@ async function getScenesFromTable(): Promise<BaserowRow[]> {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { currentSentence, sceneId, model } = body;
+    const {
+      currentSentence,
+      sceneId,
+      model,
+      enforceLongerSentences = false,
+    } = body;
 
     if (!currentSentence) {
       return Response.json(
@@ -150,7 +155,11 @@ Please improve this sentence by following these guidelines:
 • Keep the technical accuracy intact
 • Use simple English that's easy to understand
 • Avoid unnecessary jargon and complex vocabulary
-• Ensure the improved sentence must be longer than the original with more detail and clarity.
+${
+  enforceLongerSentences
+    ? '• Ensure the improved sentence must be longer than the original with more detail and clarity.'
+    : ''
+}
 • if your improvement includes a sentence
 more than 12 words), make it into smaller sentences (a sentence ends with a period), but keep the meaning and length similar.
 • Never use code snippets like html or css tags
@@ -166,7 +175,11 @@ Please improve this sentence by following these guidelines:
 • Keep the technical accuracy intact
 • Use simple English that's easy to understand
 • Avoid unnecessary jargon and complex vocabulary
-• Ensure the improved sentence must be longer than the original with more detail and clarity.
+${
+  enforceLongerSentences
+    ? '• Ensure the improved sentence must be longer than the original with more detail and clarity.'
+    : ''
+}
 • if your improvement includes a sentence
 more than 12 words), make it into smaller sentences (a sentence ends with a period), but keep the meaning and length similar.
 • Never use code snippets like html or css tags
