@@ -4188,7 +4188,7 @@ export default function SceneCard({
                         scene['field_6890'] || scene.field_6890 || ''
                       ).trim()
                     }
-                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[100px] rounded-full text-xs font-medium transition-colors ${
+                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                       sceneLoading.producingTTS === scene.id
                         ? 'bg-gray-100 text-gray-500'
                         : sceneLoading.producingTTS !== null ||
@@ -4281,7 +4281,7 @@ export default function SceneCard({
                         scene['field_6890'] || scene.field_6890 || ''
                       ).trim()
                     }
-                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
+                    className={`flex items-center justify-center space-x-1 px-1 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                       sceneLoading.improvingSentence === scene.id
                         ? 'bg-gray-100 text-gray-500'
                         : sceneLoading.improvingSentence !== null ||
@@ -4709,7 +4709,7 @@ export default function SceneCard({
                       await handleCombineWithNext(scene.id);
                     }}
                     disabled={combiningId === scene.id}
-                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
+                    className={`flex items-center justify-center space-x-1 px-1 py-1 h-7 min-w-[65px] rounded-full text-xs font-medium transition-colors ${
                       combiningId === scene.id
                         ? 'bg-gray-100 text-gray-500'
                         : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
@@ -4721,7 +4721,7 @@ export default function SceneCard({
                     ) : (
                       <FastForward className='h-3 w-3' />
                     )}
-                    <span>Combine Next</span>
+                    <span>Com</span>
                   </button>
 
                   {/* Produced Video Button - LAST */}
