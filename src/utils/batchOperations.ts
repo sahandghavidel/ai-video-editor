@@ -882,7 +882,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
 
 // Batch operation: Optimize silence for all original videos
 export const handleOptimizeSilenceForAllVideos = async (
-  originalVideos: any[],
+  originalVideos: BaserowRow[],
   setOptimizingSilenceVideo: (videoId: number | null) => void,
   setOptimizingAllSilence: (isOptimizing: boolean) => void,
   onRefresh?: () => void

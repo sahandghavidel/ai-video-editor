@@ -4,6 +4,22 @@ import { useAppStore } from '@/store/useAppStore';
 import { playSuccessSound } from '@/utils/soundManager';
 import { sendTelegramNotification } from '@/utils/telegram';
 
+interface VideoData {
+  finalVideoUrl?: string;
+  timestamp?: string;
+  caption?: string;
+  captionsUrl?: string;
+  title?: string;
+  description?: string;
+  tags?: string;
+  [key: string]: unknown;
+}
+
+interface WordObject {
+  word: string;
+  [key: string]: unknown;
+}
+
 const FinalVideoTable: React.FC = () => {
   const [transcribing, setTranscribing] = useState(false);
   const [generatingTitle, setGeneratingTitle] = useState(false);
@@ -11,7 +27,7 @@ const FinalVideoTable: React.FC = () => {
   const [generatingTags, setGeneratingTags] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [doingEverything, setDoingEverything] = useState(false);
-  const [videoData, setVideoData] = useState<any>(null);
+  const [videoData, setVideoData] = useState<VideoData | null>(null);
   const [timestampData, setTimestampData] = useState<string>('');
 
   const { transcriptionSettings, modelSelection } = useAppStore();
@@ -230,7 +246,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Step 4: Save transcription result to localStorage with captions URL
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject: any = {};
+      let dataObject: VideoData = {};
 
       if (existingData) {
         try {
@@ -292,7 +308,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Extract text from word timestamps
       const transcriptionText = transcriptionData
-        .map((word: any) => word.word)
+        .map((word: WordObject) => word.word)
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -326,7 +342,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Save the generated title to localStorage
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject: any = {};
+      let dataObject: VideoData = {};
 
       if (existingData) {
         try {
@@ -388,7 +404,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Extract text from word timestamps
       const transcriptionText = transcriptionData
-        .map((word: any) => word.word)
+        .map((word: WordObject) => word.word)
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -464,7 +480,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Save the generated description to localStorage
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject: any = {};
+      let dataObject: VideoData = {};
 
       if (existingData) {
         try {
@@ -529,7 +545,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Extract text from word timestamps
       const transcriptionText = transcriptionData
-        .map((word: any) => word.word)
+        .map((word: WordObject) => word.word)
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -563,7 +579,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Save the generated tags to localStorage
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject: any = {};
+      let dataObject: VideoData = {};
 
       if (existingData) {
         try {
@@ -700,7 +716,8 @@ const FinalVideoTable: React.FC = () => {
                   {parsedData.title || 'Final Merged Video'}
                 </div>
                 <div className='text-sm text-gray-500'>
-                  {parsedData.mergedAt
+                  {parsedData.mergedAt &&
+                  typeof parsedData.mergedAt === 'string'
                     ? new Date(parsedData.mergedAt).toLocaleDateString()
                     : 'Unknown date'}
                 </div>
@@ -767,7 +784,9 @@ const FinalVideoTable: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(parsedData.finalVideoUrl);
+                      if (parsedData.finalVideoUrl) {
+                        navigator.clipboard.writeText(parsedData.finalVideoUrl);
+                      }
                       // Could add a toast notification here
                     }}
                     className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors'
@@ -868,7 +887,7 @@ const FinalVideoTable: React.FC = () => {
               onClick={() => {
                 const finalVideoData = localStorage.getItem('final-video-data');
                 let description = '';
-                let title = parsedData.title || 'Final Merged Video';
+                const title = parsedData.title || 'Final Merged Video';
                 let tags = '';
                 if (finalVideoData) {
                   try {

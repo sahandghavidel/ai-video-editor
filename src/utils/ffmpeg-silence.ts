@@ -1,9 +1,15 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
-import { readFile, access, unlink, writeFile } from 'fs/promises';
+import { readFile, access, unlink, writeFile, stat } from 'fs/promises';
+import { Stats as FsStats } from 'fs';
 
 const execAsync = promisify(exec);
+
+interface Stats {
+  silenceIntervals: number;
+  totalSilenceDuration: number;
+}
 
 export interface OptimizeSilenceOptions {
   inputUrl: string;
@@ -26,7 +32,7 @@ export interface OptimizeSilenceOptions {
  */
 export async function optimizeSilence(
   options: OptimizeSilenceOptions
-): Promise<{ outputPath: string; stats: any }> {
+): Promise<{ outputPath: string; stats: Stats }> {
   const {
     inputUrl,
     outputPath,
@@ -632,7 +638,7 @@ export async function optimizeSilenceWithUpload(
     sceneId?: string;
     cleanup?: boolean;
   }
-): Promise<{ localPath: string; uploadUrl: string; stats: any }> {
+): Promise<{ localPath: string; uploadUrl: string; stats: Stats }> {
   const { videoId, sceneId, cleanup = true, ...silenceOptions } = options;
 
   let localPath: string | null = null;

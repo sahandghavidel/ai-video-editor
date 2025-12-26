@@ -3,13 +3,19 @@
  * Uses Web Audio API to generate tones programmatically
  */
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 class SoundManager {
   private audioContext: AudioContext | null = null;
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
       this.audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
+        window.webkitAudioContext)();
     }
     return this.audioContext;
   }

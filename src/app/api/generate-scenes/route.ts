@@ -11,6 +11,18 @@ interface SceneSegment {
   videoId: string;
 }
 
+interface WordSegment {
+  word: string;
+  start: number;
+  end: number;
+}
+
+type TranscriptionData =
+  | WordSegment[]
+  | { Segments: WordSegment[] }
+  | { segments: WordSegment[] }
+  | { words: WordSegment[] };
+
 export async function POST(request: NextRequest) {
   try {
     const {
@@ -98,21 +110,21 @@ export async function POST(request: NextRequest) {
 
 // Function to split transcription into sentences and gaps
 function generateScenesFromTranscription(
-  transcriptionData: any,
+  transcriptionData: TranscriptionData,
   videoId: string,
   videoDuration?: number
 ): SceneSegment[] {
   // Handle different data structures
-  let segments: any[] = [];
+  let segments: WordSegment[] = [];
 
   if (Array.isArray(transcriptionData)) {
     // Direct array of word objects
     segments = transcriptionData;
-  } else if (transcriptionData.Segments) {
+  } else if ('Segments' in transcriptionData) {
     segments = transcriptionData.Segments;
-  } else if (transcriptionData.segments) {
+  } else if ('segments' in transcriptionData) {
     segments = transcriptionData.segments;
-  } else if (transcriptionData.words) {
+  } else if ('words' in transcriptionData) {
     segments = transcriptionData.words;
   }
 

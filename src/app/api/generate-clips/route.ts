@@ -4,6 +4,23 @@ import { BaserowRow } from '@/lib/baserow-actions';
 import path from 'path';
 import fs from 'fs/promises';
 
+type BaserowFileField =
+  | string
+  | {
+      url?: string;
+      file?: {
+        url?: string;
+      };
+    }
+  | Array<{
+      url?: string;
+      file?: {
+        url?: string;
+      };
+    }>
+  | null
+  | undefined;
+
 type ClipResponseItem = {
   file_url?: string;
   url?: string;
@@ -247,19 +264,21 @@ function extractVideoUrl(field: BaserowFileField): string | null {
     return field;
   }
 
-  if (typeof field === 'object' && field !== null) {
-    if (field.url) return field.url;
-    if (field.file && field.file.url) return field.file.url;
+  if (typeof field === 'object' && field !== null && !Array.isArray(field)) {
+    const obj = field as { url?: string; file?: { url?: string } };
+    if (obj.url) return obj.url;
+    if (obj.file && obj.file.url) return obj.file.url;
   }
 
   if (Array.isArray(field) && field.length > 0) {
-    const firstItem = field[0];
+    const firstItem = field[0] as unknown;
     if (typeof firstItem === 'string' && firstItem.startsWith('http')) {
       return firstItem;
     }
     if (typeof firstItem === 'object' && firstItem !== null) {
-      if (firstItem.url) return firstItem.url;
-      if (firstItem.file && firstItem.file.url) return firstItem.file.url;
+      const obj = firstItem as { url?: string; file?: { url?: string } };
+      if (obj.url) return obj.url;
+      if (obj.file && obj.file.url) return obj.file.url;
     }
   }
 
@@ -327,7 +346,7 @@ async function getScenesForVideo(videoId: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
   const token = await getJWTToken();
 
-  let allScenes = [];
+  const allScenes = [];
   let page = 1;
   let hasMorePages = true;
   const pageSize = 200; // Fetch 200 scenes per page
@@ -366,10 +385,10 @@ async function getScenesForVideo(videoId: string) {
 // Function to create video clip using direct FFmpeg (much faster!)
 async function createVideoClipDirect(
   videoUrl: string,
-  scene: any
+  scene: BaserowRow
 ): Promise<string> {
-  const startTime = parseFloat(scene.field_6898);
-  const endTime = parseFloat(scene.field_6897);
+  const startTime = parseFloat(String(scene.field_6898));
+  const endTime = parseFloat(String(scene.field_6897));
   const duration = endTime - startTime;
 
   // Extract video ID from scene data
@@ -396,8 +415,8 @@ async function createVideoClipDirect(
     // Use direct FFmpeg with hardware acceleration + MinIO upload
     const result = await createVideoClipWithUpload({
       inputUrl: videoUrl,
-      startTime: scene.field_6898.toString(),
-      endTime: scene.field_6897.toString(),
+      startTime: String(scene.field_6898),
+      endTime: String(scene.field_6897),
       useHardwareAcceleration: true,
       videoBitrate: '6000k', // High quality for good results
       sceneId: scene.id.toString(),
@@ -419,7 +438,7 @@ async function createVideoClipDirect(
 }
 
 // Function to create video clips using NCA toolkit split endpoint (batch processing)
-async function createVideoClipsBatch(videoUrl: string, scenes: any[]) {
+async function createVideoClipsBatch(videoUrl: string, scenes: BaserowRow[]) {
   const ncaUrl = 'http://host.docker.internal:8080/v1/video/split';
 
   // Generate unique request ID for tracking
@@ -436,8 +455,8 @@ async function createVideoClipsBatch(videoUrl: string, scenes: any[]) {
   const requestBody = {
     video_url: videoUrl,
     splits: scenes.map((scene) => ({
-      start: scene.field_6898.toString(),
-      end: scene.field_6897.toString(),
+      start: String(scene.field_6898),
+      end: String(scene.field_6897),
     })),
     id: requestId,
     video_preset: 'medium',
@@ -491,11 +510,11 @@ async function createVideoClipsBatch(videoUrl: string, scenes: any[]) {
 }
 
 // Function to create video clip using NCA toolkit
-async function createVideoClip(videoUrl: string, scene: any) {
+async function createVideoClip(videoUrl: string, scene: BaserowRow) {
   const ncaUrl = 'http://host.docker.internal:8080/v1/video/cut';
 
-  const startTime = parseFloat(scene.field_6898);
-  const endTime = parseFloat(scene.field_6897);
+  const startTime = parseFloat(String(scene.field_6898));
+  const endTime = parseFloat(String(scene.field_6897));
   const duration = endTime - startTime;
 
   // Generate unique request ID for tracking
@@ -515,8 +534,8 @@ async function createVideoClip(videoUrl: string, scene: any) {
     video_url: videoUrl,
     cuts: [
       {
-        start: scene.field_6898.toString(),
-        end: scene.field_6897.toString(),
+        start: String(scene.field_6898),
+        end: String(scene.field_6897),
       },
     ],
     id: requestId,

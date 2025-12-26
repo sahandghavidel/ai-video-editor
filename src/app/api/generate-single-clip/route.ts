@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createVideoClipWithUpload } from '@/utils/ffmpeg-direct';
+import { BaserowRow } from '@/lib/baserow-actions';
 
 type BaserowFileField =
   | string
@@ -102,25 +103,32 @@ function extractVideoUrl(field: BaserowFileField): string | null {
     return field;
   }
 
-  if (typeof field === 'object' && field !== null) {
-    if (field.url) return field.url;
-    if (field.file && field.file.url) return field.file.url;
+  if (typeof field === 'object' && field !== null && !Array.isArray(field)) {
+    const obj = field as { url?: string; file?: { url?: string } };
+    if (obj.url) return obj.url;
+    if (obj.file && obj.file.url) return obj.file.url;
   }
 
   if (Array.isArray(field) && field.length > 0) {
-    const firstItem = field[0];
-    if (firstItem && firstItem.url) return firstItem.url;
-    if (firstItem && firstItem.file && firstItem.file.url)
-      return firstItem.file.url;
+    const firstItem = field[0] as unknown;
+    if (typeof firstItem === 'object' && firstItem !== null) {
+      const obj = firstItem as { url?: string; file?: { url?: string } };
+      if (obj.url) return obj.url;
+      if (obj.file && obj.file.url) return obj.file.url;
+    }
   }
 
   return null;
 }
 
 // Function to create video clip using direct FFmpeg + MinIO upload
-async function createVideoClip(videoUrl: string, scene: any, videoId?: number) {
-  const startTime = parseFloat(scene.field_6898);
-  const endTime = parseFloat(scene.field_6897);
+async function createVideoClip(
+  videoUrl: string,
+  scene: BaserowRow,
+  videoId?: number
+) {
+  const startTime = parseFloat(String(scene.field_6898));
+  const endTime = parseFloat(String(scene.field_6897));
   const duration = endTime - startTime;
 
   console.log(
@@ -137,8 +145,8 @@ async function createVideoClip(videoUrl: string, scene: any, videoId?: number) {
     // Use direct FFmpeg with hardware acceleration + MinIO upload
     const result = await createVideoClipWithUpload({
       inputUrl: videoUrl,
-      startTime: scene.field_6898.toString(),
-      endTime: scene.field_6897.toString(),
+      startTime: String(scene.field_6898),
+      endTime: String(scene.field_6897),
       useHardwareAcceleration: true,
       videoBitrate: '6000k', // High quality for good results
       sceneId: scene.id.toString(),

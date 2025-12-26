@@ -60,11 +60,17 @@ export interface MediaPlayerState {
 // Model selection state interface
 export interface ModelSelectionState {
   selectedModel: string | null;
-  models: any[];
+  models: Model[];
   modelsLoading: boolean;
   modelsError: string | null;
   modelSearch: string;
   enforceLongerSentences: boolean;
+}
+
+export interface Model {
+  id: string;
+  name: string;
+  recommended?: boolean;
 }
 
 // Scene loading state interface
@@ -235,6 +241,7 @@ interface AppState {
   setModelsLoading: (loading: boolean) => void;
   setModelsError: (error: string | null) => void;
   setModelSearch: (search: string) => void;
+  setEnforceLongerSentences: (enforce: boolean) => void;
   fetchModels: () => Promise<void>;
 
   // Scene Loading Actions

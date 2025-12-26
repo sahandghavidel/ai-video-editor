@@ -15,9 +15,10 @@ function computeTargetAudioBitrate(
   // bitrates that cause generational loss after multiple renders.
   const minBitrate = channels === 1 ? 96_000 : 192_000;
   const maxBitrate = 512_000;
-  const safeOriginal = Number.isFinite(originalBitrate) && originalBitrate > 0
-    ? originalBitrate
-    : 128_000;
+  const safeOriginal =
+    Number.isFinite(originalBitrate) && originalBitrate > 0
+      ? originalBitrate
+      : 128_000;
   return Math.min(maxBitrate, Math.max(safeOriginal, minBitrate));
 }
 
@@ -119,8 +120,8 @@ export async function syncVideoWithAudio(
 
       // Video filter: adjust video speed to match audio duration
       // Audio filter: resample to match original video's sample rate
-      let videoFilter = ``;
-      let audioFilter = `aresample=${originalSampleRate}`;
+      const videoFilter = ``;
+      const audioFilter = `aresample=${originalSampleRate}`;
 
       ffmpegCommand.push(
         '-filter_complex',
@@ -536,7 +537,7 @@ export async function syncVideoWithAudioAdvanced(
             `[SYNC] Applying ${zoomLevel}% zoom (factor: ${zoomFactor})`
           );
         }
-        let audioFilter = `aresample=${originalSampleRate}`;
+        const audioFilter = `aresample=${originalSampleRate}`;
 
         console.log(`[SYNC] Video filter: ${videoFilter}`);
 

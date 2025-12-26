@@ -9,6 +9,13 @@ import http from 'http';
 import https from 'https';
 import type { IncomingMessage } from 'http';
 
+interface FFmpegStream {
+  codec_type: string;
+  width?: number;
+  height?: number;
+  [key: string]: unknown;
+}
+
 const execAsync = promisify(exec);
 
 // Helper function to run FFmpeg with spawn (avoids shell interpretation issues)
@@ -303,7 +310,7 @@ export async function speedUpVideoWithFFmpeg(
       ];
 
       // Video filter: speed up video by changing PTS (presentation timestamp)
-      let videoFilter = `setpts=PTS/${speed}`;
+      const videoFilter = `setpts=PTS/${speed}`;
 
       // Audio filter: speed up audio and optionally mute
       let audioFilter;
@@ -726,7 +733,7 @@ export async function createTypingEffectVideo(
 
     // Get video dimensions from the first video stream
     const videoStream = probeData.streams.find(
-      (stream: any) => stream.codec_type === 'video'
+      (stream: FFmpegStream) => stream.codec_type === 'video'
     );
     const videoWidth = videoStream.width;
     const videoHeight = videoStream.height;
@@ -807,7 +814,7 @@ export async function createTypingEffectVideo(
     const concatInputs = Array(loopsNeeded).fill('[1:a]').join('');
     const concatFilter = `${concatInputs}concat=n=${loopsNeeded}:v=0:a=1,atrim=duration=${typingOnlyDuration}[a1]`;
 
-    let audioFilter = `[0:a]volume=0[a0];${concatFilter};[a0][a1]amix=inputs=2[outa]`;
+    const audioFilter = `[0:a]volume=0[a0];${concatFilter};[a0][a1]amix=inputs=2[outa]`;
 
     if (speedFactor < 1) {
       // Need to slow down video first, then apply subtitles

@@ -328,7 +328,9 @@ export default function BatchOperations({
     const nextMode = modes[nextIndex];
 
     // Auto-set speed and audio based on mode
-    let autoSettings: Partial<typeof videoSettings> = { speedUpMode: nextMode };
+    const autoSettings: Partial<typeof videoSettings> = {
+      speedUpMode: nextMode,
+    };
 
     switch (nextMode) {
       case 'emptyOnly':

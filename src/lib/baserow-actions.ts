@@ -509,7 +509,7 @@ export async function deleteRelatedScenes(
     const deleteResults: Array<{
       success: boolean;
       sceneId: number;
-      error?: any;
+      error?: unknown;
     }> = [];
 
     for (const scene of allRelatedScenes) {
@@ -1014,7 +1014,7 @@ export async function getOriginalVideoRow(rowId: number): Promise<BaserowRow> {
 export async function updateOriginalVideoRow(
   rowId: number,
   rowData: Record<string, unknown>
-): Promise<BaserowRow> {
+): Promise<void> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const originalVideosTableId = '713'; // Table 713 for original videos
 
@@ -1041,7 +1041,7 @@ export async function updateOriginalVideoRow(
       );
     }
 
-    return await response.json();
+    // No return value needed
   } catch (error) {
     console.error('Error updating original video row:', error);
     throw error;

@@ -48,6 +48,28 @@ import {
   handleOptimizeSilenceForAllVideos,
 } from '@/utils/batchOperations';
 import { deleteFromMinio } from '@/utils/minio-client';
+
+type BaserowField =
+  | string
+  | number
+  | boolean
+  | {
+      url?: string;
+      value?: unknown;
+      name?: string;
+      text?: string;
+      title?: string;
+      file?: { url?: string };
+    }
+  | Array<{
+      url?: string;
+      value?: unknown;
+      name?: string;
+      text?: string;
+      file?: { url?: string };
+    }>
+  | null
+  | undefined;
 import { Sparkles, Mic2 } from 'lucide-react';
 
 interface SceneHandlers {
@@ -213,23 +235,30 @@ export default function OriginalVideosList({
   }, []);
 
   // Helper function to extract value from Baserow field
-  const extractFieldValue = (field: any): string => {
-    if (!field) return '';
+  const extractFieldValue = (field: unknown): string => {
+    const f = field as BaserowField;
+    if (!f) return '';
 
     // If it's already a string, return it
-    if (typeof field === 'string') return field;
+    if (typeof f === 'string') return f;
 
     // If it's an array, join with commas
-    if (Array.isArray(field)) {
-      return field
+    if (Array.isArray(f)) {
+      return f
         .map((item) => {
           if (typeof item === 'object' && item !== null) {
             // Try to extract meaningful value from object
+            const obj = item as {
+              value?: unknown;
+              name?: string;
+              text?: string;
+              title?: string;
+            };
             return (
-              item.value ||
-              item.name ||
-              item.text ||
-              item.title ||
+              String(obj.value) ||
+              obj.name ||
+              obj.text ||
+              obj.title ||
               JSON.stringify(item)
             );
           }
@@ -239,41 +268,62 @@ export default function OriginalVideosList({
     }
 
     // If it's an object, try to extract meaningful value
-    if (typeof field === 'object' && field !== null) {
+    if (typeof f === 'object' && f !== null) {
       // Common Baserow field patterns
-      if (field.url) return field.url;
-      if (field.value) return field.value;
-      if (field.name) return field.name;
-      if (field.text) return field.text;
-      if (field.title) return field.title;
+      const obj = f as {
+        url?: string;
+        value?: unknown;
+        name?: string;
+        text?: string;
+        title?: string;
+        file?: { url?: string };
+      };
+      if (obj.url) return obj.url;
+      if (obj.value) return String(obj.value);
+      if (obj.name) return obj.name;
+      if (obj.text) return obj.text;
+      if (obj.title) return obj.title;
 
       // If none of the above, convert to string
-      return JSON.stringify(field);
+      return JSON.stringify(f);
     }
 
-    return String(field);
+    return String(f);
   };
 
   // Helper function to extract and format scenes
-  const extractScenes = (field: any): { count: number; scenes: string[] } => {
-    if (!field) return { count: 0, scenes: [] };
+  const extractScenes = (
+    field: unknown
+  ): { count: number; scenes: string[] } => {
+    const f = field as BaserowField;
+    if (!f) return { count: 0, scenes: [] };
 
     let sceneList: string[] = [];
 
     // If it's already a string with comma-separated values
-    if (typeof field === 'string') {
-      sceneList = field
+    if (typeof f === 'string') {
+      sceneList = f
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
     }
     // If it's an array
-    else if (Array.isArray(field)) {
-      sceneList = field
+    else if (Array.isArray(f)) {
+      sceneList = f
         .map((item) => {
           if (typeof item === 'object' && item !== null) {
+            const obj = item as {
+              value?: unknown;
+              name?: string;
+              text?: string;
+              title?: string;
+            };
             return (
-              item.value || item.name || item.text || item.title || String(item)
+              String(obj.value) ||
+              obj.name ||
+              obj.text ||
+              obj.title ||
+              String(item)
             );
           }
           return String(item);
@@ -281,19 +331,25 @@ export default function OriginalVideosList({
         .filter((s) => s.length > 0);
     }
     // If it's an object, try to extract meaningful value
-    else if (typeof field === 'object' && field !== null) {
+    else if (typeof f === 'object' && f !== null) {
+      const obj = f as {
+        value?: unknown;
+        name?: string;
+        text?: string;
+        title?: string;
+      };
       const value =
-        field.value ||
-        field.name ||
-        field.text ||
-        field.title ||
-        JSON.stringify(field);
+        String(obj.value) ||
+        obj.name ||
+        obj.text ||
+        obj.title ||
+        JSON.stringify(f);
       sceneList = String(value)
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
     } else {
-      sceneList = String(field)
+      sceneList = String(f)
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
@@ -303,32 +359,32 @@ export default function OriginalVideosList({
   };
 
   // Helper function to extract URL from field
-  const extractUrl = (field: any): string | null => {
-    if (!field) return null;
+  const extractUrl = (field: unknown): string | null => {
+    const f = field as BaserowField;
+    if (!f) return null;
 
     // If it's a string that looks like a URL
-    if (
-      typeof field === 'string' &&
-      (field.startsWith('http') || field.startsWith('/'))
-    ) {
-      return field;
+    if (typeof f === 'string' && (f.startsWith('http') || f.startsWith('/'))) {
+      return f;
     }
 
     // If it's an object with url property
-    if (typeof field === 'object' && field !== null) {
-      if (field.url) return field.url;
-      if (field.file && field.file.url) return field.file.url;
+    if (typeof f === 'object' && f !== null && !Array.isArray(f)) {
+      const obj = f as { url?: string; file?: { url?: string } };
+      if (obj.url) return obj.url;
+      if (obj.file && obj.file.url) return obj.file.url;
     }
 
     // If it's an array, get the first URL
-    if (Array.isArray(field) && field.length > 0) {
-      const firstItem = field[0];
+    if (Array.isArray(f) && f.length > 0) {
+      const firstItem = f[0] as unknown;
       if (typeof firstItem === 'string' && firstItem.startsWith('http')) {
         return firstItem;
       }
       if (typeof firstItem === 'object' && firstItem !== null) {
-        if (firstItem.url) return firstItem.url;
-        if (firstItem.file && firstItem.file.url) return firstItem.file.url;
+        const obj = firstItem as { url?: string; file?: { url?: string } };
+        if (obj.url) return obj.url;
+        if (obj.file && obj.file.url) return obj.file.url;
       }
     }
 
@@ -553,7 +609,7 @@ export default function OriginalVideosList({
       currentVideos.splice(targetIndex, 0, draggedVideo);
 
       // Update order values (1-based indexing)
-      const updates: Promise<any>[] = [];
+      const updates: Promise<void>[] = [];
       currentVideos.forEach((video, index) => {
         const newOrder = index + 1;
         // Update both local state and database
@@ -638,7 +694,7 @@ export default function OriginalVideosList({
   const handleStatusChange = async (
     videoId: number,
     newStatus: string,
-    e: React.MouseEvent
+    e: React.SyntheticEvent
   ) => {
     e.stopPropagation();
     setUpdatingStatus(videoId);
@@ -811,7 +867,7 @@ export default function OriginalVideosList({
       // Step 4: Update the original video record with the captions URL and duration
       const captionsUrl = uploadResult.url || uploadResult.file_url;
       if (captionsUrl) {
-        const updateData: Record<string, any> = {
+        const updateData: Record<string, unknown> = {
           field_6861: captionsUrl, // Captions URL field
         };
 
@@ -2792,7 +2848,7 @@ export default function OriginalVideosList({
 
       // Save to localStorage - preserve existing data
       const existingData = localStorage.getItem('final-video-data');
-      let dataObject: any = {};
+      let dataObject: Record<string, unknown> = {};
 
       if (existingData) {
         try {
@@ -4636,7 +4692,7 @@ export default function OriginalVideosList({
                                       handleStatusChange(
                                         video.id,
                                         e.target.value,
-                                        e as any
+                                        e
                                       )
                                     }
                                     className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${

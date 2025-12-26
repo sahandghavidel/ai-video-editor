@@ -250,6 +250,120 @@ export default function SceneCard({
     setCreatingTypingEffect,
   } = useAppStore();
 
+  // Click outside handler for time adjustment and settings dropdowns
+  useEffect(() => {
+    const handleClickOutside = async (event: MouseEvent) => {
+      const target = event.target as Element;
+
+      // Handle time adjustment dropdown
+      if (showTimeAdjustment !== null) {
+        if (!target.closest('[data-time-adjustment-dropdown]')) {
+          // Save any pending input values before closing
+          const sceneInputValues = inputValues[showTimeAdjustment];
+          if (sceneInputValues) {
+            if (sceneInputValues.start !== undefined) {
+              const startValue = parseFloat(sceneInputValues.start || '0') || 0;
+              await handleSetStartTime(showTimeAdjustment, startValue);
+            }
+            if (sceneInputValues.end !== undefined) {
+              const endValue = parseFloat(sceneInputValues.end || '0') || 0;
+              await handleSetEndTime(showTimeAdjustment, endValue);
+            }
+          }
+          setShowTimeAdjustment(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTimeAdjustment, inputValues]);
+
+  // Helper function to scroll a scene card to the top of the screen
+  const scrollCardToTop = (sceneId: number) => {
+    const cardElement = sceneCardRefs.current[sceneId];
+    console.log('Attempting to scroll card for scene:', sceneId);
+    console.log('Card element found:', cardElement);
+
+    if (cardElement) {
+      // Scroll with a small delay to ensure the state is updated
+      setTimeout(() => {
+        cardElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+        console.log('Scroll command executed for scene:', sceneId);
+      }, 150);
+    } else {
+      console.warn('Card element not found for scene:', sceneId);
+    }
+  };
+
+  const handleProducedVideoPlay = useCallback(
+    async (sceneId: number, videoUrl: string) => {
+      try {
+        // Stop any currently playing produced video
+        if (
+          mediaPlayer.playingProducedVideoId &&
+          producedVideoRefs.current[mediaPlayer.playingProducedVideoId]
+        ) {
+          producedVideoRefs.current[mediaPlayer.playingProducedVideoId].pause();
+        }
+
+        // Stop any currently playing original video
+        if (
+          mediaPlayer.playingVideoId &&
+          videoRefs.current[mediaPlayer.playingVideoId]
+        ) {
+          videoRefs.current[mediaPlayer.playingVideoId].pause();
+          setPlayingVideo(null);
+        }
+
+        // If clicking the same video that's playing, just pause it
+        if (mediaPlayer.playingProducedVideoId === sceneId) {
+          setPlayingProducedVideo(null);
+          return;
+        }
+
+        setPlayingProducedVideo(sceneId);
+        setLoadingProducedVideo(sceneId);
+
+        // Wait a moment for the video element to be rendered, then scroll
+        setTimeout(() => {
+          // Scroll the card to the top of the screen
+          scrollCardToTop(sceneId);
+
+          const video = producedVideoRefs.current[sceneId];
+          if (video) {
+            video.src = videoUrl;
+            video.playbackRate = videoSettings.playerSpeed;
+            video
+              .play()
+              .then(() => {
+                setLoadingProducedVideo(null);
+              })
+              .catch((error) => {
+                console.error('Error playing produced video:', error);
+                setLoadingProducedVideo(null);
+                setPlayingProducedVideo(null);
+              });
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Error in handleProducedVideoPlay:', error);
+        setLoadingProducedVideo(null);
+        setPlayingProducedVideo(null);
+      }
+    },
+    [
+      mediaPlayer.playingProducedVideoId,
+      mediaPlayer.playingVideoId,
+      videoSettings.playerSpeed,
+      scrollCardToTop,
+    ]
+  );
+
   // Keyboard shortcuts for player speed
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -262,6 +376,122 @@ export default function SceneCard({
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLSelectElement
       ) {
+        return;
+      }
+
+      // Handle arrow key navigation for final videos
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+
+        // Find the currently playing produced video scene
+        const currentPlayingSceneId = mediaPlayer.playingProducedVideoId;
+        if (!currentPlayingSceneId) return;
+
+        // Compute filtered and sorted data locally to avoid dependency issues
+        let filtered = data;
+
+        // Filter by empty text
+        if (showOnlyEmptyText) {
+          filtered = filtered.filter((scene) => {
+            const sentence = String(
+              scene['field_6890'] || scene.field_6890 || ''
+            );
+            return !sentence.trim();
+          });
+        }
+
+        // Filter by not-empty original fields
+        if (showOnlyNotEmptyText) {
+          filtered = filtered.filter((scene) => {
+            const orig = String(
+              scene['field_6901'] || scene.field_6901 || ''
+            ).trim();
+            const other = String(
+              scene['field_6900'] || scene.field_6900 || ''
+            ).trim();
+            return !!orig || !!other;
+          });
+        }
+
+        // Filter by recently modified TTS
+        if (showRecentlyModifiedTTS) {
+          const oneDayAgo = Date.now() - 10 * 24 * 60 * 60 * 1000;
+          filtered = filtered.filter((scene) => {
+            const url = scene.field_6891 || scene['field_6891'];
+            if (!url || typeof url !== 'string') return false;
+            const match = url.match(/_(\d+)\.wav$/);
+            if (!match) return false;
+            const timestamp = parseInt(match[1]);
+            if (isNaN(timestamp)) return false;
+            return timestamp >= oneDayAgo;
+          });
+        }
+
+        // Sort by duration
+        if (sortByDuration) {
+          filtered = [...filtered].sort((a, b) => {
+            const durationA = Number(a.field_6884) || 0;
+            const durationB = Number(b.field_6884) || 0;
+            if (sortByDuration === 'asc') {
+              return durationA - durationB;
+            } else {
+              return durationB - durationA;
+            }
+          });
+        }
+
+        // Sort by last modified
+        if (sortByLastModified) {
+          filtered = [...filtered].sort((a, b) => {
+            const getLastModified = (scene: Record<string, unknown>) => {
+              const lastModified = scene.field_6905 || scene['field_6905'];
+              if (!lastModified) return 0;
+              if (typeof lastModified === 'string') {
+                const date = new Date(lastModified);
+                const timestamp = date.getTime();
+                return isNaN(timestamp) ? 0 : timestamp;
+              } else if (typeof lastModified === 'number') {
+                return lastModified;
+              }
+              return 0;
+            };
+            const timeA = getLastModified(a);
+            const timeB = getLastModified(b);
+            if (sortByLastModified === 'asc') {
+              return timeA - timeB;
+            } else {
+              return timeB - timeA;
+            }
+          });
+        }
+
+        // Find the current scene index in filtered and sorted data
+        const currentIndex = filtered.findIndex(
+          (scene) => scene.id === currentPlayingSceneId
+        );
+        if (currentIndex === -1) return;
+
+        // Calculate next/previous index
+        let targetIndex;
+        if (event.key === 'ArrowRight') {
+          targetIndex = currentIndex + 1;
+        } else {
+          targetIndex = currentIndex - 1;
+        }
+
+        // Check bounds
+        if (targetIndex < 0 || targetIndex >= filtered.length) return;
+
+        // Get target scene
+        const targetScene = filtered[targetIndex];
+        const finalVideoUrl =
+          targetScene['field_6886'] || targetScene.field_6886;
+
+        // Only navigate if the target scene has a final video
+        if (finalVideoUrl && typeof finalVideoUrl === 'string') {
+          handleProducedVideoPlay(targetScene.id, finalVideoUrl);
+        }
+
         return;
       }
 
@@ -341,36 +571,14 @@ export default function SceneCard({
     mediaPlayer.playingVideoId,
     mediaPlayer.playingProducedVideoId,
     imageOverlayModal.isOpen,
+    handleProducedVideoPlay,
+    data,
+    showOnlyEmptyText,
+    showOnlyNotEmptyText,
+    sortByDuration,
+    sortByLastModified,
+    showRecentlyModifiedTTS,
   ]);
-
-  // Click outside handler for time adjustment and settings dropdowns
-  useEffect(() => {
-    const handleClickOutside = async (event: MouseEvent) => {
-      const target = event.target as Element;
-
-      // Handle time adjustment dropdown
-      if (showTimeAdjustment !== null) {
-        if (!target.closest('[data-time-adjustment-dropdown]')) {
-          // Save any pending input values before closing
-          const sceneInputValues = inputValues[showTimeAdjustment];
-          if (sceneInputValues) {
-            if (sceneInputValues.start !== undefined) {
-              const startValue = parseFloat(sceneInputValues.start || '0') || 0;
-              await handleSetStartTime(showTimeAdjustment, startValue);
-            }
-            if (sceneInputValues.end !== undefined) {
-              const endValue = parseFloat(sceneInputValues.end || '0') || 0;
-              await handleSetEndTime(showTimeAdjustment, endValue);
-            }
-          }
-          setShowTimeAdjustment(null);
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showTimeAdjustment, inputValues]);
 
   // Local wrapper for cycling through speeds
   const cycleSpeed = () => {
@@ -1231,27 +1439,6 @@ export default function SceneCard({
     }
   };
 
-  // Helper function to scroll a scene card to the top of the screen
-  const scrollCardToTop = (sceneId: number) => {
-    const cardElement = sceneCardRefs.current[sceneId];
-    console.log('Attempting to scroll card for scene:', sceneId);
-    console.log('Card element found:', cardElement);
-
-    if (cardElement) {
-      // Scroll with a small delay to ensure the state is updated
-      setTimeout(() => {
-        cardElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-          inline: 'nearest',
-        });
-        console.log('Scroll command executed for scene:', sceneId);
-      }, 150);
-    } else {
-      console.warn('Card element not found for scene:', sceneId);
-    }
-  };
-
   const handleEditStart = (sceneId: number, currentText: string) => {
     setEditingId(sceneId);
     setEditingText(currentText);
@@ -1524,62 +1711,6 @@ export default function SceneCard({
     if (video) {
       video.pause();
       setPlayingVideo(null);
-    }
-  };
-
-  const handleProducedVideoPlay = async (sceneId: number, videoUrl: string) => {
-    try {
-      // Stop any currently playing produced video
-      if (
-        mediaPlayer.playingProducedVideoId &&
-        producedVideoRefs.current[mediaPlayer.playingProducedVideoId]
-      ) {
-        producedVideoRefs.current[mediaPlayer.playingProducedVideoId].pause();
-      }
-
-      // Stop any currently playing original video
-      if (
-        mediaPlayer.playingVideoId &&
-        videoRefs.current[mediaPlayer.playingVideoId]
-      ) {
-        videoRefs.current[mediaPlayer.playingVideoId].pause();
-        setPlayingVideo(null);
-      }
-
-      // If clicking the same video that's playing, just pause it
-      if (mediaPlayer.playingProducedVideoId === sceneId) {
-        setPlayingProducedVideo(null);
-        return;
-      }
-
-      setPlayingProducedVideo(sceneId);
-      setLoadingProducedVideo(sceneId);
-
-      // Wait a moment for the video element to be rendered, then scroll
-      setTimeout(() => {
-        // Scroll the card to the top of the screen
-        scrollCardToTop(sceneId);
-
-        const video = producedVideoRefs.current[sceneId];
-        if (video) {
-          video.src = videoUrl;
-          video.playbackRate = videoSettings.playerSpeed;
-          video
-            .play()
-            .then(() => {
-              setLoadingProducedVideo(null);
-            })
-            .catch((error) => {
-              console.error('Error playing produced video:', error);
-              setLoadingProducedVideo(null);
-              setPlayingProducedVideo(null);
-            });
-        }
-      }, 100);
-    } catch (error) {
-      console.error('Error in handleProducedVideoPlay:', error);
-      setLoadingProducedVideo(null);
-      setPlayingProducedVideo(null);
     }
   };
 
