@@ -151,6 +151,10 @@ export default function OriginalVideosList({
     transcribingProcessingScenesAllVideos,
     setTranscribingProcessingScenesAllVideos,
   ] = useState(false);
+  const [
+    promptingProcessingScenesAllVideos,
+    setPromptingProcessingScenesAllVideos,
+  ] = useState(false);
   const [generatingAllVideos, setGeneratingAllVideos] = useState(false);
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
@@ -2325,6 +2329,184 @@ export default function OriginalVideosList({
       );
     } finally {
       setTranscribingProcessingScenesAllVideos(false);
+      setCurrentProcessingVideoId(null);
+    }
+  };
+
+  // Prompt Scenes for All Videos (Processing only)
+  const handlePromptProcessingScenesAllVideos = async (playSound = true) => {
+    if (promptingProcessingScenesAllVideos) return;
+    if (!modelSelection.selectedModel) return;
+
+    try {
+      setPromptingProcessingScenesAllVideos(true);
+
+      // Resolve prompt destination field key once
+      let promptFieldKey: string | null = null;
+      try {
+        const res = await fetch('/api/generate-scene-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resolveOnly: true }),
+        });
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Failed to resolve prompt field: ${res.status} ${t}`);
+        }
+
+        const json = (await res.json().catch(() => null)) as {
+          promptFieldKey?: unknown;
+        } | null;
+        promptFieldKey =
+          typeof json?.promptFieldKey === 'string' ? json.promptFieldKey : null;
+      } catch (error) {
+        console.error('Failed to resolve prompt field key:', error);
+        return;
+      }
+
+      if (!promptFieldKey) return;
+
+      const extractLinkedVideoId = (videoIdField: unknown): number | null => {
+        if (typeof videoIdField === 'number') return videoIdField;
+
+        if (typeof videoIdField === 'string') {
+          const parsed = parseInt(videoIdField, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const first = videoIdField[0];
+
+          if (typeof first === 'number') return first;
+          if (typeof first === 'string') {
+            const parsed = parseInt(first, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+
+          if (typeof first === 'object' && first !== null) {
+            const rec = first as Record<string, unknown>;
+            const candidate = rec.id ?? rec.value;
+            const parsed = parseInt(String(candidate ?? ''), 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+        }
+
+        if (typeof videoIdField === 'object' && videoIdField !== null) {
+          const rec = videoIdField as Record<string, unknown>;
+          const candidate = rec.id ?? rec.value;
+          const parsed = parseInt(String(candidate ?? ''), 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        return null;
+      };
+
+      // Fetch fresh original videos and scenes
+      const freshVideosData = await getOriginalVideosData();
+      const freshScenesData = await getBaserowData();
+
+      if (!freshScenesData || freshScenesData.length === 0) {
+        if (playSound) playSuccessSound();
+        return;
+      }
+
+      // Processing-only videos
+      const processingVideos = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+
+      // Scenes for Processing videos, non-empty, and missing prompt
+      const scenesToPrompt = freshScenesData.filter((scene) => {
+        const videoId = extractLinkedVideoId(scene['field_6889']);
+        if (!videoId || isNaN(videoId) || !processingVideoIds.has(videoId)) {
+          return false;
+        }
+
+        const sentence = String(scene['field_6890'] ?? '').trim();
+        const original = String(
+          scene['field_6901'] ?? scene['field_6900'] ?? ''
+        ).trim();
+        if (!(sentence || original)) return false;
+
+        const existingPromptValue = scene[
+          promptFieldKey as keyof typeof scene
+        ] as unknown;
+        if (typeof existingPromptValue === 'string') {
+          return existingPromptValue.trim().length === 0;
+        }
+
+        return !existingPromptValue;
+      });
+
+      if (scenesToPrompt.length === 0) {
+        if (playSound) playSuccessSound();
+        return;
+      }
+
+      for (const scene of scenesToPrompt) {
+        const videoId = extractLinkedVideoId(scene['field_6889']);
+        if (videoId && !isNaN(videoId)) {
+          setCurrentProcessingVideoId(videoId);
+        }
+
+        const genRes = await fetch('/api/generate-scene-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sceneId: scene.id,
+            model: modelSelection.selectedModel,
+          }),
+        });
+
+        if (!genRes.ok) {
+          const t = await genRes.text().catch(() => '');
+          throw new Error(
+            `Prompt generation failed for scene ${scene.id}: ${genRes.status} ${t}`
+          );
+        }
+
+        const genData = (await genRes.json().catch(() => null)) as {
+          scenePrompt?: unknown;
+        } | null;
+        const scenePrompt =
+          typeof genData?.scenePrompt === 'string' ? genData.scenePrompt : null;
+
+        if (!scenePrompt || !scenePrompt.trim()) {
+          throw new Error(`Empty prompt returned for scene ${scene.id}`);
+        }
+
+        const patchRes = await fetch(`/api/baserow/scenes/${scene.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [promptFieldKey]: scenePrompt }),
+        });
+
+        if (!patchRes.ok) {
+          const t = await patchRes.text().catch(() => '');
+          throw new Error(
+            `Failed to save prompt for scene ${scene.id}: ${patchRes.status} ${t}`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Prompt scenes (Processing) failed:', error);
+      // No UI error messages; keep silent on failure.
+    } finally {
+      setPromptingProcessingScenesAllVideos(false);
       setCurrentProcessingVideoId(null);
     }
   };
@@ -4759,6 +4941,7 @@ export default function OriginalVideosList({
                       }
                       disabled={
                         transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
                         deletingEmptyScenesAllVideos ||
                         uploading ||
                         reordering ||
@@ -4790,6 +4973,46 @@ export default function OriginalVideosList({
                             ? `V${currentProcessingVideoId}`
                             : 'Processing...'
                           : 'Transcribe Scenes'}
+                      </span>
+                    </button>
+
+                    {/* Prompt Scenes (Processing) Button */}
+                    <button
+                      onClick={() => handlePromptProcessingScenesAllVideos()}
+                      disabled={
+                        promptingProcessingScenesAllVideos ||
+                        transcribingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos ||
+                        uploading ||
+                        reordering ||
+                        transcribing !== null ||
+                        transcribingAll ||
+                        generatingScenes !== null ||
+                        generatingScenesAll ||
+                        mergingFinalVideos ||
+                        batchOperations.convertingAllFinalToCFR ||
+                        sceneLoading.convertingFinalToCFRVideo !== null
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        promptingProcessingScenesAllVideos
+                          ? 'Generating prompts for scenes in Processing videos...'
+                          : 'Generate and save prompts for non-empty scenes in videos with Processing status'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          promptingProcessingScenesAllVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {promptingProcessingScenesAllVideos
+                          ? currentProcessingVideoId !== null
+                            ? `V${currentProcessingVideoId}`
+                            : 'Processing...'
+                          : 'Prompt Scenes'}
                       </span>
                     </button>
 
