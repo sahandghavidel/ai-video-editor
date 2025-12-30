@@ -145,6 +145,8 @@ export default function OriginalVideosList({
   const [generatingAllTTSForAllVideos, setGeneratingAllTTSForAllVideos] =
     useState(false);
   const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
+  const [deletingEmptyScenesAllVideos, setDeletingEmptyScenesAllVideos] =
+    useState(false);
   const [generatingAllVideos, setGeneratingAllVideos] = useState(false);
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
@@ -1936,6 +1938,137 @@ export default function OriginalVideosList({
       );
     } finally {
       setSpeedingUpAllVideos(false);
+      setCurrentProcessingVideoId(null);
+    }
+  };
+
+  // Delete Empty Scenes for All Videos (Processing only)
+  const handleDeleteEmptyScenesAllVideos = async (playSound = true) => {
+    try {
+      setError(null);
+      setDeletingEmptyScenesAllVideos(true);
+
+      // Fetch fresh original videos data to check status
+      const freshVideosData = await getOriginalVideosData();
+
+      // Fetch fresh scenes data directly from API
+      const freshScenesData = await getBaserowData();
+
+      if (!freshScenesData || freshScenesData.length === 0) {
+        console.log('No scenes found to delete');
+        return;
+      }
+
+      // Filter videos by Processing status
+      const processingVideos = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+
+      // Filter scenes to only those whose parent video has status === 'Processing'
+      const scenesForProcessingVideos = freshScenesData.filter((scene) => {
+        const videoIdField = scene['field_6889'];
+        let videoId: number | null = null;
+
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? (videoIdField[0] as any).id || (videoIdField[0] as any).value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
+      });
+
+      const emptyScenes = scenesForProcessingVideos.filter((scene) => {
+        const sentence = String(
+          scene['field_6890'] ?? (scene as any).field_6890 ?? ''
+        ).trim();
+        const original = String(
+          scene['field_6901'] ??
+            (scene as any).field_6901 ??
+            scene['field_6900'] ??
+            (scene as any).field_6900 ??
+            ''
+        ).trim();
+
+        return sentence === '' && original === '';
+      });
+
+      console.log(`Processing videos: ${processingVideos.length}`);
+      console.log(
+        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`
+      );
+      console.log(`Empty scenes to delete: ${emptyScenes.length}`);
+
+      if (emptyScenes.length === 0) {
+        console.log('No empty scenes found for Processing videos');
+        return;
+      }
+
+      for (const scene of emptyScenes) {
+        const videoIdField = scene['field_6889'];
+        let videoId: number | null = null;
+
+        if (typeof videoIdField === 'number') {
+          videoId = videoIdField;
+        } else if (typeof videoIdField === 'string') {
+          videoId = parseInt(videoIdField, 10);
+        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const firstId =
+            typeof videoIdField[0] === 'object'
+              ? (videoIdField[0] as any).id || (videoIdField[0] as any).value
+              : videoIdField[0];
+          videoId = parseInt(String(firstId), 10);
+        }
+
+        if (videoId && !isNaN(videoId)) {
+          setCurrentProcessingVideoId(videoId);
+        }
+
+        const res = await fetch(`/api/baserow/scenes/${scene.id}`, {
+          method: 'DELETE',
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(
+            `Failed to delete scene ${scene.id}: ${res.status} ${errorText}`
+          );
+        }
+
+        // Small delay to avoid overwhelming Baserow
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error deleting empty scenes for all videos:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to delete empty scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setDeletingEmptyScenesAllVideos(false);
       setCurrentProcessingVideoId(null);
     }
   };
@@ -4245,6 +4378,42 @@ export default function OriginalVideosList({
                             ? `V${sceneLoading.convertingFinalToCFRVideo}`
                             : 'Processing...'
                           : 'CFR Final All'}
+                      </span>
+                    </button>
+
+                    {/* Delete Empty Scenes (Processing) Button */}
+                    <button
+                      onClick={() => handleDeleteEmptyScenesAllVideos()}
+                      disabled={
+                        deletingEmptyScenesAllVideos ||
+                        uploading ||
+                        reordering ||
+                        transcribing !== null ||
+                        transcribingAll ||
+                        generatingScenes !== null ||
+                        generatingScenesAll ||
+                        mergingFinalVideos ||
+                        batchOperations.convertingAllFinalToCFR ||
+                        sceneLoading.convertingFinalToCFRVideo !== null
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        deletingEmptyScenesAllVideos
+                          ? 'Deleting empty scenes for Processing videos...'
+                          : 'Delete scenes that have empty text fields for videos with Processing status'
+                      }
+                    >
+                      <Trash2
+                        className={`w-4 h-4 ${
+                          deletingEmptyScenesAllVideos ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {deletingEmptyScenesAllVideos
+                          ? currentProcessingVideoId !== null
+                            ? `V${currentProcessingVideoId}`
+                            : 'Processing...'
+                          : 'Delete Empty'}
                       </span>
                     </button>
 
