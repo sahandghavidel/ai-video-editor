@@ -336,6 +336,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   handleTranscribeScene,
   onUpdateModalVideoUrl,
 }) => {
+  const selectedOpenRouterModel = useAppStore(
+    (state) => state.modelSelection.selectedModel
+  );
   const previewButtonRef = useRef<HTMLButtonElement | null>(null);
   const pasteSinkRef = useRef<HTMLTextAreaElement | null>(null);
   const forceHandleOverlayPasteRef = useRef(false);
@@ -407,6 +410,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [, setIsResizing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isGeneratingScenePrompt, setIsGeneratingScenePrompt] = useState(false);
+  const [scenePromptStatus, setScenePromptStatus] = useState<string | null>(
+    null
+  );
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
   >(null);
@@ -2465,6 +2472,81 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     videoUrl,
   ]);
 
+  const handleGenerateScenePrompt = useCallback(async () => {
+    if (!sceneId) return;
+    if (!selectedOpenRouterModel) {
+      setScenePromptStatus('No AI model selected');
+      return;
+    }
+
+    setIsGeneratingScenePrompt(true);
+    setScenePromptStatus(null);
+
+    try {
+      const genRes = await fetch('/api/generate-scene-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sceneId,
+          model: selectedOpenRouterModel,
+        }),
+      });
+
+      if (!genRes.ok) {
+        const t = await genRes.text().catch(() => '');
+        throw new Error(`Prompt generation failed: ${genRes.status} ${t}`);
+      }
+
+      const genData = (await genRes.json().catch(() => null)) as {
+        scenePrompt?: unknown;
+        promptFieldKey?: unknown;
+      } | null;
+      const scenePrompt =
+        typeof genData?.scenePrompt === 'string' ? genData.scenePrompt : null;
+      const promptFieldKey =
+        typeof genData?.promptFieldKey === 'string'
+          ? genData.promptFieldKey
+          : null;
+
+      if (!scenePrompt || !scenePrompt.trim()) {
+        throw new Error('Prompt generation returned empty prompt');
+      }
+
+      if (!promptFieldKey) {
+        throw new Error(
+          'Prompt generation did not return a valid promptFieldKey'
+        );
+      }
+
+      const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          [promptFieldKey]: scenePrompt,
+        }),
+      });
+
+      if (!patchRes.ok) {
+        const t = await patchRes.text().catch(() => '');
+        throw new Error(`Failed to save scene prompt: ${patchRes.status} ${t}`);
+      }
+
+      setScenePromptStatus('Saved');
+      window.setTimeout(() => setScenePromptStatus(null), 2500);
+    } catch (error) {
+      console.error('Failed to generate/save scene prompt:', error);
+      setScenePromptStatus(
+        error instanceof Error ? error.message : 'Failed to generate prompt'
+      );
+    } finally {
+      setIsGeneratingScenePrompt(false);
+    }
+  }, [sceneId, selectedOpenRouterModel]);
+
   const handleReturnToPreviousUrl = useCallback(async () => {
     if (!sceneId) return;
     if (!previousVideoUrl) return;
@@ -2544,6 +2626,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsAnimationSectionOpen(false);
     setPreviewUrl(null);
     setIsPreviewLoading(false);
+    setIsGeneratingScenePrompt(false);
+    setScenePromptStatus(null);
     setTranscriptionWords(null);
     setSelectedWordText(null);
     setCustomText('');
@@ -3020,6 +3104,29 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         <div className='flex justify-between items-center mb-4'>
           <h2 className='text-xl font-semibold'>Add Image Overlay</h2>
           <div className='flex items-center gap-4'>
+            <div className='flex items-center gap-2'>
+              <button
+                type='button'
+                onClick={handleGenerateScenePrompt}
+                disabled={isApplying || isGeneratingScenePrompt}
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Generate and save storyboard prompt for this scene'
+              >
+                {isGeneratingScenePrompt ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    Prompt
+                  </span>
+                ) : (
+                  'Prompt'
+                )}
+              </button>
+              {scenePromptStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {scenePromptStatus}
+                </span>
+              ) : null}
+            </div>
             <div className='text-sm font-mono bg-gray-100 px-3 py-1 rounded'>
               {Math.floor(timerSeconds / 60)}:
               {(timerSeconds % 60).toString().padStart(2, '0')}

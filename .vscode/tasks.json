@@ -38,6 +38,103 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Lint generate-scene-prompt",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint",
+				"--",
+				"src/app/api/generate-scene-prompt/route.ts"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Lint generate-scene-prompt (after fix)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint",
+				"--",
+				"src/app/api/generate-scene-prompt/route.ts"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build (after prompt changes)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Lint overlay modal (after prompt)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint",
+				"--",
+				"src/components/ImageOverlayModal.tsx",
+				"src/app/api/generate-scene-prompt/route.ts"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build (confirm)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Lint generate-scene-prompt (field type fix)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint",
+				"--",
+				"src/app/api/generate-scene-prompt/route.ts"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build (prompt type fix)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }
