@@ -110,6 +110,11 @@ export default function BatchOperations({
   const [savingToDatabase, setSavingToDatabase] = useState(false);
   const [saveToDbMessage, setSaveToDbMessage] = useState<string | null>(null);
 
+  const [deletingEmptyScenes, setDeletingEmptyScenes] = useState(false);
+  const [deletingEmptySceneId, setDeletingEmptySceneId] = useState<
+    number | null
+  >(null);
+
   // Load settings on component mount
   useEffect(() => {
     loadSettingsFromLocalStorage();
@@ -215,6 +220,63 @@ export default function BatchOperations({
       clearLocalStorageSettings();
       setSaveMessage('Settings cleared and reset to defaults!');
       setTimeout(() => setSaveMessage(null), 3000);
+    }
+  };
+
+  const handleDeleteEmptyScenes = async () => {
+    if (deletingEmptyScenes) return;
+
+    const emptyScenes = data.filter((scene) => {
+      const sentence = String(scene['field_6890'] ?? '').trim();
+      const original = String(
+        scene['field_6901'] ?? scene['field_6900'] ?? ''
+      ).trim();
+      return sentence === '' && original === '';
+    });
+
+    if (emptyScenes.length === 0) {
+      return;
+    }
+
+    if (
+      !confirm(
+        `Delete ${emptyScenes.length} empty scene${
+          emptyScenes.length === 1 ? '' : 's'
+        }? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingEmptyScenes(true);
+    setDeletingEmptySceneId(null);
+
+    try {
+      for (const scene of emptyScenes) {
+        setDeletingEmptySceneId(scene.id);
+
+        const res = await fetch(`/api/baserow/scenes/${scene.id}`, {
+          method: 'DELETE',
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(
+            `Failed to delete scene ${scene.id}: ${res.status} ${errorText}`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('Failed to delete empty scenes:', error);
+    } finally {
+      setDeletingEmptyScenes(false);
+      setDeletingEmptySceneId(null);
     }
   };
 
@@ -988,6 +1050,29 @@ export default function BatchOperations({
                     : sceneLoading.speedingUpVideo !== null
                     ? `Busy (#${sceneLoading.speedingUpVideo})`
                     : getSpeedUpButtonText()}
+                </span>
+              </button>
+
+              <button
+                onClick={handleDeleteEmptyScenes}
+                disabled={
+                  deletingEmptyScenes ||
+                  batchOperations.speedingUpAllVideos ||
+                  sceneLoading.speedingUpVideo !== null
+                }
+                className='w-full h-12 mt-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title='Delete empty scenes (both sentence + original are blank)'
+              >
+                {deletingEmptyScenes && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <Trash2 className='w-4 h-4' />
+                <span className='font-medium'>
+                  {deletingEmptyScenes
+                    ? deletingEmptySceneId
+                      ? `Deleting #${deletingEmptySceneId}`
+                      : 'Deleting...'
+                    : 'Delete Empty'}
                 </span>
               </button>
             </div>
