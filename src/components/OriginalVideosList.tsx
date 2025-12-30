@@ -147,6 +147,10 @@ export default function OriginalVideosList({
   const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
   const [deletingEmptyScenesAllVideos, setDeletingEmptyScenesAllVideos] =
     useState(false);
+  const [
+    transcribingProcessingScenesAllVideos,
+    setTranscribingProcessingScenesAllVideos,
+  ] = useState(false);
   const [generatingAllVideos, setGeneratingAllVideos] = useState(false);
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
@@ -2077,6 +2081,250 @@ export default function OriginalVideosList({
       );
     } finally {
       setDeletingEmptyScenesAllVideos(false);
+      setCurrentProcessingVideoId(null);
+    }
+  };
+
+  // Transcribe FINAL Scenes for All Videos (Processing only)
+  const handleTranscribeProcessingScenesAllVideos = async (
+    playSound = true
+  ) => {
+    if (transcribingProcessingScenesAllVideos) return;
+
+    try {
+      setError(null);
+      setTranscribingProcessingScenesAllVideos(true);
+
+      const extractLinkedVideoId = (videoIdField: unknown): number | null => {
+        if (typeof videoIdField === 'number') {
+          return videoIdField;
+        }
+
+        if (typeof videoIdField === 'string') {
+          const parsed = parseInt(videoIdField, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const first = videoIdField[0];
+
+          if (typeof first === 'number') {
+            return first;
+          }
+
+          if (typeof first === 'string') {
+            const parsed = parseInt(first, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+
+          if (typeof first === 'object' && first !== null) {
+            const rec = first as Record<string, unknown>;
+            const candidate = rec.id ?? rec.value;
+            const parsed = parseInt(String(candidate ?? ''), 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+        }
+
+        if (typeof videoIdField === 'object' && videoIdField !== null) {
+          const rec = videoIdField as Record<string, unknown>;
+          const candidate = rec.id ?? rec.value;
+          const parsed = parseInt(String(candidate ?? ''), 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        return null;
+      };
+
+      // Fetch fresh original videos and scenes
+      const freshVideosData = await getOriginalVideosData();
+      const freshScenesData = await getBaserowData();
+
+      if (!freshScenesData || freshScenesData.length === 0) {
+        console.log('No scenes found to transcribe');
+        return;
+      }
+
+      // Filter videos by Processing status
+      const processingVideos = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+
+      // Filter scenes for Processing videos
+      const scenesForProcessingVideos = freshScenesData.filter((scene) => {
+        const videoId = extractLinkedVideoId(scene['field_6889']);
+        return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
+      });
+
+      // Only transcribe scenes that have a final video and missing captions
+      const scenesToTranscribe = scenesForProcessingVideos.filter((scene) => {
+        const finalVideo = scene['field_6886'];
+        const captions = scene['field_6910'];
+
+        const hasFinalVideo =
+          typeof finalVideo === 'string' && finalVideo.trim().length > 0;
+        const hasCaptions =
+          typeof captions === 'string'
+            ? captions.trim().length > 0
+            : !!captions;
+
+        return hasFinalVideo && !hasCaptions;
+      });
+
+      console.log(`Processing videos: ${processingVideos.length}`);
+      console.log(
+        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`
+      );
+      console.log(
+        `Scenes to transcribe (final video, missing captions): ${scenesToTranscribe.length}`
+      );
+
+      if (scenesToTranscribe.length === 0) {
+        console.log(
+          'No final scenes found that need transcription for Processing videos'
+        );
+        return;
+      }
+
+      for (const scene of scenesToTranscribe) {
+        const videoId = extractLinkedVideoId(scene['field_6889']);
+        if (videoId && !isNaN(videoId)) {
+          setCurrentProcessingVideoId(videoId);
+        }
+
+        const videoUrl = String(scene['field_6886'] ?? '').trim();
+        if (!videoUrl) continue;
+
+        // Step 1: Transcribe the scene final video
+        const transcribeResponse = await fetch('/api/transcribe-scene', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            media_url: videoUrl,
+            model: transcriptionSettings.selectedModel,
+            scene_id: scene.id,
+          }),
+        });
+
+        if (!transcribeResponse.ok) {
+          const errText = await transcribeResponse.text();
+          throw new Error(
+            `Failed to transcribe scene ${scene.id}: ${transcribeResponse.status} ${errText}`
+          );
+        }
+
+        const transcriptionData = await transcribeResponse.json();
+
+        // Step 2: Extract word timestamps
+        const wordTimestamps: Array<{
+          word: string;
+          start: number;
+          end: number;
+        }> = [];
+        const segments = transcriptionData.response?.segments;
+
+        if (segments && segments.length > 0) {
+          for (const segment of segments) {
+            if (segment.words) {
+              for (const wordObj of segment.words) {
+                wordTimestamps.push({
+                  word: String(wordObj.word ?? '').trim(),
+                  start: Number(wordObj.start),
+                  end: Number(wordObj.end),
+                });
+              }
+            }
+          }
+        }
+
+        // Step 3: Upload captions JSON
+        const captionsData = JSON.stringify(wordTimestamps);
+        const timestamp = Date.now();
+        const filename = `scene_${scene.id}_captions_${timestamp}.json`;
+
+        const formData = new FormData();
+        const blob = new Blob([captionsData], { type: 'application/json' });
+        formData.append('file', blob, filename);
+
+        const uploadResponse = await fetch('/api/upload-captions', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          const errText = await uploadResponse.text();
+          throw new Error(
+            `Failed to upload captions for scene ${scene.id}: ${uploadResponse.status} ${errText}`
+          );
+        }
+
+        const uploadResult = await uploadResponse.json();
+        const captionsUrl = uploadResult.url || uploadResult.file_url;
+        if (!captionsUrl) {
+          throw new Error(
+            `Upload did not return a captions URL for scene ${scene.id}`
+          );
+        }
+
+        // Step 4: Update scene fields (captions + sentence)
+        const fullText = wordTimestamps
+          .map((w) => w.word)
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+
+        const updateData: Record<string, unknown> = {
+          field_6910: captionsUrl,
+          ...(fullText ? { field_6890: fullText } : {}),
+        };
+
+        const patchRes = await fetch(`/api/baserow/scenes/${scene.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData),
+        });
+
+        if (!patchRes.ok) {
+          const errorText = await patchRes.text();
+          throw new Error(
+            `Failed to update scene ${scene.id}: ${patchRes.status} ${errorText}`
+          );
+        }
+
+        // Small delay to avoid rate limits / overwhelming the backend
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error(
+        'Error transcribing final scenes for Processing videos:',
+        error
+      );
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to transcribe final scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setTranscribingProcessingScenesAllVideos(false);
       setCurrentProcessingVideoId(null);
     }
   };
@@ -4434,6 +4682,7 @@ export default function OriginalVideosList({
                       onClick={() => handleDeleteEmptyScenesAllVideos()}
                       disabled={
                         deletingEmptyScenesAllVideos ||
+                        transcribingProcessingScenesAllVideos ||
                         uploading ||
                         reordering ||
                         transcribing !== null ||
@@ -4462,6 +4711,47 @@ export default function OriginalVideosList({
                             ? `V${currentProcessingVideoId}`
                             : 'Processing...'
                           : 'Delete Empty'}
+                      </span>
+                    </button>
+
+                    {/* Transcribe FINAL Scenes (Processing) Button */}
+                    <button
+                      onClick={() =>
+                        handleTranscribeProcessingScenesAllVideos()
+                      }
+                      disabled={
+                        transcribingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos ||
+                        uploading ||
+                        reordering ||
+                        transcribing !== null ||
+                        transcribingAll ||
+                        generatingScenes !== null ||
+                        generatingScenesAll ||
+                        mergingFinalVideos ||
+                        batchOperations.convertingAllFinalToCFR ||
+                        sceneLoading.convertingFinalToCFRVideo !== null
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        transcribingProcessingScenesAllVideos
+                          ? 'Transcribing final scenes for Processing videos...'
+                          : 'Transcribe final scene videos (missing captions) for videos with Processing status'
+                      }
+                    >
+                      <Subtitles
+                        className={`w-4 h-4 ${
+                          transcribingProcessingScenesAllVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {transcribingProcessingScenesAllVideos
+                          ? currentProcessingVideoId !== null
+                            ? `V${currentProcessingVideoId}`
+                            : 'Processing...'
+                          : 'Transcribe Scenes'}
                       </span>
                     </button>
 
