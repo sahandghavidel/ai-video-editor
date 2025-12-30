@@ -3545,7 +3545,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing)
+  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing) -> Prompt Scenes (Processing)
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -3997,6 +3997,43 @@ export default function OriginalVideosList({
         console.log(
           '⊘ Skipping Step: Transcribe Scenes After Sync (disabled in config)'
         );
+      }
+
+      // Step 9: Prompt Scenes (Processing only, after Transcribe Scenes)
+      if (pipelineConfig.promptScenesAfterTranscribe) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Prompting scenes for Processing videos...`
+        );
+        console.log(
+          `Step ${stepNumber}: Prompting scenes for Processing videos`
+        );
+
+        try {
+          await handlePromptProcessingScenesAllVideos(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Scene prompting finished`
+          );
+
+          console.log('Refreshing data after scene prompting...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Scene prompting error`,
+            error
+          );
+          throw new Error(
+            `Scene prompting failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Prompt Scenes (disabled in config)');
       }
 
       console.log('========================================');

@@ -129,6 +129,7 @@ export interface PipelineConfig {
   generateTTS: boolean;
   sync: boolean;
   transcribeScenesAfterSync: boolean;
+  promptScenesAfterTranscribe: boolean;
 }
 
 // Audio enhancement mode type
@@ -425,6 +426,7 @@ const defaultPipelineConfig: PipelineConfig = {
   generateTTS: true,
   sync: true,
   transcribeScenesAfterSync: true,
+  promptScenesAfterTranscribe: true,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({

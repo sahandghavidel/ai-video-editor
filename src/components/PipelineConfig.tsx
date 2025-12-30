@@ -54,6 +54,11 @@ export default function PipelineConfig() {
       label: 'Transcribe Scenes',
       color: 'text-purple-500',
     },
+    {
+      key: 'promptScenesAfterTranscribe' as const,
+      label: 'Prompt Scenes',
+      color: 'text-indigo-500',
+    },
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);
