@@ -12,6 +12,7 @@ import {
   handleTranscribeAllFinalScenes,
   cycleSpeed as cycleThroughSpeeds,
 } from '@/utils/batchOperations';
+import { playSuccessSound } from '@/utils/soundManager';
 import {
   Loader2,
   Sparkles,
@@ -114,6 +115,13 @@ export default function BatchOperations({
   const [deletingEmptySceneId, setDeletingEmptySceneId] = useState<
     number | null
   >(null);
+
+  const [promptingAllScenes, setPromptingAllScenes] = useState(false);
+  const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
+
+  const playBatchDoneSound = () => {
+    playSuccessSound();
+  };
 
   // Load settings on component mount
   useEffect(() => {
@@ -308,6 +316,124 @@ export default function BatchOperations({
       completeBatchOperation,
       setImprovingSentence
     );
+  };
+
+  const onPromptAllScenes = async () => {
+    if (promptingAllScenes) return;
+    if (!modelSelection.selectedModel) {
+      return;
+    }
+
+    // Resolve the destination prompt field key once, so we can skip scenes
+    // that already have a saved prompt.
+    let promptFieldKey: string | null = null;
+    try {
+      const res = await fetch('/api/generate-scene-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolveOnly: true }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`Failed to resolve prompt field: ${res.status} ${t}`);
+      }
+
+      const json = (await res.json().catch(() => null)) as {
+        promptFieldKey?: unknown;
+      } | null;
+      promptFieldKey =
+        typeof json?.promptFieldKey === 'string' ? json.promptFieldKey : null;
+    } catch (error) {
+      console.error('Failed to resolve prompt field key:', error);
+      return;
+    }
+
+    if (!promptFieldKey) {
+      return;
+    }
+
+    const scenesToPrompt = data.filter((scene) => {
+      const sentence = String(scene['field_6890'] ?? '').trim();
+      const original = String(
+        scene['field_6901'] ?? scene['field_6900'] ?? ''
+      ).trim();
+      if (!(sentence || original)) return false;
+
+      const existingPromptValue = scene[promptFieldKey as keyof typeof scene];
+      if (typeof existingPromptValue === 'string') {
+        return existingPromptValue.trim().length === 0;
+      }
+
+      return true;
+    });
+
+    if (scenesToPrompt.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setPromptingAllScenes(true);
+    setPromptingSceneId(null);
+
+    try {
+      for (const scene of scenesToPrompt) {
+        setPromptingSceneId(scene.id);
+
+        const genRes = await fetch('/api/generate-scene-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sceneId: scene.id,
+            model: modelSelection.selectedModel,
+          }),
+        });
+
+        if (!genRes.ok) {
+          const t = await genRes.text().catch(() => '');
+          throw new Error(
+            `Prompt generation failed for scene ${scene.id}: ${genRes.status} ${t}`
+          );
+        }
+
+        const genData = (await genRes.json().catch(() => null)) as {
+          scenePrompt?: unknown;
+          promptFieldKey?: unknown;
+        } | null;
+        const scenePrompt =
+          typeof genData?.scenePrompt === 'string' ? genData.scenePrompt : null;
+
+        if (!scenePrompt || !scenePrompt.trim()) {
+          throw new Error(`Empty prompt returned for scene ${scene.id}`);
+        }
+
+        const patchRes = await fetch(`/api/baserow/scenes/${scene.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            [promptFieldKey]: scenePrompt,
+          }),
+        });
+
+        if (!patchRes.ok) {
+          const t = await patchRes.text().catch(() => '');
+          throw new Error(
+            `Failed to save prompt for scene ${scene.id}: ${patchRes.status} ${t}`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+
+      playBatchDoneSound();
+
+      onRefresh?.();
+    } catch (error) {
+      console.error('Prompt All failed:', error);
+    } finally {
+      setPromptingAllScenes(false);
+      setPromptingSceneId(null);
+    }
   };
 
   const onGenerateAllTTS = () => {
@@ -840,6 +966,34 @@ export default function BatchOperations({
                     : sceneLoading.improvingSentence !== null
                     ? `Busy (#${sceneLoading.improvingSentence})`
                     : 'Improve All'}
+                </span>
+              </button>
+
+              <button
+                onClick={onPromptAllScenes}
+                disabled={
+                  promptingAllScenes ||
+                  batchOperations.improvingAll ||
+                  sceneLoading.improvingSentence !== null
+                }
+                className='mt-3 w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  promptingAllScenes
+                    ? promptingSceneId
+                      ? `Generating prompt for scene ${promptingSceneId}`
+                      : 'Generating prompts for all scenes...'
+                    : 'Generate and save prompts for all non-empty scenes'
+                }
+              >
+                {promptingAllScenes && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {promptingAllScenes
+                    ? promptingSceneId
+                      ? `Prompting #${promptingSceneId}`
+                      : 'Processing...'
+                    : 'Prompt All'}
                 </span>
               </button>
             </div>

@@ -213,10 +213,31 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as {
       sceneId?: unknown;
       model?: unknown;
+      resolveOnly?: unknown;
     } | null;
 
     const sceneId = Number(body?.sceneId);
     const model = typeof body?.model === 'string' ? body.model : null;
+    const resolveOnly = body?.resolveOnly === true;
+
+    // Allow callers to resolve the destination field without generating.
+    if (resolveOnly) {
+      const { key: promptFieldKey, field: promptField } =
+        await resolvePromptFieldKey();
+
+      if (promptField && !isPromptWritableFieldType(promptField.type)) {
+        return Response.json(
+          {
+            error: `"${promptField.name}" cannot store prompts (type: ${promptField.type}). Change it to a Text or Long text field in Baserow.`,
+            promptFieldKey,
+            promptFieldType: promptField.type,
+          },
+          { status: 400 }
+        );
+      }
+
+      return Response.json({ promptFieldKey });
+    }
 
     if (!Number.isFinite(sceneId) || sceneId <= 0) {
       return Response.json({ error: 'Scene ID is required' }, { status: 400 });
