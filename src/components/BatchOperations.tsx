@@ -342,13 +342,15 @@ export default function BatchOperations({
   };
 
   const onTranscribeAllFinal = () => {
+    // This batch action must only run for the currently selected original video.
+    if (!selectedOriginalVideo.id) return;
+
     handleTranscribeAllFinalScenes(
       data,
       handleTranscribeScene,
       startBatchOperation,
       completeBatchOperation,
-      setTranscribingScene,
-      onRefresh
+      setTranscribingScene
     );
   };
 
@@ -907,12 +909,15 @@ export default function BatchOperations({
                 <button
                   onClick={onTranscribeAllFinal}
                   disabled={
+                    !selectedOriginalVideo.id ||
                     batchOperations.transcribingAllFinalScenes ||
                     sceneLoading.transcribingScene !== null
                   }
                   className='w-full h-12 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                   title={
-                    batchOperations.transcribingAllFinalScenes
+                    !selectedOriginalVideo.id
+                      ? 'Select an original video first'
+                      : batchOperations.transcribingAllFinalScenes
                       ? 'Transcribing final scenes...'
                       : sceneLoading.transcribingScene !== null
                       ? `Transcribing scene ${sceneLoading.transcribingScene}`

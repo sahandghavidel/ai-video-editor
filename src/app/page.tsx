@@ -33,10 +33,7 @@ export default function Home() {
 
   // Get filtered data based on selected original video
   const filteredData = getFilteredData();
-  const transcribingAllFinalScenes = useAppStore(
-    (s) => s.batchOperations.transcribingAllFinalScenes
-  );
-  const displayData = transcribingAllFinalScenes ? data : filteredData;
+  const displayData = filteredData;
 
   const [sceneHandlers, setSceneHandlers] = useState<{
     handleSentenceImprovement: (

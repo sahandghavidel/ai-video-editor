@@ -1305,10 +1305,26 @@ export default function SceneCard({
             console.log('Updating scene sentence with transcribed text');
           }
 
-          await updateSceneRow(sceneId, updateData);
+          const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updateData),
+          });
 
-          // Optimistic update
-          const optimisticData = data.map((scene) =>
+          if (!patchRes.ok) {
+            const errorText = await patchRes.text();
+            throw new Error(
+              `Failed to update scene ${sceneId}: ${patchRes.status} ${errorText}`
+            );
+          }
+
+          // Optimistic update: merge into the full global store dataset.
+          // IMPORTANT: `onDataUpdate` in the page overwrites the store, so it must
+          // receive the full dataset, not the currently displayed (filtered) subset.
+          const currentStoreData = useAppStore.getState().data;
+          const optimisticStoreData = currentStoreData.map((scene) =>
             scene.id === sceneId
               ? {
                   ...scene,
@@ -1317,9 +1333,8 @@ export default function SceneCard({
                 }
               : scene
           );
-          onDataUpdate?.(optimisticData);
-          // Update global store directly for optimistic update during batch
-          setData(optimisticData);
+          onDataUpdate?.(optimisticStoreData);
+          setData(optimisticStoreData);
         }
 
         // Refresh data from server to ensure consistency only when not skipped
