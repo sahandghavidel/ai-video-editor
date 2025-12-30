@@ -260,9 +260,22 @@ export async function POST(request: Request) {
       .slice()
       .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
 
-    const fullScript = orderedScenes.map(formatScriptLine).join(' ');
+    const currentText = getSceneText(currentScene).trim();
+    if (!currentText) {
+      return Response.json(
+        {
+          error: 'Current scene is empty; cannot generate prompt',
+          promptFieldKey,
+        },
+        { status: 400 }
+      );
+    }
 
-    const currentText = getSceneText(currentScene);
+    // Exclude empty scenes from the context we send to the model.
+    const contextScenes = orderedScenes.filter((scene) =>
+      Boolean(getSceneText(scene).trim())
+    );
+    const fullScript = contextScenes.map(formatScriptLine).join(' ');
 
     const prompt = `You are a Professional Video Storyboard Artist and AI Prompt Engineer. Your task is to analyze the trading script I provide and break it down into a series of visual image prompts. GLOBAL CHARACTER RULES (Must be in every prompt): Character: 2D minimalist sticky character. Appearance: Solid cyan skin, solid cyan head. Face: NO face mask, NO white patch. Simple black dot eyes directly on the cyan skin. Art Style: Thick black vector outlines, flat 2D art, high contrast. Environment: Minimalist, dark navy or black backgrounds. For each scene, create a visual metaphor that explains the concept being spoken. Do not just show the character talking; show the character interacting with trading charts, symbols, or metaphorical objects (mountains, traps, clocks, etc.). Just return the prompt for the current scene nothing else: current scene: ${sceneId} ${currentText} Full script: ${fullScript}`;
 
