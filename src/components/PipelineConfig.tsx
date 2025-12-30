@@ -32,6 +32,11 @@ export default function PipelineConfig() {
       color: 'text-purple-500',
     },
     {
+      key: 'deleteEmpty' as const,
+      label: 'Delete Empty',
+      color: 'text-red-500',
+    },
+    {
       key: 'generateClips' as const,
       label: 'Generate Clips',
       color: 'text-cyan-500',

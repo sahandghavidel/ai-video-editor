@@ -1948,6 +1948,46 @@ export default function OriginalVideosList({
       setError(null);
       setDeletingEmptyScenesAllVideos(true);
 
+      const extractLinkedVideoId = (videoIdField: unknown): number | null => {
+        if (typeof videoIdField === 'number') {
+          return videoIdField;
+        }
+
+        if (typeof videoIdField === 'string') {
+          const parsed = parseInt(videoIdField, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const first = videoIdField[0];
+
+          if (typeof first === 'number') {
+            return first;
+          }
+
+          if (typeof first === 'string') {
+            const parsed = parseInt(first, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+
+          if (typeof first === 'object' && first !== null) {
+            const rec = first as Record<string, unknown>;
+            const candidate = rec.id ?? rec.value;
+            const parsed = parseInt(String(candidate ?? ''), 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+        }
+
+        if (typeof videoIdField === 'object' && videoIdField !== null) {
+          const rec = videoIdField as Record<string, unknown>;
+          const candidate = rec.id ?? rec.value;
+          const parsed = parseInt(String(candidate ?? ''), 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        return null;
+      };
+
       // Fetch fresh original videos data to check status
       const freshVideosData = await getOriginalVideosData();
 
@@ -1969,34 +2009,15 @@ export default function OriginalVideosList({
 
       // Filter scenes to only those whose parent video has status === 'Processing'
       const scenesForProcessingVideos = freshScenesData.filter((scene) => {
-        const videoIdField = scene['field_6889'];
-        let videoId: number | null = null;
-
-        if (typeof videoIdField === 'number') {
-          videoId = videoIdField;
-        } else if (typeof videoIdField === 'string') {
-          videoId = parseInt(videoIdField, 10);
-        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
-          const firstId =
-            typeof videoIdField[0] === 'object'
-              ? (videoIdField[0] as any).id || (videoIdField[0] as any).value
-              : videoIdField[0];
-          videoId = parseInt(String(firstId), 10);
-        }
+        const videoId = extractLinkedVideoId(scene['field_6889']);
 
         return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
       });
 
       const emptyScenes = scenesForProcessingVideos.filter((scene) => {
-        const sentence = String(
-          scene['field_6890'] ?? (scene as any).field_6890 ?? ''
-        ).trim();
+        const sentence = String(scene['field_6890'] ?? '').trim();
         const original = String(
-          scene['field_6901'] ??
-            (scene as any).field_6901 ??
-            scene['field_6900'] ??
-            (scene as any).field_6900 ??
-            ''
+          scene['field_6901'] ?? scene['field_6900'] ?? ''
         ).trim();
 
         return sentence === '' && original === '';
@@ -2014,20 +2035,7 @@ export default function OriginalVideosList({
       }
 
       for (const scene of emptyScenes) {
-        const videoIdField = scene['field_6889'];
-        let videoId: number | null = null;
-
-        if (typeof videoIdField === 'number') {
-          videoId = videoIdField;
-        } else if (typeof videoIdField === 'string') {
-          videoId = parseInt(videoIdField, 10);
-        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
-          const firstId =
-            typeof videoIdField[0] === 'object'
-              ? (videoIdField[0] as any).id || (videoIdField[0] as any).value
-              : videoIdField[0];
-          videoId = parseInt(String(firstId), 10);
-        }
+        const videoId = extractLinkedVideoId(scene['field_6889']);
 
         if (videoId && !isNaN(videoId)) {
           setCurrentProcessingVideoId(videoId);
@@ -3107,7 +3115,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All
+  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -3308,6 +3316,46 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: Generate Scenes (disabled in config)');
+      }
+
+      // Step: Delete Empty (Processing only)
+      if (pipelineConfig.deleteEmpty) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Deleting empty scenes for Processing videos...`
+        );
+        console.log(
+          `Step ${stepNumber}: Deleting empty scenes for Processing videos`
+        );
+        try {
+          await handleDeleteEmptyScenesAllVideos(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Empty scenes deletion finished`
+          );
+
+          console.log('Refreshing data after deleting empty scenes...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Delete empty scenes error`,
+            error
+          );
+          throw new Error(
+            `Delete empty scenes failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Delete Empty (disabled in config)');
       }
 
       // Step 3: Generate Clips All
@@ -4527,7 +4575,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                           ? pipelineStep
-                          : 'Run full pipeline: Normalize → CFR → Silence → Transcribe → Scenes → Clips → Speed Up → Improve → TTS → Sync'
+                          : 'Run full pipeline: Normalize → CFR → Silence → Transcribe → Scenes → Delete Empty → Clips → Speed Up → Improve → TTS → Sync'
                       }
                     >
                       <Workflow
