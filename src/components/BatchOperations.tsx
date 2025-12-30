@@ -238,16 +238,6 @@ export default function BatchOperations({
       return;
     }
 
-    if (
-      !confirm(
-        `Delete ${emptyScenes.length} empty scene${
-          emptyScenes.length === 1 ? '' : 's'
-        }? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
-
     setDeletingEmptyScenes(true);
     setDeletingEmptySceneId(null);
 
