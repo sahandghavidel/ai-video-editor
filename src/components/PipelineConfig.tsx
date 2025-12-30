@@ -49,6 +49,11 @@ export default function PipelineConfig() {
       color: 'text-indigo-500',
     },
     { key: 'sync' as const, label: 'Sync Videos', color: 'text-green-500' },
+    {
+      key: 'transcribeScenesAfterSync' as const,
+      label: 'Transcribe Scenes',
+      color: 'text-purple-500',
+    },
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);

@@ -3363,7 +3363,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All
+  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing)
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -3777,6 +3777,44 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: Sync (disabled in config)');
+      }
+
+      // Step 8: Transcribe Scenes (Processing only, after Sync)
+      if (pipelineConfig.transcribeScenesAfterSync) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Transcribing scenes for Processing videos...`
+        );
+        console.log(
+          `Step ${stepNumber}: Transcribing scenes for Processing videos`
+        );
+        try {
+          await handleTranscribeProcessingScenesAllVideos(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Scene transcription finished`
+          );
+
+          console.log('Refreshing data after scene transcription...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Scene transcription error`,
+            error
+          );
+          throw new Error(
+            `Scene transcription failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log(
+          '⊘ Skipping Step: Transcribe Scenes After Sync (disabled in config)'
+        );
       }
 
       console.log('========================================');
