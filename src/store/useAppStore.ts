@@ -117,6 +117,7 @@ export interface ClipGenerationState {
 
 // Pipeline configuration state interface
 export interface PipelineConfig {
+  ttsScript: boolean;
   normalizeAudio: boolean;
   convertToCFR: boolean;
   optimizeSilence: boolean;
@@ -414,6 +415,7 @@ const defaultClipGeneration: ClipGenerationState = {
 
 // Default pipeline configuration (all steps enabled by default)
 const defaultPipelineConfig: PipelineConfig = {
+  ttsScript: true,
   normalizeAudio: true,
   convertToCFR: true,
   optimizeSilence: true,

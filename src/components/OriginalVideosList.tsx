@@ -536,7 +536,10 @@ export default function OriginalVideosList({
     }
   };
 
-  const handleGenerateTtsFromScripts = async () => {
+  const handleGenerateTtsFromScripts = async (
+    playSound = true,
+    refreshAtEnd = true
+  ) => {
     if (generatingTtsFromScripts) return;
 
     setGeneratingTtsFromScripts(true);
@@ -599,15 +602,22 @@ export default function OriginalVideosList({
         }
       }
 
-      await fetchOriginalVideos(true);
-      playSuccessSound();
+      if (refreshAtEnd) {
+        await fetchOriginalVideos(true);
+      }
+
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : 'Failed to generate TTS from scripts'
       );
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
     } finally {
       setGeneratingTtsFromScripts(false);
       setGeneratingScriptTtsForVideo(null);
@@ -3737,7 +3747,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing) -> Prompt Scenes (Processing)
+  // Run Full Pipeline: TTS Script -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing) -> Prompt Scenes (Processing)
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -3757,7 +3767,44 @@ export default function OriginalVideosList({
 
       let stepNumber = 0;
 
-      // Step 1: Normalize Audio All
+      // Step 1: TTS Script (Processing only, from video Script)
+      if (pipelineConfig.ttsScript) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating TTS from scripts for Processing videos...`
+        );
+        console.log(
+          `Step ${stepNumber}: Generating TTS from scripts for Processing videos`
+        );
+        try {
+          await handleGenerateTtsFromScripts(false, false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Script TTS generation finished`
+          );
+
+          console.log('Refreshing data after script TTS generation...');
+          await handleRefresh();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Script TTS generation error`,
+            error
+          );
+          throw new Error(
+            `Script TTS generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: TTS Script (disabled in config)');
+      }
+
+      // Step: Normalize Audio All
       if (pipelineConfig.normalizeAudio) {
         stepNumber++;
         setPipelineStep(
@@ -5462,7 +5509,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                           ? pipelineStep
-                          : 'Run full pipeline: Normalize → CFR → Silence → Transcribe → Scenes → Delete Empty → Clips → Speed Up → Improve → TTS → Sync'
+                          : 'Run full pipeline: TTS Script → Normalize → CFR → Silence → Transcribe → Scenes → Delete Empty → Clips → Speed Up → Improve → TTS → Sync'
                       }
                     >
                       <Workflow

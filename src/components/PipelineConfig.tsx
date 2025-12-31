@@ -11,6 +11,11 @@ export default function PipelineConfig() {
 
   const steps = [
     {
+      key: 'ttsScript' as const,
+      label: 'TTS Script',
+      color: 'text-orange-500',
+    },
+    {
       key: 'normalizeAudio' as const,
       label: 'Normalize Audio',
       color: 'text-orange-500',
