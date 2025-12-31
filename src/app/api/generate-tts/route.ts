@@ -645,9 +645,19 @@ export async function POST(request: NextRequest) {
   try {
     const { text, sceneId, videoId, ttsSettings } = await request.json();
 
-    if (!text || !sceneId) {
+    const hasText = typeof text === 'string' && text.trim().length > 0;
+    const hasSceneId =
+      sceneId !== undefined &&
+      sceneId !== null &&
+      String(sceneId).trim().length > 0;
+    const hasVideoId =
+      videoId !== undefined &&
+      videoId !== null &&
+      String(videoId).trim().length > 0;
+
+    if (!hasText || (!hasSceneId && !hasVideoId)) {
       return NextResponse.json(
-        { error: 'Text and sceneId are required' },
+        { error: 'Text and (sceneId or videoId) are required' },
         { status: 400 }
       );
     }
@@ -820,8 +830,10 @@ export async function POST(request: NextRequest) {
 
     // Step 2: Upload to MinIO
     const timestamp = Date.now();
-    const filename = videoId
-      ? `video_${videoId}_scene_${sceneId}_tts_${timestamp}.wav`
+    const filename = hasVideoId
+      ? hasSceneId
+        ? `video_${videoId}_scene_${sceneId}_tts_${timestamp}.wav`
+        : `video_${videoId}_tts_${timestamp}.wav`
       : `scene_${sceneId}_tts_${timestamp}.wav`;
     const bucket = 'nca-toolkit';
     const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
@@ -855,7 +867,8 @@ export async function POST(request: NextRequest) {
       audioUrl: uploadUrl,
       filename,
       bucket,
-      sceneId,
+      sceneId: hasSceneId ? sceneId : null,
+      videoId: hasVideoId ? videoId : null,
     });
   } catch (error) {
     console.error('❌ Error generating TTS:', error);

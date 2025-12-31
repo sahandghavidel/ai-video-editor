@@ -118,6 +118,8 @@ export default function OriginalVideosList({
   const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
   const [scriptUploadText, setScriptUploadText] = useState('');
   const [creatingVideoFromScript, setCreatingVideoFromScript] = useState(false);
+  const [generatingTtsFromScripts, setGeneratingTtsFromScripts] =
+    useState(false);
   const [editingTitle, setEditingTitle] = useState<{
     videoId: number;
     value: string;
@@ -529,6 +531,76 @@ export default function OriginalVideosList({
       setError(err instanceof Error ? err.message : 'Create failed');
     } finally {
       setCreatingVideoFromScript(false);
+    }
+  };
+
+  const handleGenerateTtsFromScripts = async () => {
+    if (generatingTtsFromScripts) return;
+
+    setGeneratingTtsFromScripts(true);
+    setError(null);
+
+    try {
+      // Fetch once at start to avoid mid-batch refresh loops
+      const videos = await getOriginalVideosData();
+      const processingVideos = videos.filter((v) => {
+        const status = extractFieldValue(v.field_6864).trim().toLowerCase();
+        return status === 'processing';
+      });
+
+      for (const video of processingVideos) {
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        if (!script) continue;
+
+        const existingTtsUrl = extractUrl(video.field_6859);
+        if (existingTtsUrl && existingTtsUrl.trim().length > 0) continue;
+
+        try {
+          const ttsRes = await fetch('/api/generate-tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: script, videoId: video.id }),
+          });
+
+          if (!ttsRes.ok) {
+            const json = (await ttsRes.json().catch(() => null)) as {
+              error?: unknown;
+            } | null;
+            const msg =
+              typeof json?.error === 'string'
+                ? json.error
+                : `TTS failed (${ttsRes.status})`;
+            console.error('TTS failed for video', video.id, msg);
+            continue;
+          }
+
+          const ttsJson = (await ttsRes.json()) as { audioUrl?: unknown };
+          const audioUrl =
+            typeof ttsJson.audioUrl === 'string' ? ttsJson.audioUrl : '';
+          if (!audioUrl) {
+            console.error('TTS returned no audioUrl for video', video.id);
+            continue;
+          }
+
+          await updateOriginalVideoRow(video.id, { field_6859: audioUrl });
+        } catch (innerErr) {
+          console.error('TTS error for video', video.id, innerErr);
+          continue;
+        }
+      }
+
+      await fetchOriginalVideos(true);
+      playSuccessSound();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to generate TTS from scripts'
+      );
+      playErrorSound();
+    } finally {
+      setGeneratingTtsFromScripts(false);
     }
   };
 
@@ -4520,6 +4592,36 @@ export default function OriginalVideosList({
                         <>
                           <FileText className='w-4 h-4' />
                           <span>Upload Script</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* TTS Script Button */}
+                    <button
+                      onClick={handleGenerateTtsFromScripts}
+                      disabled={
+                        uploading ||
+                        creatingVideoFromScript ||
+                        generatingTtsFromScripts
+                      }
+                      className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
+                        uploading ||
+                        creatingVideoFromScript ||
+                        generatingTtsFromScripts
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-600'
+                      } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
+                      title='Generate TTS audio from Script for Processing videos'
+                    >
+                      {generatingTtsFromScripts ? (
+                        <>
+                          <Loader2 className='w-4 h-4 animate-spin' />
+                          <span className='truncate'>Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className='w-4 h-4' />
+                          <span>TTS Script</span>
                         </>
                       )}
                     </button>
