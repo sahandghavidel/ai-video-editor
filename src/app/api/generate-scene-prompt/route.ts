@@ -298,7 +298,7 @@ export async function POST(request: Request) {
     );
     const fullScript = contextScenes.map(formatScriptLine).join(' ');
 
-    const prompt = `You are a Professional Video Storyboard Artist and AI Prompt Engineer. Your task is to analyze the trading script I provide and break it down into a series of visual image prompts. GLOBAL CHARACTER RULES (Must be in every prompt): Character: 2D minimalist sticky character. Appearance: Solid cyan skin, solid cyan head. Face: NO face mask, NO white patch. Simple black dot eyes directly on the cyan skin. Art Style: Thick black vector outlines, flat 2D art, high contrast. Environment: Minimalist, dark navy or black backgrounds. For each scene, create a visual metaphor that explains the concept being spoken. Do not just show the character talking; show the character interacting with trading charts, symbols, or metaphorical objects (mountains, traps, clocks, etc.). Just return the prompt for the current scene nothing else: current scene: ${sceneId} ${currentText} Full script: ${fullScript}`;
+    const prompt = `You are a Professional Video Storyboard Artist and AI Prompt Engineer. Your task is to analyze the trading script I provide and break it down into a visual image prompt. GLOBAL CHARACTER RULES (Must be in every prompt): Do not just show the character talking; show the character interacting, very detailed prompt and use descriptive language to create vivid imagery. Avoid generic descriptions; be specific about the setting, mood, and actions. Just return the prompt for the current scene nothing else: current scene: ${sceneId} ${currentText} Full script: ${fullScript}`;
 
     // User requested: log the EXACT prompt being sent.
     console.log('generate-scene-prompt: sending prompt to OpenRouter');
