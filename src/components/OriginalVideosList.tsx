@@ -122,6 +122,10 @@ export default function OriginalVideosList({
     useState(false);
   const [generatingScriptTtsForVideo, setGeneratingScriptTtsForVideo] =
     useState<number | null>(null);
+  const [
+    generatingVideoFromTtsAudioForVideo,
+    setGeneratingVideoFromTtsAudioForVideo,
+  ] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState<{
     videoId: number;
     value: string;
@@ -408,6 +412,105 @@ export default function OriginalVideosList({
     }
 
     return null;
+  };
+
+  const parseDimension = (
+    input: string
+  ): { width: number; height: number } | null => {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+
+    const match = trimmed.match(/(\d{2,5})\s*[x×X]\s*(\d{2,5})/);
+    if (!match) return null;
+
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+    if (width <= 0 || height <= 0) return null;
+    return { width, height };
+  };
+
+  const parseHexColor = (input: string): string | null => {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+
+    const match = trimmed.match(/#?[0-9a-fA-F]{6}/);
+    if (!match) return null;
+
+    const hex = match[0].startsWith('#') ? match[0] : `#${match[0]}`;
+    return hex.toUpperCase();
+  };
+
+  const handleGenerateVideoFromTtsAudio = async (video: BaserowRow) => {
+    const audioUrl = extractUrl(video.field_6859);
+    if (!audioUrl) {
+      setError('No TTS audio URL found for this video');
+      return;
+    }
+
+    try {
+      setGeneratingVideoFromTtsAudioForVideo(video.id);
+
+      const dimensionRaw = extractFieldValue(video.field_7092);
+      const bgRaw = extractFieldValue(video.field_7093);
+
+      const parsedDim = parseDimension(dimensionRaw) ?? {
+        width: 1920,
+        height: 1080,
+      };
+      const parsedBg = parseHexColor(bgRaw) ?? '#FFFFFF';
+
+      const response = await fetch('/api/generate-video-from-tts-audio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: video.id,
+          audioUrl,
+          dimension: `${parsedDim.width}x${parsedDim.height}`,
+          bgColor: parsedBg,
+          framerate: 30,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Video generation failed: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.details || errorMessage;
+          console.error('API Error:', errorData);
+        } catch {
+          // ignore parse errors
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      const generatedUrl = result?.data?.videoUrl as string | undefined;
+
+      if (!generatedUrl) {
+        throw new Error('No videoUrl returned from API');
+      }
+
+      await updateOriginalVideoRow(video.id, {
+        field_6881: generatedUrl, // Video Uploaded URL
+        field_6908: generatedUrl, // CFR Video URL (already encoded CFR-like at 30fps)
+      });
+
+      await handleRefresh();
+      playSuccessSound();
+    } catch (error) {
+      console.error('Error generating video from TTS audio:', error);
+      playErrorSound();
+      setError(
+        `Failed to generate video from TTS audio: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setGeneratingVideoFromTtsAudioForVideo(null);
+    }
   };
 
   // Helper function to check if video has scenes
@@ -6016,6 +6119,39 @@ export default function OriginalVideosList({
                                     <Loader2 className='w-4 h-4 animate-spin' />
                                   ) : (
                                     <Mic2 className='w-4 h-4' />
+                                  )}
+                                </button>
+
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGenerateVideoFromTtsAudio(video);
+                                  }}
+                                  disabled={
+                                    generatingVideoFromTtsAudioForVideo !==
+                                      null ||
+                                    !extractUrl(video.field_6859) ||
+                                    !!extractUrl(video.field_6881)
+                                  }
+                                  className='p-2 text-pink-600 hover:text-pink-800 hover:bg-pink-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                  title={
+                                    generatingVideoFromTtsAudioForVideo !== null
+                                      ? generatingVideoFromTtsAudioForVideo ===
+                                        video.id
+                                        ? 'Generating video from TTS audio...'
+                                        : 'Another video generation in progress'
+                                      : !extractUrl(video.field_6859)
+                                      ? 'No TTS audio available'
+                                      : !!extractUrl(video.field_6881)
+                                      ? 'Video already exists'
+                                      : 'Generate video from TTS audio (30fps)'
+                                  }
+                                >
+                                  {generatingVideoFromTtsAudioForVideo ===
+                                  video.id ? (
+                                    <Loader2 className='w-4 h-4 animate-spin' />
+                                  ) : (
+                                    <Film className='w-4 h-4' />
                                   )}
                                 </button>
 
