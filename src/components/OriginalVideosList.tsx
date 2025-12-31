@@ -29,6 +29,7 @@ import {
   Volume2,
   Mic,
   Upload,
+  FileText,
   Zap,
   Workflow,
   Film,
@@ -113,6 +114,10 @@ export default function OriginalVideosList({
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
+  const [scriptUploadText, setScriptUploadText] = useState('');
+  const [creatingVideoFromScript, setCreatingVideoFromScript] = useState(false);
   const [editingTitle, setEditingTitle] = useState<{
     videoId: number;
     value: string;
@@ -480,6 +485,51 @@ export default function OriginalVideosList({
 
   const openFileDialog = () => {
     fileInputRef.current?.click();
+  };
+
+  const openScriptUploadModal = () => {
+    setIsScriptUploadModalOpen(true);
+  };
+
+  const closeScriptUploadModal = () => {
+    if (creatingVideoFromScript) return;
+    setIsScriptUploadModalOpen(false);
+    setScriptUploadText('');
+  };
+
+  const handleCreateVideoFromScript = async () => {
+    if (creatingVideoFromScript) return;
+    if (!scriptUploadText.trim()) return;
+
+    setCreatingVideoFromScript(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/create-video-from-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: scriptUploadText }),
+      });
+
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as {
+          error?: unknown;
+        } | null;
+        const msg =
+          typeof json?.error === 'string'
+            ? json.error
+            : `Create failed (${res.status})`;
+        throw new Error(msg);
+      }
+
+      await fetchOriginalVideos(true);
+      setIsScriptUploadModalOpen(false);
+      setScriptUploadText('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Create failed');
+    } finally {
+      setCreatingVideoFromScript(false);
+    }
   };
 
   const handleRowClick = (video: BaserowRow) => {
@@ -4450,6 +4500,30 @@ export default function OriginalVideosList({
                       )}
                     </button>
 
+                    {/* Upload Script Button */}
+                    <button
+                      onClick={openScriptUploadModal}
+                      disabled={uploading || creatingVideoFromScript}
+                      className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
+                        uploading || creatingVideoFromScript
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-600'
+                      } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
+                      title='Create a new video row from a script'
+                    >
+                      {creatingVideoFromScript ? (
+                        <>
+                          <Loader2 className='w-4 h-4 animate-spin' />
+                          <span className='truncate'>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileText className='w-4 h-4' />
+                          <span>Upload Script</span>
+                        </>
+                      )}
+                    </button>
+
                     <input
                       ref={fileInputRef}
                       type='file'
@@ -4457,6 +4531,59 @@ export default function OriginalVideosList({
                       onChange={handleFileSelect}
                       className='hidden'
                     />
+
+                    {isScriptUploadModalOpen && (
+                      <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4'>
+                        <div className='w-full max-w-2xl rounded-lg bg-white shadow-lg border border-gray-200'>
+                          <div className='px-4 py-3 border-b border-gray-200 flex items-center justify-between'>
+                            <h3 className='text-sm font-semibold text-gray-900'>
+                              Upload Script
+                            </h3>
+                            <button
+                              onClick={closeScriptUploadModal}
+                              disabled={creatingVideoFromScript}
+                              className='text-gray-500 hover:text-gray-700 disabled:text-gray-300'
+                              title='Close'
+                            >
+                              <X className='w-4 h-4' />
+                            </button>
+                          </div>
+
+                          <div className='p-4'>
+                            <textarea
+                              value={scriptUploadText}
+                              onChange={(e) =>
+                                setScriptUploadText(e.target.value)
+                              }
+                              placeholder='Paste your script here...'
+                              className='w-full min-h-[200px] rounded-md border border-gray-300 p-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500'
+                            />
+                          </div>
+
+                          <div className='px-4 py-3 border-t border-gray-200 flex items-center justify-end gap-2'>
+                            <button
+                              onClick={closeScriptUploadModal}
+                              disabled={creatingVideoFromScript}
+                              className='px-3 py-2 text-sm font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:text-gray-300 disabled:border-gray-200'
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleCreateVideoFromScript}
+                              disabled={
+                                creatingVideoFromScript ||
+                                scriptUploadText.trim().length === 0
+                              }
+                              className='px-3 py-2 text-sm font-medium rounded-md bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white'
+                            >
+                              {creatingVideoFromScript
+                                ? 'Creating...'
+                                : 'Create Video'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Primary Actions */}
                     {/* Refresh Button */}
