@@ -49,13 +49,15 @@ export async function convertToCFR(
       '-preset',
       'medium',
       '-crf',
-      '23',
+      '20',
       '-c:a',
       'aac',
       '-b:a',
       '128k',
       '-ar',
       '48000',
+      '-ac',
+      '2',
       `"${fullOutputPath}"`,
     ];
 

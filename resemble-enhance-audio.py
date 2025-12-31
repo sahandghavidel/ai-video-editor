@@ -166,6 +166,7 @@ def merge_audio_video(video_path: str, audio_path: str, output_path: str) -> boo
             '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',  # Normalize audio to EBU R128 standard
             '-c:a', 'aac',   # Encode audio as AAC
             '-b:a', '192k',  # Audio bitrate
+            '-ac', '2',      # Force stereo for merge consistency
             '-map', '0:v:0', # Map video from first input
             '-map', '1:a:0', # Map audio from second input
             '-shortest',     # Match shortest stream duration

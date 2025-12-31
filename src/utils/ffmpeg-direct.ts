@@ -174,7 +174,7 @@ export async function trimVideoWithFFmpeg(
           '-preset',
           'medium',
           '-crf',
-          '23'
+          '20'
         );
       }
 
@@ -184,6 +184,8 @@ export async function trimVideoWithFFmpeg(
         'aac',
         '-b:a',
         '128k',
+        '-ac',
+        '2',
         '-avoid_negative_ts',
         'make_zero',
         `"${fullOutputPath}"`
@@ -366,7 +368,7 @@ export async function speedUpVideoWithFFmpeg(
           '-preset',
           'medium',
           '-crf',
-          '23'
+          '20'
         );
       }
 
@@ -376,6 +378,8 @@ export async function speedUpVideoWithFFmpeg(
         'aac',
         '-b:a',
         '128k',
+        '-ac',
+        '2',
         '-avoid_negative_ts',
         'make_zero',
         `"${fullOutputPath}"`
@@ -844,11 +848,13 @@ export async function createTypingEffectVideo(
       '-preset',
       'medium',
       '-crf',
-      '23',
+      '20',
       '-c:a',
       'aac',
       '-b:a',
       '124k',
+      '-ac',
+      '2',
       '-t',
       requiredDuration.toString(),
       fullOutputPath,

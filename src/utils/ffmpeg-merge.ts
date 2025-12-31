@@ -91,7 +91,7 @@ export async function concatenateVideosWithFFmpeg(
           '-preset',
           'medium',
           '-crf',
-          '23'
+          '20'
         );
       }
 
@@ -101,6 +101,8 @@ export async function concatenateVideosWithFFmpeg(
         'aac',
         '-b:a',
         '128k',
+        '-ac',
+        '2',
         '-avoid_negative_ts',
         'make_zero',
         `"${fullOutputPath}"`

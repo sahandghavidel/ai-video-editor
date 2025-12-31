@@ -460,7 +460,7 @@ async function createVideoClipsBatch(videoUrl: string, scenes: BaserowRow[]) {
     })),
     id: requestId,
     video_preset: 'medium',
-    video_crf: 23,
+    video_crf: 20,
   };
 
   console.log(
@@ -540,7 +540,7 @@ async function createVideoClip(videoUrl: string, scene: BaserowRow) {
     ],
     id: requestId,
     video_preset: 'medium',
-    video_crf: 23,
+    video_crf: 20,
   };
 
   console.log(

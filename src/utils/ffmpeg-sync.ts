@@ -152,7 +152,7 @@ export async function syncVideoWithAudio(
           '-preset',
           'medium',
           '-crf',
-          '23'
+          '20'
         );
       }
 
@@ -165,7 +165,7 @@ export async function syncVideoWithAudio(
         '-b:a',
         `${Math.round(targetAudioBitrate / 1000)}k`,
         '-ac',
-        originalChannels.toString(),
+        originalCodec === 'aac' ? '2' : originalChannels.toString(),
         '-avoid_negative_ts',
         'make_zero',
         `"${fullOutputPath}"`
@@ -511,7 +511,7 @@ export async function syncVideoWithAudioAdvanced(
             '-c:v',
             isHardware ? 'h264_videotoolbox' : 'libx264',
             isHardware ? '-b:v' : '-crf',
-            isHardware ? videoBitrate : '23',
+            isHardware ? videoBitrate : '20',
             '-c:a',
             'copy',
             `"${fullOutputPath}"`,
@@ -569,7 +569,7 @@ export async function syncVideoWithAudioAdvanced(
             '-preset',
             'medium',
             '-crf',
-            '23'
+            '20'
           );
         }
 
@@ -582,7 +582,7 @@ export async function syncVideoWithAudioAdvanced(
           '-b:a',
           `${Math.round(targetAudioBitrate / 1000)}k`,
           '-ac',
-          originalChannels.toString(),
+          originalCodec === 'aac' ? '2' : originalChannels.toString(),
           '-avoid_negative_ts',
           'make_zero',
           `"${fullOutputPath}"`

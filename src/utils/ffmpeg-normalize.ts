@@ -98,6 +98,8 @@ export async function normalizeAudioLoudness(
       'aac', // Re-encode audio with AAC
       '-b:a',
       '128k',
+      '-ac',
+      '2',
       `"${fullOutputPath}"`,
     ];
 
