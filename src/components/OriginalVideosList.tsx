@@ -120,6 +120,8 @@ export default function OriginalVideosList({
   const [creatingVideoFromScript, setCreatingVideoFromScript] = useState(false);
   const [generatingTtsFromScripts, setGeneratingTtsFromScripts] =
     useState(false);
+  const [generatingScriptTtsForVideo, setGeneratingScriptTtsForVideo] =
+    useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState<{
     videoId: number;
     value: string;
@@ -538,6 +540,7 @@ export default function OriginalVideosList({
     if (generatingTtsFromScripts) return;
 
     setGeneratingTtsFromScripts(true);
+    setGeneratingScriptTtsForVideo(null);
     setError(null);
 
     try {
@@ -555,6 +558,9 @@ export default function OriginalVideosList({
 
         const existingTtsUrl = extractUrl(video.field_6859);
         if (existingTtsUrl && existingTtsUrl.trim().length > 0) continue;
+
+        // Show per-row loading state for the current video
+        setGeneratingScriptTtsForVideo(video.id);
 
         try {
           const ttsRes = await fetch('/api/generate-tts', {
@@ -587,6 +593,9 @@ export default function OriginalVideosList({
         } catch (innerErr) {
           console.error('TTS error for video', video.id, innerErr);
           continue;
+        } finally {
+          // Clear between iterations so the spinner only shows for the active row
+          setGeneratingScriptTtsForVideo(null);
         }
       }
 
@@ -601,6 +610,67 @@ export default function OriginalVideosList({
       playErrorSound();
     } finally {
       setGeneratingTtsFromScripts(false);
+      setGeneratingScriptTtsForVideo(null);
+    }
+  };
+
+  const handleGenerateTtsFromVideoScript = async (video: BaserowRow) => {
+    if (generatingScriptTtsForVideo !== null) return;
+
+    const script =
+      typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+    const existingTtsUrl = extractUrl(video.field_6859);
+
+    if (!script) {
+      setError('No script found for TTS');
+      return;
+    }
+
+    if (existingTtsUrl && existingTtsUrl.trim().length > 0) {
+      return;
+    }
+
+    setGeneratingScriptTtsForVideo(video.id);
+    setError(null);
+
+    try {
+      const ttsRes = await fetch('/api/generate-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: script, videoId: video.id }),
+      });
+
+      if (!ttsRes.ok) {
+        const json = (await ttsRes.json().catch(() => null)) as {
+          error?: unknown;
+        } | null;
+        const msg =
+          typeof json?.error === 'string'
+            ? json.error
+            : `TTS failed (${ttsRes.status})`;
+        throw new Error(msg);
+      }
+
+      const ttsJson = (await ttsRes.json()) as { audioUrl?: unknown };
+      const audioUrl =
+        typeof ttsJson.audioUrl === 'string' ? ttsJson.audioUrl : '';
+      if (!audioUrl) {
+        throw new Error('TTS returned no audioUrl');
+      }
+
+      await updateOriginalVideoRow(video.id, { field_6859: audioUrl });
+      await fetchOriginalVideos(true);
+      playSuccessSound();
+    } catch (err) {
+      console.error('Error generating TTS from video script:', err);
+      playErrorSound();
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to generate TTS from script'
+      );
+    } finally {
+      setGeneratingScriptTtsForVideo(null);
     }
   };
 
@@ -5859,6 +5929,46 @@ export default function OriginalVideosList({
                                     <Loader2 className='w-4 h-4 animate-spin' />
                                   ) : (
                                     <Subtitles className='w-4 h-4' />
+                                  )}
+                                </button>
+
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGenerateTtsFromVideoScript(video);
+                                  }}
+                                  disabled={
+                                    generatingTtsFromScripts ||
+                                    generatingScriptTtsForVideo !== null ||
+                                    !(
+                                      typeof video.field_6854 === 'string' &&
+                                      video.field_6854.trim().length > 0
+                                    ) ||
+                                    !!extractUrl(video.field_6859)
+                                  }
+                                  className='p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                  title={
+                                    generatingTtsFromScripts
+                                      ? 'Batch TTS Script in progress'
+                                      : generatingScriptTtsForVideo !== null
+                                      ? generatingScriptTtsForVideo === video.id
+                                        ? 'Generating TTS...'
+                                        : 'Another TTS generation in progress'
+                                      : !(
+                                          typeof video.field_6854 ===
+                                            'string' &&
+                                          video.field_6854.trim().length > 0
+                                        )
+                                      ? 'No script available'
+                                      : !!extractUrl(video.field_6859)
+                                      ? 'TTS audio already exists'
+                                      : 'Generate TTS from script'
+                                  }
+                                >
+                                  {generatingScriptTtsForVideo === video.id ? (
+                                    <Loader2 className='w-4 h-4 animate-spin' />
+                                  ) : (
+                                    <Mic2 className='w-4 h-4' />
                                   )}
                                 </button>
 
