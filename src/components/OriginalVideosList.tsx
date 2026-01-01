@@ -126,6 +126,8 @@ export default function OriginalVideosList({
     generatingVideoFromTtsAudioForVideo,
     setGeneratingVideoFromTtsAudioForVideo,
   ] = useState<number | null>(null);
+  const [generatingVideoFromTtsAudioAll, setGeneratingVideoFromTtsAudioAll] =
+    useState(false);
   const [editingTitle, setEditingTitle] = useState<{
     videoId: number;
     value: string;
@@ -441,12 +443,23 @@ export default function OriginalVideosList({
     return hex.toUpperCase();
   };
 
-  const handleGenerateVideoFromTtsAudio = async (video: BaserowRow) => {
+  const handleGenerateVideoFromTtsAudio = async (
+    video: BaserowRow,
+    options?: {
+      playSound?: boolean;
+      refreshAtEnd?: boolean;
+      setErrorOnFailure?: boolean;
+    }
+  ) => {
     const audioUrl = extractUrl(video.field_6859);
     if (!audioUrl) {
       setError('No TTS audio URL found for this video');
       return;
     }
+
+    const playSound = options?.playSound ?? true;
+    const refreshAtEnd = options?.refreshAtEnd ?? true;
+    const setErrorOnFailure = options?.setErrorOnFailure ?? true;
 
     try {
       setGeneratingVideoFromTtsAudioForVideo(video.id);
@@ -498,17 +511,77 @@ export default function OriginalVideosList({
         field_6908: generatedUrl, // CFR Video URL (already encoded CFR-like at 30fps)
       });
 
-      await handleRefresh();
-      playSuccessSound();
+      if (refreshAtEnd) {
+        await handleRefresh();
+      }
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error('Error generating video from TTS audio:', error);
+      if (playSound) {
+        playErrorSound();
+      }
+      if (setErrorOnFailure) {
+        setError(
+          `Failed to generate video from TTS audio: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+      }
+    } finally {
+      setGeneratingVideoFromTtsAudioForVideo(null);
+    }
+  };
+
+  const handleGenerateVideoFromTtsAudioAll = async () => {
+    if (generatingVideoFromTtsAudioAll) return;
+    if (generatingVideoFromTtsAudioForVideo !== null) return;
+
+    setGeneratingVideoFromTtsAudioAll(true);
+    setGeneratingVideoFromTtsAudioForVideo(null);
+    setError(null);
+
+    try {
+      // Fetch once at start to avoid mid-batch refresh loops
+      const videos = await getOriginalVideosData();
+      const processingVideos = videos.filter((v) => {
+        const status = extractFieldValue(v.field_6864).trim().toLowerCase();
+        return status === 'processing';
+      });
+
+      for (const video of processingVideos) {
+        const hasTtsAudio = !!extractUrl(video.field_6859);
+        if (!hasTtsAudio) continue;
+
+        const existingVideoUrl =
+          extractUrl(video.field_6881) || extractUrl(video.field_6908);
+        if (existingVideoUrl && existingVideoUrl.trim().length > 0) continue;
+
+        try {
+          await handleGenerateVideoFromTtsAudio(video, {
+            playSound: false,
+            refreshAtEnd: false,
+            setErrorOnFailure: false,
+          });
+        } catch (innerErr) {
+          console.error('TTS→Video batch: error for video', video.id, innerErr);
+          continue;
+        }
+      }
+
+      await fetchOriginalVideos(true);
+      playSuccessSound();
+    } catch (err) {
+      console.error('Error in TTS→Video batch:', err);
       playErrorSound();
       setError(
-        `Failed to generate video from TTS audio: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`
+        err instanceof Error
+          ? err.message
+          : 'Failed to generate videos from TTS audio'
       );
     } finally {
+      setGeneratingVideoFromTtsAudioAll(false);
       setGeneratingVideoFromTtsAudioForVideo(null);
     }
   };
@@ -4726,7 +4799,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations
                 </h3>
-                <span className='text-xs text-gray-500'>({12} actions)</span>
+                <span className='text-xs text-gray-500'>({13} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -4842,6 +4915,40 @@ export default function OriginalVideosList({
                         <>
                           <Volume2 className='w-4 h-4' />
                           <span>TTS Script</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* TTS → Video Button */}
+                    <button
+                      onClick={handleGenerateVideoFromTtsAudioAll}
+                      disabled={
+                        uploading ||
+                        creatingVideoFromScript ||
+                        generatingTtsFromScripts ||
+                        generatingVideoFromTtsAudioAll ||
+                        generatingVideoFromTtsAudioForVideo !== null
+                      }
+                      className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
+                        uploading ||
+                        creatingVideoFromScript ||
+                        generatingTtsFromScripts ||
+                        generatingVideoFromTtsAudioAll ||
+                        generatingVideoFromTtsAudioForVideo !== null
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-600'
+                      } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
+                      title='Generate video from TTS audio for Processing videos (skips ones with video URL)'
+                    >
+                      {generatingVideoFromTtsAudioAll ? (
+                        <>
+                          <Loader2 className='w-4 h-4 animate-spin' />
+                          <span className='truncate'>Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Film className='w-4 h-4' />
+                          <span>TTS Video</span>
                         </>
                       )}
                     </button>
@@ -6128,6 +6235,7 @@ export default function OriginalVideosList({
                                     handleGenerateVideoFromTtsAudio(video);
                                   }}
                                   disabled={
+                                    generatingVideoFromTtsAudioAll ||
                                     generatingVideoFromTtsAudioForVideo !==
                                       null ||
                                     !extractUrl(video.field_6859) ||
@@ -6135,7 +6243,10 @@ export default function OriginalVideosList({
                                   }
                                   className='p-2 text-pink-600 hover:text-pink-800 hover:bg-pink-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                   title={
-                                    generatingVideoFromTtsAudioForVideo !== null
+                                    generatingVideoFromTtsAudioAll
+                                      ? 'Batch TTS Video in progress'
+                                      : generatingVideoFromTtsAudioForVideo !==
+                                        null
                                       ? generatingVideoFromTtsAudioForVideo ===
                                         video.id
                                         ? 'Generating video from TTS audio...'
