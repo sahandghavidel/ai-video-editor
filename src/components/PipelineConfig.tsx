@@ -16,6 +16,11 @@ export default function PipelineConfig() {
       color: 'text-orange-500',
     },
     {
+      key: 'ttsVideo' as const,
+      label: 'TTS Video',
+      color: 'text-pink-500',
+    },
+    {
       key: 'normalizeAudio' as const,
       label: 'Normalize Audio',
       color: 'text-orange-500',

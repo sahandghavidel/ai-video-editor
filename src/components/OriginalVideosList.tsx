@@ -534,7 +534,10 @@ export default function OriginalVideosList({
     }
   };
 
-  const handleGenerateVideoFromTtsAudioAll = async () => {
+  const handleGenerateVideoFromTtsAudioAll = async (
+    playSound = true,
+    refreshAtEnd = true
+  ) => {
     if (generatingVideoFromTtsAudioAll) return;
     if (generatingVideoFromTtsAudioForVideo !== null) return;
 
@@ -570,11 +573,17 @@ export default function OriginalVideosList({
         }
       }
 
-      await fetchOriginalVideos(true);
-      playSuccessSound();
+      if (refreshAtEnd) {
+        await fetchOriginalVideos(true);
+      }
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (err) {
       console.error('Error in TTS→Video batch:', err);
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
       setError(
         err instanceof Error
           ? err.message
@@ -3923,7 +3932,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: TTS Script -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing) -> Prompt Scenes (Processing)
+  // Run Full Pipeline: TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing) -> Prompt Scenes (Processing)
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -3978,6 +3987,43 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: TTS Script (disabled in config)');
+      }
+
+      // Step: TTS Video (Processing only, from video TTS Audio)
+      if (pipelineConfig.ttsVideo) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating videos from TTS audio for Processing videos...`
+        );
+        console.log(
+          `Step ${stepNumber}: Generating videos from TTS audio for Processing videos`
+        );
+        try {
+          await handleGenerateVideoFromTtsAudioAll(false, false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: TTS audio → video generation finished`
+          );
+
+          console.log('Refreshing data after TTS video generation...');
+          await handleRefresh();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: TTS video generation error`,
+            error
+          );
+          throw new Error(
+            `TTS video generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: TTS Video (disabled in config)');
       }
 
       // Step: Normalize Audio All
