@@ -416,6 +416,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
   const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
   const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
+  const [isUpscalingSceneImage, setIsUpscalingSceneImage] = useState(false);
+  const [sceneUpscaleStatus, setSceneUpscaleStatus] = useState<string | null>(
+    null
+  );
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
   >(null);
@@ -2597,6 +2601,53 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [sceneId]);
 
+  const handleUpscaleSceneImage = useCallback(async () => {
+    if (!sceneId) return;
+
+    setIsUpscalingSceneImage(true);
+    setSceneUpscaleStatus(null);
+
+    try {
+      const res = await fetch('/api/upscale-scene-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sceneId }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`Upscale failed: ${res.status} ${t}`);
+      }
+
+      const data = (await res.json().catch(() => null)) as {
+        imageUrl?: unknown;
+      } | null;
+
+      const imageUrl =
+        typeof data?.imageUrl === 'string' ? data.imageUrl : null;
+      if (!imageUrl || !imageUrl.trim()) {
+        throw new Error('Upscale returned empty imageUrl');
+      }
+
+      // Load upscaled image into the overlay slot as well.
+      setOverlayImage(null);
+      setOverlayImageUrl(imageUrl);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+      setSceneUpscaleStatus('Saved');
+      window.setTimeout(() => setSceneUpscaleStatus(null), 2500);
+    } catch (error) {
+      console.error('Failed to upscale/save scene image:', error);
+      setSceneUpscaleStatus(
+        error instanceof Error ? error.message : 'Failed to upscale image'
+      );
+    } finally {
+      setIsUpscalingSceneImage(false);
+    }
+  }, [sceneId]);
+
   const handleReturnToPreviousUrl = useCallback(async () => {
     if (!sceneId) return;
     if (!previousVideoUrl) return;
@@ -3175,7 +3226,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               <button
                 type='button'
                 onClick={handleGenerateSceneImage}
-                disabled={isApplying || isGeneratingSceneImage}
+                disabled={
+                  isApplying || isGeneratingSceneImage || isUpscalingSceneImage
+                }
                 className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
                 title='Generate image with Nano Banana Pro and save to Baserow (Image for Scene)'
               >
@@ -3188,6 +3241,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   'Image'
                 )}
               </button>
+              <button
+                type='button'
+                onClick={handleUpscaleSceneImage}
+                disabled={
+                  isApplying || isUpscalingSceneImage || isGeneratingSceneImage
+                }
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Upscale current scene image (Image for Scene) and save to Baserow (Upscaled Image for Scene)'
+              >
+                {isUpscalingSceneImage ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    Upscale
+                  </span>
+                ) : (
+                  'Upscale'
+                )}
+              </button>
               {scenePromptStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {scenePromptStatus}
@@ -3196,6 +3267,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               {sceneImageStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {sceneImageStatus}
+                </span>
+              ) : null}
+              {sceneUpscaleStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {sceneUpscaleStatus}
                 </span>
               ) : null}
             </div>
