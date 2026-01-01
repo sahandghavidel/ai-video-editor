@@ -414,6 +414,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [scenePromptStatus, setScenePromptStatus] = useState<string | null>(
     null
   );
+  const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
+  const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
   >(null);
@@ -2547,6 +2549,54 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [sceneId, selectedOpenRouterModel]);
 
+  const handleGenerateSceneImage = useCallback(async () => {
+    if (!sceneId) return;
+
+    setIsGeneratingSceneImage(true);
+    setSceneImageStatus(null);
+
+    try {
+      const genRes = await fetch('/api/generate-scene-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sceneId }),
+      });
+
+      if (!genRes.ok) {
+        const t = await genRes.text().catch(() => '');
+        throw new Error(`Image generation failed: ${genRes.status} ${t}`);
+      }
+
+      const genData = (await genRes.json().catch(() => null)) as {
+        imageUrl?: unknown;
+      } | null;
+
+      const imageUrl =
+        typeof genData?.imageUrl === 'string' ? genData.imageUrl : null;
+
+      if (!imageUrl || !imageUrl.trim()) {
+        throw new Error('Image generation returned empty imageUrl');
+      }
+
+      // Load generated image into the overlay slot as well.
+      setOverlayImage(null);
+      setOverlayImageUrl(imageUrl);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+      setSceneImageStatus('Saved');
+      window.setTimeout(() => setSceneImageStatus(null), 2500);
+    } catch (error) {
+      console.error('Failed to generate/save scene image:', error);
+      setSceneImageStatus(
+        error instanceof Error ? error.message : 'Failed to generate image'
+      );
+    } finally {
+      setIsGeneratingSceneImage(false);
+    }
+  }, [sceneId]);
+
   const handleReturnToPreviousUrl = useCallback(async () => {
     if (!sceneId) return;
     if (!previousVideoUrl) return;
@@ -2628,6 +2678,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsPreviewLoading(false);
     setIsGeneratingScenePrompt(false);
     setScenePromptStatus(null);
+    setSceneImageStatus(null);
     setTranscriptionWords(null);
     setSelectedWordText(null);
     setCustomText('');
@@ -3121,9 +3172,30 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   'Prompt'
                 )}
               </button>
+              <button
+                type='button'
+                onClick={handleGenerateSceneImage}
+                disabled={isApplying || isGeneratingSceneImage}
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Generate image with Nano Banana Pro and save to Baserow (Image for Scene)'
+              >
+                {isGeneratingSceneImage ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    Image
+                  </span>
+                ) : (
+                  'Image'
+                )}
+              </button>
               {scenePromptStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {scenePromptStatus}
+                </span>
+              ) : null}
+              {sceneImageStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {sceneImageStatus}
                 </span>
               ) : null}
             </div>

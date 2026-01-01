@@ -43,3 +43,4 @@ next-env.d.ts
 # runtime state files
 tts-timeout-state.json
 public/sounds/*
+public/photos/character.png
