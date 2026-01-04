@@ -2316,12 +2316,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
 
   const handlePreview = useCallback(async () => {
-    if (
-      !overlayImage &&
-      !overlayImageUrl &&
-      !selectedWordText &&
-      !videoTintColor
-    )
+    const overlayText = customText.trim()
+      ? customText.trim()
+      : selectedWordText
+      ? selectedWordText
+      : null;
+    if (!overlayImage && !overlayImageUrl && !overlayText && !videoTintColor)
       return;
     if (!originalVideoUrl) return;
     console.log('handlePreview: textStyling', textStyling);
@@ -2354,8 +2354,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         formData.append('gifLoop', loopGif ? 'true' : 'false');
       }
     }
-    if (selectedWordText) {
-      formData.append('overlayText', selectedWordText);
+    if (overlayText) {
+      formData.append('overlayText', overlayText);
     }
     formData.append(
       'positionX',
@@ -2389,7 +2389,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       formData.append('overlaySound', selectedSoundName);
     }
     formData.append('overlayAnimation', overlayAnimation);
-    if (selectedWordText && textStyling) {
+    if (overlayText && textStyling) {
       formData.append('textStyling', JSON.stringify(textStyling));
     }
 
@@ -2429,6 +2429,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     fetchOverlayFileFromUrl,
     loopGif,
     selectedWordText,
+    customText,
     videoTintColor,
     videoTintOpacity,
     originalVideoUrl,
@@ -2451,12 +2452,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   ]);
 
   const handleApply = useCallback(async () => {
-    if (
-      !overlayImage &&
-      !overlayImageUrl &&
-      !selectedWordText &&
-      !videoTintColor
-    )
+    const overlayText = customText.trim()
+      ? customText.trim()
+      : selectedWordText
+      ? selectedWordText
+      : null;
+    if (!overlayImage && !overlayImageUrl && !overlayText && !videoTintColor)
       return;
 
     const undoKey = sceneId ? `scene-undo-video-url:${sceneId}` : null;
@@ -2465,7 +2466,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     try {
       console.log(
         'handleApply: sending textStyling',
-        selectedWordText ? textStyling : undefined
+        overlayText ? textStyling : undefined
       );
 
       const overlayFile = overlayImage
@@ -2478,12 +2479,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       await onApply(
         sceneId,
         overlayFile,
-        selectedWordText,
+        overlayText,
         overlayFile ? overlayPosition : textOverlayPosition,
         overlayFile ? overlaySize : textOverlaySize,
         startTime,
         endTime,
-        selectedWordText ? textStyling : undefined,
+        overlayText ? textStyling : undefined,
         videoTintColor,
         videoTintOpacity,
         tintPosition,
@@ -2595,6 +2596,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     fetchOverlayFileFromUrl,
     loopGif,
     selectedWordText,
+    customText,
     textStyling,
     videoTintColor,
     videoTintOpacity,
