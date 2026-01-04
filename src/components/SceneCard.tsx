@@ -1869,7 +1869,12 @@ export default function SceneCard({
   };
 
   const handleTTSProduce = useCallback(
-    async (sceneId: number, text: string, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      text: string,
+      sceneData?: BaserowRow,
+      opts?: { seedOverride?: number }
+    ) => {
       try {
         setProducingTTS(sceneId);
 
@@ -1900,7 +1905,10 @@ export default function SceneCard({
             text,
             sceneId,
             videoId: videoId || undefined,
-            ttsSettings,
+            ttsSettings:
+              typeof opts?.seedOverride === 'number'
+                ? { ...ttsSettings, seed: opts.seedOverride }
+                : ttsSettings,
           }),
         });
 
@@ -4327,6 +4335,24 @@ export default function SceneCard({
                         scene
                       )
                     }
+                    onContextMenu={(e) => {
+                      // Right-click: generate with a one-off random seed.
+                      e.preventDefault();
+                      e.stopPropagation();
+
+                      const randomSeed =
+                        typeof crypto !== 'undefined' &&
+                        typeof crypto.getRandomValues === 'function'
+                          ? crypto.getRandomValues(new Uint32Array(1))[0]
+                          : Math.floor(Math.random() * 2 ** 32);
+
+                      void handleTTSProduce(
+                        scene.id,
+                        String(scene['field_6890'] || scene.field_6890 || ''),
+                        scene,
+                        { seedOverride: Number(randomSeed) }
+                      );
+                    }}
                     disabled={
                       sceneLoading.producingTTS !== null ||
                       batchOperations.generatingAllTTS ||
@@ -4349,7 +4375,7 @@ export default function SceneCard({
                         ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
                         : batchOperations.generatingAllTTS
                         ? 'Batch TTS generation is in progress'
-                        : 'Generate TTS from sentence'
+                        : 'Generate TTS from sentence (right-click: random seed)'
                     }
                   >
                     {sceneLoading.producingTTS === scene.id ? (
