@@ -159,7 +159,7 @@ async function createVideoClip(
     const ffmpegEndTime = Date.now();
     const processingTime = ffmpegEndTime - ffmpegStartTime;
     console.log(
-      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s) - Hardware accelerated + MinIO uploaded!`,
+      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s) - CRF software encoded + MinIO uploaded!`,
     );
     console.log(`[UPLOAD] Scene ${scene.id} uploaded to: ${result.uploadUrl}`);
 

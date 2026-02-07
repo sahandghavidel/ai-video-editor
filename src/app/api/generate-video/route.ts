@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       console.log(
         `[SYNC] Scene ${
           sceneId || 'unknown'
-        } completed in ${processingTime}ms - Hardware accelerated + MinIO uploaded!`,
+        } completed in ${processingTime}ms - CRF software encoded + MinIO uploaded!`,
       );
       console.log(
         `[UPLOAD] Scene ${sceneId || 'unknown'} sync uploaded to: ${
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
         videoUrl: result.uploadUrl,
         message: `Successfully synchronized video and audio using local FFmpeg`,
         runTime: `${processingTime}ms`,
-        method: 'local_ffmpeg_hardware',
+        method: 'local_ffmpeg_crf',
       });
     } catch (error) {
       console.error('[SYNC] Local FFmpeg sync failed:', error);
