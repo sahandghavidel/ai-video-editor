@@ -14,14 +14,14 @@ export async function POST(request: NextRequest) {
     if (!sceneId) {
       return NextResponse.json(
         { error: 'Scene ID is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!videoUrl) {
       return NextResponse.json(
         { error: 'Video URL from field_6888 is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -29,25 +29,25 @@ export async function POST(request: NextRequest) {
     if (![1, 1.125, 1.5, 2, 4, 8].includes(speed)) {
       return NextResponse.json(
         { error: 'Speed must be 1, 1.125, 1.5, 2, 4, or 8' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.log(
       `[SPEEDUP] Scene ${sceneId}: Processing ${speed}x speed-up with${
         muteAudio ? '' : 'out'
-      } audio muting`
+      } audio muting`,
     );
     const speedUpStartTime = Date.now();
 
     try {
-      // Use direct FFmpeg with hardware acceleration + MinIO upload (same format as clip generation)
+      // Prefer CRF-based software encoding for consistent visual quality.
+      // `h264_videotoolbox` is bitrate-based and can look noticeably worse on detailed scenes.
       const result = await speedUpVideoWithUpload({
         inputUrl: videoUrl,
         speed: speed,
         muteAudio: muteAudio,
-        useHardwareAcceleration: true,
-        videoBitrate: '6000k', // Same bitrate as clip generation for consistent format
+        useHardwareAcceleration: false,
         sceneId: sceneId.toString(),
         videoId: videoId,
         cleanup: true, // Clean up local files after upload
@@ -56,10 +56,10 @@ export async function POST(request: NextRequest) {
       const speedUpEndTime = Date.now();
       const processingTime = speedUpEndTime - speedUpStartTime;
       console.log(
-        `[SPEEDUP] Scene ${sceneId} completed in ${processingTime}ms (${speed}x speed) - Hardware accelerated + MinIO uploaded!`
+        `[SPEEDUP] Scene ${sceneId} completed in ${processingTime}ms (${speed}x speed) - CRF encoded + MinIO uploaded!`,
       );
       console.log(
-        `[UPLOAD] Scene ${sceneId} speed-up uploaded to: ${result.uploadUrl}`
+        `[UPLOAD] Scene ${sceneId} speed-up uploaded to: ${result.uploadUrl}`,
       );
 
       // Update the scene with the sped-up video URL
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       console.log(
         `[BASEROW] Scene ${sceneId} updated in ${
           baserowUpdateEnd - baserowUpdateStart
-        }ms`
+        }ms`,
       );
 
       return NextResponse.json({
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
         error:
           error instanceof Error ? error.message : 'Unknown error occurred',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -128,7 +128,7 @@ async function getJWTToken(): Promise<string> {
 // Function to update scene with speed-up video URL
 async function updateSceneWithSpeedUpUrl(
   sceneId: number,
-  speedUpVideoUrl: string
+  speedUpVideoUrl: string,
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
 
@@ -148,13 +148,13 @@ async function updateSceneWithSpeedUpUrl(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to update scene with speed-up URL: ${response.status} ${errorText}`
+        `Failed to update scene with speed-up URL: ${response.status} ${errorText}`,
       );
     }
 
