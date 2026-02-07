@@ -8,7 +8,7 @@ const execAsync = promisify(exec);
 
 function computeTargetAudioBitrate(
   originalBitrate: number,
-  channels: number
+  channels: number,
 ): number {
   // Match the strategy used by Apply (non-preview) when adding a sound effect:
   // keep codec/sample rate/channels for merge compatibility, but avoid too-low
@@ -37,7 +37,7 @@ export interface SyncOptions {
  * Uses the same encoding parameters as speed-up function for fast merge compatibility
  */
 export async function syncVideoWithAudio(
-  options: SyncOptions
+  options: SyncOptions,
 ): Promise<string> {
   const {
     videoUrl,
@@ -80,16 +80,16 @@ export async function syncVideoWithAudio(
   originalChannels = audioStream.channels || 2;
 
   console.log(
-    `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
+    `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`,
   );
 
   const targetAudioBitrate = computeTargetAudioBitrate(
     originalBitrate,
-    originalChannels
+    originalChannels,
   );
   if (targetAudioBitrate !== originalBitrate) {
     console.log(
-      `[SYNC] Bumping output audio bitrate to ${targetAudioBitrate}bps for quality (original: ${originalBitrate}bps)`
+      `[SYNC] Bumping output audio bitrate to ${targetAudioBitrate}bps for quality (original: ${originalBitrate}bps)`,
     );
   }
 
@@ -130,7 +130,7 @@ export async function syncVideoWithAudio(
         '[v]',
         '-map',
         '[a]',
-        '-shortest' // End when shortest stream ends
+        '-shortest', // End when shortest stream ends
       );
 
       // Add video encoding options (same as trimming for consistency)
@@ -143,7 +143,7 @@ export async function syncVideoWithAudio(
           '-allow_sw',
           '1', // Allow software fallback if hardware fails
           '-realtime',
-          '0' // Disable realtime encoding for better quality
+          '0', // Disable realtime encoding for better quality
         );
       } else {
         ffmpegCommand.push(
@@ -152,7 +152,7 @@ export async function syncVideoWithAudio(
           '-preset',
           'medium',
           '-crf',
-          '20'
+          '20',
         );
       }
 
@@ -168,7 +168,7 @@ export async function syncVideoWithAudio(
         originalCodec === 'aac' ? '2' : originalChannels.toString(),
         '-avoid_negative_ts',
         'make_zero',
-        `"${fullOutputPath}"`
+        `"${fullOutputPath}"`,
       );
 
       const commandString = ffmpegCommand.join(' ');
@@ -183,7 +183,7 @@ export async function syncVideoWithAudio(
       console.log(
         `[SYNC] FFmpeg sync completed in ${
           execEndTime - execStartTime
-        }ms (${attempt} encoding)`
+        }ms (${attempt} encoding)`,
       );
 
       // Check if output file exists
@@ -205,7 +205,7 @@ export async function syncVideoWithAudio(
         throw new Error(
           `FFmpeg sync processing failed after ${attempts.length} attempts: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       }
 
@@ -223,7 +223,7 @@ export async function syncVideoWithAudio(
  * Calculates speed ratio and adjusts video speed to match audio duration
  */
 export async function syncVideoWithAudioAdvanced(
-  options: SyncOptions
+  options: SyncOptions,
 ): Promise<string> {
   const {
     videoUrl,
@@ -270,16 +270,16 @@ export async function syncVideoWithAudioAdvanced(
   originalChannels = audioStream.channels || 2;
 
   console.log(
-    `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
+    `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`,
   );
 
   const targetAudioBitrate = computeTargetAudioBitrate(
     originalBitrate,
-    originalChannels
+    originalChannels,
   );
   if (targetAudioBitrate !== originalBitrate) {
     console.log(
-      `[SYNC] Bumping output audio bitrate to ${targetAudioBitrate}bps for quality (original: ${originalBitrate}bps)`
+      `[SYNC] Bumping output audio bitrate to ${targetAudioBitrate}bps for quality (original: ${originalBitrate}bps)`,
     );
   }
 
@@ -326,13 +326,13 @@ export async function syncVideoWithAudioAdvanced(
     originalChannels = audioStream.channels || 2;
 
     console.log(
-      `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`
+      `[SYNC] Original audio - Codec: ${originalCodec}, Bitrate: ${originalBitrate}, Sample Rate: ${originalSampleRate}, Channels: ${originalChannels}`,
     );
 
     // Step 4: Calculate speed ratio
     const speedRatio = audioDuration / videoDuration;
     console.log(
-      `[SYNC] Video: ${videoDuration}s, Audio: ${audioDuration}s, Speed ratio: ${speedRatio}`
+      `[SYNC] Video: ${videoDuration}s, Audio: ${audioDuration}s, Speed ratio: ${speedRatio}`,
     );
 
     // Try hardware acceleration first, then fallback to software
@@ -346,7 +346,7 @@ export async function syncVideoWithAudioAdvanced(
 
       try {
         console.log(
-          `[SYNC] Starting advanced sync using ${attempt} encoding (speed ratio: ${speedRatio})`
+          `[SYNC] Starting advanced sync using ${attempt} encoding (speed ratio: ${speedRatio})`,
         );
 
         // Build FFmpeg command with speed adjustment
@@ -380,10 +380,10 @@ export async function syncVideoWithAudioAdvanced(
           videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${startZoom}+${zoomDelta}*sin((on/${totalOutputFrames})*PI/2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
           console.log(
             `[SYNC] First syncing video to ${audioDuration.toFixed(
-              2
+              2,
             )}s, then applying smooth zoom IN from ${zoomLevel}% to ${
               zoomLevel + 20
-            }% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`
+            }% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`,
           );
         } else if (panMode === 'zoomOut') {
           // Zoom Out: animate from (zoomLevel+20)% to zoomLevel% over OUTPUT duration
@@ -397,10 +397,10 @@ export async function syncVideoWithAudioAdvanced(
           videoFilter = `setpts=PTS*${speedRatio},fps=${fps},scale=10*iw:10*ih,zoompan=z='${startZoom}+${zoomDelta}*sin((on/${totalOutputFrames})*PI/2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
           console.log(
             `[SYNC] First syncing video to ${audioDuration.toFixed(
-              2
+              2,
             )}s, then applying smooth zoom OUT from ${
               zoomLevel + 20
-            }% to ${zoomLevel}% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`
+            }% to ${zoomLevel}% over ${totalOutputFrames} output frames (output: ${videoWidth}x${videoHeight})`,
           );
         } else if (panMode === 'topToBottom') {
           // Top to Bottom pan: TWO-STEP PROCESS
@@ -412,7 +412,7 @@ export async function syncVideoWithAudioAdvanced(
           // Create temp synced video first (use fullOutputPath, not outputPath which could be undefined)
           const tempSyncedPath = fullOutputPath.replace(
             '.mp4',
-            '_synced_temp.mp4'
+            '_synced_temp.mp4',
           );
           const syncCommand = [
             'ffmpeg',
@@ -451,9 +451,8 @@ export async function syncVideoWithAudioAdvanced(
 
           // Get the actual duration of the synced video
           const syncedDurationCmd = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${tempSyncedPath}"`;
-          const { stdout: syncedDurationStr } = await execAsync(
-            syncedDurationCmd
-          );
+          const { stdout: syncedDurationStr } =
+            await execAsync(syncedDurationCmd);
           const syncedDuration = parseFloat(syncedDurationStr.trim());
           console.log(`[SYNC] Synced video duration: ${syncedDuration}s`);
 
@@ -465,7 +464,7 @@ export async function syncVideoWithAudioAdvanced(
             .split(',')
             .map(Number);
           console.log(
-            `[SYNC] Synced video dimensions: ${syncedWidth}x${syncedHeight}`
+            `[SYNC] Synced video dimensions: ${syncedWidth}x${syncedHeight}`,
           );
 
           // Top-to-bottom pan effect with FIXED zoom level:
@@ -486,16 +485,16 @@ export async function syncVideoWithAudioAdvanced(
           const scaledHeight = Math.round(syncedHeight * upscaleFactor);
           // Crop size: to achieve zoomFactor zoom, we crop to (upscale / zoomFactor) of original
           const cropWidth = Math.round(
-            (syncedWidth * upscaleFactor) / scaleFactor
+            (syncedWidth * upscaleFactor) / scaleFactor,
           );
           const cropHeight = Math.round(
-            (syncedHeight * upscaleFactor) / scaleFactor
+            (syncedHeight * upscaleFactor) / scaleFactor,
           );
           const cropX = Math.floor((scaledWidth - cropWidth) / 2); // Center horizontally
           const maxY = scaledHeight - cropHeight; // Total vertical distance to pan
 
           console.log(
-            `[SYNC] Zoom factor: ${scaleFactor}, Scaled: ${scaledWidth}x${scaledHeight}, Crop: ${cropWidth}x${cropHeight}, MaxY: ${maxY}px over ${syncedDuration}s`
+            `[SYNC] Zoom factor: ${scaleFactor}, Scaled: ${scaledWidth}x${scaledHeight}, Crop: ${cropWidth}x${cropHeight}, MaxY: ${maxY}px over ${syncedDuration}s`,
           );
 
           // Use sine easing for smooth pan motion (same as zoom pan)
@@ -520,7 +519,7 @@ export async function syncVideoWithAudioAdvanced(
           console.log(
             `[SYNC] Step 2: Top-to-bottom pan with sine easing (${
               (scaleFactor - 1) * 100
-            }% zoom, 10x upscale, ${maxY}px over ${syncedDuration}s)...`
+            }% zoom, 10x upscale, ${maxY}px over ${syncedDuration}s)...`,
           );
           console.log(`[SYNC] Pan command: ${panCommand.join(' ')}`);
           await execAsync(panCommand.join(' '));
@@ -534,7 +533,7 @@ export async function syncVideoWithAudioAdvanced(
           const zoomFactor = 1 + zoomLevel / 100;
           videoFilter = `setpts=PTS*${speedRatio},scale=iw*${zoomFactor}:ih*${zoomFactor},crop=iw/${zoomFactor}:ih/${zoomFactor}`;
           console.log(
-            `[SYNC] Applying ${zoomLevel}% zoom (factor: ${zoomFactor})`
+            `[SYNC] Applying ${zoomLevel}% zoom (factor: ${zoomFactor})`,
           );
         }
         const audioFilter = `aresample=${originalSampleRate}`;
@@ -547,7 +546,7 @@ export async function syncVideoWithAudioAdvanced(
           '-map',
           '[v]',
           '-map',
-          '[a]'
+          '[a]',
         );
 
         // Add video encoding options (same as trimming for consistency)
@@ -560,7 +559,7 @@ export async function syncVideoWithAudioAdvanced(
             '-allow_sw',
             '1', // Allow software fallback if hardware fails
             '-realtime',
-            '0' // Disable realtime encoding for better quality
+            '0', // Disable realtime encoding for better quality
           );
         } else {
           ffmpegCommand.push(
@@ -569,7 +568,7 @@ export async function syncVideoWithAudioAdvanced(
             '-preset',
             'medium',
             '-crf',
-            '20'
+            '20',
           );
         }
 
@@ -585,7 +584,7 @@ export async function syncVideoWithAudioAdvanced(
           originalCodec === 'aac' ? '2' : originalChannels.toString(),
           '-avoid_negative_ts',
           'make_zero',
-          `"${fullOutputPath}"`
+          `"${fullOutputPath}"`,
         );
 
         const commandString = ffmpegCommand.join(' ');
@@ -600,7 +599,7 @@ export async function syncVideoWithAudioAdvanced(
         console.log(
           `[SYNC] Advanced sync completed in ${
             execEndTime - execStartTime
-          }ms (${attempt} encoding, speed ratio: ${speedRatio})`
+          }ms (${attempt} encoding, speed ratio: ${speedRatio})`,
         );
 
         // Check if output file exists
@@ -624,13 +623,13 @@ export async function syncVideoWithAudioAdvanced(
               attempts.length
             } attempts: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
 
         // Otherwise, continue to next attempt
         console.log(
-          `[SYNC] Retrying advanced sync with ${attempts[i + 1]} encoding...`
+          `[SYNC] Retrying advanced sync with ${attempts[i + 1]} encoding...`,
         );
       }
     }
@@ -645,13 +644,13 @@ export async function syncVideoWithAudioAdvanced(
     throw new Error(
       `FFmpeg advanced sync failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 
   // This should never be reached, but just in case
   throw new Error(
-    'FFmpeg advanced sync processing failed: No successful attempts'
+    'FFmpeg advanced sync processing failed: No successful attempts',
   );
 }
 
@@ -664,15 +663,17 @@ export async function syncVideoWithUpload(
     videoId?: number | string;
     ttsTimestamp?: string;
     clipTimestamp?: string;
+    qualityTag?: string;
     cleanup?: boolean;
     useAdvancedSync?: boolean;
-  }
+  },
 ): Promise<{ localPath: string; uploadUrl: string }> {
   const {
     sceneId,
     videoId,
     ttsTimestamp,
     clipTimestamp,
+    qualityTag,
     cleanup = true,
     useAdvancedSync = true,
     zoomLevel = 0,
@@ -696,45 +697,47 @@ export async function syncVideoWithUpload(
     // This allows us to regenerate sync if either TTS or clip changes
     // Always include zoom suffix (zoom0, zoom10, zoom20, etc.)
     // Add panMode suffix if not 'none'
+    // Add qualityTag so changes in encoding don't reuse old cached outputs.
     const panSuffix = panMode !== 'none' ? `_${panMode}` : '';
     const zoomSuffix = `_zoom${zoomLevel}${panSuffix}`;
+    const qualitySuffix = qualityTag ? `_${qualityTag}` : '';
     let filename: string;
 
     if (ttsTimestamp && clipTimestamp) {
       // Both timestamps available - full tracking
       filename =
         videoId && sceneId
-          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`
+          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${qualitySuffix}${zoomSuffix}.mp4`
           : sceneId
-          ? `scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`
-          : `synced_video_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`;
+            ? `scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${qualitySuffix}${zoomSuffix}.mp4`
+            : `synced_video_${ttsTimestamp}_${clipTimestamp}${qualitySuffix}${zoomSuffix}.mp4`;
       console.log(
         `[SYNC] Generating filename with TTS timestamp (${ttsTimestamp}), clip timestamp (${clipTimestamp}), zoom ${zoomLevel}%${
           panMode !== 'none' ? ` ${panMode}` : ''
-        }: ${filename}`
+        }: ${filename}`,
       );
     } else if (ttsTimestamp) {
       // Only TTS timestamp - backward compatibility
       filename =
         videoId && sceneId
-          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}${zoomSuffix}.mp4`
+          ? `video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}${qualitySuffix}${zoomSuffix}.mp4`
           : sceneId
-          ? `scene_${sceneId}_synced_${ttsTimestamp}${zoomSuffix}.mp4`
-          : `synced_video_${ttsTimestamp}${zoomSuffix}.mp4`;
+            ? `scene_${sceneId}_synced_${ttsTimestamp}${qualitySuffix}${zoomSuffix}.mp4`
+            : `synced_video_${ttsTimestamp}${qualitySuffix}${zoomSuffix}.mp4`;
       console.log(
-        `[SYNC] Generating filename with TTS timestamp only, zoom ${zoomLevel}%: ${filename}`
+        `[SYNC] Generating filename with TTS timestamp only, zoom ${zoomLevel}%: ${filename}`,
       );
     } else {
       // No timestamps - generate new one
       const timestamp = Date.now().toString();
       filename =
         videoId && sceneId
-          ? `video_${videoId}_scene_${sceneId}_synced_${timestamp}${zoomSuffix}.mp4`
+          ? `video_${videoId}_scene_${sceneId}_synced_${timestamp}${qualitySuffix}${zoomSuffix}.mp4`
           : sceneId
-          ? `scene_${sceneId}_synced_${timestamp}${zoomSuffix}.mp4`
-          : `synced_video_${timestamp}${zoomSuffix}.mp4`;
+            ? `scene_${sceneId}_synced_${timestamp}${qualitySuffix}${zoomSuffix}.mp4`
+            : `synced_video_${timestamp}${qualitySuffix}${zoomSuffix}.mp4`;
       console.log(
-        `[SYNC] Generating filename with new timestamp, zoom ${zoomLevel}%: ${filename}`
+        `[SYNC] Generating filename with new timestamp, zoom ${zoomLevel}%: ${filename}`,
       );
     }
 

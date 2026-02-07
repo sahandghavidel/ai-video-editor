@@ -15,14 +15,14 @@ export async function POST(request: NextRequest) {
     if (!videoUrl || !audioUrl) {
       return NextResponse.json(
         { error: 'Video URL and audio URL are required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.log(
       `[SYNC] Starting video-audio sync for scene ${
         sceneId || 'unknown'
-      } (zoom: ${zoomLevel}%${panMode !== 'none' ? ` ${panMode}` : ''})`
+      } (zoom: ${zoomLevel}%${panMode !== 'none' ? ` ${panMode}` : ''})`,
     );
     console.log(`[SYNC] Video URL: ${videoUrl}`);
     console.log(`[SYNC] Audio URL: ${audioUrl}`);
@@ -48,11 +48,11 @@ export async function POST(request: NextRequest) {
         if (ttsMatch && ttsMatch[1]) {
           ttsTimestamp = ttsMatch[1];
           console.log(
-            `[SYNC] ✅ Extracted TTS timestamp (generic): ${ttsTimestamp}`
+            `[SYNC] ✅ Extracted TTS timestamp (generic): ${ttsTimestamp}`,
           );
         } else {
           console.log(
-            `[SYNC] ⚠️ Could not extract TTS timestamp from: ${audioUrl}`
+            `[SYNC] ⚠️ Could not extract TTS timestamp from: ${audioUrl}`,
           );
         }
       }
@@ -81,29 +81,31 @@ export async function POST(request: NextRequest) {
         if (genericMatch && genericMatch[1]) {
           clipTimestamp = genericMatch[1];
           console.log(
-            `[SYNC] ✅ Extracted generic video timestamp: ${clipTimestamp}`
+            `[SYNC] ✅ Extracted generic video timestamp: ${clipTimestamp}`,
           );
         } else {
           console.log(
-            `[SYNC] ⚠️ Could not extract any timestamp from video URL: ${videoUrl}`
+            `[SYNC] ⚠️ Could not extract any timestamp from video URL: ${videoUrl}`,
           );
         }
       }
     }
 
     // Check if sync with both timestamps already exists (including zoom level and pan mode in filename)
+    // Include a qualityTag so encoding changes don't keep reusing older cached outputs.
+    const qualityTag = 'enc_crf20';
     const panSuffix = panMode !== 'none' ? `_${panMode}` : '';
     const zoomSuffix = `_zoom${zoomLevel}${panSuffix}`;
     if (ttsTimestamp && clipTimestamp) {
       const expectedSyncUrl =
         videoId && sceneId
-          ? `http://host.docker.internal:9000/nca-toolkit/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`
-          : `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}${zoomSuffix}.mp4`;
+          ? `http://host.docker.internal:9000/nca-toolkit/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`
+          : `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`;
       try {
         const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
         if (checkResponse.ok) {
           console.log(
-            `[SYNC] Found existing synced video with same TTS, clip timestamps, zoom level and pan mode: ${expectedSyncUrl}`
+            `[SYNC] Found existing synced video with same TTS, clip timestamps, zoom level and pan mode: ${expectedSyncUrl}`,
           );
           console.log(`[SYNC] Skipping regeneration - returning cached sync`);
           return NextResponse.json({
@@ -131,8 +133,10 @@ export async function POST(request: NextRequest) {
         videoId: videoId,
         ttsTimestamp: ttsTimestamp || undefined, // Pass the TTS timestamp to preserve it
         clipTimestamp: clipTimestamp || undefined, // Pass the clip timestamp to track video changes
-        useHardwareAcceleration: true,
-        videoBitrate: '6000k', // Same bitrate as speed-up function for consistent format
+        qualityTag,
+        // Prefer CRF-based software encoding for consistent visual quality.
+        // `h264_videotoolbox` is bitrate-based and can look noticeably worse on detailed scenes.
+        useHardwareAcceleration: false,
         cleanup: true, // Clean up local files after upload
         useAdvancedSync: true, // Use duration-based speed adjustment (like NCA toolkit)
         zoomLevel: zoomLevel, // Pass zoom level to FFmpeg
@@ -145,12 +149,12 @@ export async function POST(request: NextRequest) {
       console.log(
         `[SYNC] Scene ${
           sceneId || 'unknown'
-        } completed in ${processingTime}ms - Hardware accelerated + MinIO uploaded!`
+        } completed in ${processingTime}ms - Hardware accelerated + MinIO uploaded!`,
       );
       console.log(
         `[UPLOAD] Scene ${sceneId || 'unknown'} sync uploaded to: ${
           result.uploadUrl
-        }`
+        }`,
       );
 
       return NextResponse.json({
@@ -170,7 +174,7 @@ export async function POST(request: NextRequest) {
         error:
           error instanceof Error ? error.message : 'Unknown error occurred',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
