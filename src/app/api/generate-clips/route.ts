@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!videoId) {
       return NextResponse.json(
         { error: 'Video ID is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -76,12 +76,12 @@ export async function POST(request: NextRequest) {
                 total: scenes.length,
                 percentage: 0,
                 message: `Starting to process ${scenes.length} scenes...`,
-              })}\n\n`
-            )
+              })}\n\n`,
+            ),
           );
 
           console.log(
-            `Found ${scenes.length} scenes to process, sorted by start time`
+            `Found ${scenes.length} scenes to process, sorted by start time`,
           );
 
           // Step 3: Process each scene using direct FFmpeg (much faster!)
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
             const scene = scenes[i];
             const sceneNumber = i + 1;
             const progressPercentage = Math.round(
-              (sceneNumber / scenes.length) * 100
+              (sceneNumber / scenes.length) * 100,
             );
 
             // Check if scene already has a clip in field_6888 (Video Clip URL)
@@ -112,7 +112,9 @@ export async function POST(request: NextRequest) {
                   clipValue.some(
                     (item) =>
                       item &&
-                      (typeof item === 'string' ? item.trim() !== '' : item.url)
+                      (typeof item === 'string'
+                        ? item.trim() !== ''
+                        : item.url),
                   );
               } else if (typeof clipValue === 'object' && clipValue !== null) {
                 // Object: check if it has url property
@@ -133,8 +135,8 @@ export async function POST(request: NextRequest) {
                       total: scenes.length,
                       percentage: progressPercentage,
                       message: `Scene ${sceneNumber} already has clip, skipping...`,
-                    })}\n\n`
-                  )
+                    })}\n\n`,
+                  ),
                 );
                 continue; // Skip this scene
               }
@@ -149,8 +151,8 @@ export async function POST(request: NextRequest) {
                   total: scenes.length,
                   percentage: progressPercentage,
                   message: `Processing scene ${sceneNumber}/${scenes.length} with FFmpeg...`,
-                })}\n\n`
-              )
+                })}\n\n`,
+              ),
             );
 
             try {
@@ -176,13 +178,13 @@ export async function POST(request: NextRequest) {
                     current: sceneNumber,
                     total: scenes.length,
                     percentage: progressPercentage,
-                  })}\n\n`
-                )
+                  })}\n\n`,
+                ),
               );
             } catch (error) {
               console.error(
                 `Failed to create clip for scene ${scene.id}:`,
-                error
+                error,
               );
 
               // Send error update
@@ -197,8 +199,8 @@ export async function POST(request: NextRequest) {
                     current: sceneNumber,
                     total: scenes.length,
                     percentage: progressPercentage,
-                  })}\n\n`
-                )
+                  })}\n\n`,
+                ),
               );
               // Continue with next scene even if one fails
             }
@@ -215,8 +217,8 @@ export async function POST(request: NextRequest) {
                 failedScenes:
                   scenes.length - processedClips.length - skippedCount,
                 clips: processedClips,
-              })}\n\n`
-            )
+              })}\n\n`,
+            ),
           );
 
           controller.close();
@@ -227,8 +229,8 @@ export async function POST(request: NextRequest) {
               `data: ${JSON.stringify({
                 type: 'error',
                 error: error instanceof Error ? error.message : 'Unknown error',
-              })}\n\n`
-            )
+              })}\n\n`,
+            ),
           );
 
           controller.close();
@@ -251,7 +253,7 @@ export async function POST(request: NextRequest) {
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -328,13 +330,13 @@ async function getOriginalVideoData(videoId: string) {
         Authorization: `JWT ${token}`,
         'Content-Type': 'application/json',
       },
-    }
+    },
   );
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `Failed to get original video data: ${response.status} ${errorText}`
+      `Failed to get original video data: ${response.status} ${errorText}`,
     );
   }
 
@@ -361,7 +363,7 @@ async function getScenesForVideo(videoId: string) {
           Authorization: `JWT ${token}`,
           'Content-Type': 'application/json',
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -385,7 +387,7 @@ async function getScenesForVideo(videoId: string) {
 // Function to create video clip using direct FFmpeg (much faster!)
 async function createVideoClipDirect(
   videoUrl: string,
-  scene: BaserowRow
+  scene: BaserowRow,
 ): Promise<string> {
   const startTime = parseFloat(String(scene.field_6898));
   const endTime = parseFloat(String(scene.field_6897));
@@ -407,7 +409,7 @@ async function createVideoClipDirect(
   }
 
   console.log(
-    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s, videoId=${videoId}`
+    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s, videoId=${videoId}`,
   );
   const ffmpegStartTime = Date.now();
 
@@ -417,8 +419,9 @@ async function createVideoClipDirect(
       inputUrl: videoUrl,
       startTime: String(scene.field_6898),
       endTime: String(scene.field_6897),
-      useHardwareAcceleration: true,
-      videoBitrate: '6000k', // High quality for good results
+      // Force CRF-based software encoding for consistent quality.
+      forceSoftwareEncoding: true,
+      useHardwareAcceleration: false,
       sceneId: scene.id.toString(),
       videoId: videoId || undefined,
       cleanup: true, // Clean up local files after upload
@@ -427,7 +430,7 @@ async function createVideoClipDirect(
     const ffmpegEndTime = Date.now();
     const processingTime = ffmpegEndTime - ffmpegStartTime;
     console.log(
-      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s)`
+      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s)`,
     );
 
     return result.uploadUrl;
@@ -445,10 +448,10 @@ async function createVideoClipsBatch(videoUrl: string, scenes: BaserowRow[]) {
   const requestId = `batch_${Date.now()}`;
 
   console.log(
-    `[BATCH] Processing ${scenes.length} scenes in batch [${requestId}]`
+    `[BATCH] Processing ${scenes.length} scenes in batch [${requestId}]`,
   );
   console.log(
-    `[TIMING] Batch: Starting request at ${new Date().toISOString()}`
+    `[TIMING] Batch: Starting request at ${new Date().toISOString()}`,
   );
   const batchStartTime = Date.now();
 
@@ -464,7 +467,7 @@ async function createVideoClipsBatch(videoUrl: string, scenes: BaserowRow[]) {
   };
 
   console.log(
-    `[TIMING] Batch: Sending request to NCA at ${new Date().toISOString()}`
+    `[TIMING] Batch: Sending request to NCA at ${new Date().toISOString()}`,
   );
   const response = await fetch(ncaUrl, {
     method: 'POST',
@@ -479,7 +482,7 @@ async function createVideoClipsBatch(videoUrl: string, scenes: BaserowRow[]) {
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `NCA toolkit split failed: ${response.status} ${errorText}`
+      `NCA toolkit split failed: ${response.status} ${errorText}`,
     );
   }
 
@@ -488,7 +491,7 @@ async function createVideoClipsBatch(videoUrl: string, scenes: BaserowRow[]) {
   const batchEndTime = Date.now();
   const processingTime = batchEndTime - batchStartTime;
   console.log(
-    `[BATCH] Batch completed in ${processingTime}ms for ${scenes.length} scenes`
+    `[BATCH] Batch completed in ${processingTime}ms for ${scenes.length} scenes`,
   );
 
   // Extract clip URLs from the response
@@ -497,12 +500,12 @@ async function createVideoClipsBatch(videoUrl: string, scenes: BaserowRow[]) {
   }
 
   const clipUrls = result.response.map(
-    (item: ClipResponseItem) => item.file_url || item.url || item.response
+    (item: ClipResponseItem) => item.file_url || item.url || item.response,
   );
 
   if (clipUrls.length !== scenes.length) {
     throw new Error(
-      `Expected ${scenes.length} clips but got ${clipUrls.length}`
+      `Expected ${scenes.length} clips but got ${clipUrls.length}`,
     );
   }
 
@@ -521,12 +524,12 @@ async function createVideoClip(videoUrl: string, scene: BaserowRow) {
   const requestId = `${scene.id}_${Date.now()}`;
 
   console.log(
-    `Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s [${requestId}]`
+    `Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s [${requestId}]`,
   );
   console.log(
     `[TIMING] Scene ${
       scene.id
-    }: Starting request at ${new Date().toISOString()}`
+    }: Starting request at ${new Date().toISOString()}`,
   );
   const trimStartTime = Date.now();
 
@@ -546,7 +549,7 @@ async function createVideoClip(videoUrl: string, scene: BaserowRow) {
   console.log(
     `[TIMING] Scene ${
       scene.id
-    }: Sending request to NCA at ${new Date().toISOString()}`
+    }: Sending request to NCA at ${new Date().toISOString()}`,
   );
   const response = await fetch(ncaUrl, {
     method: 'POST',
@@ -568,7 +571,7 @@ async function createVideoClip(videoUrl: string, scene: BaserowRow) {
   const trimEndTime = Date.now();
   const processingTime = trimEndTime - trimStartTime;
   console.log(
-    `Scene ${scene.id} trim completed in ${processingTime}ms (start=${startTime}s)`
+    `Scene ${scene.id} trim completed in ${processingTime}ms (start=${startTime}s)`,
   );
 
   // Extract the clip URL from the response
@@ -593,13 +596,13 @@ async function getSceneById(sceneId: number) {
       headers: {
         Authorization: `JWT ${token}`,
       },
-    }
+    },
   );
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `Failed to fetch scene ${sceneId}: ${response.status} ${errorText}`
+      `Failed to fetch scene ${sceneId}: ${response.status} ${errorText}`,
     );
   }
 
@@ -627,13 +630,13 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to update scene with clip URL: ${response.status} ${errorText}`
+        `Failed to update scene with clip URL: ${response.status} ${errorText}`,
       );
     }
 

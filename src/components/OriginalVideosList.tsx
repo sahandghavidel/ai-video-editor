@@ -80,22 +80,22 @@ interface SceneHandlers {
     model?: string,
     sceneData?: BaserowRow,
     skipRefresh?: boolean,
-    enforceLongerSentences?: boolean
+    enforceLongerSentences?: boolean,
   ) => Promise<void>;
   handleTTSProduce: (
     sceneId: number,
     text: string,
-    sceneData?: BaserowRow
+    sceneData?: BaserowRow,
   ) => Promise<void>;
   handleVideoGenerate: (
     sceneId: number,
     videoUrl: string,
-    audioUrl: string
+    audioUrl: string,
   ) => Promise<void>;
   handleSpeedUpVideo: (
     sceneId: number,
     sceneData?: BaserowRow,
-    skipRefresh?: boolean
+    skipRefresh?: boolean,
   ) => Promise<void>;
 }
 
@@ -147,7 +147,7 @@ export default function OriginalVideosList({
   const [normalizing, setNormalizing] = useState<number | null>(null);
   const [convertingToCFR, setConvertingToCFR] = useState<number | null>(null);
   const [optimizingSilence, setOptimizingSilence] = useState<number | null>(
-    null
+    null,
   );
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
@@ -318,7 +318,7 @@ export default function OriginalVideosList({
 
   // Helper function to extract and format scenes
   const extractScenes = (
-    field: unknown
+    field: unknown,
   ): { count: number; scenes: string[] } => {
     const f = field as BaserowField;
     if (!f) return { count: 0, scenes: [] };
@@ -417,7 +417,7 @@ export default function OriginalVideosList({
   };
 
   const parseDimension = (
-    input: string
+    input: string,
   ): { width: number; height: number } | null => {
     const trimmed = input.trim();
     if (!trimmed) return null;
@@ -449,7 +449,7 @@ export default function OriginalVideosList({
       playSound?: boolean;
       refreshAtEnd?: boolean;
       setErrorOnFailure?: boolean;
-    }
+    },
   ) => {
     const audioUrl = extractUrl(video.field_6859);
     if (!audioUrl) {
@@ -526,7 +526,7 @@ export default function OriginalVideosList({
         setError(
           `Failed to generate video from TTS audio: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       }
     } finally {
@@ -536,7 +536,7 @@ export default function OriginalVideosList({
 
   const handleGenerateVideoFromTtsAudioAll = async (
     playSound = true,
-    refreshAtEnd = true
+    refreshAtEnd = true,
   ) => {
     if (generatingVideoFromTtsAudioAll) return;
     if (generatingVideoFromTtsAudioForVideo !== null) return;
@@ -587,7 +587,7 @@ export default function OriginalVideosList({
       setError(
         err instanceof Error
           ? err.message
-          : 'Failed to generate videos from TTS audio'
+          : 'Failed to generate videos from TTS audio',
       );
     } finally {
       setGeneratingVideoFromTtsAudioAll(false);
@@ -723,7 +723,7 @@ export default function OriginalVideosList({
 
   const handleGenerateTtsFromScripts = async (
     playSound = true,
-    refreshAtEnd = true
+    refreshAtEnd = true,
   ) => {
     if (generatingTtsFromScripts) return;
 
@@ -798,7 +798,7 @@ export default function OriginalVideosList({
       setError(
         err instanceof Error
           ? err.message
-          : 'Failed to generate TTS from scripts'
+          : 'Failed to generate TTS from scripts',
       );
       if (playSound) {
         playErrorSound();
@@ -862,7 +862,7 @@ export default function OriginalVideosList({
       setError(
         err instanceof Error
           ? err.message
-          : 'Failed to generate TTS from script'
+          : 'Failed to generate TTS from script',
       );
     } finally {
       setGeneratingScriptTtsForVideo(null);
@@ -913,7 +913,7 @@ export default function OriginalVideosList({
       setOriginalVideos(sortedData);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to fetch original videos'
+        err instanceof Error ? err.message : 'Failed to fetch original videos',
       );
       console.error('Error fetching original videos:', err);
     } finally {
@@ -996,7 +996,7 @@ export default function OriginalVideosList({
       const currentVideos = [...originalVideos];
       const draggedIndex = currentVideos.findIndex((v) => v.id === draggedRow);
       const targetIndex = currentVideos.findIndex(
-        (v) => v.id === targetVideoId
+        (v) => v.id === targetVideoId,
       );
 
       if (draggedIndex === -1 || targetIndex === -1) return;
@@ -1012,7 +1012,7 @@ export default function OriginalVideosList({
         // Update both local state and database
         video.field_6902 = newOrder;
         updates.push(
-          updateOriginalVideoRow(video.id, { field_6902: newOrder })
+          updateOriginalVideoRow(video.id, { field_6902: newOrder }),
         );
       });
 
@@ -1025,7 +1025,7 @@ export default function OriginalVideosList({
       console.log(
         `Reordered videos: moved video ${draggedRow} to position ${
           targetIndex + 1
-        }`
+        }`,
       );
     } catch (error) {
       console.error('Failed to reorder videos:', error);
@@ -1064,8 +1064,8 @@ export default function OriginalVideosList({
       // Update local state
       setOriginalVideos((prevVideos) =>
         prevVideos.map((video) =>
-          video.id === videoId ? { ...video, field_6852: newTitle } : video
-        )
+          video.id === videoId ? { ...video, field_6852: newTitle } : video,
+        ),
       );
 
       setEditingTitle(null);
@@ -1091,7 +1091,7 @@ export default function OriginalVideosList({
   const handleStatusChange = async (
     videoId: number,
     newStatus: string,
-    e: React.SyntheticEvent
+    e: React.SyntheticEvent,
   ) => {
     e.stopPropagation();
     setUpdatingStatus(videoId);
@@ -1104,8 +1104,8 @@ export default function OriginalVideosList({
       // Update local state
       setOriginalVideos((prevVideos) =>
         prevVideos.map((video) =>
-          video.id === videoId ? { ...video, field_6864: newStatus } : video
-        )
+          video.id === videoId ? { ...video, field_6864: newStatus } : video,
+        ),
       );
     } catch (error) {
       console.error('Failed to update status:', error);
@@ -1134,7 +1134,7 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `Failed to update status for video ${video.id}:`,
-            error
+            error,
           );
           errorCount++;
           return null;
@@ -1148,11 +1148,11 @@ export default function OriginalVideosList({
         prevVideos.map((video) => ({
           ...video,
           field_6864: bulkStatusChange,
-        }))
+        })),
       );
 
       console.log(
-        `Bulk status update completed: ${successCount} successful, ${errorCount} failed`
+        `Bulk status update completed: ${successCount} successful, ${errorCount} failed`,
       );
 
       // Reset the bulk status change
@@ -1173,7 +1173,7 @@ export default function OriginalVideosList({
       // Pass the prefix cleanup setting from global state
       await deleteOriginalVideoWithScenes(
         videoId,
-        deletionSettings.enablePrefixCleanup
+        deletionSettings.enablePrefixCleanup,
       );
 
       // Remove from local state
@@ -1290,7 +1290,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to transcribe video: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setTranscribing(null);
@@ -1355,29 +1355,29 @@ export default function OriginalVideosList({
         // Delete the old video from MinIO to save space
         if (oldVideoUrl && oldVideoUrl !== processedUrl) {
           console.log(
-            `[NORMALIZE] Deleting original video from MinIO: ${oldVideoUrl}`
+            `[NORMALIZE] Deleting original video from MinIO: ${oldVideoUrl}`,
           );
           try {
             const deleted = await deleteFromMinio(oldVideoUrl);
             if (deleted) {
               console.log(
-                `[NORMALIZE] Successfully deleted original video from MinIO`
+                `[NORMALIZE] Successfully deleted original video from MinIO`,
               );
             } else {
               console.warn(
-                `[NORMALIZE] Failed to delete original video from MinIO, but continuing`
+                `[NORMALIZE] Failed to delete original video from MinIO, but continuing`,
               );
             }
           } catch (deleteError) {
             console.error(
               `[NORMALIZE] Error deleting original video from MinIO:`,
-              deleteError
+              deleteError,
             );
             // Don't throw - normalization was successful
           }
         } else {
           console.log(
-            `[NORMALIZE] Skipping deletion - URLs are the same or old URL is missing`
+            `[NORMALIZE] Skipping deletion - URLs are the same or old URL is missing`,
           );
         }
       }
@@ -1396,7 +1396,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to process audio: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setNormalizing(null);
@@ -1444,29 +1444,29 @@ export default function OriginalVideosList({
         // Delete the old video from MinIO to save space
         if (oldVideoUrl && oldVideoUrl !== cfrData.data.cfrUrl) {
           console.log(
-            `[CFR] Deleting original video from MinIO: ${oldVideoUrl}`
+            `[CFR] Deleting original video from MinIO: ${oldVideoUrl}`,
           );
           try {
             const deleted = await deleteFromMinio(oldVideoUrl);
             if (deleted) {
               console.log(
-                `[CFR] Successfully deleted original video from MinIO`
+                `[CFR] Successfully deleted original video from MinIO`,
               );
             } else {
               console.warn(
-                `[CFR] Failed to delete original video from MinIO, but continuing`
+                `[CFR] Failed to delete original video from MinIO, but continuing`,
               );
             }
           } catch (deleteError) {
             console.error(
               `[CFR] Error deleting original video from MinIO:`,
-              deleteError
+              deleteError,
             );
             // Don't throw - CFR conversion was successful
           }
         } else {
           console.log(
-            `[CFR] Skipping deletion - URLs are the same or old URL is missing`
+            `[CFR] Skipping deletion - URLs are the same or old URL is missing`,
           );
         }
       }
@@ -1485,7 +1485,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to convert to CFR: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setConvertingToCFR(null);
@@ -1546,29 +1546,29 @@ export default function OriginalVideosList({
         // Delete the old video from MinIO to save space
         if (oldVideoUrl && oldVideoUrl !== silenceData.data.optimizedUrl) {
           console.log(
-            `[SILENCE] Deleting original video from MinIO: ${oldVideoUrl}`
+            `[SILENCE] Deleting original video from MinIO: ${oldVideoUrl}`,
           );
           try {
             const deleted = await deleteFromMinio(oldVideoUrl);
             if (deleted) {
               console.log(
-                `[SILENCE] Successfully deleted original video from MinIO`
+                `[SILENCE] Successfully deleted original video from MinIO`,
               );
             } else {
               console.warn(
-                `[SILENCE] Failed to delete original video from MinIO, but continuing`
+                `[SILENCE] Failed to delete original video from MinIO, but continuing`,
               );
             }
           } catch (deleteError) {
             console.error(
               `[SILENCE] Error deleting original video from MinIO:`,
-              deleteError
+              deleteError,
             );
             // Don't throw - silence optimization was successful
           }
         } else {
           console.log(
-            `[SILENCE] Skipping deletion - URLs are the same or old URL is missing`
+            `[SILENCE] Skipping deletion - URLs are the same or old URL is missing`,
           );
         }
       }
@@ -1587,7 +1587,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to optimize silence: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setOptimizingSilence(null);
@@ -1616,7 +1616,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting transcription for ${videosToTranscribe.length} videos...`
+        `Starting transcription for ${videosToTranscribe.length} videos...`,
       );
 
       // Process videos one by one to avoid overwhelming the API
@@ -1652,7 +1652,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to transcribe all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setTranscribing(null);
@@ -1663,7 +1663,7 @@ export default function OriginalVideosList({
   // Internal transcription function (without UI state management)
   const handleTranscribeVideoInternal = async (
     videoId: number,
-    videoUrl: string
+    videoUrl: string,
   ) => {
     // Step 1: Transcribe the video using selected model
     const transcribeResponse = await fetch('/api/transcribe-video', {
@@ -1748,7 +1748,7 @@ export default function OriginalVideosList({
       // Fallback: If duration not stored, calculate from captions
       if (!videoDuration) {
         console.log(
-          'Duration not found in database, calculating from captions...'
+          'Duration not found in database, calculating from captions...',
         );
         try {
           const captionsResponse = await fetch(captionsUrl);
@@ -1760,7 +1760,7 @@ export default function OriginalVideosList({
               if (lastWord && typeof lastWord.end === 'number') {
                 videoDuration = lastWord.end;
                 console.log(
-                  `Calculated duration from captions: ${videoDuration}s`
+                  `Calculated duration from captions: ${videoDuration}s`,
                 );
 
                 // Save duration to database for future use
@@ -1806,7 +1806,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to generate scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setGeneratingScenes(null);
@@ -1830,7 +1830,7 @@ export default function OriginalVideosList({
         const scenesExist = hasScenes(video);
         const status = extractFieldValue(video.field_6864);
         console.log(
-          `Video ${video.id}: captions=${hasCaptions}, scenes=${scenesExist}, status=${status}`
+          `Video ${video.id}: captions=${hasCaptions}, scenes=${scenesExist}, status=${status}`,
         );
         return captionsUrl && !hasScenes(video) && status === 'Processing'; // Has captions, no scenes, and Processing status
       });
@@ -1841,7 +1841,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting scene generation for ${videosToProcess.length} videos...`
+        `Starting scene generation for ${videosToProcess.length} videos...`,
       );
 
       // Process videos one by one
@@ -1860,7 +1860,7 @@ export default function OriginalVideosList({
                 if (lastWord && typeof lastWord.end === 'number') {
                   videoDuration = lastWord.end;
                   console.log(
-                    `Video ${video.id}: Calculated duration from captions: ${videoDuration}s`
+                    `Video ${video.id}: Calculated duration from captions: ${videoDuration}s`,
                   );
                   // Save duration to database
                   await updateOriginalVideoRow(video.id, {
@@ -1871,7 +1871,7 @@ export default function OriginalVideosList({
             }
           } catch (error) {
             console.warn(
-              `Video ${video.id}: Failed to calculate duration from captions`
+              `Video ${video.id}: Failed to calculate duration from captions`,
             );
           }
         }
@@ -1884,13 +1884,13 @@ export default function OriginalVideosList({
             await handleGenerateScenesInternal(
               video.id,
               captionsUrl,
-              videoDuration
+              videoDuration,
             );
             console.log(`Successfully generated scenes for video ${video.id}`);
           } catch (error) {
             console.error(
               `Failed to generate scenes for video ${video.id}:`,
-              error
+              error,
             );
             // Continue with next video even if one fails
           }
@@ -1904,7 +1904,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to generate scenes for all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setGeneratingScenes(null);
@@ -1916,7 +1916,7 @@ export default function OriginalVideosList({
   const handleGenerateScenesInternal = async (
     videoId: number,
     captionsUrl: string,
-    videoDuration?: number
+    videoDuration?: number,
   ) => {
     const response = await fetch('/api/generate-scenes', {
       method: 'POST',
@@ -1942,7 +1942,7 @@ export default function OriginalVideosList({
   const handleImproveAllVideosScenes = async (playSound = true) => {
     if (!sceneHandlers) {
       console.log(
-        'Scene handlers are not available yet. Please wait a moment and try again.'
+        'Scene handlers are not available yet. Please wait a moment and try again.',
       );
       return;
     }
@@ -1992,7 +1992,7 @@ export default function OriginalVideosList({
 
       console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`,
       );
 
       if (scenesToProcess.length === 0) {
@@ -2001,7 +2001,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting AI improvement for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
+        `Starting AI improvement for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
       );
 
       await handleImproveAllSentencesForAllVideos(
@@ -2011,7 +2011,7 @@ export default function OriginalVideosList({
         setImprovingAllVideosScenes,
         setCurrentProcessingVideoId,
         setImprovingSentence,
-        playSound
+        playSound,
       );
 
       console.log('Batch improvement completed for all videos');
@@ -2031,7 +2031,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to improve all videos scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setImprovingAllVideosScenes(false);
@@ -2043,7 +2043,7 @@ export default function OriginalVideosList({
   const handleGenerateAllTTSForAllVideos = async (playSound = true) => {
     if (!sceneHandlers) {
       console.log(
-        'Scene handlers are not available yet. Please wait a moment and try again.'
+        'Scene handlers are not available yet. Please wait a moment and try again.',
       );
       return;
     }
@@ -2093,7 +2093,7 @@ export default function OriginalVideosList({
 
       console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`,
       );
 
       if (scenesToProcess.length === 0) {
@@ -2102,7 +2102,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting TTS generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
+        `Starting TTS generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
       );
 
       await generateAllTTSForAllVideosUtil(
@@ -2111,7 +2111,7 @@ export default function OriginalVideosList({
         setGeneratingAllTTSForAllVideos,
         setCurrentProcessingVideoId,
         setProducingTTS,
-        playSound
+        playSound,
       );
 
       console.log('Batch TTS generation completed for all videos');
@@ -2131,7 +2131,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to generate TTS for all videos scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setGeneratingAllTTSForAllVideos(false);
@@ -2143,7 +2143,7 @@ export default function OriginalVideosList({
   const handleGenerateAllVideosForAllScenes = async (playSound = true) => {
     if (!sceneHandlers) {
       console.log(
-        'Scene handlers are not available yet. Please wait a moment and try again.'
+        'Scene handlers are not available yet. Please wait a moment and try again.',
       );
       return;
     }
@@ -2193,7 +2193,7 @@ export default function OriginalVideosList({
 
       console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`,
       );
 
       if (scenesToProcess.length === 0) {
@@ -2202,7 +2202,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting video generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
+        `Starting video generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
       );
 
       await handleGenerateAllVideos(
@@ -2217,7 +2217,7 @@ export default function OriginalVideosList({
             refreshScenesData();
           }
         },
-        playSound
+        playSound,
       );
 
       console.log('Batch video generation completed for all videos');
@@ -2234,7 +2234,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to generate videos for all scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setGeneratingAllVideos(false);
@@ -2288,7 +2288,7 @@ export default function OriginalVideosList({
 
       console.log(`Videos with Processing status: ${videosToProcess.length}`);
       console.log(
-        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`
+        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`,
       );
 
       if (scenesToProcess.length === 0) {
@@ -2297,7 +2297,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting speed up for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`
+        `Starting speed up for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
       );
 
       await handleSpeedUpAllVideosForAllScenes(
@@ -2312,7 +2312,7 @@ export default function OriginalVideosList({
             refreshScenesData();
           }
         },
-        playSound
+        playSound,
       );
 
       console.log('Batch speed up completed for all videos');
@@ -2329,7 +2329,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to speed up all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setSpeedingUpAllVideos(false);
@@ -2412,7 +2412,7 @@ export default function OriginalVideosList({
       const emptyScenes = scenesForProcessingVideos.filter((scene) => {
         const sentence = String(scene['field_6890'] ?? '').trim();
         const original = String(
-          scene['field_6901'] ?? scene['field_6900'] ?? ''
+          scene['field_6901'] ?? scene['field_6900'] ?? '',
         ).trim();
 
         return sentence === '' && original === '';
@@ -2420,7 +2420,7 @@ export default function OriginalVideosList({
 
       console.log(`Processing videos: ${processingVideos.length}`);
       console.log(
-        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`
+        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`,
       );
       console.log(`Empty scenes to delete: ${emptyScenes.length}`);
 
@@ -2443,7 +2443,7 @@ export default function OriginalVideosList({
         if (!res.ok) {
           const errorText = await res.text();
           throw new Error(
-            `Failed to delete scene ${scene.id}: ${res.status} ${errorText}`
+            `Failed to delete scene ${scene.id}: ${res.status} ${errorText}`,
           );
         }
 
@@ -2468,7 +2468,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to delete empty scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setDeletingEmptyScenesAllVideos(false);
@@ -2478,7 +2478,7 @@ export default function OriginalVideosList({
 
   // Transcribe FINAL Scenes for All Videos (Processing only)
   const handleTranscribeProcessingScenesAllVideos = async (
-    playSound = true
+    playSound = true,
   ) => {
     if (transcribingProcessingScenesAllVideos) return;
 
@@ -2566,15 +2566,15 @@ export default function OriginalVideosList({
 
       console.log(`Processing videos: ${processingVideos.length}`);
       console.log(
-        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`
+        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`,
       );
       console.log(
-        `Scenes to transcribe (final video, missing captions): ${scenesToTranscribe.length}`
+        `Scenes to transcribe (final video, missing captions): ${scenesToTranscribe.length}`,
       );
 
       if (scenesToTranscribe.length === 0) {
         console.log(
-          'No final scenes found that need transcription for Processing videos'
+          'No final scenes found that need transcription for Processing videos',
         );
         return;
       }
@@ -2604,7 +2604,7 @@ export default function OriginalVideosList({
         if (!transcribeResponse.ok) {
           const errText = await transcribeResponse.text();
           throw new Error(
-            `Failed to transcribe scene ${scene.id}: ${transcribeResponse.status} ${errText}`
+            `Failed to transcribe scene ${scene.id}: ${transcribeResponse.status} ${errText}`,
           );
         }
 
@@ -2649,7 +2649,7 @@ export default function OriginalVideosList({
         if (!uploadResponse.ok) {
           const errText = await uploadResponse.text();
           throw new Error(
-            `Failed to upload captions for scene ${scene.id}: ${uploadResponse.status} ${errText}`
+            `Failed to upload captions for scene ${scene.id}: ${uploadResponse.status} ${errText}`,
           );
         }
 
@@ -2657,7 +2657,7 @@ export default function OriginalVideosList({
         const captionsUrl = uploadResult.url || uploadResult.file_url;
         if (!captionsUrl) {
           throw new Error(
-            `Upload did not return a captions URL for scene ${scene.id}`
+            `Upload did not return a captions URL for scene ${scene.id}`,
           );
         }
 
@@ -2684,7 +2684,7 @@ export default function OriginalVideosList({
         if (!patchRes.ok) {
           const errorText = await patchRes.text();
           throw new Error(
-            `Failed to update scene ${scene.id}: ${patchRes.status} ${errorText}`
+            `Failed to update scene ${scene.id}: ${patchRes.status} ${errorText}`,
           );
         }
 
@@ -2702,7 +2702,7 @@ export default function OriginalVideosList({
     } catch (error) {
       console.error(
         'Error transcribing final scenes for Processing videos:',
-        error
+        error,
       );
 
       if (playSound) {
@@ -2712,7 +2712,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to transcribe final scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setTranscribingProcessingScenesAllVideos(false);
@@ -2815,7 +2815,7 @@ export default function OriginalVideosList({
 
         const sentence = String(scene['field_6890'] ?? '').trim();
         const original = String(
-          scene['field_6901'] ?? scene['field_6900'] ?? ''
+          scene['field_6901'] ?? scene['field_6900'] ?? '',
         ).trim();
         if (!(sentence || original)) return false;
 
@@ -2852,7 +2852,7 @@ export default function OriginalVideosList({
         if (!genRes.ok) {
           const t = await genRes.text().catch(() => '');
           throw new Error(
-            `Prompt generation failed for scene ${scene.id}: ${genRes.status} ${t}`
+            `Prompt generation failed for scene ${scene.id}: ${genRes.status} ${t}`,
           );
         }
 
@@ -2875,7 +2875,7 @@ export default function OriginalVideosList({
         if (!patchRes.ok) {
           const t = await patchRes.text().catch(() => '');
           throw new Error(
-            `Failed to save prompt for scene ${scene.id}: ${patchRes.status} ${t}`
+            `Failed to save prompt for scene ${scene.id}: ${patchRes.status} ${t}`,
           );
         }
 
@@ -2921,7 +2921,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting silence optimization for ${videosToOptimize.length} videos...`
+        `Starting silence optimization for ${videosToOptimize.length} videos...`,
       );
 
       // Process videos one by one to avoid overwhelming the API
@@ -2983,7 +2983,7 @@ export default function OriginalVideosList({
 
               console.log(`[SILENCE BATCH] Old URL: ${oldVideoUrl}`);
               console.log(
-                `[SILENCE BATCH] New URL: ${result.data.optimizedUrl}`
+                `[SILENCE BATCH] New URL: ${result.data.optimizedUrl}`,
               );
 
               await updateOriginalVideoRow(video.id, {
@@ -2995,29 +2995,29 @@ export default function OriginalVideosList({
               // Delete the old video from MinIO to save space
               if (oldVideoUrl && oldVideoUrl !== result.data.optimizedUrl) {
                 console.log(
-                  `[SILENCE BATCH] Deleting original video from MinIO: ${oldVideoUrl}`
+                  `[SILENCE BATCH] Deleting original video from MinIO: ${oldVideoUrl}`,
                 );
                 try {
                   const deleted = await deleteFromMinio(oldVideoUrl);
                   if (deleted) {
                     console.log(
-                      `[SILENCE BATCH] Successfully deleted original video from MinIO`
+                      `[SILENCE BATCH] Successfully deleted original video from MinIO`,
                     );
                   } else {
                     console.warn(
-                      `[SILENCE BATCH] Failed to delete original video from MinIO, but continuing`
+                      `[SILENCE BATCH] Failed to delete original video from MinIO, but continuing`,
                     );
                   }
                 } catch (deleteError) {
                   console.error(
                     `[SILENCE BATCH] Error deleting original video from MinIO:`,
-                    deleteError
+                    deleteError,
                   );
                   // Don't throw - silence optimization was successful
                 }
               } else {
                 console.log(
-                  `[SILENCE BATCH] Skipping deletion - URLs are the same or old URL is missing`
+                  `[SILENCE BATCH] Skipping deletion - URLs are the same or old URL is missing`,
                 );
               }
 
@@ -3025,13 +3025,13 @@ export default function OriginalVideosList({
               await handleRefresh();
             } else {
               console.warn(
-                `No optimized URL found in result for video ${video.id}`
+                `No optimized URL found in result for video ${video.id}`,
               );
             }
           } catch (error) {
             console.error(
               `Failed to optimize silence for video ${video.id}:`,
-              error
+              error,
             );
             // Continue with next video even if one fails
           }
@@ -3056,7 +3056,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to optimize silence for all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setOptimizingSilenceVideo(null);
@@ -3087,7 +3087,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting audio normalization for ${videosToNormalize.length} videos...`
+        `Starting audio normalization for ${videosToNormalize.length} videos...`,
       );
 
       // Process videos one by one to avoid overwhelming the API
@@ -3124,7 +3124,7 @@ export default function OriginalVideosList({
             const result = await response.json();
             console.log('='.repeat(80));
             console.log(
-              `[CLIENT] Successfully normalized audio for video ${video.id}`
+              `[CLIENT] Successfully normalized audio for video ${video.id}`,
             );
             console.log('[CLIENT] Result:', result);
             console.log('[CLIENT] Normalized URL:', result.data?.normalizedUrl);
@@ -3133,7 +3133,7 @@ export default function OriginalVideosList({
             // Update the original video record with the normalized video URL
             if (result.data?.normalizedUrl) {
               console.log(
-                `[CLIENT] Updating video ${video.id} with normalized URL...`
+                `[CLIENT] Updating video ${video.id} with normalized URL...`,
               );
 
               // Store the old uploaded video URL before updating
@@ -3141,12 +3141,12 @@ export default function OriginalVideosList({
 
               console.log(`[NORMALIZE DEBUG] Old URL: ${oldUploadedVideoUrl}`);
               console.log(
-                `[NORMALIZE DEBUG] New URL: ${result.data.normalizedUrl}`
+                `[NORMALIZE DEBUG] New URL: ${result.data.normalizedUrl}`,
               );
               console.log(
                 `[NORMALIZE DEBUG] URLs are different: ${
                   oldUploadedVideoUrl !== result.data.normalizedUrl
-                }`
+                }`,
               );
 
               await updateOriginalVideoRow(video.id, {
@@ -3161,29 +3161,29 @@ export default function OriginalVideosList({
                 oldUploadedVideoUrl !== result.data.normalizedUrl
               ) {
                 console.log(
-                  `[NORMALIZE] Deleting original uploaded video from MinIO: ${oldUploadedVideoUrl}`
+                  `[NORMALIZE] Deleting original uploaded video from MinIO: ${oldUploadedVideoUrl}`,
                 );
                 try {
                   const deleted = await deleteFromMinio(oldUploadedVideoUrl);
                   if (deleted) {
                     console.log(
-                      `[NORMALIZE] Successfully deleted original uploaded video from MinIO`
+                      `[NORMALIZE] Successfully deleted original uploaded video from MinIO`,
                     );
                   } else {
                     console.warn(
-                      `[NORMALIZE] Failed to delete original video from MinIO, but continuing`
+                      `[NORMALIZE] Failed to delete original video from MinIO, but continuing`,
                     );
                   }
                 } catch (deleteError) {
                   console.error(
                     `[NORMALIZE] Error deleting original video from MinIO:`,
-                    deleteError
+                    deleteError,
                   );
                   // Don't throw - normalization was successful
                 }
               } else {
                 console.log(
-                  `[NORMALIZE] Skipping deletion - URLs are the same or old URL is missing`
+                  `[NORMALIZE] Skipping deletion - URLs are the same or old URL is missing`,
                 );
               }
 
@@ -3191,13 +3191,13 @@ export default function OriginalVideosList({
               await handleRefresh();
             } else {
               console.warn(
-                `No normalized URL found in result for video ${video.id}`
+                `No normalized URL found in result for video ${video.id}`,
               );
             }
           } catch (error) {
             console.error(
               `Failed to normalize audio for video ${video.id}:`,
-              error
+              error,
             );
             // Continue with next video even if one fails
           }
@@ -3222,7 +3222,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to normalize audio for all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setNormalizingAudioVideo(null);
@@ -3253,7 +3253,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting CFR conversion for ${videosToConvert.length} videos...`
+        `Starting CFR conversion for ${videosToConvert.length} videos...`,
       );
 
       // Process videos one by one to avoid overwhelming the API
@@ -3312,29 +3312,29 @@ export default function OriginalVideosList({
               // Delete the old video from MinIO to save space
               if (oldVideoUrl && oldVideoUrl !== result.data.cfrUrl) {
                 console.log(
-                  `[CFR BATCH] Deleting original video from MinIO: ${oldVideoUrl}`
+                  `[CFR BATCH] Deleting original video from MinIO: ${oldVideoUrl}`,
                 );
                 try {
                   const deleted = await deleteFromMinio(oldVideoUrl);
                   if (deleted) {
                     console.log(
-                      `[CFR BATCH] Successfully deleted original video from MinIO`
+                      `[CFR BATCH] Successfully deleted original video from MinIO`,
                     );
                   } else {
                     console.warn(
-                      `[CFR BATCH] Failed to delete original video from MinIO, but continuing`
+                      `[CFR BATCH] Failed to delete original video from MinIO, but continuing`,
                     );
                   }
                 } catch (deleteError) {
                   console.error(
                     `[CFR BATCH] Error deleting original video from MinIO:`,
-                    deleteError
+                    deleteError,
                   );
                   // Don't throw - CFR conversion was successful
                 }
               } else {
                 console.log(
-                  `[CFR BATCH] Skipping deletion - URLs are the same or old URL is missing`
+                  `[CFR BATCH] Skipping deletion - URLs are the same or old URL is missing`,
                 );
               }
 
@@ -3368,7 +3368,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to convert videos to CFR: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setConvertingToCFRVideo(null);
@@ -3400,7 +3400,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting CFR conversion for ${videosToConvert.length} final videos...`
+        `Starting CFR conversion for ${videosToConvert.length} final videos...`,
       );
 
       // Process videos one by one to avoid overwhelming the API
@@ -3437,7 +3437,7 @@ export default function OriginalVideosList({
 
             const result = await response.json();
             console.log(
-              `Successfully converted final video ${video.id} to CFR`
+              `Successfully converted final video ${video.id} to CFR`,
             );
             console.log('Result:', result);
             console.log('CFR URL:', result.data?.cfrUrl);
@@ -3445,7 +3445,7 @@ export default function OriginalVideosList({
             // Update the record with the CFR final video URL
             if (result.data?.cfrUrl) {
               console.log(
-                `Updating video ${video.id} final video with CFR URL...`
+                `Updating video ${video.id} final video with CFR URL...`,
               );
 
               // Store the old final video URL before updating
@@ -3462,29 +3462,29 @@ export default function OriginalVideosList({
               // Delete the old final video from MinIO to save space
               if (oldFinalVideoUrl && oldFinalVideoUrl !== result.data.cfrUrl) {
                 console.log(
-                  `[CFR FINAL BATCH] Deleting original final video from MinIO: ${oldFinalVideoUrl}`
+                  `[CFR FINAL BATCH] Deleting original final video from MinIO: ${oldFinalVideoUrl}`,
                 );
                 try {
                   const deleted = await deleteFromMinio(oldFinalVideoUrl);
                   if (deleted) {
                     console.log(
-                      `[CFR FINAL BATCH] Successfully deleted original final video from MinIO`
+                      `[CFR FINAL BATCH] Successfully deleted original final video from MinIO`,
                     );
                   } else {
                     console.warn(
-                      `[CFR FINAL BATCH] Failed to delete original final video from MinIO, but continuing`
+                      `[CFR FINAL BATCH] Failed to delete original final video from MinIO, but continuing`,
                     );
                   }
                 } catch (deleteError) {
                   console.error(
                     `[CFR FINAL BATCH] Error deleting original final video from MinIO:`,
-                    deleteError
+                    deleteError,
                   );
                   // Don't throw - CFR conversion was successful
                 }
               } else {
                 console.log(
-                  `[CFR FINAL BATCH] Skipping deletion - URLs are the same or old URL is missing`
+                  `[CFR FINAL BATCH] Skipping deletion - URLs are the same or old URL is missing`,
                 );
               }
 
@@ -3492,13 +3492,13 @@ export default function OriginalVideosList({
               await handleRefresh();
             } else {
               console.warn(
-                `No CFR URL found in result for final video ${video.id}`
+                `No CFR URL found in result for final video ${video.id}`,
               );
             }
           } catch (error) {
             console.error(
               `Failed to convert final video ${video.id} to CFR:`,
-              error
+              error,
             );
             // Continue with next video even if one fails
           }
@@ -3519,7 +3519,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to convert final videos to CFR: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setConvertingFinalToCFRVideo(null);
@@ -3542,7 +3542,7 @@ export default function OriginalVideosList({
         const order = video.field_6902; // Order field
         const status = extractFieldValue(video.field_6864); // Status field
         console.log(
-          `Video ${video.id}: field_6858=${video.field_6858}, extracted URL=${finalVideoUrl}, order=${order}, status=${status}`
+          `Video ${video.id}: field_6858=${video.field_6858}, extracted URL=${finalVideoUrl}, order=${order}, status=${status}`,
         );
         return (
           finalVideoUrl &&
@@ -3553,12 +3553,12 @@ export default function OriginalVideosList({
       });
 
       console.log(
-        `Found ${videosWithFinalVideos.length} videos with final merged videos and "Processing" status`
+        `Found ${videosWithFinalVideos.length} videos with final merged videos and "Processing" status`,
       );
 
       if (videosWithFinalVideos.length === 0) {
         console.log(
-          'No videos found with final merged videos and "Processing" status to merge'
+          'No videos found with final merged videos and "Processing" status to merge',
         );
         return;
       }
@@ -3568,7 +3568,7 @@ export default function OriginalVideosList({
         const orderA = parseInt(String(a.field_6902)) || 0;
         const orderB = parseInt(String(b.field_6902)) || 0;
         console.log(
-          `Sorting: Video ${a.id} order=${orderA}, Video ${b.id} order=${orderB}`
+          `Sorting: Video ${a.id} order=${orderA}, Video ${b.id} order=${orderB}`,
         );
         return orderA - orderB;
       });
@@ -3579,19 +3579,19 @@ export default function OriginalVideosList({
           id: v.id,
           order: v.field_6902,
           url: extractUrl(v.field_6858),
-        }))
+        })),
       );
 
       // Extract video URLs in order
       const videoUrls = videosWithFinalVideos.map((video) =>
-        extractUrl(video.field_6858)
+        extractUrl(video.field_6858),
       );
 
       console.log('Final video URLs to merge:', videoUrls);
 
       console.log(
         `Merging ${videoUrls.length} final videos in order:`,
-        videoUrls
+        videoUrls,
       );
 
       // Get the old final merged video URL from localStorage to delete it
@@ -3603,14 +3603,14 @@ export default function OriginalVideosList({
           oldFinalMergedUrl = dataObject.finalVideoUrl || null;
           if (oldFinalMergedUrl) {
             console.log(
-              `[MERGE] Found old final merged video in localStorage: ${oldFinalMergedUrl}`
+              `[MERGE] Found old final merged video in localStorage: ${oldFinalMergedUrl}`,
             );
           }
         }
       } catch (error) {
         console.warn(
           'Failed to read old final merged video from localStorage:',
-          error
+          error,
         );
       }
 
@@ -3680,7 +3680,7 @@ export default function OriginalVideosList({
       } catch (storageError) {
         console.warn(
           'Failed to save final video URL to localStorage:',
-          storageError
+          storageError,
         );
       }
 
@@ -3701,7 +3701,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to merge final videos: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setMergingFinalVideos(false);
@@ -3734,7 +3734,7 @@ export default function OriginalVideosList({
 
       if (videosWithTimestamps.length === 0) {
         console.log(
-          'No videos found with final merged videos, titles, order values, and "Processing" status'
+          'No videos found with final merged videos, titles, order values, and "Processing" status',
         );
         return;
       }
@@ -3752,7 +3752,7 @@ export default function OriginalVideosList({
           title: v.field_6852,
           order: v.field_6902,
           url: extractUrl(v.field_6858),
-        }))
+        })),
       );
 
       // Calculate cumulative timestamps
@@ -3789,7 +3789,7 @@ export default function OriginalVideosList({
         } catch (durationError) {
           console.warn(
             `Failed to get duration for video ${video.id}, using 0:`,
-            durationError
+            durationError,
           );
           // Still add the timestamp with 0 duration
           const timestamp = formatTimestamp(cumulativeSeconds);
@@ -3842,7 +3842,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to generate timestamps: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setGeneratingTimestamps(false);
@@ -3885,7 +3885,7 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting clip generation for ${videosWithScenes.length} videos...`
+        `Starting clip generation for ${videosWithScenes.length} videos...`,
       );
 
       // Process videos one by one
@@ -3903,7 +3903,7 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `Failed to generate clips for video ${video.id}:`,
-            error
+            error,
           );
           // Continue with next video
         }
@@ -3924,7 +3924,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to generate clips for all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       setGeneratingClipsAll(false);
@@ -3936,7 +3936,7 @@ export default function OriginalVideosList({
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
-        'Scene handlers are not available yet. Please wait a moment and try again.'
+        'Scene handlers are not available yet. Please wait a moment and try again.',
       );
       return;
     }
@@ -3956,15 +3956,15 @@ export default function OriginalVideosList({
       if (pipelineConfig.ttsScript) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Generating TTS from scripts for Processing videos...`
+          `Step ${stepNumber}: Generating TTS from scripts for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Generating TTS from scripts for Processing videos`
+          `Step ${stepNumber}: Generating TTS from scripts for Processing videos`,
         );
         try {
           await handleGenerateTtsFromScripts(false, false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Script TTS generation finished`
+            `✓ Step ${stepNumber} Complete: Script TTS generation finished`,
           );
 
           console.log('Refreshing data after script TTS generation...');
@@ -3977,12 +3977,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Script TTS generation error`,
-            error
+            error,
           );
           throw new Error(
             `Script TTS generation failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -3993,15 +3993,15 @@ export default function OriginalVideosList({
       if (pipelineConfig.ttsVideo) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Generating videos from TTS audio for Processing videos...`
+          `Step ${stepNumber}: Generating videos from TTS audio for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Generating videos from TTS audio for Processing videos`
+          `Step ${stepNumber}: Generating videos from TTS audio for Processing videos`,
         );
         try {
           await handleGenerateVideoFromTtsAudioAll(false, false);
           console.log(
-            `✓ Step ${stepNumber} Complete: TTS audio → video generation finished`
+            `✓ Step ${stepNumber} Complete: TTS audio → video generation finished`,
           );
 
           console.log('Refreshing data after TTS video generation...');
@@ -4014,12 +4014,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: TTS video generation error`,
-            error
+            error,
           );
           throw new Error(
             `TTS video generation failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4030,13 +4030,13 @@ export default function OriginalVideosList({
       if (pipelineConfig.normalizeAudio) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Normalizing audio for all videos...`
+          `Step ${stepNumber}: Normalizing audio for all videos...`,
         );
         console.log(`Step ${stepNumber}: Normalizing audio for all videos`);
         try {
           await handleNormalizeAudioAll(false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Audio normalization finished`
+            `✓ Step ${stepNumber} Complete: Audio normalization finished`,
           );
 
           // Refresh data to get updated videos
@@ -4051,12 +4051,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Audio normalization error`,
-            error
+            error,
           );
           throw new Error(
             `Audio normalization failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4084,12 +4084,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: CFR conversion error`,
-            error
+            error,
           );
           throw new Error(
             `CFR conversion failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4100,13 +4100,13 @@ export default function OriginalVideosList({
       if (pipelineConfig.optimizeSilence) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Optimizing silence for all videos...`
+          `Step ${stepNumber}: Optimizing silence for all videos...`,
         );
         console.log(`Step ${stepNumber}: Optimizing silence for all videos`);
         try {
           await handleOptimizeSilenceAll(false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Silence optimization finished`
+            `✓ Step ${stepNumber} Complete: Silence optimization finished`,
           );
 
           // Refresh data to get updated videos
@@ -4121,12 +4121,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Silence optimization error`,
-            error
+            error,
           );
           throw new Error(
             `Silence optimization failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4157,12 +4157,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Transcription error`,
-            error
+            error,
           );
           throw new Error(
             `Transcription failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4173,13 +4173,13 @@ export default function OriginalVideosList({
       if (pipelineConfig.generateScenes) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Generating scenes for all videos...`
+          `Step ${stepNumber}: Generating scenes for all videos...`,
         );
         console.log(`Step ${stepNumber}: Generating scenes for all videos`);
         try {
           await handleGenerateScenesAll(false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Scene generation finished`
+            `✓ Step ${stepNumber} Complete: Scene generation finished`,
           );
 
           // Refresh data to get updated scenes
@@ -4197,12 +4197,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Scene generation error`,
-            error
+            error,
           );
           throw new Error(
             `Scene generation failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4213,15 +4213,15 @@ export default function OriginalVideosList({
       if (pipelineConfig.deleteEmpty) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Deleting empty scenes for Processing videos...`
+          `Step ${stepNumber}: Deleting empty scenes for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Deleting empty scenes for Processing videos`
+          `Step ${stepNumber}: Deleting empty scenes for Processing videos`,
         );
         try {
           await handleDeleteEmptyScenesAllVideos(false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Empty scenes deletion finished`
+            `✓ Step ${stepNumber} Complete: Empty scenes deletion finished`,
           );
 
           console.log('Refreshing data after deleting empty scenes...');
@@ -4237,12 +4237,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Delete empty scenes error`,
-            error
+            error,
           );
           throw new Error(
             `Delete empty scenes failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4253,13 +4253,13 @@ export default function OriginalVideosList({
       if (pipelineConfig.generateClips) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Generating clips for all videos...`
+          `Step ${stepNumber}: Generating clips for all videos...`,
         );
         console.log(`Step ${stepNumber}: Generating clips for all videos`);
         try {
           await handleGenerateClipsAll(false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Clip generation finished`
+            `✓ Step ${stepNumber} Complete: Clip generation finished`,
           );
 
           // Refresh data to get updated clips
@@ -4277,12 +4277,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Clip generation error`,
-            error
+            error,
           );
           throw new Error(
             `Clip generation failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4315,7 +4315,7 @@ export default function OriginalVideosList({
           throw new Error(
             `Speed up failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4346,12 +4346,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: AI improvement error`,
-            error
+            error,
           );
           throw new Error(
             `AI improvement failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4382,12 +4382,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: TTS generation error`,
-            error
+            error,
           );
           throw new Error(
             `TTS generation failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4415,7 +4415,7 @@ export default function OriginalVideosList({
           throw new Error(
             `Video sync failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4426,15 +4426,15 @@ export default function OriginalVideosList({
       if (pipelineConfig.transcribeScenesAfterSync) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Transcribing scenes for Processing videos...`
+          `Step ${stepNumber}: Transcribing scenes for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Transcribing scenes for Processing videos`
+          `Step ${stepNumber}: Transcribing scenes for Processing videos`,
         );
         try {
           await handleTranscribeProcessingScenesAllVideos(false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Scene transcription finished`
+            `✓ Step ${stepNumber} Complete: Scene transcription finished`,
           );
 
           console.log('Refreshing data after scene transcription...');
@@ -4446,17 +4446,17 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Scene transcription error`,
-            error
+            error,
           );
           throw new Error(
             `Scene transcription failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
         console.log(
-          '⊘ Skipping Step: Transcribe Scenes After Sync (disabled in config)'
+          '⊘ Skipping Step: Transcribe Scenes After Sync (disabled in config)',
         );
       }
 
@@ -4464,16 +4464,16 @@ export default function OriginalVideosList({
       if (pipelineConfig.promptScenesAfterTranscribe) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Prompting scenes for Processing videos...`
+          `Step ${stepNumber}: Prompting scenes for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Prompting scenes for Processing videos`
+          `Step ${stepNumber}: Prompting scenes for Processing videos`,
         );
 
         try {
           await handlePromptProcessingScenesAllVideos(false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Scene prompting finished`
+            `✓ Step ${stepNumber} Complete: Scene prompting finished`,
           );
 
           console.log('Refreshing data after scene prompting...');
@@ -4485,12 +4485,12 @@ export default function OriginalVideosList({
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Scene prompting error`,
-            error
+            error,
           );
           throw new Error(
             `Scene prompting failed: ${
               error instanceof Error ? error.message : 'Unknown error'
-            }`
+            }`,
           );
         }
       } else {
@@ -4504,7 +4504,7 @@ export default function OriginalVideosList({
 
       // Send Telegram notification for successful completion
       await sendTelegramNotification(
-        `🎉 Full Pipeline Complete! Successfully executed ${stepNumber} processing steps.`
+        `🎉 Full Pipeline Complete! Successfully executed ${stepNumber} processing steps.`,
       );
 
       // Final refresh
@@ -4534,7 +4534,7 @@ export default function OriginalVideosList({
       setError(
         `Full pipeline failed: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
 
       setPipelineStep('');
@@ -4598,7 +4598,7 @@ export default function OriginalVideosList({
             // Refresh data only when a scene is completed (not on every progress update)
             if (data.type === 'scene_complete') {
               console.log(
-                `Scene ${data.sceneNumber}/${data.total} completed, refreshing data...`
+                `Scene ${data.sceneNumber}/${data.total} completed, refreshing data...`,
               );
 
               // Refresh both original videos and scenes data after each scene completes
@@ -4700,7 +4700,7 @@ export default function OriginalVideosList({
                 case 'scene_error':
                   console.error(
                     `Scene ${data.sceneNumber} failed:`,
-                    data.error
+                    data.error,
                   );
                   setClipsProgressGlobal({
                     current: data.current,
@@ -4742,7 +4742,7 @@ export default function OriginalVideosList({
       setError(
         `Failed to generate clips: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     } finally {
       // Small delay to show completion before clearing
@@ -4937,7 +4937,7 @@ export default function OriginalVideosList({
 
                     {/* TTS Script Button */}
                     <button
-                      onClick={handleGenerateTtsFromScripts}
+                      onClick={() => void handleGenerateTtsFromScripts()}
                       disabled={
                         uploading ||
                         creatingVideoFromScript ||
@@ -4967,7 +4967,7 @@ export default function OriginalVideosList({
 
                     {/* TTS → Video Button */}
                     <button
-                      onClick={handleGenerateVideoFromTtsAudioAll}
+                      onClick={() => void handleGenerateVideoFromTtsAudioAll()}
                       disabled={
                         uploading ||
                         creatingVideoFromScript ||
@@ -5077,8 +5077,8 @@ export default function OriginalVideosList({
                         {reordering
                           ? 'Reordering...'
                           : refreshing
-                          ? 'Refreshing...'
-                          : 'Refresh'}
+                            ? 'Refreshing...'
+                            : 'Refresh'}
                       </span>
                     </button>
 
@@ -5158,8 +5158,8 @@ export default function OriginalVideosList({
                         !sceneHandlers
                           ? 'Scene handlers not ready. Please wait...'
                           : improvingAllVideosScenes
-                          ? 'Improving all scenes for all videos...'
-                          : 'Improve all scenes for all videos with AI'
+                            ? 'Improving all scenes for all videos...'
+                            : 'Improve all scenes for all videos with AI'
                       }
                     >
                       <Sparkles
@@ -5172,8 +5172,8 @@ export default function OriginalVideosList({
                           ? currentProcessingVideoId !== null
                             ? `V${currentProcessingVideoId}`
                             : sceneLoading.improvingSentence !== null
-                            ? `S${sceneLoading.improvingSentence}`
-                            : 'Processing...'
+                              ? `S${sceneLoading.improvingSentence}`
+                              : 'Processing...'
                           : 'Improve All'}
                       </span>
                     </button>
@@ -5193,8 +5193,8 @@ export default function OriginalVideosList({
                         !sceneHandlers
                           ? 'Scene handlers not ready. Please wait...'
                           : generatingAllTTSForAllVideos
-                          ? 'Generating TTS for all scenes in all videos...'
-                          : 'Generate TTS for all scenes in all videos'
+                            ? 'Generating TTS for all scenes in all videos...'
+                            : 'Generate TTS for all scenes in all videos'
                       }
                     >
                       <Mic2
@@ -5207,8 +5207,8 @@ export default function OriginalVideosList({
                           ? currentProcessingVideoId !== null
                             ? `V${currentProcessingVideoId}`
                             : sceneLoading.producingTTS !== null
-                            ? `S${sceneLoading.producingTTS}`
-                            : 'Processing...'
+                              ? `S${sceneLoading.producingTTS}`
+                              : 'Processing...'
                           : 'TTS All'}
                       </span>
                     </button>
@@ -5259,8 +5259,8 @@ export default function OriginalVideosList({
                         !sceneHandlers
                           ? 'Scene handlers not ready. Please wait...'
                           : speedingUpAllVideos
-                          ? 'Speeding up all videos...'
-                          : 'Speed up all video clips with current speed settings'
+                            ? 'Speeding up all videos...'
+                            : 'Speed up all video clips with current speed settings'
                       }
                     >
                       <Zap
@@ -5273,8 +5273,8 @@ export default function OriginalVideosList({
                           ? currentProcessingVideoId !== null
                             ? `V${currentProcessingVideoId}`
                             : sceneLoading.speedingUpVideo !== null
-                            ? `S${sceneLoading.speedingUpVideo}`
-                            : 'Processing...'
+                              ? `S${sceneLoading.speedingUpVideo}`
+                              : 'Processing...'
                           : 'Speed Up All'}
                       </span>
                     </button>
@@ -5394,8 +5394,8 @@ export default function OriginalVideosList({
                         !sceneHandlers
                           ? 'Scene handlers not ready. Please wait...'
                           : generatingAllVideos
-                          ? 'Generating videos for all scenes...'
-                          : 'Generate videos for all scenes with video and TTS audio'
+                            ? 'Generating videos for all scenes...'
+                            : 'Generate videos for all scenes with video and TTS audio'
                       }
                     >
                       <Video
@@ -5454,8 +5454,8 @@ export default function OriginalVideosList({
                         generatingClipsAll
                           ? 'Generating clips for all videos...'
                           : clipGeneration.generatingClips !== null
-                          ? 'Another clip generation in progress'
-                          : 'Generate video clips for all videos with scenes'
+                            ? 'Another clip generation in progress'
+                            : 'Generate video clips for all videos with scenes'
                       }
                     >
                       <Video
@@ -5764,8 +5764,8 @@ export default function OriginalVideosList({
                         !sceneHandlers
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
-                          ? pipelineStep
-                          : 'Run full pipeline: TTS Script → Normalize → CFR → Silence → Transcribe → Scenes → Delete Empty → Clips → Speed Up → Improve → TTS → Sync'
+                            ? pipelineStep
+                            : 'Run full pipeline: TTS Script → Normalize → CFR → Silence → Transcribe → Scenes → Delete Empty → Clips → Speed Up → Improve → TTS → Sync'
                       }
                     >
                       <Workflow
@@ -5960,14 +5960,14 @@ export default function OriginalVideosList({
                               draggedRow === video.id
                                 ? 'opacity-50 cursor-grabbing'
                                 : dragOverRow === video.id
-                                ? 'border-t-4 border-t-blue-500 cursor-pointer'
-                                : 'cursor-pointer'
+                                  ? 'border-t-4 border-t-blue-500 cursor-pointer'
+                                  : 'cursor-pointer'
                             } ${
                               isSelected
                                 ? 'bg-blue-50 hover:bg-blue-100 border-blue-200'
                                 : index % 2 === 0
-                                ? 'bg-white hover:bg-gray-50'
-                                : 'bg-gray-50/50 hover:bg-gray-100'
+                                  ? 'bg-white hover:bg-gray-50'
+                                  : 'bg-gray-50/50 hover:bg-gray-100'
                             }`}
                           >
                             {/* Drag Handle */}
@@ -6017,7 +6017,7 @@ export default function OriginalVideosList({
                                       setEditingTitle((prev) =>
                                         prev
                                           ? { ...prev, value: e.target.value }
-                                          : null
+                                          : null,
                                       )
                                     }
                                     onKeyDown={(e) =>
@@ -6026,7 +6026,7 @@ export default function OriginalVideosList({
                                     onBlur={() =>
                                       saveTitleEdit(
                                         video.id,
-                                        editingTitle.value
+                                        editingTitle.value,
                                       )
                                     }
                                     className='flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
@@ -6040,7 +6040,7 @@ export default function OriginalVideosList({
                                       onClick={() =>
                                         saveTitleEdit(
                                           video.id,
-                                          editingTitle.value
+                                          editingTitle.value,
                                         )
                                       }
                                       className='p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors'
@@ -6056,7 +6056,7 @@ export default function OriginalVideosList({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const currentTitle = extractFieldValue(
-                                      video.field_6852
+                                      video.field_6852,
                                     );
                                     startTitleEdit(video.id, currentTitle);
                                   }}
@@ -6099,7 +6099,7 @@ export default function OriginalVideosList({
                                       handleStatusChange(
                                         video.id,
                                         e.target.value,
-                                        e
+                                        e,
                                       )
                                     }
                                     className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
@@ -6107,10 +6107,10 @@ export default function OriginalVideosList({
                                       'Done'
                                         ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200 focus:ring-green-500'
                                         : extractFieldValue(
-                                            video.field_6864
-                                          ) === 'Processing'
-                                        ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 focus:ring-blue-500'
-                                        : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200 focus:ring-gray-500'
+                                              video.field_6864,
+                                            ) === 'Processing'
+                                          ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 focus:ring-blue-500'
+                                          : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200 focus:ring-gray-500'
                                     }`}
                                     onClick={(e) => e.stopPropagation()}
                                   >
@@ -6153,7 +6153,7 @@ export default function OriginalVideosList({
                             <td className='py-3 px-4'>
                               {(() => {
                                 const finalVideoUrl = extractUrl(
-                                  video.field_6858
+                                  video.field_6858,
                                 );
                                 const isCFR =
                                   finalVideoUrl &&
@@ -6197,13 +6197,13 @@ export default function OriginalVideosList({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const videoUrl = extractUrl(
-                                      video.field_6881
+                                      video.field_6881,
                                     );
                                     if (videoUrl) {
                                       handleTranscribeVideo(video.id, videoUrl);
                                     } else {
                                       setError(
-                                        'No video URL found for transcription'
+                                        'No video URL found for transcription',
                                       );
                                     }
                                   }}
@@ -6220,12 +6220,12 @@ export default function OriginalVideosList({
                                         ? 'Transcribing...'
                                         : 'Another transcription in progress'
                                       : transcribingAll
-                                      ? 'Bulk transcription in progress'
-                                      : !extractUrl(video.field_6881)
-                                      ? 'No video URL available'
-                                      : !!extractUrl(video.field_6861)
-                                      ? 'Video already has captions'
-                                      : 'Transcribe video'
+                                        ? 'Bulk transcription in progress'
+                                        : !extractUrl(video.field_6881)
+                                          ? 'No video URL available'
+                                          : !!extractUrl(video.field_6861)
+                                            ? 'Video already has captions'
+                                            : 'Transcribe video'
                                   }
                                 >
                                   {transcribing === video.id ? (
@@ -6254,18 +6254,19 @@ export default function OriginalVideosList({
                                     generatingTtsFromScripts
                                       ? 'Batch TTS Script in progress'
                                       : generatingScriptTtsForVideo !== null
-                                      ? generatingScriptTtsForVideo === video.id
-                                        ? 'Generating TTS...'
-                                        : 'Another TTS generation in progress'
-                                      : !(
-                                          typeof video.field_6854 ===
-                                            'string' &&
-                                          video.field_6854.trim().length > 0
-                                        )
-                                      ? 'No script available'
-                                      : !!extractUrl(video.field_6859)
-                                      ? 'TTS audio already exists'
-                                      : 'Generate TTS from script'
+                                        ? generatingScriptTtsForVideo ===
+                                          video.id
+                                          ? 'Generating TTS...'
+                                          : 'Another TTS generation in progress'
+                                        : !(
+                                              typeof video.field_6854 ===
+                                                'string' &&
+                                              video.field_6854.trim().length > 0
+                                            )
+                                          ? 'No script available'
+                                          : !!extractUrl(video.field_6859)
+                                            ? 'TTS audio already exists'
+                                            : 'Generate TTS from script'
                                   }
                                 >
                                   {generatingScriptTtsForVideo === video.id ? (
@@ -6292,16 +6293,16 @@ export default function OriginalVideosList({
                                     generatingVideoFromTtsAudioAll
                                       ? 'Batch TTS Video in progress'
                                       : generatingVideoFromTtsAudioForVideo !==
-                                        null
-                                      ? generatingVideoFromTtsAudioForVideo ===
-                                        video.id
-                                        ? 'Generating video from TTS audio...'
-                                        : 'Another video generation in progress'
-                                      : !extractUrl(video.field_6859)
-                                      ? 'No TTS audio available'
-                                      : !!extractUrl(video.field_6881)
-                                      ? 'Video already exists'
-                                      : 'Generate video from TTS audio (30fps)'
+                                          null
+                                        ? generatingVideoFromTtsAudioForVideo ===
+                                          video.id
+                                          ? 'Generating video from TTS audio...'
+                                          : 'Another video generation in progress'
+                                        : !extractUrl(video.field_6859)
+                                          ? 'No TTS audio available'
+                                          : !!extractUrl(video.field_6881)
+                                            ? 'Video already exists'
+                                            : 'Generate video from TTS audio (30fps)'
                                   }
                                 >
                                   {generatingVideoFromTtsAudioForVideo ===
@@ -6316,13 +6317,13 @@ export default function OriginalVideosList({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const captionsUrl = extractUrl(
-                                      video.field_6861
+                                      video.field_6861,
                                     );
                                     if (captionsUrl) {
                                       handleGenerateScenes(video.id);
                                     } else {
                                       setError(
-                                        'No captions URL found for scene generation'
+                                        'No captions URL found for scene generation',
                                       );
                                     }
                                   }}
@@ -6339,10 +6340,10 @@ export default function OriginalVideosList({
                                         ? 'Generating scenes...'
                                         : 'Another scene generation in progress'
                                       : !extractUrl(video.field_6861)
-                                      ? 'No captions URL available'
-                                      : hasScenes(video)
-                                      ? 'Scenes already generated for this video'
-                                      : 'Generate scenes from captions'
+                                        ? 'No captions URL available'
+                                        : hasScenes(video)
+                                          ? 'Scenes already generated for this video'
+                                          : 'Generate scenes from captions'
                                   }
                                 >
                                   {generatingScenes === video.id ? (
@@ -6371,8 +6372,8 @@ export default function OriginalVideosList({
                                           : 'Generating clips...'
                                         : 'Another clip generation in progress'
                                       : !hasScenes(video)
-                                      ? 'No scenes available - generate scenes first'
-                                      : 'Generate video clips for all scenes'
+                                        ? 'No scenes available - generate scenes first'
+                                        : 'Generate video clips for all scenes'
                                   }
                                 >
                                   {clipGeneration.generatingClips ===
@@ -6397,13 +6398,13 @@ export default function OriginalVideosList({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const videoUrl = extractUrl(
-                                      video.field_6881
+                                      video.field_6881,
                                     );
                                     if (videoUrl) {
                                       handleNormalizeVideo(video.id, videoUrl);
                                     } else {
                                       setError(
-                                        'No video URL found for normalization'
+                                        'No video URL found for normalization',
                                       );
                                     }
                                   }}
@@ -6424,10 +6425,10 @@ export default function OriginalVideosList({
                                         ? 'Normalizing audio...'
                                         : 'Another normalization in progress'
                                       : !extractUrl(video.field_6881)
-                                      ? 'No video URL available'
-                                      : !!extractUrl(video.field_6903)
-                                      ? 'Video already normalized'
-                                      : 'Normalize audio loudness'
+                                        ? 'No video URL available'
+                                        : !!extractUrl(video.field_6903)
+                                          ? 'Video already normalized'
+                                          : 'Normalize audio loudness'
                                   }
                                 >
                                   {normalizing === video.id ||
@@ -6443,13 +6444,13 @@ export default function OriginalVideosList({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const videoUrl = extractUrl(
-                                      video.field_6881
+                                      video.field_6881,
                                     );
                                     if (videoUrl) {
                                       handleConvertToCFR(video.id, videoUrl);
                                     } else {
                                       setError(
-                                        'No video URL found for CFR conversion'
+                                        'No video URL found for CFR conversion',
                                       );
                                     }
                                   }}
@@ -6470,10 +6471,10 @@ export default function OriginalVideosList({
                                         ? 'Converting to CFR 30fps...'
                                         : 'Another CFR conversion in progress'
                                       : !extractUrl(video.field_6881)
-                                      ? 'No video URL available'
-                                      : !!extractUrl(video.field_6908)
-                                      ? 'Video already converted to CFR'
-                                      : 'Convert to Constant Frame Rate (30fps)'
+                                        ? 'No video URL available'
+                                        : !!extractUrl(video.field_6908)
+                                          ? 'Video already converted to CFR'
+                                          : 'Convert to Constant Frame Rate (30fps)'
                                   }
                                 >
                                   {convertingToCFR === video.id ||
@@ -6489,13 +6490,13 @@ export default function OriginalVideosList({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const videoUrl = extractUrl(
-                                      video.field_6881
+                                      video.field_6881,
                                     );
                                     if (videoUrl) {
                                       handleOptimizeSilence(video.id, videoUrl);
                                     } else {
                                       setError(
-                                        'No video URL found for silence optimization'
+                                        'No video URL found for silence optimization',
                                       );
                                     }
                                   }}
@@ -6515,16 +6516,16 @@ export default function OriginalVideosList({
                                           })...`
                                         : 'Another silence optimization in progress'
                                       : sceneLoading.optimizingSilenceVideo !==
-                                        null
-                                      ? sceneLoading.optimizingSilenceVideo ===
-                                        video.id
-                                        ? 'Optimizing silence in batch mode...'
-                                        : 'Batch silence optimization in progress'
-                                      : !extractUrl(video.field_6881)
-                                      ? 'No video URL available'
-                                      : !!extractUrl(video.field_6907)
-                                      ? 'Video already optimized for silence'
-                                      : `Speed up & mute silent parts (${silenceSpeedRate}x)`
+                                          null
+                                        ? sceneLoading.optimizingSilenceVideo ===
+                                          video.id
+                                          ? 'Optimizing silence in batch mode...'
+                                          : 'Batch silence optimization in progress'
+                                        : !extractUrl(video.field_6881)
+                                          ? 'No video URL available'
+                                          : !!extractUrl(video.field_6907)
+                                            ? 'Video already optimized for silence'
+                                            : `Speed up & mute silent parts (${silenceSpeedRate}x)`
                                   }
                                 >
                                   {optimizingSilence === video.id ||

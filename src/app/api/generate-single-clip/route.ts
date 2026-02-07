@@ -60,13 +60,13 @@ async function getOriginalVideoData(videoId: string) {
       headers: {
         Authorization: `JWT ${token}`,
       },
-    }
+    },
   );
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `Failed to fetch original video: ${response.status} ${errorText}`
+      `Failed to fetch original video: ${response.status} ${errorText}`,
     );
   }
 
@@ -84,7 +84,7 @@ async function getSceneData(sceneId: string) {
       headers: {
         Authorization: `JWT ${token}`,
       },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -125,19 +125,19 @@ function extractVideoUrl(field: BaserowFileField): string | null {
 async function createVideoClip(
   videoUrl: string,
   scene: BaserowRow,
-  videoId?: number
+  videoId?: number,
 ) {
   const startTime = parseFloat(String(scene.field_6898));
   const endTime = parseFloat(String(scene.field_6897));
   const duration = endTime - startTime;
 
   console.log(
-    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s, videoId=${videoId}`
+    `[FFMPEG] Scene ${scene.id}: start=${scene.field_6898}s, end=${scene.field_6897}s, duration=${duration}s, videoId=${videoId}`,
   );
   console.log(
     `[TIMING] Scene ${
       scene.id
-    }: Starting FFmpeg processing at ${new Date().toISOString()}`
+    }: Starting FFmpeg processing at ${new Date().toISOString()}`,
   );
   const ffmpegStartTime = Date.now();
 
@@ -147,8 +147,10 @@ async function createVideoClip(
       inputUrl: videoUrl,
       startTime: String(scene.field_6898),
       endTime: String(scene.field_6897),
-      useHardwareAcceleration: true,
-      videoBitrate: '6000k', // High quality for good results
+      // Force CRF-based software encoding for consistent quality.
+      // Hardware (videotoolbox) is bitrate-based and can vary scene-to-scene.
+      forceSoftwareEncoding: true,
+      useHardwareAcceleration: false,
       sceneId: scene.id.toString(),
       videoId: videoId,
       cleanup: true, // Clean up local files after upload
@@ -157,7 +159,7 @@ async function createVideoClip(
     const ffmpegEndTime = Date.now();
     const processingTime = ffmpegEndTime - ffmpegStartTime;
     console.log(
-      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s) - Hardware accelerated + MinIO uploaded!`
+      `[FFMPEG] Scene ${scene.id} completed in ${processingTime}ms (start=${startTime}s) - Hardware accelerated + MinIO uploaded!`,
     );
     console.log(`[UPLOAD] Scene ${scene.id} uploaded to: ${result.uploadUrl}`);
 
@@ -189,13 +191,13 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to update scene with clip URL: ${response.status} ${errorText}`
+        `Failed to update scene with clip URL: ${response.status} ${errorText}`,
       );
     }
 
@@ -214,7 +216,7 @@ export async function POST(request: NextRequest) {
     if (!sceneId) {
       return NextResponse.json(
         { error: 'Scene ID is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -222,7 +224,7 @@ export async function POST(request: NextRequest) {
       'Generating clip for scene:',
       sceneId,
       'videoId:',
-      requestVideoId
+      requestVideoId,
     );
 
     // Step 1: Get the scene data
@@ -261,7 +263,7 @@ export async function POST(request: NextRequest) {
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

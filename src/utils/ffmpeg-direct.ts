@@ -59,7 +59,7 @@ function runFFmpegSpawn(args: string[]): Promise<void> {
 function uploadLargeFileToMinio(
   filePath: string,
   uploadUrl: string,
-  contentType: string
+  contentType: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const fileStream = createReadStream(filePath);
@@ -110,10 +110,15 @@ export interface TrimOptions {
   outputPath?: string;
   useHardwareAcceleration?: boolean;
   videoBitrate?: string;
+  /**
+   * Force software encoding (libx264 CRF) instead of hardware bitrate mode.
+   * Useful for more consistent visual quality across clips.
+   */
+  forceSoftwareEncoding?: boolean;
 }
 
 export async function trimVideoWithFFmpeg(
-  options: TrimOptions
+  options: TrimOptions,
 ): Promise<string> {
   const {
     inputUrl,
@@ -122,6 +127,7 @@ export async function trimVideoWithFFmpeg(
     outputPath,
     useHardwareAcceleration = true,
     videoBitrate = '6000k',
+    forceSoftwareEncoding = false,
   } = options;
 
   // Create a unique output filename
@@ -130,10 +136,13 @@ export async function trimVideoWithFFmpeg(
     `clip_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
   const fullOutputPath = path.resolve('/tmp', outputFileName);
 
-  // Try hardware acceleration first, then fallback to software
-  const attempts = useHardwareAcceleration
-    ? ['hardware', 'software']
-    : ['software'];
+  // Try hardware acceleration first, then fallback to software.
+  // If forceSoftwareEncoding is true, always use the software path (CRF-based).
+  const attempts = forceSoftwareEncoding
+    ? ['software']
+    : useHardwareAcceleration
+      ? ['hardware', 'software']
+      : ['software'];
 
   for (let i = 0; i < attempts.length; i++) {
     const attempt = attempts[i];
@@ -165,7 +174,7 @@ export async function trimVideoWithFFmpeg(
           '-allow_sw',
           '1', // Allow software fallback if hardware fails
           '-realtime',
-          '0' // Disable realtime encoding for better quality
+          '0', // Disable realtime encoding for better quality
         );
       } else {
         ffmpegCommand.push(
@@ -174,7 +183,7 @@ export async function trimVideoWithFFmpeg(
           '-preset',
           'medium',
           '-crf',
-          '20'
+          '20',
         );
       }
 
@@ -188,7 +197,7 @@ export async function trimVideoWithFFmpeg(
         '2',
         '-avoid_negative_ts',
         'make_zero',
-        `"${fullOutputPath}"`
+        `"${fullOutputPath}"`,
       );
 
       const commandString = ffmpegCommand.join(' ');
@@ -203,7 +212,7 @@ export async function trimVideoWithFFmpeg(
       console.log(
         `FFmpeg completed in ${
           execEndTime - execStartTime
-        }ms (${attempt} encoding)`
+        }ms (${attempt} encoding)`,
       );
 
       // Check if output file exists
@@ -225,7 +234,7 @@ export async function trimVideoWithFFmpeg(
         throw new Error(
           `FFmpeg processing failed after ${attempts.length} attempts: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       }
 
@@ -242,7 +251,7 @@ export async function trimMultipleVideosWithFFmpeg(
   inputUrl: string,
   segments: Array<{ start: string; end: string; id: string }>,
   useHardwareAcceleration: boolean = true,
-  videoBitrate: string = '6000k'
+  videoBitrate: string = '6000k',
 ): Promise<string[]> {
   const results: string[] = [];
 
@@ -276,7 +285,7 @@ export interface SpeedUpOptions {
 }
 
 export async function speedUpVideoWithFFmpeg(
-  options: SpeedUpOptions
+  options: SpeedUpOptions,
 ): Promise<string> {
   const {
     inputUrl,
@@ -346,7 +355,7 @@ export async function speedUpVideoWithFFmpeg(
         '-map',
         '[v]',
         '-map',
-        '[a]'
+        '[a]',
       );
 
       // Add video encoding options (same as trimming for consistent format)
@@ -359,7 +368,7 @@ export async function speedUpVideoWithFFmpeg(
           '-allow_sw',
           '1', // Allow software fallback if hardware fails
           '-realtime',
-          '0' // Disable realtime encoding for better quality
+          '0', // Disable realtime encoding for better quality
         );
       } else {
         ffmpegCommand.push(
@@ -368,7 +377,7 @@ export async function speedUpVideoWithFFmpeg(
           '-preset',
           'medium',
           '-crf',
-          '20'
+          '20',
         );
       }
 
@@ -382,7 +391,7 @@ export async function speedUpVideoWithFFmpeg(
         '2',
         '-avoid_negative_ts',
         'make_zero',
-        `"${fullOutputPath}"`
+        `"${fullOutputPath}"`,
       );
 
       const commandString = ffmpegCommand.join(' ');
@@ -396,7 +405,7 @@ export async function speedUpVideoWithFFmpeg(
       console.log(
         `FFmpeg speedup completed in ${
           execEndTime - execStartTime
-        }ms (${attempt} encoding, ${speed}x speed)`
+        }ms (${attempt} encoding, ${speed}x speed)`,
       );
 
       // Check if output file exists
@@ -420,7 +429,7 @@ export async function speedUpVideoWithFFmpeg(
             attempts.length
           } attempts: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       }
 
@@ -439,7 +448,7 @@ export async function speedUpVideoWithFFmpeg(
 export async function uploadToMinio(
   filePath: string,
   filename?: string,
-  contentType: string = 'video/mp4'
+  contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
     // Check file size first
@@ -451,7 +460,7 @@ export async function uploadToMinio(
       `[STAT] File size check took ${statEnd - statStart}ms (${(
         fileSize /
         (1024 * 1024)
-      ).toFixed(2)}MB)`
+      ).toFixed(2)}MB)`,
     );
 
     // Generate filename if not provided
@@ -468,8 +477,8 @@ export async function uploadToMinio(
       // 100MB limit for streaming
       console.log(
         `Large file detected (${(fileSize / (1024 * 1024)).toFixed(
-          2
-        )}MB), using streaming upload`
+          2,
+        )}MB), using streaming upload`,
       );
 
       // Verify file exists before attempting upload
@@ -479,13 +488,13 @@ export async function uploadToMinio(
         const verifyStats = await stat(filePath);
         if (verifyStats.size !== fileSize) {
           console.warn(
-            `File size changed during upload preparation: ${fileSize} -> ${verifyStats.size}`
+            `File size changed during upload preparation: ${fileSize} -> ${verifyStats.size}`,
           );
         }
       } catch (accessError) {
         console.error(`File access error: ${accessError}`);
         throw new Error(
-          `File does not exist or is not accessible: ${filePath}`
+          `File does not exist or is not accessible: ${filePath}`,
         );
       }
 
@@ -512,14 +521,14 @@ export async function uploadToMinio(
       } as RequestInit & { duplex: 'half' });
       const streamEnd = Date.now();
       console.log(
-        `[STREAM] Streaming upload took ${streamEnd - streamStart}ms`
+        `[STREAM] Streaming upload took ${streamEnd - streamStart}ms`,
       );
 
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text();
         console.error('MinIO streaming upload error:', errorText);
         throw new Error(
-          `MinIO streaming upload error: ${uploadResponse.status}`
+          `MinIO streaming upload error: ${uploadResponse.status}`,
         );
       }
 
@@ -531,7 +540,7 @@ export async function uploadToMinio(
         await access(filePath);
       } catch (accessError) {
         throw new Error(
-          `File does not exist or is not accessible: ${filePath}`
+          `File does not exist or is not accessible: ${filePath}`,
         );
       }
 
@@ -566,7 +575,7 @@ export async function uploadToMinio(
     throw new Error(
       `MinIO upload failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -579,7 +588,7 @@ export async function createVideoClipWithUpload(
     sceneId?: string;
     videoId?: number | string;
     cleanup?: boolean;
-  }
+  },
 ): Promise<{ localPath: string; uploadUrl: string }> {
   const { sceneId, videoId, cleanup = true, ...trimOptions } = options;
 
@@ -595,8 +604,8 @@ export async function createVideoClipWithUpload(
       videoId && sceneId
         ? `video_${videoId}_scene_${sceneId}_clip_${timestamp}.mp4`
         : sceneId
-        ? `scene_${sceneId}_clip_${timestamp}.mp4`
-        : `clip_${timestamp}.mp4`;
+          ? `scene_${sceneId}_clip_${timestamp}.mp4`
+          : `clip_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
@@ -636,7 +645,7 @@ export async function speedUpVideoWithUpload(
     sceneId?: string;
     videoId?: number | string;
     cleanup?: boolean;
-  }
+  },
 ): Promise<{ localPath: string; uploadUrl: string }> {
   const { sceneId, videoId, cleanup = true, ...speedUpOptions } = options;
 
@@ -648,7 +657,7 @@ export async function speedUpVideoWithUpload(
     localPath = await speedUpVideoWithFFmpeg(speedUpOptions);
     const ffmpegEnd = Date.now();
     console.log(
-      `[FFMPEG] Scene ${sceneId} processing took ${ffmpegEnd - ffmpegStart}ms`
+      `[FFMPEG] Scene ${sceneId} processing took ${ffmpegEnd - ffmpegStart}ms`,
     );
 
     // Step 2: Generate filename for upload
@@ -658,15 +667,15 @@ export async function speedUpVideoWithUpload(
       videoId && sceneId
         ? `video_${videoId}_scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
         : sceneId
-        ? `scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
-        : `spedup_${speedSuffix}_${timestamp}.mp4`;
+          ? `scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
+          : `spedup_${speedSuffix}_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadStart = Date.now();
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
     const uploadEnd = Date.now();
     console.log(
-      `[MINIO] Scene ${sceneId} upload took ${uploadEnd - uploadStart}ms`
+      `[MINIO] Scene ${sceneId} upload took ${uploadEnd - uploadStart}ms`,
     );
 
     // Step 4: Cleanup local file if requested
@@ -678,7 +687,7 @@ export async function speedUpVideoWithUpload(
         console.log(
           `[CLEANUP] Scene ${sceneId} cleanup took ${
             cleanupEnd - cleanupStart
-          }ms - removed: ${localPath}`
+          }ms - removed: ${localPath}`,
         );
       } catch (cleanupError) {
         console.warn(`Failed to cleanup local file: ${cleanupError}`);
@@ -709,7 +718,7 @@ export async function speedUpVideoWithUpload(
 export async function createTypingEffectVideo(
   inputVideoUrl: string,
   text: string,
-  outputPath?: string
+  outputPath?: string,
 ): Promise<string> {
   const outputFileName =
     outputPath ||
@@ -737,7 +746,7 @@ export async function createTypingEffectVideo(
 
     // Get video dimensions from the first video stream
     const videoStream = probeData.streams.find(
-      (stream: FFmpegStream) => stream.codec_type === 'video'
+      (stream: FFmpegStream) => stream.codec_type === 'video',
     );
     const videoWidth = videoStream.width;
     const videoHeight = videoStream.height;
@@ -746,7 +755,7 @@ export async function createTypingEffectVideo(
     // Use about 1.5% of the video height as font size, with min 16 and max 40
     const fontSize = Math.max(
       16,
-      Math.min(40, Math.round(videoHeight * 0.015))
+      Math.min(40, Math.round(videoHeight * 0.015)),
     );
 
     // Split text into characters for typing effect
@@ -794,7 +803,7 @@ export async function createTypingEffectVideo(
 
       srtContent += `${index + 1}\n`;
       srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(
-        endTime
+        endTime,
       )}\n`;
       srtContent += `${frame.text}\n\n`;
     });
@@ -807,7 +816,7 @@ export async function createTypingEffectVideo(
     const typingSoundPath = path.resolve(
       process.cwd(),
       'public',
-      'type-sound.WAV'
+      'type-sound.WAV',
     );
 
     // Build FFmpeg filter based on whether we need to slow down the video
@@ -878,7 +887,7 @@ export async function createTypingEffectVideo(
     throw new Error(
       `Typing effect creation failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -919,7 +928,7 @@ export async function createTypingEffectVideoWithUpload(options: {
     console.log(
       `[FFMPEG] Scene ${sceneId} (video ${videoId}) typing effect processing took ${
         ffmpegEnd - ffmpegStart
-      }ms`
+      }ms`,
     );
 
     // Step 2: Generate filename for upload
@@ -928,8 +937,8 @@ export async function createTypingEffectVideoWithUpload(options: {
       videoId && sceneId
         ? `video_${videoId}_scene_${sceneId}_typing_${timestamp}.mp4`
         : sceneId
-        ? `scene_${sceneId}_typing_${timestamp}.mp4`
-        : `typing_effect_${timestamp}.mp4`;
+          ? `scene_${sceneId}_typing_${timestamp}.mp4`
+          : `typing_effect_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadStart = Date.now();
@@ -938,7 +947,7 @@ export async function createTypingEffectVideoWithUpload(options: {
     console.log(
       `[UPLOAD] Scene ${sceneId} (video ${videoId}) typing effect uploaded in ${
         uploadEnd - uploadStart
-      }ms`
+      }ms`,
     );
 
     return { localPath, uploadUrl };
