@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
     const overlayWindowDuration = Math.max(0.001, endTime - startTime);
     const entranceAnimDuration = Math.min(
       0.6,
-      Math.max(0.15, overlayWindowDuration * 0.35)
+      Math.max(0.15, overlayWindowDuration * 0.35),
     );
 
     // Preview performance tuning
@@ -237,6 +237,8 @@ export async function POST(request: NextRequest) {
     const previewVideoEncodeArgs = preview
       ? '-c:v libx264 -preset ultrafast -crf 33 -tune zerolatency -pix_fmt yuv420p -movflags +faststart'
       : '';
+    const finalVideoEncodeArgs =
+      '-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -movflags +faststart';
     const previewAudioEncodeArgs = preview
       ? '-c:a aac -b:a 96k -ar 44100 -ac 2'
       : '';
@@ -269,12 +271,12 @@ export async function POST(request: NextRequest) {
         if (cached) {
           videoInput = cached;
           ({ stdout: probeOutput } = await execAsync(
-            `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`
+            `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`,
           ));
         } else {
           videoInput = videoUrl;
           ({ stdout: probeOutput } = await execAsync(
-            `ffprobe -v quiet -print_format json -show_format -show_streams "${videoUrl}"`
+            `ffprobe -v quiet -print_format json -show_format -show_streams "${videoUrl}"`,
           ));
         }
       } else {
@@ -284,14 +286,14 @@ export async function POST(request: NextRequest) {
         });
         videoInput = cached;
         ({ stdout: probeOutput } = await execAsync(
-          `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`
+          `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`,
         ));
       }
       if (preview) {
         console.log(
           `[preview] ffprobe done in ${Date.now() - probeStartMs}ms (remote=${
             canUseRemoteInput && videoInput === videoUrl
-          }, cached=${videoInput !== videoUrl})`
+          }, cached=${videoInput !== videoUrl})`,
         );
       }
     } catch (err) {
@@ -302,11 +304,11 @@ export async function POST(request: NextRequest) {
       });
       videoInput = cached;
       ({ stdout: probeOutput } = await execAsync(
-        `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`
+        `ffprobe -v quiet -print_format json -show_format -show_streams "${cached}"`,
       ));
       if (preview) {
         console.log(
-          `[preview] ffprobe fallback cache+probe completed (remote failed)`
+          `[preview] ffprobe fallback cache+probe completed (remote failed)`,
         );
       }
     }
@@ -314,7 +316,7 @@ export async function POST(request: NextRequest) {
     // Get video dimensions
     const probeData = JSON.parse(probeOutput) as FFprobeOutput;
     const videoStream = probeData.streams?.find(
-      (s) => s.codec_type === 'video'
+      (s) => s.codec_type === 'video',
     );
     if (!videoStream) {
       throw new Error('No video stream found');
@@ -392,8 +394,8 @@ export async function POST(request: NextRequest) {
           Math.min(
             Math.max(0.1, videoDuration - segmentStart),
             Math.max(0.1, endTime - segmentStart + previewTailPadSeconds),
-            previewMaxSeconds
-          )
+            previewMaxSeconds,
+          ),
         )
       : Math.max(0.1, videoDuration);
     const tStart = preview ? Math.max(0, startTime - segmentStart) : startTime;
@@ -417,7 +419,7 @@ export async function POST(request: NextRequest) {
 
     if (hasAudio) {
       const audioStream = probeData.streams?.find(
-        (s) => s.codec_type === 'audio'
+        (s) => s.codec_type === 'audio',
       );
       if (audioStream) {
         if (typeof audioStream.codec_name === 'string') {
@@ -436,8 +438,8 @@ export async function POST(request: NextRequest) {
       originalAudioChannels === 1
         ? 'mono'
         : originalAudioChannels === 2
-        ? 'stereo'
-        : 'stereo';
+          ? 'stereo'
+          : 'stereo';
 
     // When mixing (amix), audio must be re-encoded; using the source bitrate can
     // cause noticeable generational loss after multiple renders, especially if
@@ -447,7 +449,7 @@ export async function POST(request: NextRequest) {
     const maxMixedAudioBitrate = 512000;
     const mixedAudioBitrate = Math.min(
       maxMixedAudioBitrate,
-      Math.max(originalAudioBitrate, minMixedAudioBitrate)
+      Math.max(originalAudioBitrate, minMixedAudioBitrate),
     );
 
     // Resolve optional overlay sound from /public/sounds
@@ -459,7 +461,7 @@ export async function POST(request: NextRequest) {
       if (base !== soundName) {
         return NextResponse.json(
           { error: 'Invalid sound file' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -471,7 +473,7 @@ export async function POST(request: NextRequest) {
       } catch {
         return NextResponse.json(
           { error: 'Sound file not found' },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -491,19 +493,19 @@ export async function POST(request: NextRequest) {
       // so adjacent strips meet cleanly with no gaps.
       const x0 = Math.max(
         0,
-        Math.min(videoWidth, Math.floor((leftPct / 100) * videoWidth))
+        Math.min(videoWidth, Math.floor((leftPct / 100) * videoWidth)),
       );
       const y0 = Math.max(
         0,
-        Math.min(videoHeight, Math.floor((topPct / 100) * videoHeight))
+        Math.min(videoHeight, Math.floor((topPct / 100) * videoHeight)),
       );
       const x1 = Math.max(
         0,
-        Math.min(videoWidth, Math.ceil((rightPct / 100) * videoWidth))
+        Math.min(videoWidth, Math.ceil((rightPct / 100) * videoWidth)),
       );
       const y1 = Math.max(
         0,
-        Math.min(videoHeight, Math.ceil((bottomPct / 100) * videoHeight))
+        Math.min(videoHeight, Math.ceil((bottomPct / 100) * videoHeight)),
       );
 
       const rectW = Math.max(0, x1 - x0);
@@ -553,7 +555,7 @@ export async function POST(request: NextRequest) {
         ? `[0:a]aresample=${audioSampleRateOut}[a0]`
         : `anullsrc=r=${audioSampleRateOut}:cl=${audioChannelLayoutOut},atrim=0:${Math.max(
             0,
-            baseAudioDuration
+            baseAudioDuration,
           )},asetpts=N/SR/TB[a0]`;
       const a1 = `[${soundInputIndex}:a]adelay=${soundDelayMs}:all=1,aresample=${audioSampleRateOut}[a1]`;
       const amix = `[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
@@ -572,12 +574,12 @@ export async function POST(request: NextRequest) {
         mime === 'image/png'
           ? 'png'
           : mime === 'image/gif'
-          ? 'gif'
-          : mime === 'image/webp'
-          ? 'webp'
-          : mime === 'image/jpeg'
-          ? 'jpg'
-          : sniffed?.ext || 'png';
+            ? 'gif'
+            : mime === 'image/webp'
+              ? 'webp'
+              : mime === 'image/jpeg'
+                ? 'jpg'
+                : sniffed?.ext || 'png';
 
       let imagePath = path.join(tempDir, `overlay.${ext}`);
       let effectiveMime = mime;
@@ -634,7 +636,7 @@ export async function POST(request: NextRequest) {
 
       // Global progress (main timeline) for entrance animations
       const pGlobal = escExpr(
-        `min(max((t-${tStart})/${entranceAnimDuration},0),1)`
+        `min(max((t-${tStart})/${entranceAnimDuration},0),1)`,
       );
       const easeGlobal = escExpr(`(1-pow(1-${pGlobal},3))`);
 
@@ -655,7 +657,7 @@ export async function POST(request: NextRequest) {
 
       // Ensure the scale snaps to 1 after the entrance animation window.
       const scaleExpr = escExpr(
-        `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`
+        `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`,
       );
 
       // Build overlay filter chain.
@@ -668,7 +670,7 @@ export async function POST(request: NextRequest) {
         overlayFilters.push(`setpts=PTS-STARTPTS+(${tStart})/TB`);
       }
       overlayFilters.push(
-        `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase`
+        `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase`,
       );
       overlayFilters.push(`crop=${overlayWidth}:${overlayHeight}`);
       overlayFilters.push('format=rgba');
@@ -685,8 +687,8 @@ export async function POST(request: NextRequest) {
         overlayAnimation === 'slideLeft'
           ? `(W*0.25*(1-${easeGlobal}))`
           : overlayAnimation === 'slideRight'
-          ? `(-W*0.25*(1-${easeGlobal}))`
-          : `0`;
+            ? `(-W*0.25*(1-${easeGlobal}))`
+            : `0`;
       const slideDY =
         overlayAnimation === 'slideUp' ? `(H*0.25*(1-${easeGlobal}))` : `0`;
       const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
@@ -695,8 +697,8 @@ export async function POST(request: NextRequest) {
       const baseVideo = preview
         ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
         : tintFilter
-        ? `[0:v]${tintFilter}[base]`
-        : null;
+          ? `[0:v]${tintFilter}[base]`
+          : null;
       const baseRef = preview || tintFilter ? `[base]` : `[0:v]`;
 
       // If the overlay stream ends early (e.g. non-looping GIF), repeat the last
@@ -712,28 +714,28 @@ export async function POST(request: NextRequest) {
       if (overlaySoundPath) {
         const audio = buildAudioFilter(2);
         const parts = [baseVideo, overlayScale, overlayFilter, audio].filter(
-          Boolean
+          Boolean,
         );
         ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
-          ';'
+          ';',
         )}${videoPost}" -map "${vmap}" -map "[aout]" ${
           preview
             ? previewAudioEncodeArgs
             : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-                mixedAudioBitrate / 1000
+                mixedAudioBitrate / 1000,
               )}k -ac ${originalAudioChannels}`
         } ${
-          preview ? previewVideoEncodeArgs : ''
+          preview ? previewVideoEncodeArgs : finalVideoEncodeArgs
         } -avoid_negative_ts make_zero -shortest "${outputPath}"`;
       } else {
         if (tintFilter) {
           ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -filter_complex "[0:v]${tintFilter}[base];${overlayScale};${overlayFilter}${videoPost}" -map "${vmap}" -map 0:a? ${
             preview ? previewAudioEncodeArgs : '-c:a copy'
-          } ${preview ? previewVideoEncodeArgs : ''} -shortest "${outputPath}"`;
+          } ${preview ? previewVideoEncodeArgs : finalVideoEncodeArgs} -shortest "${outputPath}"`;
         } else {
           ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}${videoPost}" -map "${vmap}" -map 0:a? ${
             preview ? previewAudioEncodeArgs : '-c:a copy'
-          } ${preview ? previewVideoEncodeArgs : ''} -shortest "${outputPath}"`;
+          } ${preview ? previewVideoEncodeArgs : finalVideoEncodeArgs} -shortest "${outputPath}"`;
         }
       }
     } else if (overlayText) {
@@ -742,8 +744,8 @@ export async function POST(request: NextRequest) {
         16,
         Math.min(
           500,
-          (sizeWidth / 100) * Math.min(baseVideoWidth, baseVideoHeight) * 0.2
-        )
+          (sizeWidth / 100) * Math.min(baseVideoWidth, baseVideoHeight) * 0.2,
+        ),
       );
 
       const escapeFilterValue = (value: string) =>
@@ -769,22 +771,22 @@ export async function POST(request: NextRequest) {
         typeof textStyling?.textOpacity === 'number'
           ? textStyling.textOpacity
           : textStyling?.textOpacity != null
-          ? Number(textStyling.textOpacity)
-          : undefined;
+            ? Number(textStyling.textOpacity)
+            : undefined;
       // Background params
       const bgColor = textStyling?.bgColor || null;
       const bgOpacity =
         typeof textStyling?.bgOpacity === 'number'
           ? textStyling?.bgOpacity
           : textStyling?.bgOpacity
-          ? Number(textStyling?.bgOpacity)
-          : 1;
+            ? Number(textStyling?.bgOpacity)
+            : 1;
       const bgSize =
         typeof textStyling?.bgSize === 'number'
           ? textStyling?.bgSize
           : textStyling?.bgSize
-          ? Number(textStyling?.bgSize)
-          : 0;
+            ? Number(textStyling?.bgSize)
+            : 0;
       const borderWidth = textStyling?.borderWidth ?? 3;
       const borderColor = textStyling?.borderColor ?? 'black';
       const shadowX = textStyling?.shadowX ?? 8;
@@ -794,16 +796,16 @@ export async function POST(request: NextRequest) {
         typeof textStyling?.shadowOpacity === 'number'
           ? textStyling.shadowOpacity
           : textStyling?.shadowOpacity != null
-          ? Number(textStyling.shadowOpacity)
-          : 0.9;
+            ? Number(textStyling.shadowOpacity)
+            : 0.9;
       const fontFamily = textStyling?.fontFamily ?? 'Helvetica';
 
       // Map font family names to actual font files; use the generated mapping
       const mapping = Object.fromEntries(
-        Object.entries(ffmpegFonts).filter(([, value]) => value !== null)
+        Object.entries(ffmpegFonts).filter(([, value]) => value !== null),
       ) as Record<string, string>;
       const fontFileMap: { [key: string]: string } = Object.fromEntries(
-        Object.entries(mapping).filter(([k]) => k !== 'user_fonts_dir')
+        Object.entries(mapping).filter(([k]) => k !== 'user_fonts_dir'),
       );
 
       let fontFile =
@@ -820,7 +822,7 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         console.warn(
           `Font file ${fontFile} is not readable or missing; falling back to default`,
-          err
+          err,
         );
         fontFile = '/System/Library/Fonts/Helvetica.ttc';
       }
@@ -842,12 +844,12 @@ export async function POST(request: NextRequest) {
         const bgColorNormalized = normalizeColor(bgColor) || bgColor;
         const boxColorWithOpacity = `${bgColorNormalized}@${Math.max(
           0,
-          Math.min(1, Number(bgOpacity))
+          Math.min(1, Number(bgOpacity)),
         )}`;
         // Use drawtext built-in box so padding follows measured text_w/text_h.
         boxParams = `:box=1:boxcolor=${boxColorWithOpacity}:boxborderw=${Math.max(
           0,
-          Math.min(200, Number(bgSize))
+          Math.min(200, Number(bgSize)),
         )}`;
       }
 
@@ -863,11 +865,14 @@ export async function POST(request: NextRequest) {
       const paddingFromBorder = Math.ceil(Number(borderWidth) || 0);
       const paddingFromBg = Math.ceil(Number(bgSize) || 0);
       const paddingFromShadow = Math.ceil(
-        Math.max(Math.abs(Number(shadowX) || 0), Math.abs(Number(shadowY) || 0))
+        Math.max(
+          Math.abs(Number(shadowX) || 0),
+          Math.abs(Number(shadowY) || 0),
+        ),
       );
       const wrapPadPx = Math.min(
         120,
-        Math.max(2, paddingFromBorder + paddingFromBg + paddingFromShadow + 2)
+        Math.max(2, paddingFromBorder + paddingFromBg + paddingFromShadow + 2),
       );
 
       // Server-side wrapping: drawtext doesn't auto-wrap, so insert newlines.
@@ -942,7 +947,7 @@ export async function POST(request: NextRequest) {
       const escExpr = (s: string) => s.replace(/(?<!\\),/g, '\\,');
 
       const pGlobal = escExpr(
-        `min(max((t-${tStart})/${entranceAnimDuration},0),1)`
+        `min(max((t-${tStart})/${entranceAnimDuration},0),1)`,
       );
       const easeGlobal = escExpr(`(1-pow(1-${pGlobal},3))`);
 
@@ -968,15 +973,15 @@ export async function POST(request: NextRequest) {
         }
       })();
       const scaleExpr = escExpr(
-        `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`
+        `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`,
       );
 
       const slideDX =
         overlayAnimation === 'slideLeft'
           ? `(W*0.25*(1-${easeGlobal}))`
           : overlayAnimation === 'slideRight'
-          ? `(-W*0.25*(1-${easeGlobal}))`
-          : `0`;
+            ? `(-W*0.25*(1-${easeGlobal}))`
+            : `0`;
       const slideDY =
         overlayAnimation === 'slideUp' ? `(H*0.25*(1-${easeGlobal}))` : `0`;
 
@@ -986,8 +991,8 @@ export async function POST(request: NextRequest) {
       const baseVideo = preview
         ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
         : tintFilter
-        ? `[0:v]${tintFilter}[base]`
-        : null;
+          ? `[0:v]${tintFilter}[base]`
+          : null;
       const baseRef = preview || tintFilter ? `[base]` : `[0:v]`;
 
       // Keep output duration equal to the base video duration, but ensure the
@@ -1000,7 +1005,7 @@ export async function POST(request: NextRequest) {
       const textLayerDuration = Math.max(
         0.1,
         preview ? segmentDuration : videoDuration,
-        tEnd + oneFrame
+        tEnd + oneFrame,
       );
 
       const lineSpacing = Math.max(0, Math.round(fontSize * 0.22));
@@ -1034,15 +1039,15 @@ export async function POST(request: NextRequest) {
           preview
             ? previewAudioEncodeArgs
             : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-                mixedAudioBitrate / 1000
+                mixedAudioBitrate / 1000,
               )}k -ac ${originalAudioChannels}`
         } ${
-          preview ? previewVideoEncodeArgs : ''
+          preview ? previewVideoEncodeArgs : finalVideoEncodeArgs
         } -avoid_negative_ts make_zero "${outputPath}"`;
       } else {
         ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -filter_complex "${filterComplexWithPost}" -map "${vmap}" -map 0:a? ${
           preview ? previewAudioEncodeArgs : '-c:a copy'
-        } ${preview ? previewVideoEncodeArgs : ''} "${outputPath}"`;
+        } ${preview ? previewVideoEncodeArgs : finalVideoEncodeArgs} "${outputPath}"`;
       }
     } else if (tintFilter) {
       // Tint-only
@@ -1055,16 +1060,16 @@ export async function POST(request: NextRequest) {
           preview
             ? previewAudioEncodeArgs
             : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
-                mixedAudioBitrate / 1000
+                mixedAudioBitrate / 1000,
               )}k -ac ${originalAudioChannels}`
         } ${
-          preview ? previewVideoEncodeArgs : ''
+          preview ? previewVideoEncodeArgs : finalVideoEncodeArgs
         } -avoid_negative_ts make_zero "${outputPath}"`;
       } else {
         const vf = preview ? `${tintFilter},${previewBaseFilter}` : tintFilter;
         ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -vf "${vf}" -map 0:v:0 -map 0:a? ${
           preview ? previewAudioEncodeArgs : '-c:a copy'
-        } ${preview ? previewVideoEncodeArgs : ''} "${outputPath}"`;
+        } ${preview ? previewVideoEncodeArgs : finalVideoEncodeArgs} "${outputPath}"`;
       }
     } else {
       throw new Error('No overlay content provided');
@@ -1087,7 +1092,7 @@ export async function POST(request: NextRequest) {
       console.log(
         `[preview] total request time ${Date.now() - requestStartMs}ms (bytes=${
           body.byteLength
-        })`
+        })`,
       );
       return new NextResponse(body, {
         status: 200,
@@ -1106,7 +1111,7 @@ export async function POST(request: NextRequest) {
     const uploadUrl = await uploadToMinio(
       tempUploadPath,
       fileName,
-      'video/mp4'
+      'video/mp4',
     );
 
     await updateSceneRow(sceneId, {
@@ -1120,11 +1125,11 @@ export async function POST(request: NextRequest) {
       error instanceof Error
         ? error.message
         : typeof error === 'string'
-        ? error
-        : null;
+          ? error
+          : null;
     return NextResponse.json(
       { error: message || 'Failed to add overlay' },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     // Clean up temporary files
