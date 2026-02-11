@@ -1,5 +1,4 @@
-import OpenAI from 'openai';
-import { readFile, writeFile, unlink } from 'fs/promises';
+import { writeFile, unlink } from 'fs/promises';
 import path from 'path';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
 
@@ -8,18 +7,12 @@ type BaserowRow = {
   [key: string]: unknown;
 };
 
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
-
 const SCENES_TABLE_ID = 714;
 const IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
-const CHARACTER_IMAGE_RELATIVE_PATH = 'public/photos/character.png';
+const KIE_API_BASE = 'https://api.kie.ai/api/v1';
+const KIE_MODEL = 'nano-banana-pro';
+const KIE_POLL_INTERVAL_MS = 3000;
+const KIE_MAX_WAIT_MS = 300000;
 
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
@@ -54,7 +47,7 @@ async function getJWTToken(): Promise<string> {
 
 async function baserowGetJson<T>(
   pathName: string,
-  query?: Record<string, string>
+  query?: Record<string, string>,
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
   if (!baserowUrl) {
@@ -86,7 +79,7 @@ async function baserowGetJson<T>(
 
 async function baserowPatchJson<T>(
   pathName: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
   if (!baserowUrl) {
@@ -203,14 +196,235 @@ function mimeToExt(mime: string): string {
   return 'png';
 }
 
+function getKieApiKey(): string {
+  const key = process.env.KIE_API_KEY;
+  if (!key) {
+    throw new Error('Missing KIE_API_KEY');
+  }
+  return key;
+}
+
+type KieCreateTaskResponse = {
+  code?: number;
+  msg?: string;
+  data?: { taskId?: string };
+};
+
+type KieRecordInfoResponse = {
+  code?: number;
+  msg?: string;
+  data?: {
+    taskId?: string;
+    model?: string;
+    state?: 'waiting' | 'success' | 'fail' | string;
+    param?: string;
+    resultJson?: string;
+    failCode?: string | null;
+    failMsg?: string | null;
+    costTime?: number | null;
+    completeTime?: number | null;
+    createTime?: number | null;
+  };
+};
+
+async function createNanoBananaTask(
+  prompt: string,
+  imageInputs: string[],
+  aspectRatio: string = '16:9',
+  resolution: string = '2K',
+  outputFormat: string = 'png',
+): Promise<string> {
+  const apiKey = getKieApiKey();
+
+  const response = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: KIE_MODEL,
+      input: {
+        prompt,
+        image_input: imageInputs,
+        aspect_ratio: aspectRatio,
+        resolution,
+        output_format: outputFormat,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    throw new Error(`Kie createTask failed: ${response.status} ${t}`);
+  }
+
+  const json = (await response
+    .json()
+    .catch(() => null)) as KieCreateTaskResponse | null;
+  const taskId = json?.data?.taskId;
+  if (typeof taskId !== 'string' || !taskId.trim()) {
+    throw new Error(
+      `Kie createTask returned no taskId (${json?.msg ?? 'no msg'})`,
+    );
+  }
+
+  return taskId;
+}
+
+type NanoBananaPollResult = {
+  imageUrl: string | null;
+  state: string | null;
+  failMsg: string | null;
+  rawResultJson: unknown;
+};
+
+function extractFirstUrlFromString(value: string): string | null {
+  const normalized = value.replace(/\\\//g, '/');
+  const match = normalized.match(/https?:\/\/[^\s"'<>]+/i);
+  return match ? match[0] : null;
+}
+
+function extractResultUrl(resultJson: unknown): string | null {
+  if (!resultJson) return null;
+
+  let parsed: unknown = resultJson;
+  let depth = 0;
+  while (typeof parsed === 'string' && depth < 2) {
+    const urlCandidate = extractFirstUrlFromString(parsed);
+    if (urlCandidate) return urlCandidate;
+
+    try {
+      parsed = JSON.parse(parsed) as unknown;
+    } catch (error) {
+      return null;
+    }
+    depth += 1;
+  }
+
+  if (Array.isArray(parsed)) {
+    const first = parsed.find(
+      (item) => typeof item === 'string' && item.trim(),
+    );
+    return typeof first === 'string' ? first : null;
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+
+  const candidate = parsed as {
+    resultUrls?: unknown;
+    resultUrl?: unknown;
+    result_url?: unknown;
+    url?: unknown;
+    output?: unknown;
+    data?: unknown;
+    resultJson?: unknown;
+  };
+
+  if (candidate.resultJson) {
+    const nested = extractResultUrl(candidate.resultJson);
+    if (nested) return nested;
+  }
+
+  if (typeof candidate.resultUrl === 'string' && candidate.resultUrl.trim()) {
+    return candidate.resultUrl;
+  }
+
+  if (typeof candidate.result_url === 'string' && candidate.result_url.trim()) {
+    return candidate.result_url;
+  }
+
+  if (typeof candidate.url === 'string' && candidate.url.trim()) {
+    return candidate.url;
+  }
+
+  if (Array.isArray(candidate.resultUrls)) {
+    const firstUrl = candidate.resultUrls.find(
+      (u) => typeof u === 'string' && u.trim(),
+    );
+    if (typeof firstUrl === 'string') return firstUrl;
+  }
+
+  if (Array.isArray(candidate.output)) {
+    const first = candidate.output.find(
+      (item) => item && typeof item === 'object' && 'url' in item,
+    ) as { url?: unknown } | undefined;
+    if (first && typeof first.url === 'string' && first.url.trim()) {
+      return first.url;
+    }
+  }
+
+  if (candidate.data) {
+    return extractResultUrl(candidate.data);
+  }
+
+  return null;
+}
+
+async function fetchNanoBananaResult(
+  taskId: string,
+): Promise<NanoBananaPollResult> {
+  const apiKey = getKieApiKey();
+
+  const response = await fetch(
+    `${KIE_API_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    throw new Error(`Kie recordInfo failed: ${response.status} ${t}`);
+  }
+
+  const json = (await response
+    .json()
+    .catch(() => null)) as KieRecordInfoResponse | null;
+  const state = json?.data?.state ?? null;
+
+  if (state === 'fail') {
+    const failMsg = json?.data?.failMsg || json?.msg || 'Unknown failure';
+    return {
+      imageUrl: null,
+      state,
+      failMsg,
+      rawResultJson: json?.data?.resultJson ?? null,
+    };
+  }
+
+  const resultJson = json?.data?.resultJson ?? null;
+  const extracted =
+    state === 'success'
+      ? extractResultUrl(resultJson ?? json?.data ?? json)
+      : null;
+
+  if (state === 'success' && !extracted && resultJson) {
+    const snippet =
+      typeof resultJson === 'string'
+        ? resultJson.slice(0, 200)
+        : JSON.stringify(resultJson).slice(0, 200);
+    console.warn(
+      `Nano Banana success with no URL yet (taskId=${taskId}). resultJson snippet: ${snippet}`,
+    );
+  }
+
+  return {
+    imageUrl: extracted,
+    state,
+    failMsg: null,
+    rawResultJson: resultJson ?? json?.data ?? json,
+  };
+}
+
 export async function POST(req: Request) {
   try {
-    if (!process.env.OPENROUTER_API_KEY) {
-      return Response.json(
-        { error: 'Missing OPENROUTER_API_KEY' },
-        { status: 500 }
-      );
-    }
+    getKieApiKey();
 
     const body = (await req.json().catch(() => null)) as {
       sceneId?: unknown;
@@ -225,7 +439,7 @@ export async function POST(req: Request) {
 
     // Fetch current scene.
     const currentScene = await baserowGetJson<BaserowRow>(
-      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`
+      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
     );
 
     const videoId = extractLinkedVideoId(currentScene['field_6889']);
@@ -238,7 +452,7 @@ export async function POST(req: Request) {
         {
           [`filter__field_6889__equal`]: String(videoId),
           size: '200',
-        }
+        },
       );
       videoScenes = Array.isArray(page?.results) ? page.results : [];
     }
@@ -253,19 +467,19 @@ export async function POST(req: Request) {
         {
           error: 'Current scene is empty; cannot generate image',
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const contextScenes = orderedScenes.filter((scene) =>
-      Boolean(getSceneText(scene).trim())
+      Boolean(getSceneText(scene).trim()),
     );
     const fullScript = contextScenes.map(formatScriptLine).join(' ');
 
     const prompt = `You are a professional image creator for video clips. Your task is to analyze the script I provide and convert each scene into a single, clear visual that communicates the idea being spoken.
 
   GLOBAL CHARACTER RULES (must be in every prompt):
-  Character: "image 1" (use the attached reference image to keep the character consistent).
+  Character: "image 1" (use the provided reference image to keep the character consistent, if available).
   Art Style: thick black vector outlines, flat 2D art, high contrast.
 
   For each scene:
@@ -275,42 +489,48 @@ export async function POST(req: Request) {
 
   current scene: ${sceneId} ${currentText} Full script: ${fullScript}`;
 
-    console.log('generate-scene-image: sending prompt to OpenRouter');
+    console.log('generate-scene-image: sending prompt to Nano Banana Pro');
     console.log(prompt);
 
-    const characterPath = path.join(
-      process.cwd(),
-      CHARACTER_IMAGE_RELATIVE_PATH
-    );
-    const characterBuffer = await readFile(characterPath);
-    const characterDataUrl = `data:image/png;base64,${characterBuffer.toString(
-      'base64'
-    )}`;
+    const characterImageUrl = process.env.KIE_CHARACTER_IMAGE_URL?.trim();
+    const imageInputs = characterImageUrl ? [characterImageUrl] : [];
 
-    const completion = await openai.chat.completions.create({
-      model: 'google/gemini-3-pro-image-preview',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: characterDataUrl } },
-          ],
-        },
-      ],
-      // @ts-expect-error OpenRouter supports modalities for image output
-      modalities: ['image', 'text'],
-      temperature: 0.2,
-    });
+    const taskId = await createNanoBananaTask(prompt, imageInputs);
 
-    const imageUrl =
-      // @ts-expect-error OpenRouter image modality response
-      completion.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    let imageUrl = '';
+    let lastState: string | null = null;
+    let lastFailMsg: string | null = null;
+    const pollStart = Date.now();
+    while (Date.now() - pollStart < KIE_MAX_WAIT_MS) {
+      const pollResult = await fetchNanoBananaResult(taskId);
+      lastState = pollResult.state;
+      lastFailMsg = pollResult.failMsg;
 
-    if (typeof imageUrl !== 'string' || !imageUrl.trim()) {
-      return Response.json(
-        { error: 'Model returned no image' },
-        { status: 500 }
+      if (pollResult.state === 'fail') {
+        throw new Error(
+          `Nano Banana task failed: ${pollResult.failMsg || 'Unknown failure'}`,
+        );
+      }
+
+      if (pollResult.imageUrl) {
+        imageUrl = pollResult.imageUrl;
+        break;
+      }
+
+      if (pollResult.state === 'success') {
+        console.warn(
+          `Nano Banana reported success but no URL yet (taskId=${taskId}).`,
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, KIE_POLL_INTERVAL_MS));
+    }
+
+    if (!imageUrl) {
+      throw new Error(
+        `Nano Banana task timed out without a result (taskId=${taskId}, lastState=${
+          lastState ?? 'unknown'
+        })`,
       );
     }
 
@@ -331,7 +551,7 @@ export async function POST(req: Request) {
       const ct = res.headers.get('content-type');
       if (ct) imageMime = ct;
     } else {
-      throw new Error('Model returned an unsupported image URL format');
+      throw new Error('Nano Banana returned an unsupported image URL format');
     }
 
     const ext = mimeToExt(imageMime);
@@ -347,7 +567,7 @@ export async function POST(req: Request) {
         `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
         {
           [IMAGE_FIELD_KEY]: minioUrl,
-        }
+        },
       );
 
       return Response.json({ imageUrl: minioUrl });
@@ -364,7 +584,7 @@ export async function POST(req: Request) {
       {
         error: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
