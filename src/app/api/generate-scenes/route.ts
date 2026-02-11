@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!videoId || !captionsUrl) {
       return NextResponse.json(
         { error: 'Video ID and captions URL are required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -59,21 +59,21 @@ export async function POST(request: NextRequest) {
     const captionsResponse = await fetch(captionsUrl);
     if (!captionsResponse.ok) {
       throw new Error(
-        `Failed to fetch captions: ${captionsResponse.statusText}`
+        `Failed to fetch captions: ${captionsResponse.statusText}`,
       );
     }
 
     const captionsData = await captionsResponse.json();
     console.log(
       'Fetched captions data - length:',
-      Array.isArray(captionsData) ? captionsData.length : 'not array'
+      Array.isArray(captionsData) ? captionsData.length : 'not array',
     );
 
     // Step 2: Split into sentences and gaps
     const scenes = generateScenesFromTranscription(
       captionsData,
       videoId,
-      videoDuration
+      videoDuration,
     );
     console.log(`Generated ${scenes.length} scenes`);
 
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     // Step 4: Update the original video record with scene IDs
     console.log(
       `Updating original video ${videoId} with ${sceneIds.length} scene IDs:`,
-      sceneIds
+      sceneIds,
     );
     await updateOriginalVideoWithScenes(videoId, sceneIds);
 
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
 function generateScenesFromTranscription(
   transcriptionData: TranscriptionData,
   videoId: string,
-  videoDuration?: number
+  videoDuration?: number,
 ): SceneSegment[] {
   // Handle different data structures
   let segments: WordSegment[] = [];
@@ -131,14 +131,14 @@ function generateScenesFromTranscription(
   console.log(
     'Processing',
     segments.length,
-    'word segments into sentences and gaps'
+    'word segments into sentences and gaps',
   );
 
   if (!Array.isArray(segments) || segments.length === 0) {
     throw new Error(
       `No segments found in transcription data. Available keys: ${Object.keys(
-        transcriptionData || {}
-      ).join(', ')}`
+        transcriptionData || {},
+      ).join(', ')}`,
     );
   }
 
@@ -200,8 +200,8 @@ function generateScenesFromTranscription(
       console.error('Unexpected word object structure:', wordObj);
       throw new Error(
         `Invalid word object structure at index ${i}: ${JSON.stringify(
-          wordObj
-        )}`
+          wordObj,
+        )}`,
       );
     }
 
@@ -286,8 +286,8 @@ function generateScenesFromTranscription(
       console.log(
         `Skipping overlapping sentence: "${segment.words.substring(
           0,
-          50
-        )}..." (${segment.startTime.toFixed(2)}-${segment.endTime.toFixed(2)})`
+          50,
+        )}..." (${segment.startTime.toFixed(2)}-${segment.endTime.toFixed(2)})`,
       );
     }
   }
@@ -297,7 +297,7 @@ function generateScenesFromTranscription(
       sentenceSegments.length
     } unique sentences (removed ${
       processedSegments.length - sentenceSegments.length
-    } overlapping duplicates)`
+    } overlapping duplicates)`,
   );
 
   // Create final segments array including gaps
@@ -330,7 +330,7 @@ function generateScenesFromTranscription(
     // Add the sentence segment (preEndTime will be calculated after adjustments)
     if (sentence.startTime !== null && sentence.endTime !== null) {
       const sentenceKey = `${sentence.startTime.toFixed(
-        2
+        2,
       )}-${sentence.endTime.toFixed(2)}-${sentence.words}`;
       if (!sentenceSet.has(sentenceKey)) {
         sentenceSet.add(sentenceKey);
@@ -399,10 +399,10 @@ function generateScenesFromTranscription(
         // Only add if gap is meaningful (> 10ms)
         console.log(
           `✅ Adding trailing gap: ${trailingGapDuration.toFixed(
-            2
+            2,
           )}s (video ends at ${videoDuration}s, last word at ${
             lastSentenceSegment.endTime
-          }s)`
+          }s)`,
         );
         allSegments.push({
           id: segmentId++,
@@ -417,25 +417,49 @@ function generateScenesFromTranscription(
       } else {
         console.log(
           `⚠️ Trailing gap too small (${trailingGapDuration.toFixed(
-            3
-          )}s), not adding`
+            3,
+          )}s), not adding`,
         );
       }
     } else if (!lastSentenceSegment) {
       console.log('⚠️ No sentence segments found');
     } else {
       console.log(
-        `⚠️ No trailing gap (last word at ${lastSentenceSegment.endTime}s, video ends at ${videoDuration}s)`
+        `⚠️ No trailing gap (last word at ${lastSentenceSegment.endTime}s, video ends at ${videoDuration}s)`,
       );
     }
   } else if (!videoDuration) {
     console.log(
-      '⚠️ Video duration not provided - trailing silence cannot be detected'
+      '⚠️ Video duration not provided - trailing silence cannot be detected',
     );
   } else if (typeof videoDuration !== 'number') {
     console.log(
-      `⚠️ Video duration is not a number: ${typeof videoDuration} = ${videoDuration}`
+      `⚠️ Video duration is not a number: ${typeof videoDuration} = ${videoDuration}`,
     );
+  }
+
+  // Step 2.5: If a sentence is followed by an empty gap, extend the sentence
+  // by up to 1 second using the start of that gap.
+  console.log('Extending sentence end into following empty gaps...');
+  for (let i = 0; i < allSegments.length - 1; i++) {
+    const current = allSegments[i];
+    const next = allSegments[i + 1];
+
+    if (current.type !== 'sentence' || next.type !== 'gap') {
+      continue;
+    }
+
+    const availableGap = next.endTime - next.startTime;
+    if (availableGap <= 0) {
+      continue;
+    }
+
+    const extendBy = Math.min(1, availableGap);
+
+    current.endTime = parseFloat((current.endTime + extendBy).toFixed(2));
+    current.duration = parseFloat((current.duration + extendBy).toFixed(2));
+    next.startTime = parseFloat((next.startTime + extendBy).toFixed(2));
+    next.duration = parseFloat((next.endTime - next.startTime).toFixed(2));
   }
 
   // Step 3: Adjust timings based on gap durations
@@ -451,30 +475,30 @@ function generateScenesFromTranscription(
         // Negative gap means overlap - trim the previous sentence and adjust next sentence
         const overlapDuration = Math.abs(gapDuration);
         console.log(
-          `Processing negative gap ${gapDuration.toFixed(2)}s at index ${i}`
+          `Processing negative gap ${gapDuration.toFixed(2)}s at index ${i}`,
         );
         console.log(
           `Previous segment: ${allSegments[i - 1]?.type} ${allSegments[
             i - 1
-          ]?.startTime?.toFixed(2)}-${allSegments[i - 1]?.endTime?.toFixed(2)}`
+          ]?.startTime?.toFixed(2)}-${allSegments[i - 1]?.endTime?.toFixed(2)}`,
         );
         console.log(
           `Next segment: ${allSegments[i + 1]?.type} ${allSegments[
             i + 1
-          ]?.startTime?.toFixed(2)}-${allSegments[i + 1]?.endTime?.toFixed(2)}`
+          ]?.startTime?.toFixed(2)}-${allSegments[i + 1]?.endTime?.toFixed(2)}`,
         );
 
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
           allSegments[i - 1].endTime = parseFloat(
-            (allSegments[i - 1].endTime - overlapDuration).toFixed(2)
+            (allSegments[i - 1].endTime - overlapDuration).toFixed(2),
           );
           allSegments[i - 1].duration = parseFloat(
-            (allSegments[i - 1].duration - overlapDuration).toFixed(2)
+            (allSegments[i - 1].duration - overlapDuration).toFixed(2),
           );
           console.log(
             `Trimmed previous sentence by ${overlapDuration.toFixed(
-              2
-            )}s to resolve overlap`
+              2,
+            )}s to resolve overlap`,
           );
         }
 
@@ -484,15 +508,15 @@ function generateScenesFromTranscription(
           allSegments[i + 1].type === 'sentence'
         ) {
           allSegments[i + 1].startTime = parseFloat(
-            (allSegments[i + 1].startTime + overlapDuration).toFixed(2)
+            (allSegments[i + 1].startTime + overlapDuration).toFixed(2),
           );
           allSegments[i + 1].duration = parseFloat(
-            (allSegments[i + 1].duration - overlapDuration).toFixed(2)
+            (allSegments[i + 1].duration - overlapDuration).toFixed(2),
           );
           console.log(
             `Adjusted next sentence start time by +${overlapDuration.toFixed(
-              2
-            )}s to resolve overlap`
+              2,
+            )}s to resolve overlap`,
           );
         }
 
@@ -507,10 +531,10 @@ function generateScenesFromTranscription(
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
           // Gap is AFTER a sentence - add 0.1s to sentence end time
           allSegments[i - 1].endTime = parseFloat(
-            (allSegments[i - 1].endTime + adjustAmount).toFixed(2)
+            (allSegments[i - 1].endTime + adjustAmount).toFixed(2),
           );
           allSegments[i - 1].duration = parseFloat(
-            (allSegments[i - 1].duration + adjustAmount).toFixed(2)
+            (allSegments[i - 1].duration + adjustAmount).toFixed(2),
           );
         }
 
@@ -521,10 +545,10 @@ function generateScenesFromTranscription(
         ) {
           // Gap is BEFORE a sentence - subtract 0.1s from sentence start time
           allSegments[i + 1].startTime = parseFloat(
-            (allSegments[i + 1].startTime - adjustAmount).toFixed(2)
+            (allSegments[i + 1].startTime - adjustAmount).toFixed(2),
           );
           allSegments[i + 1].duration = parseFloat(
-            (allSegments[i + 1].duration + adjustAmount).toFixed(2)
+            (allSegments[i + 1].duration + adjustAmount).toFixed(2),
           );
         }
 
@@ -532,10 +556,10 @@ function generateScenesFromTranscription(
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
           // Gap starts later (sentence extended into gap)
           segment.startTime = parseFloat(
-            (segment.startTime + adjustAmount).toFixed(2)
+            (segment.startTime + adjustAmount).toFixed(2),
           );
           segment.duration = parseFloat(
-            (segment.duration - adjustAmount).toFixed(2)
+            (segment.duration - adjustAmount).toFixed(2),
           );
         }
         if (
@@ -544,10 +568,10 @@ function generateScenesFromTranscription(
         ) {
           // Gap ends earlier (sentence extended into gap)
           segment.endTime = parseFloat(
-            (segment.endTime - adjustAmount).toFixed(2)
+            (segment.endTime - adjustAmount).toFixed(2),
           );
           segment.duration = parseFloat(
-            (segment.duration - adjustAmount).toFixed(2)
+            (segment.duration - adjustAmount).toFixed(2),
           );
         }
       } else if (gapDuration > 0) {
@@ -557,15 +581,15 @@ function generateScenesFromTranscription(
         // Extend previous segment (if exists and is a sentence)
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
           allSegments[i - 1].endTime = parseFloat(
-            (allSegments[i - 1].endTime + gapDuration).toFixed(2)
+            (allSegments[i - 1].endTime + gapDuration).toFixed(2),
           );
           allSegments[i - 1].duration = parseFloat(
-            (allSegments[i - 1].duration + gapDuration).toFixed(2)
+            (allSegments[i - 1].duration + gapDuration).toFixed(2),
           );
           console.log(
             `Absorbed ${gapDuration.toFixed(
-              2
-            )}s gap into previous sentence (extended end time)`
+              2,
+            )}s gap into previous sentence (extended end time)`,
           );
         } else {
           // If no previous sentence, extend the next segment's start time (but don't overlap)
@@ -576,8 +600,8 @@ function generateScenesFromTranscription(
             // Instead of subtracting, just log that we're skipping to avoid overlaps
             console.log(
               `Small gap ${gapDuration.toFixed(
-                2
-              )}s before sentence - leaving as is to avoid overlap`
+                2,
+              )}s before sentence - leaving as is to avoid overlap`,
             );
           }
         }
@@ -591,7 +615,7 @@ function generateScenesFromTranscription(
 
   // Step 4: Remove gaps with zero duration and update IDs
   const filteredSegments = allSegments.filter(
-    (segment) => segment.duration > 0
+    (segment) => segment.duration > 0,
   );
   filteredSegments.forEach((segment, index) => {
     segment.id = index;
@@ -600,7 +624,7 @@ function generateScenesFromTranscription(
   console.log(
     `After gap adjustments: ${filteredSegments.length} segments (removed ${
       allSegments.length - filteredSegments.length
-    } zero-duration gaps)`
+    } zero-duration gaps)`,
   );
 
   // Step 4.5: Final pass to ensure sequential timing (fix any remaining overlaps)
@@ -614,12 +638,12 @@ function generateScenesFromTranscription(
       const overlap = previousSegment.endTime - currentSegment.startTime;
       currentSegment.startTime = previousSegment.endTime;
       currentSegment.endTime = parseFloat(
-        (currentSegment.startTime + currentSegment.duration).toFixed(2)
+        (currentSegment.startTime + currentSegment.duration).toFixed(2),
       );
       console.log(
         `Fixed overlap: adjusted segment ${i} start time by +${overlap.toFixed(
-          2
-        )}s`
+          2,
+        )}s`,
       );
     }
   }
@@ -633,7 +657,7 @@ function generateScenesFromTranscription(
     } else {
       // Each segment's preEndTime is the previous segment's endTime
       filteredSegments[i].preEndTime = parseFloat(
-        filteredSegments[i - 1].endTime.toFixed(2)
+        filteredSegments[i - 1].endTime.toFixed(2),
       );
     }
   }
@@ -649,7 +673,7 @@ async function getJWTToken() {
 
   if (!baserowUrl || !email || !password) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -667,7 +691,7 @@ async function getJWTToken() {
   if (!authResponse.ok) {
     const errorText = await authResponse.text();
     throw new Error(
-      `Authentication failed: ${authResponse.status} ${errorText}`
+      `Authentication failed: ${authResponse.status} ${errorText}`,
     );
   }
 
@@ -689,8 +713,8 @@ async function createSceneRecordsBatch(scenes: SceneSegment[]) {
 
     console.log(
       `Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(
-        scenes.length / BATCH_SIZE
-      )} (${chunk.length} items)`
+        scenes.length / BATCH_SIZE,
+      )} (${chunk.length} items)`,
     );
 
     // Prepare batch data for this chunk
@@ -716,13 +740,13 @@ async function createSceneRecordsBatch(scenes: SceneSegment[]) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(batchData),
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to create scene records in batch: ${response.status} ${errorText}`
+        `Failed to create scene records in batch: ${response.status} ${errorText}`,
       );
     }
 
@@ -731,7 +755,7 @@ async function createSceneRecordsBatch(scenes: SceneSegment[]) {
     allCreatedScenes.push(...batchItems);
 
     console.log(
-      `Successfully created ${batchItems.length} scenes in this batch`
+      `Successfully created ${batchItems.length} scenes in this batch`,
     );
   }
 
@@ -742,7 +766,7 @@ async function createSceneRecordsBatch(scenes: SceneSegment[]) {
 // Function to update original video record with scene IDs
 async function updateOriginalVideoWithScenes(
   videoId: string,
-  sceneIds: number[]
+  sceneIds: number[],
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
   const token = await getJWTToken();
@@ -759,13 +783,13 @@ async function updateOriginalVideoWithScenes(
       body: JSON.stringify({
         field_6866: sceneIds, // Scenes field - linked to table
       }),
-    }
+    },
   );
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `Failed to update original video record: ${response.status} ${errorText}`
+      `Failed to update original video record: ${response.status} ${errorText}`,
     );
   }
 
