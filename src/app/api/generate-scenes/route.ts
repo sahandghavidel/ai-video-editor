@@ -23,6 +23,9 @@ type TranscriptionData =
   | { segments: WordSegment[] }
   | { words: WordSegment[] };
 
+const VIDEOS_TABLE_ID = 713;
+const SCRIPT_FIELD_KEY = 'field_6854'; // Script (6854)
+
 export async function POST(request: NextRequest) {
   try {
     const {
@@ -69,12 +72,16 @@ export async function POST(request: NextRequest) {
       Array.isArray(captionsData) ? captionsData.length : 'not array',
     );
 
-    // Step 2: Split into sentences and gaps
-    const scenes = generateScenesFromTranscription(
-      captionsData,
-      videoId,
-      videoDuration,
-    );
+    // Step 2: Prefer script text when available, otherwise use transcription text
+    const scriptText = await getVideoScriptText(videoId);
+    const scenes = scriptText
+      ? generateScenesFromScriptAndTranscription(
+          scriptText,
+          captionsData,
+          videoId,
+          videoDuration,
+        )
+      : generateScenesFromTranscription(captionsData, videoId, videoDuration);
     console.log(`Generated ${scenes.length} scenes`);
 
     // Step 3: Create all scene records in Baserow using batch operation
@@ -108,25 +115,88 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Function to split transcription into sentences and gaps
-function generateScenesFromTranscription(
+function extractWordSegments(
+  transcriptionData: TranscriptionData,
+): WordSegment[] {
+  if (Array.isArray(transcriptionData)) {
+    return transcriptionData as WordSegment[];
+  }
+  if ('Segments' in transcriptionData) {
+    return transcriptionData.Segments;
+  }
+  if ('segments' in transcriptionData) {
+    return transcriptionData.segments;
+  }
+  if ('words' in transcriptionData) {
+    return transcriptionData.words;
+  }
+  return [];
+}
+
+function normalizeToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9']+/g, ' ')
+    .trim();
+}
+
+function splitScriptIntoSentences(scriptText: string): string[] {
+  const raw = scriptText.replace(/\r\n/g, '\n').replace(/\n+/g, '\n').trim();
+
+  if (!raw) return [];
+
+  const sentences: string[] = [];
+  let buffer = '';
+
+  const flush = () => {
+    const trimmed = buffer.trim();
+    if (trimmed) sentences.push(trimmed);
+    buffer = '';
+  };
+
+  const isSentenceBoundary = (
+    current: string,
+    next: string | undefined,
+    nextNonSpace: string | undefined,
+  ) => {
+    if (!/[.!?]/.test(current)) return false;
+    if (!next || next === '\n') return true;
+    if (!/\s/.test(next)) return false;
+    if (!nextNonSpace) return true;
+    return /[A-Z0-9"'\[]/.test(nextNonSpace);
+  };
+
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
+    buffer += char;
+
+    if (char === '\n') {
+      flush();
+      continue;
+    }
+
+    const next = raw[i + 1];
+    let nextNonSpace: string | undefined;
+    if (next) {
+      let j = i + 1;
+      while (j < raw.length && /\s/.test(raw[j])) j += 1;
+      nextNonSpace = raw[j];
+    }
+
+    if (isSentenceBoundary(char, next, nextNonSpace)) {
+      flush();
+    }
+  }
+
+  flush();
+  return sentences;
+}
+
+function buildSentenceSegmentsFromTranscription(
   transcriptionData: TranscriptionData,
   videoId: string,
-  videoDuration?: number,
 ): SceneSegment[] {
-  // Handle different data structures
-  let segments: WordSegment[] = [];
-
-  if (Array.isArray(transcriptionData)) {
-    // Direct array of word objects
-    segments = transcriptionData;
-  } else if ('Segments' in transcriptionData) {
-    segments = transcriptionData.Segments;
-  } else if ('segments' in transcriptionData) {
-    segments = transcriptionData.segments;
-  } else if ('words' in transcriptionData) {
-    segments = transcriptionData.words;
-  }
+  const segments = extractWordSegments(transcriptionData);
 
   console.log(
     'Processing',
@@ -160,13 +230,24 @@ function generateScenesFromTranscription(
       'ave',
       'blvd',
     ];
-    const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
+    const trimmed = word.trim();
+    const cleanWord = trimmed.toLowerCase().replace(/[^a-z]/g, '');
 
     if (abbreviations.includes(cleanWord)) {
       return false;
     }
 
-    return /[.!?]$/.test(word.trim());
+    if (!/[.!?]$/.test(trimmed)) {
+      return false;
+    }
+
+    // Avoid treating dotted tokens like "next.js" or version numbers as sentence ends.
+    const withoutTrailing = trimmed.replace(/[.!?]+$/, '');
+    if (/[a-z0-9]\.[a-z0-9]/i.test(withoutTrailing)) {
+      return false;
+    }
+
+    return true;
   }
 
   // Process words to create sentence segments
@@ -207,6 +288,42 @@ function generateScenesFromTranscription(
 
     if (currentSegment.startTime === null) {
       currentSegment.startTime = start;
+    }
+
+    // Merge dotted tokens split across words (e.g., "Next." + "js" -> "Next.js").
+    const nextWordObj = i + 1 < segments.length ? segments[i + 1] : null;
+    if (
+      nextWordObj &&
+      typeof nextWordObj !== 'string' &&
+      typeof nextWordObj.word === 'string' &&
+      typeof nextWordObj.start === 'number' &&
+      typeof nextWordObj.end === 'number' &&
+      /[.!?]$/.test(word)
+    ) {
+      const nextToken = normalizeToken(nextWordObj.word);
+      const hasInternalDot = /[a-z0-9]\.[a-z0-9]/i.test(
+        word.replace(/[.!?]+$/, ''),
+      );
+      const isLikelySuffix =
+        [
+          'js',
+          'ts',
+          'jsx',
+          'tsx',
+          'json',
+          'ai',
+          'io',
+          'com',
+          'net',
+          'org',
+        ].includes(nextToken) || /^[0-9]{1,3}$/.test(nextToken);
+
+      if (!hasInternalDot && nextToken && isLikelySuffix) {
+        const merged = `${word.replace(/[.!?]+$/, '')}.${nextWordObj.word}`;
+        word = merged;
+        end = nextWordObj.end;
+        i += 1;
+      }
     }
 
     currentSegment.words += (currentSegment.words ? ' ' : '') + word;
@@ -260,12 +377,146 @@ function generateScenesFromTranscription(
     });
   }
 
-  // Deduplicate overlapping sentences
+  return dedupeSentenceSegments(processedSegments);
+}
+
+function alignScriptToTranscription(
+  scriptText: string,
+  transcriptionData: TranscriptionData,
+  videoId: string,
+): SceneSegment[] {
+  const wordSegments = extractWordSegments(transcriptionData)
+    .map((seg) => ({
+      ...seg,
+      token: normalizeToken(seg.word),
+    }))
+    .filter((seg) => seg.token.length > 0);
+
+  const sentences = splitScriptIntoSentences(scriptText);
+  if (!sentences.length) {
+    return [];
+  }
+
+  const avgWordDuration =
+    wordSegments.reduce((acc, seg) => acc + (seg.end - seg.start), 0) /
+      (wordSegments.length || 1) || 0.3;
+
+  if (!wordSegments.length) {
+    let currentTime = 0;
+    return sentences.map((sentenceText, index) => {
+      const tokens = normalizeToken(sentenceText).split(' ').filter(Boolean);
+      const duration = avgWordDuration * Math.max(tokens.length, 1);
+      const startTime = currentTime;
+      const endTime = currentTime + duration;
+      currentTime = endTime;
+
+      return {
+        id: index,
+        words: sentenceText.trim(),
+        duration: parseFloat(duration.toFixed(2)),
+        startTime: parseFloat(startTime.toFixed(2)),
+        endTime: parseFloat(endTime.toFixed(2)),
+        preEndTime: 0,
+        type: 'sentence',
+        videoId,
+      };
+    });
+  }
+
+  const alignedSegments: SceneSegment[] = [];
+  let cursor = 0;
+  let lastEndTime = wordSegments[0]?.start ?? 0;
+  const maxLookahead = 200;
+  const windowSlack = 2;
+  const minScore = 0.55;
+
+  for (let i = 0; i < sentences.length; i++) {
+    const sentenceText = sentences[i];
+    const tokens = normalizeToken(sentenceText).split(' ').filter(Boolean);
+
+    if (!tokens.length) {
+      continue;
+    }
+
+    let bestScore = 0;
+    let bestStart = -1;
+    let bestLength = tokens.length;
+
+    const searchEnd = Math.min(wordSegments.length, cursor + maxLookahead);
+    for (let startIdx = cursor; startIdx < searchEnd; startIdx++) {
+      const minLen = Math.max(1, tokens.length - windowSlack);
+      const maxLen = Math.min(
+        tokens.length + windowSlack,
+        wordSegments.length - startIdx,
+      );
+
+      for (let len = minLen; len <= maxLen; len++) {
+        let matches = 0;
+        for (let t = 0; t < tokens.length && t < len; t++) {
+          if (tokens[t] === wordSegments[startIdx + t].token) {
+            matches += 1;
+          }
+        }
+        const score = matches / tokens.length;
+        if (score > bestScore) {
+          bestScore = score;
+          bestStart = startIdx;
+          bestLength = len;
+          if (score === 1) break;
+        }
+      }
+
+      if (bestScore === 1) break;
+    }
+
+    let startTime: number;
+    let endTime: number;
+
+    if (bestStart >= 0 && bestScore >= minScore) {
+      const window = wordSegments.slice(bestStart, bestStart + bestLength);
+      startTime = window[0].start;
+      endTime = window[window.length - 1].end;
+      cursor = bestStart + bestLength;
+    } else if (cursor < wordSegments.length) {
+      const fallbackLength = Math.min(
+        tokens.length,
+        wordSegments.length - cursor,
+      );
+      const window = wordSegments.slice(cursor, cursor + fallbackLength);
+      startTime = window[0].start;
+      endTime = window[window.length - 1].end;
+      cursor += fallbackLength;
+    } else {
+      startTime = lastEndTime;
+      endTime = lastEndTime + avgWordDuration * tokens.length;
+    }
+
+    if (endTime < startTime) {
+      endTime = startTime + avgWordDuration * tokens.length;
+    }
+
+    lastEndTime = endTime;
+
+    alignedSegments.push({
+      id: alignedSegments.length,
+      words: sentenceText.trim(),
+      duration: parseFloat((endTime - startTime).toFixed(2)),
+      startTime: parseFloat(startTime.toFixed(2)),
+      endTime: parseFloat(endTime.toFixed(2)),
+      preEndTime: 0,
+      type: 'sentence',
+      videoId,
+    });
+  }
+
+  return dedupeSentenceSegments(alignedSegments);
+}
+
+function dedupeSentenceSegments(segments: SceneSegment[]): SceneSegment[] {
   const sentenceSegments: SceneSegment[] = [];
   const usedTimeRanges: Array<{ start: number; end: number }> = [];
 
-  for (const segment of processedSegments) {
-    // Check if this sentence overlaps significantly with any existing sentence
+  for (const segment of segments) {
     let isOverlapping = false;
     for (const used of usedTimeRanges) {
       const overlap =
@@ -273,7 +524,6 @@ function generateScenesFromTranscription(
         Math.max(segment.startTime, used.start);
       const overlapRatio = overlap / (segment.endTime - segment.startTime);
       if (overlapRatio > 0.5) {
-        // More than 50% overlap
         isOverlapping = true;
         break;
       }
@@ -282,29 +532,26 @@ function generateScenesFromTranscription(
     if (!isOverlapping) {
       sentenceSegments.push(segment);
       usedTimeRanges.push({ start: segment.startTime, end: segment.endTime });
-    } else {
-      console.log(
-        `Skipping overlapping sentence: "${segment.words.substring(
-          0,
-          50,
-        )}..." (${segment.startTime.toFixed(2)}-${segment.endTime.toFixed(2)})`,
-      );
     }
   }
 
+  return sentenceSegments;
+}
+
+function finalizeSegments(
+  sentenceSegments: SceneSegment[],
+  videoId: string,
+  videoDuration?: number,
+): SceneSegment[] {
   console.log(
-    `After deduplication: ${
-      sentenceSegments.length
-    } unique sentences (removed ${
-      processedSegments.length - sentenceSegments.length
-    } overlapping duplicates)`,
+    `After deduplication: ${sentenceSegments.length} unique sentences`,
   );
 
   // Create final segments array including gaps
   const allSegments: SceneSegment[] = [];
   let segmentId = 0;
-  const gapSet = new Set(); // Track unique gaps to prevent duplicates
-  const sentenceSet = new Set(); // Track unique sentences to prevent duplicates
+  const gapSet = new Set();
+  const sentenceSet = new Set();
 
   // Check if there's silence at the beginning
   if (
@@ -318,7 +565,7 @@ function generateScenesFromTranscription(
       duration: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
       startTime: 0,
       endTime: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
-      preEndTime: 0, // Placeholder, will be recalculated after adjustments
+      preEndTime: 0,
       type: 'gap',
       videoId,
     });
@@ -327,7 +574,6 @@ function generateScenesFromTranscription(
   for (let i = 0; i < sentenceSegments.length; i++) {
     const sentence = sentenceSegments[i];
 
-    // Add the sentence segment (preEndTime will be calculated after adjustments)
     if (sentence.startTime !== null && sentence.endTime !== null) {
       const sentenceKey = `${sentence.startTime.toFixed(
         2,
@@ -340,14 +586,13 @@ function generateScenesFromTranscription(
           duration: parseFloat(sentence.duration.toFixed(2)),
           startTime: parseFloat(sentence.startTime.toFixed(2)),
           endTime: parseFloat(sentence.endTime.toFixed(2)),
-          preEndTime: 0, // Placeholder, will be recalculated after adjustments
+          preEndTime: 0,
           type: 'sentence',
           videoId,
         });
       }
     }
 
-    // Add gap segment if there's a next sentence
     if (i < sentenceSegments.length - 1) {
       const nextSentence = sentenceSegments[i + 1];
       if (sentence.endTime !== null && nextSentence.startTime !== null) {
@@ -355,7 +600,6 @@ function generateScenesFromTranscription(
         const gapEndTime = nextSentence.startTime;
         const gapDuration = gapEndTime - gapStartTime;
 
-        // Record all gaps (including negative gaps for overlaps)
         const gapKey = `${gapStartTime.toFixed(2)}-${gapEndTime.toFixed(2)}`;
         if (gapDuration !== 0 && !gapSet.has(gapKey)) {
           gapSet.add(gapKey);
@@ -365,7 +609,7 @@ function generateScenesFromTranscription(
             duration: parseFloat(gapDuration.toFixed(2)),
             startTime: parseFloat(gapStartTime.toFixed(2)),
             endTime: parseFloat(gapEndTime.toFixed(2)),
-            preEndTime: 0, // Placeholder, will be recalculated after adjustments
+            preEndTime: 0,
             type: 'gap',
             videoId,
           });
@@ -384,7 +628,6 @@ function generateScenesFromTranscription(
     typeof videoDuration === 'number' &&
     allSegments.length > 0
   ) {
-    // Find the last sentence segment (skip gaps)
     let lastSentenceSegment = null;
     for (let i = allSegments.length - 1; i >= 0; i--) {
       if (allSegments[i].type === 'sentence') {
@@ -396,7 +639,6 @@ function generateScenesFromTranscription(
     if (lastSentenceSegment && lastSentenceSegment.endTime < videoDuration) {
       const trailingGapDuration = videoDuration - lastSentenceSegment.endTime;
       if (trailingGapDuration > 0.01) {
-        // Only add if gap is meaningful (> 10ms)
         console.log(
           `✅ Adding trailing gap: ${trailingGapDuration.toFixed(
             2,
@@ -410,7 +652,7 @@ function generateScenesFromTranscription(
           duration: parseFloat(trailingGapDuration.toFixed(2)),
           startTime: parseFloat(lastSentenceSegment.endTime.toFixed(2)),
           endTime: parseFloat(videoDuration.toFixed(2)),
-          preEndTime: 0, // Placeholder, will be recalculated after adjustments
+          preEndTime: 0,
           type: 'gap',
           videoId,
         });
@@ -472,7 +714,6 @@ function generateScenesFromTranscription(
       const gapDuration = segment.duration;
 
       if (gapDuration < 0) {
-        // Negative gap means overlap - trim the previous sentence and adjust next sentence
         const overlapDuration = Math.abs(gapDuration);
         console.log(
           `Processing negative gap ${gapDuration.toFixed(2)}s at index ${i}`,
@@ -502,7 +743,6 @@ function generateScenesFromTranscription(
           );
         }
 
-        // Also adjust the next sentence's start time to eliminate overlap
         if (
           i < allSegments.length - 1 &&
           allSegments[i + 1].type === 'sentence'
@@ -520,16 +760,12 @@ function generateScenesFromTranscription(
           );
         }
 
-        // Remove the negative gap entirely
         segment.startTime = parseFloat(segment.endTime.toFixed(2));
         segment.duration = 0;
       } else if (gapDuration > 0.2) {
-        // Gap is larger than 0.2s - adjust adjacent segments by 0.1s
         const adjustAmount = 0.1;
 
-        // Check if there's a sentence before this gap
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
-          // Gap is AFTER a sentence - add 0.1s to sentence end time
           allSegments[i - 1].endTime = parseFloat(
             (allSegments[i - 1].endTime + adjustAmount).toFixed(2),
           );
@@ -538,12 +774,10 @@ function generateScenesFromTranscription(
           );
         }
 
-        // Check if there's a sentence after this gap
         if (
           i < allSegments.length - 1 &&
           allSegments[i + 1].type === 'sentence'
         ) {
-          // Gap is BEFORE a sentence - subtract 0.1s from sentence start time
           allSegments[i + 1].startTime = parseFloat(
             (allSegments[i + 1].startTime - adjustAmount).toFixed(2),
           );
@@ -552,9 +786,7 @@ function generateScenesFromTranscription(
           );
         }
 
-        // Adjust the gap timing accordingly
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
-          // Gap starts later (sentence extended into gap)
           segment.startTime = parseFloat(
             (segment.startTime + adjustAmount).toFixed(2),
           );
@@ -566,7 +798,6 @@ function generateScenesFromTranscription(
           i < allSegments.length - 1 &&
           allSegments[i + 1].type === 'sentence'
         ) {
-          // Gap ends earlier (sentence extended into gap)
           segment.endTime = parseFloat(
             (segment.endTime - adjustAmount).toFixed(2),
           );
@@ -575,10 +806,6 @@ function generateScenesFromTranscription(
           );
         }
       } else if (gapDuration > 0) {
-        // Gap is smaller than 0.2s - absorb entirely into the previous segment
-        // This avoids creating overlaps by not pulling the next segment's start time earlier
-
-        // Extend previous segment (if exists and is a sentence)
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
           allSegments[i - 1].endTime = parseFloat(
             (allSegments[i - 1].endTime + gapDuration).toFixed(2),
@@ -592,12 +819,10 @@ function generateScenesFromTranscription(
             )}s gap into previous sentence (extended end time)`,
           );
         } else {
-          // If no previous sentence, extend the next segment's start time (but don't overlap)
           if (
             i < allSegments.length - 1 &&
             allSegments[i + 1].type === 'sentence'
           ) {
-            // Instead of subtracting, just log that we're skipping to avoid overlaps
             console.log(
               `Small gap ${gapDuration.toFixed(
                 2,
@@ -606,7 +831,6 @@ function generateScenesFromTranscription(
           }
         }
 
-        // Remove the gap entirely by setting it to zero duration
         segment.startTime = parseFloat(segment.endTime.toFixed(2));
         segment.duration = 0;
       }
@@ -634,7 +858,6 @@ function generateScenesFromTranscription(
     const previousSegment = filteredSegments[i - 1];
 
     if (currentSegment.startTime < previousSegment.endTime) {
-      // Overlap detected - adjust current segment's start time
       const overlap = previousSegment.endTime - currentSegment.startTime;
       currentSegment.startTime = previousSegment.endTime;
       currentSegment.endTime = parseFloat(
@@ -652,10 +875,8 @@ function generateScenesFromTranscription(
   console.log('Recalculating preEndTime values for adjusted timeline...');
   for (let i = 0; i < filteredSegments.length; i++) {
     if (i === 0) {
-      // First segment always starts at 0
       filteredSegments[i].preEndTime = 0;
     } else {
-      // Each segment's preEndTime is the previous segment's endTime
       filteredSegments[i].preEndTime = parseFloat(
         filteredSegments[i - 1].endTime.toFixed(2),
       );
@@ -663,6 +884,35 @@ function generateScenesFromTranscription(
   }
 
   return filteredSegments;
+}
+
+function generateScenesFromScriptAndTranscription(
+  scriptText: string,
+  transcriptionData: TranscriptionData,
+  videoId: string,
+  videoDuration?: number,
+): SceneSegment[] {
+  const sentenceSegments = alignScriptToTranscription(
+    scriptText,
+    transcriptionData,
+    videoId,
+  );
+
+  return finalizeSegments(sentenceSegments, videoId, videoDuration);
+}
+
+// Function to split transcription into sentences and gaps
+function generateScenesFromTranscription(
+  transcriptionData: TranscriptionData,
+  videoId: string,
+  videoDuration?: number,
+): SceneSegment[] {
+  const sentenceSegments = buildSentenceSegmentsFromTranscription(
+    transcriptionData,
+    videoId,
+  );
+
+  return finalizeSegments(sentenceSegments, videoId, videoDuration);
 }
 
 // Helper function to get JWT token
@@ -697,6 +947,46 @@ async function getJWTToken() {
 
   const authData = await authResponse.json();
   return authData.token;
+}
+
+async function getVideoScriptText(videoId: string): Promise<string | null> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  if (!baserowUrl) {
+    throw new Error(
+      'Missing Baserow configuration. Please check BASEROW_API_URL.',
+    );
+  }
+
+  const token = await getJWTToken();
+  const response = await fetch(
+    `${baserowUrl}/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `JWT ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(
+      `Failed to fetch video ${videoId} script: ${response.status} ${errorText}`,
+    );
+  }
+
+  const data = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  const scriptValue = data?.[SCRIPT_FIELD_KEY];
+
+  if (typeof scriptValue === 'string') {
+    const trimmed = scriptValue.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  return null;
 }
 
 // Function to create multiple scene records in Baserow using batch operation
