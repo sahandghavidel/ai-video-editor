@@ -512,6 +512,105 @@ function alignScriptToTranscription(
   return dedupeSentenceSegments(alignedSegments);
 }
 
+function buildPunctuationBoundaries(segments: WordSegment[]): number[] {
+  const boundaries: number[] = [];
+
+  for (let i = 0; i < segments.length; i++) {
+    if (/[.!?]$/.test(segments[i].word.trim())) {
+      boundaries.push(i);
+    }
+  }
+
+  if (
+    !boundaries.length ||
+    boundaries[boundaries.length - 1] !== segments.length - 1
+  ) {
+    boundaries.push(segments.length - 1);
+  }
+
+  return boundaries;
+}
+
+function redistributeTimingByTranscriptWords(
+  segments: SceneSegment[],
+  transcriptionData: TranscriptionData,
+): SceneSegment[] {
+  const wordSegments = extractWordSegments(transcriptionData).filter(
+    (seg) => typeof seg.start === 'number' && typeof seg.end === 'number',
+  );
+
+  if (!wordSegments.length || !segments.length) {
+    return segments;
+  }
+
+  if (segments.length === 1) {
+    return [
+      {
+        ...segments[0],
+        startTime: parseFloat(wordSegments[0].start.toFixed(2)),
+        endTime: parseFloat(
+          wordSegments[wordSegments.length - 1].end.toFixed(2),
+        ),
+        duration: parseFloat(
+          (
+            wordSegments[wordSegments.length - 1].end - wordSegments[0].start
+          ).toFixed(2),
+        ),
+      },
+    ];
+  }
+
+  const totalTokens = segments.reduce(
+    (acc, segment) =>
+      acc + normalizeToken(segment.words).split(' ').filter(Boolean).length,
+    0,
+  );
+
+  if (totalTokens <= 0) return segments;
+
+  const totalWords = wordSegments.length;
+  let tokenCursor = 0;
+  let wordCursor = 0;
+
+  return segments.map((segment, index) => {
+    const tokenCount = Math.max(
+      1,
+      normalizeToken(segment.words).split(' ').filter(Boolean).length,
+    );
+    tokenCursor += tokenCount;
+
+    let targetEndIndex =
+      Math.round((tokenCursor / totalTokens) * totalWords) - 1;
+    if (index === segments.length - 1) {
+      targetEndIndex = totalWords - 1;
+    }
+
+    targetEndIndex = Math.max(targetEndIndex, wordCursor);
+    targetEndIndex = Math.min(targetEndIndex, totalWords - 1);
+
+    const startIndex = wordCursor;
+    const endIndex = targetEndIndex;
+    wordCursor = Math.min(endIndex + 1, totalWords - 1);
+
+    const startTime = wordSegments[startIndex].start;
+    const endTime = wordSegments[endIndex].end;
+
+    return {
+      ...segment,
+      startTime: parseFloat(startTime.toFixed(2)),
+      endTime: parseFloat(endTime.toFixed(2)),
+      duration: parseFloat((endTime - startTime).toFixed(2)),
+    };
+  });
+}
+
+function updateTimingFromTranscription(
+  segments: SceneSegment[],
+  transcriptionData: TranscriptionData,
+): SceneSegment[] {
+  return redistributeTimingByTranscriptWords(segments, transcriptionData);
+}
+
 function dedupeSentenceSegments(segments: SceneSegment[]): SceneSegment[] {
   const sentenceSegments: SceneSegment[] = [];
   const usedTimeRanges: Array<{ start: number; end: number }> = [];
@@ -892,10 +991,16 @@ function generateScenesFromScriptAndTranscription(
   videoId: string,
   videoDuration?: number,
 ): SceneSegment[] {
-  const sentenceSegments = alignScriptToTranscription(
+  let sentenceSegments = alignScriptToTranscription(
     scriptText,
     transcriptionData,
     videoId,
+  );
+
+  // Update timings only, keeping sentence text unchanged.
+  sentenceSegments = updateTimingFromTranscription(
+    sentenceSegments,
+    transcriptionData,
   );
 
   return finalizeSegments(sentenceSegments, videoId, videoDuration);
