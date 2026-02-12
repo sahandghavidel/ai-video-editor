@@ -1739,10 +1739,13 @@ export default function OriginalVideosList({
       // Find the video to get captions URL and duration
       const video = originalVideos.find((v) => v.id === videoId);
       const captionsUrl = extractUrl(video?.field_6861);
+      const hasScript =
+        typeof video?.field_6854 === 'string' &&
+        video.field_6854.trim().length > 0;
       let videoDuration = video?.field_6909 as number | undefined;
 
-      if (!captionsUrl) {
-        throw new Error('No captions URL found for this video');
+      if (!captionsUrl && !hasScript) {
+        throw new Error('No captions URL or script found for this video');
       }
 
       // Fallback: If duration not stored, calculate from captions
@@ -1823,16 +1826,23 @@ export default function OriginalVideosList({
       const freshData = await getOriginalVideosData();
       console.log('Fresh data fetched:', freshData.length, 'videos');
 
-      // Filter videos that have captions URLs but no scenes AND status is "Processing"
+      // Filter videos that have captions or script but no scenes AND status is "Processing"
       const videosToProcess = freshData.filter((video) => {
         const captionsUrl = extractUrl(video.field_6861);
         const hasCaptions = !!captionsUrl;
+        const hasScript =
+          typeof video.field_6854 === 'string' &&
+          video.field_6854.trim().length > 0;
         const scenesExist = hasScenes(video);
         const status = extractFieldValue(video.field_6864);
         console.log(
-          `Video ${video.id}: captions=${hasCaptions}, scenes=${scenesExist}, status=${status}`,
+          `Video ${video.id}: captions=${hasCaptions}, script=${hasScript}, scenes=${scenesExist}, status=${status}`,
         );
-        return captionsUrl && !hasScenes(video) && status === 'Processing'; // Has captions, no scenes, and Processing status
+        return (
+          (hasCaptions || hasScript) &&
+          !hasScenes(video) &&
+          status === 'Processing'
+        );
       });
 
       if (videosToProcess.length === 0) {
@@ -1847,6 +1857,9 @@ export default function OriginalVideosList({
       // Process videos one by one
       for (const video of videosToProcess) {
         const captionsUrl = extractUrl(video.field_6861);
+        const hasScript =
+          typeof video.field_6854 === 'string' &&
+          video.field_6854.trim().length > 0;
         let videoDuration = video?.field_6909 as number | undefined;
 
         // Fallback: Calculate duration from captions if not stored
@@ -1876,7 +1889,7 @@ export default function OriginalVideosList({
           }
         }
 
-        if (captionsUrl) {
+        if (captionsUrl || hasScript) {
           console.log(`Generating scenes for video ${video.id}...`);
           setGeneratingScenes(video.id);
 
@@ -1915,7 +1928,7 @@ export default function OriginalVideosList({
   // Internal scene generation function (without UI state management)
   const handleGenerateScenesInternal = async (
     videoId: number,
-    captionsUrl: string,
+    captionsUrl?: string,
     videoDuration?: number,
   ) => {
     const response = await fetch('/api/generate-scenes', {
@@ -5125,7 +5138,7 @@ export default function OriginalVideosList({
                       title={
                         generatingScenes !== null || generatingScenesAll
                           ? 'Scene generation in progress...'
-                          : 'Generate scenes for all videos with captions'
+                          : 'Generate scenes for all videos with captions or script'
                       }
                     >
                       <Grid3x3
@@ -6316,21 +6329,16 @@ export default function OriginalVideosList({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const captionsUrl = extractUrl(
-                                      video.field_6861,
-                                    );
-                                    if (captionsUrl) {
-                                      handleGenerateScenes(video.id);
-                                    } else {
-                                      setError(
-                                        'No captions URL found for scene generation',
-                                      );
-                                    }
+                                    handleGenerateScenes(video.id);
                                   }}
                                   disabled={
                                     generatingScenes !== null ||
                                     generatingScenesAll ||
-                                    !extractUrl(video.field_6861) ||
+                                    (!extractUrl(video.field_6861) &&
+                                      !(
+                                        typeof video.field_6854 === 'string' &&
+                                        video.field_6854.trim().length > 0
+                                      )) ||
                                     hasScenes(video)
                                   }
                                   className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
@@ -6339,11 +6347,16 @@ export default function OriginalVideosList({
                                       ? generatingScenes === video.id
                                         ? 'Generating scenes...'
                                         : 'Another scene generation in progress'
-                                      : !extractUrl(video.field_6861)
-                                        ? 'No captions URL available'
+                                      : !extractUrl(video.field_6861) &&
+                                          !(
+                                            typeof video.field_6854 ===
+                                              'string' &&
+                                            video.field_6854.trim().length > 0
+                                          )
+                                        ? 'No captions URL or script available'
                                         : hasScenes(video)
                                           ? 'Scenes already generated for this video'
-                                          : 'Generate scenes from captions'
+                                          : 'Generate scenes from captions or script'
                                   }
                                 >
                                   {generatingScenes === video.id ? (

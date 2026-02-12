@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
       videoDuration: rawVideoDuration,
     } = await request.json();
 
-    if (!videoId || !captionsUrl) {
+    if (!videoId) {
       return NextResponse.json(
-        { error: 'Video ID and captions URL are required' },
+        { error: 'Video ID is required' },
         { status: 400 },
       );
     }
@@ -55,28 +55,47 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Generating scenes for video:', videoId);
-    console.log('Captions URL:', captionsUrl);
+    console.log('Captions URL:', captionsUrl || 'not provided');
     console.log('Video Duration:', videoDuration || 'not provided');
 
-    // Step 1: Fetch the captions/transcription JSON
-    const captionsResponse = await fetch(captionsUrl);
-    if (!captionsResponse.ok) {
-      throw new Error(
-        `Failed to fetch captions: ${captionsResponse.statusText}`,
+    // Step 1: Check script (allows scene creation without transcription)
+    const scriptText = await getVideoScriptText(videoId);
+
+    if (!scriptText && !captionsUrl) {
+      return NextResponse.json(
+        {
+          error:
+            'Captions URL or script is required to generate scenes for this video.',
+        },
+        { status: 400 },
       );
     }
 
-    const captionsData = await captionsResponse.json();
-    console.log(
-      'Fetched captions data - length:',
-      Array.isArray(captionsData) ? captionsData.length : 'not array',
-    );
+    // Step 2: Fetch the captions/transcription JSON when needed
+    let captionsData: TranscriptionData | null = null;
+    if (!scriptText) {
+      const captionsResponse = await fetch(captionsUrl);
+      if (!captionsResponse.ok) {
+        throw new Error(
+          `Failed to fetch captions: ${captionsResponse.statusText}`,
+        );
+      }
 
-    // Step 2: Prefer script text when available, otherwise use transcription text
-    const scriptText = await getVideoScriptText(videoId);
+      captionsData = await captionsResponse.json();
+      console.log(
+        'Fetched captions data - length:',
+        Array.isArray(captionsData) ? captionsData.length : 'not array',
+      );
+    }
+
+    // Step 3: Prefer script text when available, otherwise use transcription text
     const scenes = scriptText
       ? generateScenesFromScriptFixedTiming(scriptText, videoId)
-      : generateScenesFromTranscription(captionsData, videoId, videoDuration);
+      : generateScenesFromTranscription(
+          captionsData as TranscriptionData,
+          videoId,
+          videoDuration,
+        );
     console.log(`Generated ${scenes.length} scenes`);
 
     // Step 3: Create all scene records in Baserow using batch operation
