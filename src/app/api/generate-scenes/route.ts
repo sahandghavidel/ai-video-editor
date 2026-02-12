@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import path from 'path';
+import { readdir } from 'fs/promises';
+import { uploadToMinio } from '@/utils/ffmpeg-direct';
 
 interface SceneSegment {
   id: number;
@@ -58,8 +61,9 @@ export async function POST(request: NextRequest) {
     console.log('Captions URL:', captionsUrl || 'not provided');
     console.log('Video Duration:', videoDuration || 'not provided');
 
-    // Step 1: Check script (allows scene creation without transcription)
-    const scriptText = await getVideoScriptText(videoId);
+    // Step 1: Fetch video row (script + settings)
+    const videoRow = await getVideoRow(videoId);
+    const scriptText = extractScriptFromVideoRow(videoRow);
 
     if (!scriptText && !captionsUrl) {
       return NextResponse.json(
@@ -119,6 +123,17 @@ export async function POST(request: NextRequest) {
       sceneIds,
     );
     await updateOriginalVideoWithScenes(videoId, sceneIds);
+
+    // Step 5: If script-based scenes, upload stock video and apply to all scenes
+    if (scriptText) {
+      const { dimension, bgColor } = getVideoDimensionAndBg(videoRow);
+      const stockVideoUrl = await uploadStockVideoForScriptScenes(
+        dimension,
+        bgColor,
+        videoId,
+      );
+      await updateSceneVideoUrlsBatch(sceneIds, stockVideoUrl);
+    }
 
     return NextResponse.json({
       success: true,
@@ -214,6 +229,100 @@ function splitScriptIntoSentences(scriptText: string): string[] {
 
   flush();
   return sentences;
+}
+
+function parseDimension(
+  input: string,
+): { width: number; height: number } | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/(\d{2,5})\s*[x×X]\s*(\d{2,5})/);
+  if (!match) return null;
+
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  if (width <= 0 || height <= 0) return null;
+  return { width, height };
+}
+
+function parseHexColor(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/#?[0-9a-fA-F]{6}/);
+  if (!match) return null;
+
+  const hex = match[0].startsWith('#') ? match[0] : `#${match[0]}`;
+  return hex.toUpperCase();
+}
+
+function extractStringField(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  if (value && typeof value === 'object') {
+    const maybeValue = value as { value?: unknown };
+    if (typeof maybeValue.value === 'string') return maybeValue.value;
+    if (typeof maybeValue.value === 'number') return String(maybeValue.value);
+  }
+  return '';
+}
+
+function extractScriptFromVideoRow(
+  row: Record<string, unknown> | null,
+): string | null {
+  if (!row) return null;
+  const raw = extractStringField(row[SCRIPT_FIELD_KEY]);
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function getVideoDimensionAndBg(row: Record<string, unknown>): {
+  dimension: string;
+  bgColor: string;
+} {
+  const dimensionRaw = extractStringField(row['field_7092']);
+  const bgRaw = extractStringField(row['field_7093']);
+
+  const parsedDim = parseDimension(dimensionRaw);
+  const parsedBg = parseHexColor(bgRaw);
+
+  if (!parsedDim) {
+    throw new Error(
+      `Invalid or missing Dimension (7092) value: "${dimensionRaw}"`,
+    );
+  }
+  if (!parsedBg) {
+    throw new Error(`Invalid or missing BG color (7093) value: "${bgRaw}"`);
+  }
+
+  return {
+    dimension: `${parsedDim.width}x${parsedDim.height}`,
+    bgColor: parsedBg,
+  };
+}
+
+async function uploadStockVideoForScriptScenes(
+  dimension: string,
+  bgColor: string,
+  videoId: string,
+): Promise<string> {
+  const videosDir = path.join(process.cwd(), 'public', 'videos');
+  const entries = await readdir(videosDir);
+  const hexNoHash = bgColor.replace('#', '');
+  const pattern = new RegExp(`^${dimension}-#?${hexNoHash}\\.mp4$`, 'i');
+
+  const filename = entries.find((entry) => pattern.test(entry));
+  if (!filename) {
+    throw new Error(
+      `No stock video found for ${dimension} and ${bgColor} in public/videos`,
+    );
+  }
+
+  const filePath = path.join(videosDir, filename);
+  const uploadName = `video_${videoId}_${filename}`;
+  return uploadToMinio(filePath, uploadName, 'video/mp4');
 }
 
 function generateScenesFromScriptFixedTiming(
@@ -1102,7 +1211,7 @@ async function getJWTToken() {
   return authData.token;
 }
 
-async function getVideoScriptText(videoId: string): Promise<string | null> {
+async function getVideoRow(videoId: string): Promise<Record<string, unknown>> {
   const baserowUrl = process.env.BASEROW_API_URL;
   if (!baserowUrl) {
     throw new Error(
@@ -1124,7 +1233,7 @@ async function getVideoScriptText(videoId: string): Promise<string | null> {
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
     throw new Error(
-      `Failed to fetch video ${videoId} script: ${response.status} ${errorText}`,
+      `Failed to fetch video ${videoId}: ${response.status} ${errorText}`,
     );
   }
 
@@ -1132,14 +1241,10 @@ async function getVideoScriptText(videoId: string): Promise<string | null> {
     string,
     unknown
   > | null;
-  const scriptValue = data?.[SCRIPT_FIELD_KEY];
-
-  if (typeof scriptValue === 'string') {
-    const trimmed = scriptValue.trim();
-    return trimmed.length > 0 ? trimmed : null;
+  if (!data) {
+    throw new Error(`Video ${videoId} response was empty or invalid JSON`);
   }
-
-  return null;
+  return data;
 }
 
 // Function to create multiple scene records in Baserow using batch operation
@@ -1237,4 +1342,45 @@ async function updateOriginalVideoWithScenes(
   }
 
   return response.json();
+}
+
+async function updateSceneVideoUrlsBatch(sceneIds: number[], videoUrl: string) {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  if (!baserowUrl) {
+    throw new Error(
+      'Missing Baserow configuration. Please check BASEROW_API_URL.',
+    );
+  }
+  const token = await getJWTToken();
+  const BATCH_SIZE = 200;
+
+  for (let i = 0; i < sceneIds.length; i += BATCH_SIZE) {
+    const chunk = sceneIds.slice(i, i + BATCH_SIZE);
+    const batchData = {
+      items: chunk.map((id) => ({
+        id,
+        field_6886: videoUrl, // Videos
+        field_6888: videoUrl, // Video Clip URL
+      })),
+    };
+
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/714/batch/`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `JWT ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(batchData),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to update scene videos in batch: ${response.status} ${errorText}`,
+      );
+    }
+  }
 }
