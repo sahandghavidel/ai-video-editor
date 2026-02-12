@@ -1202,6 +1202,7 @@ export default function SceneCard({
       skipRefresh: boolean = false,
       skipSound: boolean = false,
       updateSentence: boolean = true,
+      opts?: { throwOnError?: boolean },
     ) => {
       const currentScene =
         (sceneData as BaserowRow | undefined) ||
@@ -1360,6 +1361,10 @@ export default function SceneCard({
           errorMessage = error.message;
         }
         console.log(`Error: ${errorMessage}`);
+
+        if (opts?.throwOnError) {
+          throw error;
+        }
       } finally {
         setTranscribingScene(null);
       }
@@ -1875,16 +1880,17 @@ export default function SceneCard({
     async (
       sceneId: number,
       text: string,
-      sceneData?: BaserowRow,
-      opts?: { seedOverride?: number },
+      sceneData?: unknown,
+      opts?: { seedOverride?: number; throwOnError?: boolean },
     ) => {
       try {
         setProducingTTS(sceneId);
 
         // Extract video ID from scene data
         let videoId: number | null = null;
-        if (sceneData) {
-          const videoIdField = sceneData['field_6889'];
+        const typedSceneData = sceneData as BaserowRow | undefined;
+        if (typedSceneData) {
+          const videoIdField = typedSceneData['field_6889'];
           if (typeof videoIdField === 'number') {
             videoId = videoIdField;
           } else if (typeof videoIdField === 'string') {
@@ -1951,7 +1957,8 @@ export default function SceneCard({
         if (videoSettings.autoGenerateVideo) {
           // Use sceneData if provided (from batch operation), otherwise look up in dataRef
           const currentScene =
-            sceneData || dataRef.current.find((scene) => scene.id === sceneId);
+            (typedSceneData as BaserowRow | undefined) ||
+            dataRef.current.find((scene) => scene.id === sceneId);
           const videoUrl = currentScene?.field_6888;
 
           if (typeof videoUrl === 'string' && videoUrl) {
@@ -1964,6 +1971,10 @@ export default function SceneCard({
       } catch (error) {
         console.error('Error producing TTS:', error);
         // You could show a user-friendly error message here
+
+        if (opts?.throwOnError) {
+          throw error;
+        }
       } finally {
         setProducingTTS(null);
       }
@@ -1976,17 +1987,19 @@ export default function SceneCard({
       sceneId: number,
       videoUrl: string,
       audioUrl: string,
-      sceneData?: BaserowRow,
+      sceneData?: unknown,
       zoomLevel: number = 0,
       panMode: 'none' | 'zoom' | 'zoomOut' | 'topToBottom' = 'none',
+      opts?: { throwOnError?: boolean },
     ) => {
       try {
         setGeneratingVideo(sceneId);
 
         // Extract video ID from scene data
         let videoId: number | null = null;
-        if (sceneData) {
-          const videoIdField = sceneData['field_6889'];
+        const typedSceneData = sceneData as BaserowRow | undefined;
+        if (typedSceneData) {
+          const videoIdField = typedSceneData['field_6889'];
           if (typeof videoIdField === 'number') {
             videoId = videoIdField;
           } else if (typeof videoIdField === 'string') {
@@ -2057,6 +2070,10 @@ export default function SceneCard({
       } catch (error) {
         console.error('Error generating synchronized video:', error);
         // You could show a user-friendly error message here
+
+        if (opts?.throwOnError) {
+          throw error;
+        }
       } finally {
         setGeneratingVideo(null);
       }
@@ -5105,6 +5122,8 @@ export default function SceneCard({
         }
         isApplying={addingImageOverlay !== null}
         handleTranscribeScene={handleTranscribeScene}
+        handleTTSProduce={handleTTSProduce}
+        handleVideoGenerate={handleVideoGenerate}
       />
     </div>
   );

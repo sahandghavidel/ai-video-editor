@@ -323,6 +323,24 @@ interface ImageOverlayModalProps {
     skipRefresh?: boolean,
     skipSound?: boolean,
     updateSentence?: boolean,
+    opts?: { throwOnError?: boolean },
+  ) => Promise<void>;
+
+  handleTTSProduce?: (
+    sceneId: number,
+    text: string,
+    sceneData?: unknown,
+    opts?: { seedOverride?: number; throwOnError?: boolean },
+  ) => Promise<void>;
+
+  handleVideoGenerate?: (
+    sceneId: number,
+    videoUrl: string,
+    audioUrl: string,
+    sceneData?: unknown,
+    zoomLevel?: number,
+    panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom',
+    opts?: { throwOnError?: boolean },
   ) => Promise<void>;
   onUpdateModalVideoUrl?: (videoUrl: string) => void;
 }
@@ -335,6 +353,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   onApply,
   isApplying = false,
   handleTranscribeScene,
+  handleTTSProduce,
+  handleVideoGenerate,
   onUpdateModalVideoUrl,
 }) => {
   const selectedOpenRouterModel = useAppStore(
@@ -424,6 +444,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
+  >(null);
+
+  const [isAutoFixingMismatch, setIsAutoFixingMismatch] = useState(false);
+  const [autoFixMismatchStatus, setAutoFixMismatchStatus] = useState<
+    string | null
   >(null);
   const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string>('');
@@ -2982,6 +3007,325 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [isOpen, sceneId, refetchTrigger, videoUrl]);
 
+  const normalizeSpeechTextForCompare = useCallback((s: string) => {
+    // Normalization designed to ignore punctuation/casing/extra spaces.
+    // Keep digits/letters so e.g. "2" vs "two" is still considered different.
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[’']/g, '')
+      .replace(/[^a-z0-9\s]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }, []);
+
+  const getRowString = useCallback((row: unknown, key: string) => {
+    if (!row || typeof row !== 'object') return null;
+    const v = (row as Record<string, unknown>)[key];
+    return typeof v === 'string' ? v : null;
+  }, []);
+
+  const fetchSceneCaptionsWords = useCallback(
+    async (id: number) => {
+      const sceneData = await getSceneById(id);
+      const captionsUrl = getRowString(sceneData, 'field_6910');
+      if (!captionsUrl || !captionsUrl.trim()) return null;
+
+      const res = await fetch(captionsUrl);
+      if (!res.ok) return null;
+      const data = (await res.json().catch(() => null)) as unknown;
+      if (!Array.isArray(data)) return null;
+
+      // Best-effort validation
+      return data.filter((w) => {
+        if (!w || typeof w !== 'object') return false;
+        const ww = w as Record<string, unknown>;
+        return (
+          typeof ww.word === 'string' &&
+          typeof ww.start === 'number' &&
+          typeof ww.end === 'number'
+        );
+      }) as TranscriptionWord[];
+    },
+    [getRowString],
+  );
+
+  const handleAutoFixMismatch = useCallback(async () => {
+    if (!sceneId) return;
+    if (!handleTranscribeScene || !handleTTSProduce || !handleVideoGenerate) {
+      setAutoFixMismatchStatus('Missing handlers for auto-fix.');
+      return;
+    }
+    if (isAutoFixingMismatch) return;
+
+    setIsAutoFixingMismatch(true);
+    setAutoFixMismatchStatus(null);
+
+    const maxAttempts = 3;
+    const urlBefore = originalVideoUrl || videoUrl;
+
+    // IMPORTANT: React state updates (setTranscriptionWords) won't be visible
+    // inside this async loop due to closure semantics. Keep a local copy that
+    // we update after each re-transcription.
+    let currentWords: TranscriptionWord[] | null =
+      transcriptionWords && transcriptionWords.length > 0
+        ? transcriptionWords
+        : null;
+
+    const waitForCaptionsWords = async (
+      id: number,
+      opts?: { maxRetries?: number; delayMs?: number },
+    ) => {
+      const maxRetries = opts?.maxRetries ?? 8;
+      const delayMs = opts?.delayMs ?? 500;
+      for (let i = 0; i < maxRetries; i++) {
+        const w = await fetchSceneCaptionsWords(id);
+        if (w && w.length > 0) return w;
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      return null;
+    };
+
+    try {
+      // If there is no transcription yet, create it first (does not count as a
+      // mismatch-fix attempt).
+      if (!currentWords) {
+        setAutoFixMismatchStatus(
+          'No transcription yet — transcribing first...',
+        );
+        await handleTranscribeScene(
+          sceneId,
+          undefined,
+          'final',
+          false,
+          false,
+          false,
+          { throwOnError: true },
+        );
+
+        const bootWords = await waitForCaptionsWords(sceneId, {
+          maxRetries: 10,
+          delayMs: 500,
+        });
+        currentWords = bootWords;
+        setTranscriptionWords(bootWords);
+
+        if (!bootWords || bootWords.length === 0) {
+          setAutoFixMismatchStatus(
+            'Transcription did not produce captions words yet. Try again in a few seconds.',
+          );
+          return;
+        }
+      }
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        setAutoFixMismatchStatus(
+          `Attempt ${attempt}/${maxAttempts}: checking...`,
+        );
+
+        const sceneData = (await getSceneById(sceneId)) as Record<
+          string,
+          unknown
+        > | null;
+
+        const desiredText = (
+          sceneData && typeof sceneData['field_6890'] === 'string'
+            ? (sceneData['field_6890'] as string)
+            : ''
+        ).trim();
+
+        if (!desiredText) {
+          setAutoFixMismatchStatus(
+            'Scene text is empty (field_6890). Nothing to compare.',
+          );
+          return;
+        }
+
+        // Ensure we have a transcription to compare against.
+        let words: TranscriptionWord[] | null = currentWords;
+
+        if (!words) {
+          setAutoFixMismatchStatus(
+            `Attempt ${attempt}/${maxAttempts}: transcribing final video...`,
+          );
+          await handleTranscribeScene(
+            sceneId,
+            undefined,
+            'final',
+            false,
+            false,
+            false,
+            { throwOnError: true },
+          );
+          words = await waitForCaptionsWords(sceneId, {
+            maxRetries: 10,
+            delayMs: 500,
+          });
+          currentWords = words;
+          setTranscriptionWords(words);
+        }
+
+        const transcriptText =
+          words && words.length > 0
+            ? words
+                .map((w) => String(w.word || '').trim())
+                .filter(Boolean)
+                .join(' ')
+                .trim()
+            : '';
+
+        const a = normalizeSpeechTextForCompare(desiredText);
+        const b = normalizeSpeechTextForCompare(transcriptText);
+
+        if (a && a === b) {
+          setAutoFixMismatchStatus('Match — nothing to do.');
+          return;
+        }
+
+        setAutoFixMismatchStatus(
+          `Attempt ${attempt}/${maxAttempts}: mismatch detected. Regenerating TTS...`,
+        );
+
+        const prevAudioUrl = getRowString(sceneData, 'field_6891');
+        // Use a 32-bit-ish seed; very large seeds can break some TTS backends.
+        const maxSeed = 2_147_483_647;
+        let seedBase = 0;
+        try {
+          if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            const buf = new Uint32Array(1);
+            crypto.getRandomValues(buf);
+            seedBase = Number(buf[0] || 0);
+          }
+        } catch {
+          seedBase = 0;
+        }
+        if (!seedBase) {
+          seedBase = Math.floor(Math.random() * maxSeed);
+        }
+        const seed = Math.max(1, (seedBase + attempt) % maxSeed);
+
+        await handleTTSProduce(sceneId, desiredText, sceneData ?? undefined, {
+          seedOverride: seed,
+          throwOnError: true,
+        });
+
+        const afterTtsScene = (await getSceneById(sceneId)) as Record<
+          string,
+          unknown
+        > | null;
+        const audioUrl = getRowString(afterTtsScene, 'field_6891');
+        if (!audioUrl || !audioUrl.trim() || audioUrl === prevAudioUrl) {
+          throw new Error(
+            'TTS did not produce a new audio URL (field_6891 unchanged).',
+          );
+        }
+
+        const baseVideoUrl = getRowString(afterTtsScene, 'field_6888');
+        if (!baseVideoUrl || !baseVideoUrl.trim()) {
+          throw new Error('Missing original clip URL (field_6888).');
+        }
+
+        setAutoFixMismatchStatus(
+          `Attempt ${attempt}/${maxAttempts}: syncing video with new TTS...`,
+        );
+        await handleVideoGenerate(
+          sceneId,
+          baseVideoUrl,
+          audioUrl,
+          afterTtsScene ?? undefined,
+          0,
+          'none',
+          { throwOnError: true },
+        );
+
+        // Fetch updated final video URL and update the modal/player (and undo state).
+        const afterVideoScene = (await getSceneById(sceneId)) as Record<
+          string,
+          unknown
+        > | null;
+        const newFinalUrl = getRowString(afterVideoScene, 'field_6886');
+        if (newFinalUrl && newFinalUrl.trim()) {
+          const undoKey = `scene-undo-video-url:${sceneId}`;
+          if (urlBefore && urlBefore.trim() && urlBefore !== newFinalUrl) {
+            setPreviousVideoUrl(urlBefore);
+            try {
+              localStorage.setItem(undoKey, urlBefore);
+            } catch {
+              // ignore
+            }
+          }
+
+          setOriginalVideoUrl(newFinalUrl);
+          onUpdateModalVideoUrl?.(newFinalUrl);
+        }
+
+        setAutoFixMismatchStatus(
+          `Attempt ${attempt}/${maxAttempts}: retranscribing final video...`,
+        );
+        await handleTranscribeScene(
+          sceneId,
+          undefined,
+          'final',
+          false,
+          false,
+          false,
+          { throwOnError: true },
+        );
+
+        // Re-fetch words and compare again.
+        const newWords = await waitForCaptionsWords(sceneId, {
+          maxRetries: 10,
+          delayMs: 500,
+        });
+        currentWords = newWords;
+        setTranscriptionWords(newWords);
+
+        const newTranscriptText =
+          newWords && newWords.length > 0
+            ? newWords
+                .map((w) => String(w.word || '').trim())
+                .filter(Boolean)
+                .join(' ')
+                .trim()
+            : '';
+
+        const b2 = normalizeSpeechTextForCompare(newTranscriptText);
+        if (a && b2 && a === b2) {
+          setAutoFixMismatchStatus(
+            `Fixed — match after ${attempt}/${maxAttempts} attempt(s).`,
+          );
+          // Refetch other modal data (tinted state, etc.)
+          setRefetchTrigger((prev) => prev + 1);
+          return;
+        }
+      }
+
+      setAutoFixMismatchStatus(
+        `Still mismatched after ${maxAttempts} attempts.`,
+      );
+      setRefetchTrigger((prev) => prev + 1);
+    } catch (error) {
+      console.error('Auto-fix mismatch failed:', error);
+      setAutoFixMismatchStatus(
+        error instanceof Error ? error.message : 'Auto-fix mismatch failed',
+      );
+    } finally {
+      setIsAutoFixingMismatch(false);
+    }
+  }, [
+    sceneId,
+    handleTranscribeScene,
+    handleTTSProduce,
+    handleVideoGenerate,
+    isAutoFixingMismatch,
+    originalVideoUrl,
+    videoUrl,
+    transcriptionWords,
+    normalizeSpeechTextForCompare,
+    getRowString,
+    fetchSceneCaptionsWords,
+    onUpdateModalVideoUrl,
+  ]);
+
   // Handle keyboard controls
   useEffect(() => {
     if (!isOpen) return;
@@ -4088,6 +4432,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }
               }}
               isTranscribing={isTranscribing}
+              canAutoFixMismatch={
+                !!handleTranscribeScene &&
+                !!handleTTSProduce &&
+                !!handleVideoGenerate
+              }
+              onAutoFixMismatch={handleAutoFixMismatch}
+              isAutoFixingMismatch={isAutoFixingMismatch}
               isInsertFullDisabled={
                 !transcriptionWords ||
                 transcriptionWords.length === 0 ||
@@ -4098,6 +4449,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     .trim()
               }
             />
+
+            {autoFixMismatchStatus && (
+              <div className='mt-2 text-xs text-gray-600'>
+                {autoFixMismatchStatus}
+              </div>
+            )}
 
             {selectedWordText && (
               <TextOverlayControls

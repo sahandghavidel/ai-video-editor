@@ -3,13 +3,14 @@
 import React from 'react';
 import {
   Gift,
-  Image,
+  Image as ImageIcon,
   List,
   Loader2,
   Plus,
   RotateCcw,
   Smile,
   Upload,
+  Wand2,
   X,
 } from 'lucide-react';
 import type { TranscriptionWord } from './types';
@@ -33,6 +34,10 @@ type Props = {
   onRetranscribe: () => Promise<void>;
   isTranscribing: boolean;
 
+  canAutoFixMismatch?: boolean;
+  onAutoFixMismatch?: () => Promise<void>;
+  isAutoFixingMismatch?: boolean;
+
   isInsertFullDisabled: boolean;
 };
 
@@ -52,6 +57,9 @@ export function TranscriptionControls({
   onTranscribe,
   onRetranscribe,
   isTranscribing,
+  canAutoFixMismatch,
+  onAutoFixMismatch,
+  isAutoFixingMismatch,
   isInsertFullDisabled,
 }: Props) {
   const hasWords = !!transcriptionWords && transcriptionWords.length > 0;
@@ -59,7 +67,7 @@ export function TranscriptionControls({
   const openGoogleImages = () => {
     const q = customText.trim();
     const url = `https://www.google.com/search?udm=2&q=${encodeURIComponent(
-      q
+      q,
     )}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
@@ -75,7 +83,7 @@ export function TranscriptionControls({
   const openNotoEmojiSearch = () => {
     const q = customText.trim();
     const url = `https://googlefonts.github.io/noto-emoji-animation/?icon.query=${encodeURIComponent(
-      q
+      q,
     )}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
@@ -84,22 +92,40 @@ export function TranscriptionControls({
     if (!canTranscribe) return null;
     return (
       <div className='space-y-2'>
-        <button
-          onClick={onTranscribe}
-          disabled={isTranscribing}
-          className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
-          title='Transcribe final video for this scene'
-          aria-label='Transcribe final video for this scene'
-        >
-          {isTranscribing ? (
-            <Loader2 className='h-4 w-4 animate-spin' />
-          ) : (
-            <Upload className='h-4 w-4' />
+        <div className='flex items-center gap-2'>
+          <button
+            onClick={onTranscribe}
+            disabled={isTranscribing}
+            className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+            title='Transcribe final video for this scene'
+            aria-label='Transcribe final video for this scene'
+          >
+            {isTranscribing ? (
+              <Loader2 className='h-4 w-4 animate-spin' />
+            ) : (
+              <Upload className='h-4 w-4' />
+            )}
+            <span className='sr-only'>
+              {isTranscribing ? 'Transcribing...' : 'Transcribe Final Video'}
+            </span>
+          </button>
+
+          {canAutoFixMismatch && onAutoFixMismatch && (
+            <button
+              onClick={onAutoFixMismatch}
+              disabled={isTranscribing || !!isAutoFixingMismatch}
+              className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+              title='Auto-fix mismatch: will transcribe if needed, then regenerate TTS + sync + retranscribe (max 3 tries)'
+              aria-label='Auto-fix mismatch between scene text and transcription'
+            >
+              {isAutoFixingMismatch ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <Wand2 className='h-4 w-4' />
+              )}
+            </button>
           )}
-          <span className='sr-only'>
-            {isTranscribing ? 'Transcribing...' : 'Transcribe Final Video'}
-          </span>
-        </button>
+        </div>
       </div>
     );
   }
@@ -153,7 +179,7 @@ export function TranscriptionControls({
           aria-label='Search Google Images for input text'
           title='Search Google Images'
         >
-          <Image className='h-4 w-4' />
+          <ImageIcon className='h-4 w-4' />
         </button>
 
         <button
@@ -217,6 +243,22 @@ export function TranscriptionControls({
               <Loader2 className='h-4 w-4 animate-spin' />
             ) : (
               <RotateCcw className='h-4 w-4' />
+            )}
+          </button>
+        )}
+
+        {canAutoFixMismatch && onAutoFixMismatch && (
+          <button
+            onClick={onAutoFixMismatch}
+            disabled={isTranscribing || !!isAutoFixingMismatch}
+            className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+            title='If transcription differs from the scene text, regenerate TTS with a new random seed, sync video, and retranscribe (max 3 tries)'
+            aria-label='Auto-fix mismatch between scene text and transcription'
+          >
+            {isAutoFixingMismatch ? (
+              <Loader2 className='h-4 w-4 animate-spin' />
+            ) : (
+              <Wand2 className='h-4 w-4' />
             )}
           </button>
         )}

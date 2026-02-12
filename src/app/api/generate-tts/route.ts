@@ -55,7 +55,7 @@ function readTimeoutState(): {
 function writeTimeoutState(
   scheduledAt: number,
   shutdownInitiated: boolean,
-  sessionId?: string
+  sessionId?: string,
 ): void {
   try {
     fs.writeFileSync(
@@ -65,7 +65,7 @@ function writeTimeoutState(
         shutdownInitiated,
         sessionId,
         lastUpdated: Date.now(),
-      })
+      }),
     );
   } catch (error) {
     console.error('Error writing timeout state:', error);
@@ -87,7 +87,7 @@ function schedulePeriodicTimeoutCheck(): void {
   const state = readTimeoutState();
   if (!state || state.scheduledAt === 0) {
     console.log(
-      `🔍 [${new Date().toISOString()}] Periodic check: No timeout scheduled`
+      `🔍 [${new Date().toISOString()}] Periodic check: No timeout scheduled`,
     );
     return; // No timeout scheduled
   }
@@ -95,7 +95,7 @@ function schedulePeriodicTimeoutCheck(): void {
   // Check if shutdown has already been initiated
   if (state.shutdownInitiated) {
     console.log(
-      `🔍 [${new Date().toISOString()}] Periodic check: Shutdown already initiated, stopping checks`
+      `🔍 [${new Date().toISOString()}] Periodic check: Shutdown already initiated, stopping checks`,
     );
     return;
   }
@@ -108,21 +108,21 @@ function schedulePeriodicTimeoutCheck(): void {
     `🔍 [${new Date().toISOString()}] Periodic timeout check (${
       state.sessionId
     }): ${Math.round(elapsed / 1000)}s elapsed, ${Math.round(
-      remaining / 1000
-    )}s remaining`
+      remaining / 1000,
+    )}s remaining`,
   );
 
   if (remaining <= 0) {
     // Time to shut down
     console.log(
-      `⏰ [${new Date().toISOString()}] Periodic check: Time expired, initiating shutdown`
+      `⏰ [${new Date().toISOString()}] Periodic check: Time expired, initiating shutdown`,
     );
     performShutdown(state.scheduledAt, state.sessionId);
   } else if (remaining <= 60000) {
     // Less than 1 minute remaining
     // Schedule the final timeout
     console.log(
-      `⏰ [${new Date().toISOString()}] Periodic check: Less than 1 minute remaining, scheduling final timeout`
+      `⏰ [${new Date().toISOString()}] Periodic check: Less than 1 minute remaining, scheduling final timeout`,
     );
     serverTimeout = setTimeout(() => {
       const currentState = readTimeoutState();
@@ -137,7 +137,7 @@ function schedulePeriodicTimeoutCheck(): void {
   } else {
     // Schedule next check in 3 minutes
     console.log(
-      `🔄 [${new Date().toISOString()}] Periodic check: Scheduling next check in 3 minutes`
+      `🔄 [${new Date().toISOString()}] Periodic check: Scheduling next check in 3 minutes`,
     );
     serverTimeout = setTimeout(() => {
       // Check session before scheduling next check
@@ -155,14 +155,14 @@ function schedulePeriodicTimeoutCheck(): void {
 
 async function performShutdown(
   scheduledAt: number,
-  sessionId?: string
+  sessionId?: string,
 ): Promise<void> {
   const actualDelay = Date.now() - scheduledAt;
   const expectedDelay = SERVER_TIMEOUT;
   console.log(
     `⏰ [${new Date().toISOString()}] Server shutdown timeout fired after ${
       actualDelay / 1000 / 60
-    } minutes (${actualDelay}ms actual, ${expectedDelay}ms expected)`
+    } minutes (${actualDelay}ms actual, ${expectedDelay}ms expected)`,
   );
 
   // Mark shutdown as initiated
@@ -175,7 +175,7 @@ async function performShutdown(
     console.log(
       `🛑 Auto-stopping TTS server after ${
         SERVER_TIMEOUT / 1000 / 60
-      } minutes of inactivity`
+      } minutes of inactivity`,
     );
 
     // Priority 1: Kill by port (most reliable for detached processes)
@@ -199,7 +199,7 @@ async function performShutdown(
           console.log(
             `📋 Found ${
               pidList.length
-            } process(es) on port ${SERVER_PORT}: ${pidList.join(', ')}`
+            } process(es) on port ${SERVER_PORT}: ${pidList.join(', ')}`,
           );
 
           // Check each process to see if it's a TTS server process before killing
@@ -224,7 +224,7 @@ async function performShutdown(
                 try {
                   process.kill(parseInt(pid), 'SIGTERM');
                   console.log(
-                    `✅ Sent SIGTERM to TTS server process ${pid} (${command})`
+                    `✅ Sent SIGTERM to TTS server process ${pid} (${command})`,
                   );
                 } catch (error) {
                   console.error(`❌ Failed to kill process ${pid}:`, error);
@@ -256,7 +256,7 @@ async function performShutdown(
                   try {
                     process.kill(parseInt(pid), 'SIGKILL');
                     console.log(
-                      `💀 Force killed TTS server process ${pid} (${command})`
+                      `💀 Force killed TTS server process ${pid} (${command})`,
                     );
                   } catch (error) {
                     // Process might already be dead
@@ -302,7 +302,7 @@ async function performShutdown(
           ['-f', 'uvicorn.*server_api_only'],
           {
             stdio: 'inherit',
-          }
+          },
         );
 
         uvicornKillProcess.on('close', (code: number) => {
@@ -328,7 +328,7 @@ async function performShutdown(
         portKillProcess.on('close', (code: number) => {
           if (code === 0) {
             console.log(
-              `✅ Killed processes matching port ${SERVER_PORT} pattern`
+              `✅ Killed processes matching port ${SERVER_PORT} pattern`,
             );
           }
         });
@@ -377,7 +377,7 @@ async function performShutdown(
       const finalStatus = await checkTTSServer();
       if (finalStatus.running) {
         console.log(
-          '❌ TTS server still running after all kill attempts - may need manual intervention'
+          '❌ TTS server still running after all kill attempts - may need manual intervention',
         );
       } else {
         console.log('✅ TTS server successfully shut down');
@@ -388,7 +388,7 @@ async function performShutdown(
   }
 
   console.log(
-    `🔧 [${new Date().toISOString()}] setTimeout callback ending, clearing serverTimeout`
+    `🔧 [${new Date().toISOString()}] setTimeout callback ending, clearing serverTimeout`,
   );
   serverTimeout = null;
   timeoutScheduledAt = 0;
@@ -434,7 +434,7 @@ async function startTTSServer(): Promise<void> {
 
       if (!serverPath) {
         throw new Error(
-          'Could not find chatterbox-tts-server directory. Please ensure it exists in one of the expected locations.'
+          'Could not find chatterbox-tts-server directory. Please ensure it exists in one of the expected locations.',
         );
       }
 
@@ -446,7 +446,7 @@ async function startTTSServer(): Promise<void> {
 
       if (!venvExists) {
         throw new Error(
-          `Virtual environment not found at ${venvPath}. Please run setup in the chatterbox-tts-server directory.`
+          `Virtual environment not found at ${venvPath}. Please run setup in the chatterbox-tts-server directory.`,
         );
       }
 
@@ -461,7 +461,7 @@ async function startTTSServer(): Promise<void> {
           stdio: 'ignore', // Don't inherit stdio for independent operation
           detached: true, // Keep server alive independently
           env: { ...process.env, PYTHONUNBUFFERED: '1' }, // Ensure Python output is not buffered
-        }
+        },
       );
 
       // Store PID for reliable process management
@@ -529,14 +529,14 @@ function scheduleServerStop(): void {
   if (existingScheduledAt > 0) {
     const timeRemaining = Math.max(
       0,
-      existingScheduledAt + SERVER_TIMEOUT - now
+      existingScheduledAt + SERVER_TIMEOUT - now,
     );
     console.log(
       `🔄 [${new Date(
-        now
+        now,
       ).toISOString()}] Clearing existing server shutdown timeout (${Math.round(
-        timeRemaining / 1000
-      )}s remaining)`
+        timeRemaining / 1000,
+      )}s remaining)`,
     );
     // Clear local timeout if it exists
     if (serverTimeout) {
@@ -547,7 +547,7 @@ function scheduleServerStop(): void {
     clearTimeoutState();
   } else {
     console.log(
-      `ℹ️ [${new Date(now).toISOString()}] No existing timeout to clear`
+      `ℹ️ [${new Date(now).toISOString()}] No existing timeout to clear`,
     );
   }
 
@@ -555,7 +555,7 @@ function scheduleServerStop(): void {
   console.log(
     `⏰ [${new Date().toISOString()}] Scheduling server shutdown in ${
       SERVER_TIMEOUT / 1000 / 60
-    } minutes (${SERVER_TIMEOUT}ms) using periodic checks`
+    } minutes (${SERVER_TIMEOUT}ms) using periodic checks`,
   );
 
   // Generate unique session ID for this timeout
@@ -641,6 +641,18 @@ async function waitForServerShutdown(): Promise<void> {
   console.log('Previous TTS server shutdown timeout, proceeding anyway');
 }
 
+function coerceSeed(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  // Most ML/Torch stacks expect 32-bit-ish integer seeds.
+  const i = Math.trunc(n);
+  const max = 2_147_483_647; // 2^31 - 1
+  const min = 0;
+  if (i < min) return ((i % max) + max) % max;
+  if (i > max) return i % max;
+  return i;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { text, sceneId, videoId, ttsSettings } = await request.json();
@@ -658,7 +670,7 @@ export async function POST(request: NextRequest) {
     if (!hasText || (!hasSceneId && !hasVideoId)) {
       return NextResponse.json(
         { error: 'Text and (sceneId or videoId) are required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -669,7 +681,7 @@ export async function POST(request: NextRequest) {
     // If server is already running, timeout will be reset after TTS completion
     if (serverStatus.running) {
       console.log(
-        `🔄 [${new Date().toISOString()}] Server already running, timeout will be reset after TTS completion`
+        `🔄 [${new Date().toISOString()}] Server already running, timeout will be reset after TTS completion`,
       );
       // Note: Module context is fresh per request, so existing timeout from previous requests isn't visible
       // The timeout reset happens after successful TTS generation
@@ -684,7 +696,7 @@ export async function POST(request: NextRequest) {
         console.error('❌ Failed to start TTS server:', error);
         return NextResponse.json(
           { error: 'Failed to start TTS server' },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -702,19 +714,19 @@ export async function POST(request: NextRequest) {
           console.log(
             `⏳ TTS server ready, model still loading (attempt ${
               readinessAttempts + 1
-            }/${maxReadinessAttempts})`
+            }/${maxReadinessAttempts})`,
           );
         } else if (currentStatus.running) {
           console.log(
             `⏳ TTS server running but status uncertain (attempt ${
               readinessAttempts + 1
-            }/${maxReadinessAttempts})`
+            }/${maxReadinessAttempts})`,
           );
         } else {
           console.log(
             `⏳ TTS server not ready yet (attempt ${
               readinessAttempts + 1
-            }/${maxReadinessAttempts})`
+            }/${maxReadinessAttempts})`,
           );
         }
 
@@ -725,7 +737,7 @@ export async function POST(request: NextRequest) {
 
       if (!currentStatus.running || !currentStatus.modelLoaded) {
         console.warn(
-          '⚠️ TTS server not fully ready after waiting, but proceeding anyway'
+          '⚠️ TTS server not fully ready after waiting, but proceeding anyway',
         );
       }
     } else {
@@ -734,7 +746,7 @@ export async function POST(request: NextRequest) {
         console.log('✅ TTS server fully ready with model loaded');
       } else {
         console.log(
-          '⏳ TTS server running but model not loaded yet, waiting...'
+          '⏳ TTS server running but model not loaded yet, waiting...',
         );
         let readinessAttempts = 0;
         const maxReadinessAttempts = 10; // 10 attempts = ~20 seconds max wait
@@ -748,13 +760,13 @@ export async function POST(request: NextRequest) {
             console.log(
               `⏳ Model still loading (attempt ${
                 readinessAttempts + 1
-              }/${maxReadinessAttempts})`
+              }/${maxReadinessAttempts})`,
             );
           } else {
             console.log(
               `⏳ Waiting for model to load (attempt ${
                 readinessAttempts + 1
-              }/${maxReadinessAttempts})`
+              }/${maxReadinessAttempts})`,
             );
           }
 
@@ -767,7 +779,7 @@ export async function POST(request: NextRequest) {
           console.log('✅ Model loaded successfully');
         } else {
           console.warn(
-            '⚠️ Model not loaded after waiting, but proceeding anyway'
+            '⚠️ Model not loaded after waiting, but proceeding anyway',
           );
         }
       }
@@ -782,6 +794,8 @@ export async function POST(request: NextRequest) {
       reference_audio_filename: 'calmS5wave.wav',
     };
 
+    const safeSeed = coerceSeed(settings.seed, 1212);
+
     // Step 1: Generate TTS (server should be fully ready now)
     const ttsPayload = {
       text: text,
@@ -789,7 +803,7 @@ export async function POST(request: NextRequest) {
       exaggeration: settings.exaggeration,
       cfg_weight: settings.cfg_weight,
       speed_factor: 1,
-      seed: settings.seed,
+      seed: safeSeed,
       language: 'en',
       voice_mode: 'clone',
       split_text: true,
@@ -822,7 +836,21 @@ export async function POST(request: NextRequest) {
     clearTimeout(ttsAbortTimer);
 
     if (!ttsResponse.ok) {
-      throw new Error(`TTS service error: ${ttsResponse.status}`);
+      const contentType = ttsResponse.headers.get('content-type') || '';
+      let bodyText = '';
+      try {
+        if (contentType.includes('application/json')) {
+          const j = (await ttsResponse.json().catch(() => null)) as unknown;
+          bodyText = j ? JSON.stringify(j) : '';
+        } else {
+          bodyText = await ttsResponse.text().catch(() => '');
+        }
+      } catch {
+        bodyText = '';
+      }
+      const trimmed = bodyText.trim();
+      const suffix = trimmed ? ` - ${trimmed.slice(0, 800)}` : '';
+      throw new Error(`TTS service error: ${ttsResponse.status}${suffix}`);
     }
 
     // Get the audio file as buffer
@@ -852,12 +880,12 @@ export async function POST(request: NextRequest) {
         .text()
         .catch(() => 'Unknown error');
       throw new Error(
-        `MinIO upload failed (${uploadResponse.status}): ${errorText}`
+        `MinIO upload failed (${uploadResponse.status}): ${errorText}`,
       );
     }
 
     console.log(
-      `✅ [${new Date().toISOString()}] TTS generation completed successfully`
+      `✅ [${new Date().toISOString()}] TTS generation completed successfully`,
     );
 
     // Schedule server stop after successful generation

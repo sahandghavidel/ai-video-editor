@@ -1754,23 +1754,25 @@ export default function OriginalVideosList({
           'Duration not found in database, calculating from captions...',
         );
         try {
-          const captionsResponse = await fetch(captionsUrl);
-          if (captionsResponse.ok) {
-            const captions = await captionsResponse.json();
-            if (Array.isArray(captions) && captions.length > 0) {
-              // Get the end time of the last word
-              const lastWord = captions[captions.length - 1];
-              if (lastWord && typeof lastWord.end === 'number') {
-                videoDuration = lastWord.end;
-                console.log(
-                  `Calculated duration from captions: ${videoDuration}s`,
-                );
+          if (captionsUrl) {
+            const captionsResponse = await fetch(captionsUrl);
+            if (captionsResponse.ok) {
+              const captions = await captionsResponse.json();
+              if (Array.isArray(captions) && captions.length > 0) {
+                // Get the end time of the last word
+                const lastWord = captions[captions.length - 1];
+                if (lastWord && typeof lastWord.end === 'number') {
+                  videoDuration = lastWord.end;
+                  console.log(
+                    `Calculated duration from captions: ${videoDuration}s`,
+                  );
 
-                // Save duration to database for future use
-                await updateOriginalVideoRow(videoId, {
-                  field_6909: videoDuration,
-                });
-                console.log('Duration saved to database');
+                  // Save duration to database for future use
+                  await updateOriginalVideoRow(videoId, {
+                    field_6909: videoDuration,
+                  });
+                  console.log('Duration saved to database');
+                }
               }
             }
           }
@@ -1896,7 +1898,7 @@ export default function OriginalVideosList({
           try {
             await handleGenerateScenesInternal(
               video.id,
-              captionsUrl,
+              captionsUrl || undefined,
               videoDuration,
             );
             console.log(`Successfully generated scenes for video ${video.id}`);
