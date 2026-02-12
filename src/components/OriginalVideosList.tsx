@@ -74,6 +74,10 @@ type BaserowField =
 import { Sparkles, Mic2 } from 'lucide-react';
 
 interface SceneHandlers {
+  handleAutoFixMismatch: (
+    sceneId: number,
+    sceneData?: BaserowRow,
+  ) => Promise<void>;
   handleSentenceImprovement: (
     sceneId: number,
     sentence: string,
@@ -96,6 +100,14 @@ interface SceneHandlers {
     sceneId: number,
     sceneData?: BaserowRow,
     skipRefresh?: boolean,
+  ) => Promise<void>;
+
+  handleTranscribeScene: (
+    sceneId: number,
+    sceneData?: BaserowRow,
+    videoType?: 'original' | 'final',
+    skipRefresh?: boolean,
+    skipSound?: boolean,
   ) => Promise<void>;
 }
 
@@ -2491,7 +2503,8 @@ export default function OriginalVideosList({
     }
   };
 
-  // Transcribe FINAL Scenes for All Videos (Processing only)
+  // Fix TTS for Scenes in All Videos (Processing only)
+  // Uses the robust per-scene auto-fix handler (TTS -> sync -> transcribe -> compare, retry up to N).
   const handleTranscribeProcessingScenesAllVideos = async (
     playSound = true,
   ) => {
@@ -2500,6 +2513,12 @@ export default function OriginalVideosList({
     try {
       setError(null);
       setTranscribingProcessingScenesAllVideos(true);
+
+      if (!sceneHandlers?.handleAutoFixMismatch) {
+        throw new Error(
+          'Fix TTS handler not ready. Select a video first so scene actions initialize.',
+        );
+      }
 
       const extractLinkedVideoId = (videoIdField: unknown): number | null => {
         if (typeof videoIdField === 'number') {
@@ -2564,147 +2583,47 @@ export default function OriginalVideosList({
         return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
       });
 
-      // Only transcribe scenes that have a final video and missing captions
-      const scenesToTranscribe = scenesForProcessingVideos.filter((scene) => {
-        const finalVideo = scene['field_6886'];
-        const captions = scene['field_6910'];
-
-        const hasFinalVideo =
-          typeof finalVideo === 'string' && finalVideo.trim().length > 0;
-        const hasCaptions =
-          typeof captions === 'string'
-            ? captions.trim().length > 0
-            : !!captions;
-
-        return hasFinalVideo && !hasCaptions;
-      });
+      // Fix only scenes that have final video + text (auto-fix will bootstrap transcription if missing).
+      const scenesToFix = [...scenesForProcessingVideos]
+        .filter((scene) => {
+          const hasFinalVideo =
+            typeof scene['field_6886'] === 'string' &&
+            String(scene['field_6886']).trim().length > 0;
+          const hasText = String(scene['field_6890'] ?? '').trim().length > 0;
+          return hasFinalVideo && hasText;
+        })
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
       console.log(`Processing videos: ${processingVideos.length}`);
       console.log(
         `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`,
       );
       console.log(
-        `Scenes to transcribe (final video, missing captions): ${scenesToTranscribe.length}`,
+        `Scenes to Fix TTS (final video + text): ${scenesToFix.length}`,
       );
 
-      if (scenesToTranscribe.length === 0) {
+      if (scenesToFix.length === 0) {
         console.log(
-          'No final scenes found that need transcription for Processing videos',
+          'No Processing scenes found that are eligible for Fix TTS (need final video + text)',
         );
         return;
       }
 
-      for (const scene of scenesToTranscribe) {
+      for (const scene of scenesToFix) {
         const videoId = extractLinkedVideoId(scene['field_6889']);
         if (videoId && !isNaN(videoId)) {
           setCurrentProcessingVideoId(videoId);
         }
 
-        const videoUrl = String(scene['field_6886'] ?? '').trim();
-        if (!videoUrl) continue;
-
-        // Step 1: Transcribe the scene final video
-        const transcribeResponse = await fetch('/api/transcribe-scene', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            media_url: videoUrl,
-            model: transcriptionSettings.selectedModel,
-            scene_id: scene.id,
-          }),
-        });
-
-        if (!transcribeResponse.ok) {
-          const errText = await transcribeResponse.text();
-          throw new Error(
-            `Failed to transcribe scene ${scene.id}: ${transcribeResponse.status} ${errText}`,
-          );
+        try {
+          await sceneHandlers.handleAutoFixMismatch(scene.id, scene);
+        } catch (error) {
+          // Continue with other scenes; don't fail the whole batch.
+          console.error(`Fix TTS failed for scene ${scene.id}:`, error);
         }
 
-        const transcriptionData = await transcribeResponse.json();
-
-        // Step 2: Extract word timestamps
-        const wordTimestamps: Array<{
-          word: string;
-          start: number;
-          end: number;
-        }> = [];
-        const segments = transcriptionData.response?.segments;
-
-        if (segments && segments.length > 0) {
-          for (const segment of segments) {
-            if (segment.words) {
-              for (const wordObj of segment.words) {
-                wordTimestamps.push({
-                  word: String(wordObj.word ?? '').trim(),
-                  start: Number(wordObj.start),
-                  end: Number(wordObj.end),
-                });
-              }
-            }
-          }
-        }
-
-        // Step 3: Upload captions JSON
-        const captionsData = JSON.stringify(wordTimestamps);
-        const timestamp = Date.now();
-        const filename = `scene_${scene.id}_captions_${timestamp}.json`;
-
-        const formData = new FormData();
-        const blob = new Blob([captionsData], { type: 'application/json' });
-        formData.append('file', blob, filename);
-
-        const uploadResponse = await fetch('/api/upload-captions', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!uploadResponse.ok) {
-          const errText = await uploadResponse.text();
-          throw new Error(
-            `Failed to upload captions for scene ${scene.id}: ${uploadResponse.status} ${errText}`,
-          );
-        }
-
-        const uploadResult = await uploadResponse.json();
-        const captionsUrl = uploadResult.url || uploadResult.file_url;
-        if (!captionsUrl) {
-          throw new Error(
-            `Upload did not return a captions URL for scene ${scene.id}`,
-          );
-        }
-
-        // Step 4: Update scene fields (captions + sentence)
-        const fullText = wordTimestamps
-          .map((w) => w.word)
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-
-        const updateData: Record<string, unknown> = {
-          field_6910: captionsUrl,
-          ...(fullText ? { field_6890: fullText } : {}),
-        };
-
-        const patchRes = await fetch(`/api/baserow/scenes/${scene.id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updateData),
-        });
-
-        if (!patchRes.ok) {
-          const errorText = await patchRes.text();
-          throw new Error(
-            `Failed to update scene ${scene.id}: ${patchRes.status} ${errorText}`,
-          );
-        }
-
-        // Small delay to avoid rate limits / overwhelming the backend
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Small delay to avoid overwhelming the backend
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
       if (refreshScenesData) {
@@ -2715,17 +2634,14 @@ export default function OriginalVideosList({
         playSuccessSound();
       }
     } catch (error) {
-      console.error(
-        'Error transcribing final scenes for Processing videos:',
-        error,
-      );
+      console.error('Error fixing TTS for scenes in Processing videos:', error);
 
       if (playSound) {
         playErrorSound();
       }
 
       setError(
-        `Failed to transcribe final scenes: ${
+        `Failed to Fix TTS for Processing scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -3947,7 +3863,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Transcribe Scenes (Processing) -> Prompt Scenes (Processing)
+  // Run Full Pipeline: TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -4437,45 +4353,38 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Sync (disabled in config)');
       }
 
-      // Step 8: Transcribe Scenes (Processing only, after Sync)
+      // Step 8: Fix TTS (Processing only, after Sync)
       if (pipelineConfig.transcribeScenesAfterSync) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Transcribing scenes for Processing videos...`,
+          `Step ${stepNumber}: Fixing TTS for scenes in Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Transcribing scenes for Processing videos`,
+          `Step ${stepNumber}: Fixing TTS for scenes in Processing videos`,
         );
         try {
           await handleTranscribeProcessingScenesAllVideos(false);
-          console.log(
-            `✓ Step ${stepNumber} Complete: Scene transcription finished`,
-          );
+          console.log(`✓ Step ${stepNumber} Complete: Fix TTS finished`);
 
-          console.log('Refreshing data after scene transcription...');
+          console.log('Refreshing data after Fix TTS...');
           await handleRefresh();
           if (refreshScenesData) {
             refreshScenesData();
           }
           console.log('Data refreshed successfully');
         } catch (error) {
-          console.error(
-            `✗ Step ${stepNumber} Failed: Scene transcription error`,
-            error,
-          );
+          console.error(`✗ Step ${stepNumber} Failed: Fix TTS error`, error);
           throw new Error(
-            `Scene transcription failed: ${
+            `Fix TTS failed: ${
               error instanceof Error ? error.message : 'Unknown error'
             }`,
           );
         }
       } else {
-        console.log(
-          '⊘ Skipping Step: Transcribe Scenes After Sync (disabled in config)',
-        );
+        console.log('⊘ Skipping Step: Fix TTS After Sync (disabled in config)');
       }
 
-      // Step 9: Prompt Scenes (Processing only, after Transcribe Scenes)
+      // Step 9: Prompt Scenes (Processing only, after Fix TTS)
       if (pipelineConfig.promptScenesAfterTranscribe) {
         stepNumber++;
         setPipelineStep(
@@ -5588,7 +5497,7 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
-                    {/* Transcribe FINAL Scenes (Processing) Button */}
+                    {/* Fix TTS (Processing) Button */}
                     <button
                       onClick={() =>
                         handleTranscribeProcessingScenesAllVideos()
@@ -5597,6 +5506,7 @@ export default function OriginalVideosList({
                         transcribingProcessingScenesAllVideos ||
                         promptingProcessingScenesAllVideos ||
                         deletingEmptyScenesAllVideos ||
+                        !sceneHandlers?.handleAutoFixMismatch ||
                         uploading ||
                         reordering ||
                         transcribing !== null ||
@@ -5610,8 +5520,10 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         transcribingProcessingScenesAllVideos
-                          ? 'Transcribing final scenes for Processing videos...'
-                          : 'Transcribe final scene videos (missing captions) for videos with Processing status'
+                          ? 'Fixing TTS for scenes in Processing videos...'
+                          : !sceneHandlers?.handleAutoFixMismatch
+                            ? 'Select a video first so Fix TTS handlers initialize'
+                            : 'Fix TTS by retrying TTS + sync + transcribe until it matches scene text'
                       }
                     >
                       <Subtitles
@@ -5626,7 +5538,7 @@ export default function OriginalVideosList({
                           ? currentProcessingVideoId !== null
                             ? `V${currentProcessingVideoId}`
                             : 'Processing...'
-                          : 'Transcribe Scenes'}
+                          : 'Fix TTS'}
                       </span>
                     </button>
 

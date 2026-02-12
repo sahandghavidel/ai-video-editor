@@ -61,7 +61,7 @@ export default function PipelineConfig() {
     { key: 'sync' as const, label: 'Sync Videos', color: 'text-green-500' },
     {
       key: 'transcribeScenesAfterSync' as const,
-      label: 'Transcribe Scenes',
+      label: 'Fix TTS',
       color: 'text-purple-500',
     },
     {
