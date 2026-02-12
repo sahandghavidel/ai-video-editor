@@ -75,12 +75,7 @@ export async function POST(request: NextRequest) {
     // Step 2: Prefer script text when available, otherwise use transcription text
     const scriptText = await getVideoScriptText(videoId);
     const scenes = scriptText
-      ? generateScenesFromScriptAndTranscription(
-          scriptText,
-          captionsData,
-          videoId,
-          videoDuration,
-        )
+      ? generateScenesFromScriptFixedTiming(scriptText, videoId)
       : generateScenesFromTranscription(captionsData, videoId, videoDuration);
     console.log(`Generated ${scenes.length} scenes`);
 
@@ -190,6 +185,30 @@ function splitScriptIntoSentences(scriptText: string): string[] {
 
   flush();
   return sentences;
+}
+
+function generateScenesFromScriptFixedTiming(
+  scriptText: string,
+  videoId: string,
+): SceneSegment[] {
+  const sentences = splitScriptIntoSentences(scriptText).filter(Boolean);
+  const sceneDuration = 3;
+
+  return sentences.map((sentenceText, index) => {
+    const startTime = index * sceneDuration;
+    const endTime = startTime + sceneDuration;
+
+    return {
+      id: index,
+      words: sentenceText.trim(),
+      duration: sceneDuration,
+      startTime,
+      endTime,
+      preEndTime: index === 0 ? 0 : startTime,
+      type: 'sentence',
+      videoId,
+    };
+  });
 }
 
 function buildSentenceSegmentsFromTranscription(
