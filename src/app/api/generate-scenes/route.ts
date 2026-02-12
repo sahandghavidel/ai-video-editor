@@ -82,7 +82,17 @@ export async function POST(request: NextRequest) {
     // Step 3: Create all scene records in Baserow using batch operation
     console.log(`Creating ${scenes.length} scenes in batch...`);
     const createdScenes = await createSceneRecordsBatch(scenes);
-    const sceneIds = createdScenes.map((scene: { id: number }) => scene.id);
+    const sceneIds = createdScenes
+      .map((scene: { id?: number } | number) =>
+        typeof scene === 'number' ? scene : scene.id,
+      )
+      .filter((id): id is number => typeof id === 'number');
+
+    if (!sceneIds.length) {
+      throw new Error(
+        'No scene IDs returned from batch creation; cannot link scenes to video.',
+      );
+    }
 
     // Step 4: Update the original video record with scene IDs
     console.log(
