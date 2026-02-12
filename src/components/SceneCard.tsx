@@ -5,6 +5,7 @@ import {
   updateBaserowRow,
   updateSceneRow,
   BaserowRow,
+  getSceneById,
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
@@ -30,6 +31,7 @@ import {
   Upload,
   FastForward,
   ImageIcon,
+  Wand2,
 } from 'lucide-react';
 import { ImageOverlayModal } from './ImageOverlayModal';
 
@@ -209,6 +211,15 @@ export default function SceneCard({
   const [addingImageOverlay, setAddingImageOverlay] = useState<number | null>(
     null,
   );
+
+  const [autoFixingMismatchSceneId, setAutoFixingMismatchSceneId] = useState<
+    number | null
+  >(null);
+  const [autoFixMismatchStatus, setAutoFixMismatchStatus] = useState<
+    Record<number, string | null>
+  >({});
+
+  type CaptionsWord = { word: string; start: number; end: number };
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -2079,6 +2090,437 @@ export default function SceneCard({
       }
     },
     [setGeneratingVideo],
+  );
+
+  const normalizeSpeechTextForCompare = useCallback((s: string) => {
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[’']/g, '')
+      .replace(/[^a-z0-9\s]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }, []);
+
+  const withCacheBustSafe = useCallback((url: string) => {
+    const u = String(url || '').trim();
+    if (!u) return u;
+    const lower = u.toLowerCase();
+    const looksSigned =
+      lower.includes('x-amz-signature=') ||
+      lower.includes('x-amz-algorithm=') ||
+      lower.includes('x-amz-credential=') ||
+      lower.includes('signature=') ||
+      lower.includes('x-goog-signature=');
+    if (looksSigned) return u;
+    const sep = u.includes('?') ? '&' : '?';
+    return `${u}${sep}t=${Date.now()}`;
+  }, []);
+
+  const fetchSceneCaptionsWords = useCallback(
+    async (sceneId: number): Promise<CaptionsWord[] | null> => {
+      const scene = await getSceneById(sceneId);
+      const captionsUrlRaw =
+        scene &&
+        typeof (scene as Record<string, unknown>)['field_6910'] === 'string'
+          ? String((scene as Record<string, unknown>)['field_6910'])
+          : '';
+      const captionsUrl = captionsUrlRaw.trim();
+      if (!captionsUrl) return null;
+
+      const res = await fetch(withCacheBustSafe(captionsUrl), {
+        cache: 'no-store',
+      });
+      if (!res.ok) return null;
+      const data = (await res.json().catch(() => null)) as unknown;
+      if (!Array.isArray(data)) return null;
+
+      return data
+        .filter((w) => {
+          if (!w || typeof w !== 'object') return false;
+          const ww = w as Record<string, unknown>;
+          return (
+            typeof ww.word === 'string' &&
+            typeof ww.start === 'number' &&
+            typeof ww.end === 'number'
+          );
+        })
+        .map((w) => {
+          const ww = w as Record<string, unknown>;
+          return {
+            word: String(ww.word || ''),
+            start: Number(ww.start || 0),
+            end: Number(ww.end || 0),
+          };
+        }) as CaptionsWord[];
+    },
+    [withCacheBustSafe],
+  );
+
+  const waitForCaptionsWords = useCallback(
+    async (
+      sceneId: number,
+      opts?: { maxRetries?: number; delayMs?: number },
+    ): Promise<CaptionsWord[] | null> => {
+      const maxRetries = opts?.maxRetries ?? 10;
+      const delayMs = opts?.delayMs ?? 500;
+      for (let i = 0; i < maxRetries; i++) {
+        const w = await fetchSceneCaptionsWords(sceneId);
+        if (w && w.length > 0) return w;
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      return null;
+    },
+    [fetchSceneCaptionsWords],
+  );
+
+  const sleep = useCallback((ms: number) => {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }, []);
+
+  const getStringField = useCallback((row: unknown, key: string): string => {
+    if (!row || typeof row !== 'object') return '';
+    const v = (row as Record<string, unknown>)[key];
+    if (typeof v !== 'string') return '';
+    return v.trim();
+  }, []);
+
+  const waitForSceneWhere = useCallback(
+    async (
+      sceneId: number,
+      predicate: (scene: Record<string, unknown>) => boolean,
+      opts?: { maxRetries?: number; delayMs?: number },
+    ): Promise<Record<string, unknown> | null> => {
+      const maxRetries = opts?.maxRetries ?? 20;
+      const delayMs = opts?.delayMs ?? 500;
+      for (let i = 0; i < maxRetries; i++) {
+        const scene = (await getSceneById(sceneId)) as Record<string, unknown>;
+        if (scene && predicate(scene)) return scene;
+        await sleep(delayMs);
+      }
+      return null;
+    },
+    [sleep],
+  );
+
+  const fetchCaptionsWordsFromUrl = useCallback(
+    async (captionsUrl: string): Promise<CaptionsWord[] | null> => {
+      const url = String(captionsUrl || '').trim();
+      if (!url) return null;
+
+      const res = await fetch(withCacheBustSafe(url), { cache: 'no-store' });
+      if (!res.ok) return null;
+      const data = (await res.json().catch(() => null)) as unknown;
+      if (!Array.isArray(data)) return null;
+
+      return data
+        .filter((w) => {
+          if (!w || typeof w !== 'object') return false;
+          const ww = w as Record<string, unknown>;
+          return (
+            typeof ww.word === 'string' &&
+            typeof ww.start === 'number' &&
+            typeof ww.end === 'number'
+          );
+        })
+        .map((w) => {
+          const ww = w as Record<string, unknown>;
+          return {
+            word: String(ww.word || ''),
+            start: Number(ww.start || 0),
+            end: Number(ww.end || 0),
+          };
+        }) as CaptionsWord[];
+    },
+    [withCacheBustSafe],
+  );
+
+  const waitForCaptionsWordsFromUrl = useCallback(
+    async (
+      captionsUrl: string,
+      opts?: { maxRetries?: number; delayMs?: number },
+    ): Promise<CaptionsWord[] | null> => {
+      const maxRetries = opts?.maxRetries ?? 20;
+      const delayMs = opts?.delayMs ?? 500;
+      for (let i = 0; i < maxRetries; i++) {
+        const w = await fetchCaptionsWordsFromUrl(captionsUrl);
+        if (w && w.length > 0) return w;
+        await sleep(delayMs);
+      }
+      return null;
+    },
+    [fetchCaptionsWordsFromUrl, sleep],
+  );
+
+  const handleAutoFixMismatch = useCallback(
+    async (sceneId: number, sceneData?: BaserowRow) => {
+      if (autoFixingMismatchSceneId !== null) return;
+
+      setAutoFixingMismatchSceneId(sceneId);
+      setAutoFixMismatchStatus((prev) => ({ ...prev, [sceneId]: null }));
+
+      const setStatus = (msg: string | null) => {
+        setAutoFixMismatchStatus((prev) => ({ ...prev, [sceneId]: msg }));
+      };
+
+      try {
+        const maxAttempts = 3;
+
+        const initialScene =
+          (sceneData as BaserowRow | undefined) ||
+          (dataRef.current.find((s) => s.id === sceneId) as
+            | BaserowRow
+            | undefined);
+        // Always trust Baserow for the latest sentence.
+        const initialFromApi = (await getSceneById(sceneId)) as Record<
+          string,
+          unknown
+        > | null;
+        const desiredText = String(
+          (initialFromApi?.field_6890 as string) ??
+            initialScene?.field_6890 ??
+            '',
+        ).trim();
+        if (!desiredText) {
+          setStatus('Scene text is empty (field_6890).');
+          return;
+        }
+
+        const a = normalizeSpeechTextForCompare(desiredText);
+        if (!a) {
+          setStatus('Scene text normalizes to empty.');
+          return;
+        }
+
+        const baseVideoUrl = String(
+          (initialFromApi?.field_6888 as string) ??
+            initialScene?.field_6888 ??
+            '',
+        ).trim();
+        const startingFinalUrl = String(
+          (initialFromApi?.field_6886 as string) ??
+            initialScene?.field_6886 ??
+            '',
+        ).trim();
+        if (!baseVideoUrl) {
+          setStatus('Missing original clip (field_6888).');
+          return;
+        }
+        if (!startingFinalUrl) {
+          setStatus('Missing final video (field_6886).');
+          return;
+        }
+
+        // Bootstrap transcription if missing.
+        setStatus('Checking transcription...');
+        let words: CaptionsWord[] | null = null;
+        let captionsUrl = getStringField(initialFromApi, 'field_6910');
+        if (captionsUrl) {
+          words = await waitForCaptionsWordsFromUrl(captionsUrl, {
+            maxRetries: 6,
+            delayMs: 350,
+          });
+        }
+        if (!words) {
+          setStatus('No captions yet — transcribing final video...');
+          const sceneForTranscribe =
+            (await waitForSceneWhere(
+              sceneId,
+              (s) => Boolean(getStringField(s, 'field_6886')),
+              { maxRetries: 10, delayMs: 300 },
+            )) || (initialFromApi as Record<string, unknown> | null);
+
+          await handleTranscribeScene(
+            sceneId,
+            (sceneForTranscribe as unknown) ?? initialScene,
+            'final',
+            true,
+            true,
+            false,
+            { throwOnError: true },
+          );
+
+          const sceneWithCaptions = await waitForSceneWhere(
+            sceneId,
+            (s) => Boolean(getStringField(s, 'field_6910')),
+            { maxRetries: 20, delayMs: 400 },
+          );
+          captionsUrl = getStringField(sceneWithCaptions, 'field_6910');
+          if (captionsUrl) {
+            words = await waitForCaptionsWordsFromUrl(captionsUrl, {
+              maxRetries: 20,
+              delayMs: 400,
+            });
+          }
+        }
+
+        const toTranscriptText = (w: CaptionsWord[] | null) =>
+          (w || [])
+            .map((x) => String(x.word || '').trim())
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+
+        const b0 = normalizeSpeechTextForCompare(toTranscriptText(words));
+        if (a && b0 && a === b0) {
+          setStatus('Match — nothing to do.');
+          return;
+        }
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          setStatus(`Attempt ${attempt}/${maxAttempts}: regenerating TTS...`);
+
+          // Use a 32-bit-ish seed.
+          const maxSeed = 2_147_483_647;
+          let seedBase = 0;
+          try {
+            if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+              const buf = new Uint32Array(1);
+              crypto.getRandomValues(buf);
+              seedBase = Number(buf[0] || 0);
+            }
+          } catch {
+            seedBase = 0;
+          }
+          if (!seedBase) seedBase = Math.floor(Math.random() * maxSeed);
+          const seed = Math.max(1, (seedBase + attempt) % maxSeed);
+
+          const beforeTtsScene = (await getSceneById(sceneId)) as Record<
+            string,
+            unknown
+          > | null;
+          const prevAudioUrl = getStringField(beforeTtsScene, 'field_6891');
+
+          await handleTTSProduce(sceneId, desiredText, initialScene, {
+            seedOverride: seed,
+            throwOnError: true,
+          });
+
+          const afterTtsScene =
+            (await waitForSceneWhere(
+              sceneId,
+              (s) => {
+                const next = getStringField(s, 'field_6891');
+                return Boolean(next) && next !== prevAudioUrl;
+              },
+              { maxRetries: 20, delayMs: 250 },
+            )) || ((await getSceneById(sceneId)) as Record<string, unknown>);
+
+          const audioUrl = getStringField(afterTtsScene, 'field_6891');
+          const baseVideoUrlNow = getStringField(afterTtsScene, 'field_6888');
+          if (!audioUrl.trim())
+            throw new Error('Missing TTS audio URL (field_6891).');
+          if (!(baseVideoUrlNow || baseVideoUrl).trim())
+            throw new Error('Missing original clip URL (field_6888).');
+
+          setStatus(`Attempt ${attempt}/${maxAttempts}: syncing video...`);
+          const beforeSyncScene = (await getSceneById(sceneId)) as Record<
+            string,
+            unknown
+          > | null;
+          const prevFinalUrl = getStringField(beforeSyncScene, 'field_6886');
+          await handleVideoGenerate(
+            sceneId,
+            (baseVideoUrlNow || baseVideoUrl).trim(),
+            audioUrl,
+            (afterTtsScene as unknown) ?? undefined,
+            0,
+            'none',
+            { throwOnError: true },
+          );
+
+          // Wait for Baserow to reflect the new final video URL (or at least confirm it's present).
+          const afterSyncScene =
+            (await waitForSceneWhere(
+              sceneId,
+              (s) => {
+                const next = getStringField(s, 'field_6886');
+                if (!next) return false;
+                // Prefer URL change, but if backend returns same URL we still proceed.
+                return next !== prevFinalUrl || attempt === 1;
+              },
+              { maxRetries: 30, delayMs: 400 },
+            )) || ((await getSceneById(sceneId)) as Record<string, unknown>);
+
+          const finalUrlNow = getStringField(afterSyncScene, 'field_6886');
+          if (!finalUrlNow) {
+            throw new Error('Final video URL not available after sync.');
+          }
+
+          setStatus(`Attempt ${attempt}/${maxAttempts}: retranscribing...`);
+          // IMPORTANT: Transcribe using a freshly fetched scene so we use the newest final URL.
+          const sceneForTranscribe =
+            (await waitForSceneWhere(
+              sceneId,
+              (s) => getStringField(s, 'field_6886') === finalUrlNow,
+              { maxRetries: 10, delayMs: 250 },
+            )) || afterSyncScene;
+
+          const prevCaptionsUrl = getStringField(
+            sceneForTranscribe,
+            'field_6910',
+          );
+          await handleTranscribeScene(
+            sceneId,
+            (sceneForTranscribe as unknown) ?? undefined,
+            'final',
+            true,
+            true,
+            false,
+            { throwOnError: true },
+          );
+
+          // Wait until captions URL is replaced in Baserow, then fetch from that URL.
+          const sceneWithNewCaptions = await waitForSceneWhere(
+            sceneId,
+            (s) => {
+              const next = getStringField(s, 'field_6910');
+              return Boolean(next) && next !== prevCaptionsUrl;
+            },
+            { maxRetries: 30, delayMs: 350 },
+          );
+          const newCaptionsUrl =
+            getStringField(sceneWithNewCaptions, 'field_6910') ||
+            getStringField(
+              (await getSceneById(sceneId)) as Record<string, unknown>,
+              'field_6910',
+            );
+
+          const newWords = await waitForCaptionsWordsFromUrl(newCaptionsUrl, {
+            maxRetries: 30,
+            delayMs: 350,
+          });
+          const b2 = normalizeSpeechTextForCompare(toTranscriptText(newWords));
+          if (a && b2 && a === b2) {
+            setStatus(`Fixed — match after ${attempt}/${maxAttempts}.`);
+            refreshDataRef.current?.();
+            return;
+          }
+        }
+
+        setStatus('Still mismatched after 3 attempts.');
+        refreshDataRef.current?.();
+      } catch (err) {
+        console.error('Auto-fix mismatch failed:', err);
+        setStatus(
+          err instanceof Error ? err.message : 'Auto-fix mismatch failed',
+        );
+      } finally {
+        setAutoFixingMismatchSceneId(null);
+      }
+    },
+    [
+      autoFixingMismatchSceneId,
+      dataRef,
+      handleTranscribeScene,
+      handleTTSProduce,
+      handleVideoGenerate,
+      getStringField,
+      normalizeSpeechTextForCompare,
+      sleep,
+      waitForCaptionsWordsFromUrl,
+      waitForCaptionsWords,
+      waitForSceneWhere,
+    ],
   );
 
   const handleSentenceImprovement = useCallback(
@@ -4866,32 +5308,68 @@ export default function SceneCard({
                   {/* Image Overlay Button */}
                   {typeof scene['field_6886'] === 'string' &&
                     scene['field_6886'] && (
-                      <button
-                        onClick={() =>
-                          handleOpenImageOverlayModal(
-                            scene.id,
-                            scene['field_6886'] as string,
-                          )
-                        }
-                        disabled={addingImageOverlay === scene.id}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
-                          addingImageOverlay === scene.id
-                            ? 'bg-gray-100 text-gray-500'
-                            : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title='Add image overlay to final video'
-                      >
-                        {addingImageOverlay === scene.id ? (
-                          <Loader2 className='animate-spin h-3 w-3' />
-                        ) : (
-                          <ImageIcon className='h-3 w-3' />
-                        )}
-                        <span>
-                          {addingImageOverlay === scene.id
-                            ? 'Adding...'
-                            : 'Add Image'}
-                        </span>
-                      </button>
+                      <>
+                        <button
+                          onClick={() => {
+                            void handleAutoFixMismatch(
+                              scene.id,
+                              scene as BaserowRow,
+                            );
+                          }}
+                          disabled={
+                            addingImageOverlay === scene.id ||
+                            autoFixingMismatchSceneId !== null
+                          }
+                          className={`flex items-center justify-center space-x-1 px-2 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
+                            autoFixingMismatchSceneId === scene.id
+                              ? 'bg-gray-100 text-gray-500'
+                              : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={
+                            autoFixMismatchStatus[scene.id]
+                              ? `Fix mismatch: ${autoFixMismatchStatus[scene.id]}`
+                              : 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 3 tries)'
+                          }
+                        >
+                          {autoFixingMismatchSceneId === scene.id ? (
+                            <Loader2 className='animate-spin h-3 w-3' />
+                          ) : (
+                            <Wand2 className='h-3 w-3' />
+                          )}
+                          <span>
+                            {autoFixingMismatchSceneId === scene.id
+                              ? 'Fixing...'
+                              : 'Fix'}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleOpenImageOverlayModal(
+                              scene.id,
+                              scene['field_6886'] as string,
+                            )
+                          }
+                          disabled={addingImageOverlay === scene.id}
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
+                            addingImageOverlay === scene.id
+                              ? 'bg-gray-100 text-gray-500'
+                              : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title='Add image overlay to final video'
+                        >
+                          {addingImageOverlay === scene.id ? (
+                            <Loader2 className='animate-spin h-3 w-3' />
+                          ) : (
+                            <ImageIcon className='h-3 w-3' />
+                          )}
+                          <span>
+                            {addingImageOverlay === scene.id
+                              ? 'Adding...'
+                              : 'Add Image'}
+                          </span>
+                        </button>
+                      </>
                     )}
 
                   {/* Combine Next Scene Button */}
@@ -5109,7 +5587,10 @@ export default function SceneCard({
       <ImageOverlayModal
         isOpen={imageOverlayModal.isOpen}
         onClose={() =>
-          setImageOverlayModal({ isOpen: false, sceneId: null, videoUrl: null })
+          setImageOverlayModal((prev) => ({
+            ...prev,
+            isOpen: false,
+          }))
         }
         videoUrl={imageOverlayModal.videoUrl || ''}
         sceneId={imageOverlayModal.sceneId || 0}
@@ -5122,8 +5603,6 @@ export default function SceneCard({
         }
         isApplying={addingImageOverlay !== null}
         handleTranscribeScene={handleTranscribeScene}
-        handleTTSProduce={handleTTSProduce}
-        handleVideoGenerate={handleVideoGenerate}
       />
     </div>
   );
