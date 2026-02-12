@@ -50,21 +50,21 @@ const hexToRgb = (hex: string) => {
   return result
     ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(
         result[3],
-        16
+        16,
       )}`
     : '0, 0, 0';
 };
 
 function roundedCanvasFromSource(
   source: HTMLCanvasElement,
-  radiusPercent: number
+  radiusPercent: number,
 ): HTMLCanvasElement {
   if (!(radiusPercent > 0)) return source;
 
   const w = source.width;
   const h = source.height;
   const ctxRadius = Math.round(
-    (Math.min(w, h) / 2) * Math.min(1, Math.max(0, radiusPercent / 100))
+    (Math.min(w, h) / 2) * Math.min(1, Math.max(0, radiusPercent / 100)),
   );
   if (!(ctxRadius > 0)) return source;
 
@@ -164,7 +164,7 @@ const AdjustableImage = React.forwardRef<
       contrast = 0,
       style,
     },
-    ref
+    ref,
   ) => {
     const imageRef = useRef<HTMLImageElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -230,7 +230,7 @@ const AdjustableImage = React.forwardRef<
         />
       </>
     );
-  }
+  },
 );
 AdjustableImage.displayName = 'AdjustableImage';
 
@@ -256,7 +256,7 @@ const AdjustableCropperBackground = React.forwardRef<
       hue = 0,
       contrast = 0,
     },
-    ref
+    ref,
   ) => {
     const state = cropper.getState();
     const transitions = cropper.getTransitions();
@@ -277,7 +277,7 @@ const AdjustableCropperBackground = React.forwardRef<
         style={style}
       />
     );
-  }
+  },
 );
 AdjustableCropperBackground.displayName = 'AdjustableCropperBackground';
 
@@ -313,7 +313,7 @@ interface ImageOverlayModalProps {
     tintInvert?: boolean,
     overlaySound?: string | null,
     overlayAnimation?: OverlayAnimation,
-    gifLoop?: boolean
+    gifLoop?: boolean,
   ) => Promise<void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -321,7 +321,8 @@ interface ImageOverlayModalProps {
     sceneData?: unknown,
     videoType?: 'original' | 'final',
     skipRefresh?: boolean,
-    skipSound?: boolean
+    skipSound?: boolean,
+    updateSentence?: boolean,
   ) => Promise<void>;
   onUpdateModalVideoUrl?: (videoUrl: string) => void;
 }
@@ -337,7 +338,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   onUpdateModalVideoUrl,
 }) => {
   const selectedOpenRouterModel = useAppStore(
-    (state) => state.modelSelection.selectedModel
+    (state) => state.modelSelection.selectedModel,
   );
   const previewButtonRef = useRef<HTMLButtonElement | null>(null);
   const pasteSinkRef = useRef<HTMLTextAreaElement | null>(null);
@@ -347,7 +348,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     { name: string; url: string }[]
   >([]);
   const [selectedSoundName, setSelectedSoundName] = useState<string | null>(
-    null
+    null,
   );
   const [overlayAnimation, setOverlayAnimation] =
     useState<OverlayAnimation>('miniZoom');
@@ -405,7 +406,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       '#00FFFF',
       '#FFA500',
     ],
-    []
+    [],
   );
   const [, setIsDragging] = useState(false);
   const [, setIsResizing] = useState(false);
@@ -413,13 +414,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isGeneratingScenePrompt, setIsGeneratingScenePrompt] = useState(false);
   const [scenePromptStatus, setScenePromptStatus] = useState<string | null>(
-    null
+    null,
   );
   const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
   const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
   const [isUpscalingSceneImage, setIsUpscalingSceneImage] = useState(false);
   const [sceneUpscaleStatus, setSceneUpscaleStatus] = useState<string | null>(
-    null
+    null,
   );
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
@@ -466,10 +467,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const ext = type.includes('gif')
       ? 'gif'
       : type.includes('jpeg') || type.includes('jpg')
-      ? 'jpg'
-      : type.includes('webp')
-      ? 'webp'
-      : 'png';
+        ? 'jpg'
+        : type.includes('webp')
+          ? 'webp'
+          : 'png';
 
     return new File([blob], `overlay_${Date.now()}.${ext}`, { type });
   }, []);
@@ -506,7 +507,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       };
       img.src = localUrl;
     },
-    [fetchOverlayFileFromUrl, setOverlaySize]
+    [fetchOverlayFileFromUrl, setOverlaySize],
   );
 
   // On open, prefer loading Upscaled Image for Scene (7095) if present.
@@ -582,7 +583,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         // ignore
       }
     },
-    [availableSounds]
+    [availableSounds],
   );
 
   const cycleOverlaySound = useCallback(() => {
@@ -699,7 +700,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const availableFontFamilies = useMemo(() => {
     const mapping = ffmpegFonts as Record<string, string>;
     const keys = Object.keys(mapping || {}).filter(
-      (k) => k !== 'user_fonts_dir'
+      (k) => k !== 'user_fonts_dir',
     );
     if (keys.length > 0) return keys.sort();
     // fallback:
@@ -735,7 +736,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     (preset: { name: string; style: TextStyling }) => {
       setTextStyling(preset.style);
     },
-    []
+    [],
   );
 
   const cycleNextTextPreset = useCallback(() => {
@@ -761,7 +762,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
     const currentKey = stableStringify(textStyling);
     const currentIndex = savedTextStyles.findIndex(
-      (p) => stableStringify(p.style) === currentKey
+      (p) => stableStringify(p.style) === currentKey,
     );
     const nextIndex =
       currentIndex >= 0 ? (currentIndex + 1) % savedTextStyles.length : 0;
@@ -902,7 +903,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setPreviewCurrentTimeSeconds(video.currentTime || 0);
     const updateDuration = () =>
       setPreviewDurationSeconds(
-        Number.isFinite(video.duration) ? Math.max(0, video.duration) : 0
+        Number.isFinite(video.duration) ? Math.max(0, video.duration) : 0,
       );
     const updatePaused = () => setIsPreviewPaused(video.paused);
 
@@ -1017,7 +1018,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         height: Math.min(heightPercent, 100),
       });
     },
-    [getVideoNaturalDimensions, setOverlaySize]
+    [getVideoNaturalDimensions, setOverlaySize],
   );
 
   const handleOverlayWheelZoom = useCallback(
@@ -1034,7 +1035,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         height: Math.min(100, Math.max(5, prev.height * factor)),
       }));
     },
-    [setOverlaySize]
+    [setOverlaySize],
   );
 
   const handleTextOverlayWheelZoom = useCallback(
@@ -1050,7 +1051,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         height: Math.min(100, Math.max(5, prev.height * factor)),
       }));
     },
-    [setTextOverlaySize]
+    [setTextOverlaySize],
   );
 
   const ensureOverlayImageDimensions = useCallback(async () => {
@@ -1098,7 +1099,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         img.src = url;
       }
     },
-    [setOverlaySizeFromPixels]
+    [setOverlaySizeFromPixels],
   );
 
   const handleVideoUpload = useCallback(
@@ -1112,7 +1113,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setIsVideoEditModalOpen(true);
       }
     },
-    []
+    [],
   );
 
   const handleRemoveImage = useCallback(() => {
@@ -1164,7 +1165,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     try {
       const clipboard = navigator.clipboard;
       type ClipboardItemConstructor = new (
-        items: Record<string, Blob>
+        items: Record<string, Blob>,
       ) => ClipboardItem;
       const ClipboardItemCtor = (
         window as unknown as {
@@ -1186,7 +1187,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } catch (e) {
       console.error('Failed to copy overlay image to clipboard:', e);
       alert(
-        'Failed to copy image to clipboard. Your browser may be blocking clipboard access.'
+        'Failed to copy image to clipboard. Your browser may be blocking clipboard access.',
       );
     }
   }, [overlayImage]);
@@ -1209,7 +1210,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       };
       img.src = url;
     },
-    [setOverlaySizeFromPixels]
+    [setOverlaySizeFromPixels],
   );
 
   // Allow Cmd+V / paste to apply an overlay image without triggering the
@@ -1231,7 +1232,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
     const fetchImageAsFile = async (url: string): Promise<File | null> => {
       const res = await fetch(
-        `/api/fetch-image?url=${encodeURIComponent(url)}`
+        `/api/fetch-image?url=${encodeURIComponent(url)}`,
       );
       if (!res.ok) return null;
       const blob = await res.blob();
@@ -1277,7 +1278,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // 1) Prefer direct image files
       const items = Array.from(data.items || []);
       const imageItem = items.find(
-        (it) => it.kind === 'file' && it.type.startsWith('image/')
+        (it) => it.kind === 'file' && it.type.startsWith('image/'),
       );
       if (imageItem) {
         const file = imageItem.getAsFile();
@@ -1302,7 +1303,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 const type = blob.type || 'image/png';
                 const ext = type.split('/')[1] || 'png';
                 setOverlayFromFile(
-                  new File([blob], `pasted-data-image.${ext}`, { type })
+                  new File([blob], `pasted-data-image.${ext}`, { type }),
                 );
               })
               .finally(finishLoadingIfNeeded)
@@ -1337,7 +1338,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             const type = blob.type || 'image/png';
             const ext = type.split('/')[1] || 'png';
             setOverlayFromFile(
-              new File([blob], `pasted-data-image.${ext}`, { type })
+              new File([blob], `pasted-data-image.${ext}`, { type }),
             );
           })
           .finally(finishLoadingIfNeeded)
@@ -1400,7 +1401,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         // window width minus modal margins (mx-4) and padding (p-6)
         Math.max(240, window.innerWidth - 80),
         // max-w-4xl (896px) minus p-6 left+right (48px)
-        848
+        848,
       );
       const maxHeight = Math.max(200, Math.floor(window.innerHeight * 0.5));
 
@@ -1438,7 +1439,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       const fetchImageAsFile = async (url: string): Promise<File | null> => {
         const res = await fetch(
-          `/api/fetch-image?url=${encodeURIComponent(url)}`
+          `/api/fetch-image?url=${encodeURIComponent(url)}`,
         );
         if (!res.ok) {
           // Try to surface server error JSON if present
@@ -1486,7 +1487,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           const type = blob.type || 'image/png';
           const ext = type.split('/')[1] || 'png';
           setOverlayFromFile(
-            new File([blob], `pasted-data-image.${ext}`, { type })
+            new File([blob], `pasted-data-image.${ext}`, { type }),
           );
           return;
         }
@@ -1507,7 +1508,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           const imageBlob = await item.getType(t);
           const ext = t.split('/')[1] || 'png';
           setOverlayFromFile(
-            new File([imageBlob], `clipboard-image.${ext}`, { type: t })
+            new File([imageBlob], `clipboard-image.${ext}`, { type: t }),
           );
           return;
         }
@@ -1554,7 +1555,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         const type = blob.type || 'image/png';
         const ext = type.split('/')[1] || 'png';
         setOverlayFromFile(
-          new File([blob], `pasted-data-image.${ext}`, { type })
+          new File([blob], `pasted-data-image.${ext}`, { type }),
         );
         return;
       }
@@ -1566,7 +1567,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } catch (e) {
       // Avoid noisy console errors; show a user-facing message only.
       alert(
-        'Failed to paste image from clipboard. Your browser may be blocking clipboard access.'
+        'Failed to paste image from clipboard. Your browser may be blocking clipboard access.',
       );
     } finally {
       setIsPastingOverlayFromClipboard(false);
@@ -1863,7 +1864,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         event.preventDefault();
       }
     },
-    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect]
+    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect],
   );
 
   const handleTextMouseDown = useCallback(
@@ -1889,15 +1890,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         (selectedWordText.length <= 3
           ? 35
           : selectedWordText.length <= 7
-          ? 55
-          : selectedWordText.length <= 12
-          ? 70
-          : 85) *
-          (textOverlaySize.width / 20)
+            ? 55
+            : selectedWordText.length <= 12
+              ? 70
+              : 85) *
+          (textOverlaySize.width / 20),
       );
       const textHeightPercent = Math.max(
         10,
-        Math.min(85, (textOverlaySize.width / 100) * 60)
+        Math.min(85, (textOverlaySize.width / 100) * 60),
       );
       const textX = textOverlayPosition.x - textWidthPercent / 2;
       const textY = textOverlayPosition.y - textHeightPercent / 2;
@@ -2048,7 +2049,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       textOverlaySize,
       getVideoContentRect,
       containerRect,
-    ]
+    ],
   );
 
   const handlePointerMove = useCallback(
@@ -2108,7 +2109,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         document.body.style.cursor = 'default';
       }
     },
-    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect]
+    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect],
   );
 
   const handlePointerLeave = useCallback(() => {
@@ -2260,7 +2261,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       tintRect.top,
       tintRect.width,
       tintSize,
-    ]
+    ],
   );
 
   const handleTintPointerMove = useCallback(
@@ -2312,15 +2313,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         document.body.style.cursor = 'default';
       }
     },
-    [getVideoContentRect, isEditingTintArea, tintRect]
+    [getVideoContentRect, isEditingTintArea, tintRect],
   );
 
   const handlePreview = useCallback(async () => {
     const overlayText = customText.trim()
       ? customText.trim()
       : selectedWordText
-      ? selectedWordText
-      : null;
+        ? selectedWordText
+        : null;
     if (!overlayImage && !overlayImageUrl && !overlayText && !videoTintColor)
       return;
     if (!originalVideoUrl) return;
@@ -2345,8 +2346,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const overlayFile = overlayImage
       ? overlayImage
       : overlayImageUrl
-      ? await fetchOverlayFileFromUrl(overlayImageUrl)
-      : null;
+        ? await fetchOverlayFileFromUrl(overlayImageUrl)
+        : null;
 
     if (overlayFile) {
       formData.append('overlayImage', overlayFile);
@@ -2359,19 +2360,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
     formData.append(
       'positionX',
-      (overlayFile ? overlayPosition.x : textOverlayPosition.x).toString()
+      (overlayFile ? overlayPosition.x : textOverlayPosition.x).toString(),
     );
     formData.append(
       'positionY',
-      (overlayFile ? overlayPosition.y : textOverlayPosition.y).toString()
+      (overlayFile ? overlayPosition.y : textOverlayPosition.y).toString(),
     );
     formData.append(
       'sizeWidth',
-      (overlayFile ? overlaySize.width : textOverlaySize.width).toString()
+      (overlayFile ? overlaySize.width : textOverlaySize.width).toString(),
     );
     formData.append(
       'sizeHeight',
-      (overlayFile ? overlaySize.height : textOverlaySize.height).toString()
+      (overlayFile ? overlaySize.height : textOverlaySize.height).toString(),
     );
     formData.append('startTime', startTime.toString());
     formData.append('endTime', endTime.toString());
@@ -2455,8 +2456,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const overlayText = customText.trim()
       ? customText.trim()
       : selectedWordText
-      ? selectedWordText
-      : null;
+        ? selectedWordText
+        : null;
     if (!overlayImage && !overlayImageUrl && !overlayText && !videoTintColor)
       return;
 
@@ -2466,14 +2467,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     try {
       console.log(
         'handleApply: sending textStyling',
-        overlayText ? textStyling : undefined
+        overlayText ? textStyling : undefined,
       );
 
       const overlayFile = overlayImage
         ? overlayImage
         : overlayImageUrl
-        ? await fetchOverlayFileFromUrl(overlayImageUrl)
-        : null;
+          ? await fetchOverlayFileFromUrl(overlayImageUrl)
+          : null;
 
       // Apply overlay to the CURRENT video playing in the modal
       await onApply(
@@ -2492,7 +2493,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         tintInvert,
         selectedSoundName,
         overlayAnimation,
-        loopGif
+        loopGif,
       );
 
       // After applying, fetch the scene from the DB to get the updated video URL
@@ -2661,7 +2662,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       if (!promptFieldKey) {
         throw new Error(
-          'Prompt generation did not return a valid promptFieldKey'
+          'Prompt generation did not return a valid promptFieldKey',
         );
       }
 
@@ -2685,7 +2686,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } catch (error) {
       console.error('Failed to generate/save scene prompt:', error);
       setScenePromptStatus(
-        error instanceof Error ? error.message : 'Failed to generate prompt'
+        error instanceof Error ? error.message : 'Failed to generate prompt',
       );
     } finally {
       setIsGeneratingScenePrompt(false);
@@ -2732,7 +2733,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } catch (error) {
       console.error('Failed to generate/save scene image:', error);
       setSceneImageStatus(
-        error instanceof Error ? error.message : 'Failed to generate image'
+        error instanceof Error ? error.message : 'Failed to generate image',
       );
     } finally {
       setIsGeneratingSceneImage(false);
@@ -2778,7 +2779,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } catch (error) {
       console.error('Failed to upscale/save scene image:', error);
       setSceneUpscaleStatus(
-        error instanceof Error ? error.message : 'Failed to upscale image'
+        error instanceof Error ? error.message : 'Failed to upscale image',
       );
     } finally {
       setIsUpscalingSceneImage(false);
@@ -2816,7 +2817,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           : null;
       if (updatedUrl && updatedUrl !== previousVideoUrl) {
         alert(
-          'Undo request succeeded, but Baserow returned a different URL than expected.'
+          'Undo request succeeded, but Baserow returned a different URL than expected.',
         );
       }
 
@@ -3642,16 +3643,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       (selectedWordText.length <= 3
                         ? 35
                         : selectedWordText.length <= 7
-                        ? 55
-                        : selectedWordText.length <= 12
-                        ? 70
-                        : 85) *
-                        (textOverlaySize.width / 20)
-                    )
+                          ? 55
+                          : selectedWordText.length <= 12
+                            ? 70
+                            : 85) *
+                        (textOverlaySize.width / 20),
+                    ),
                   )}%`,
                   height: `${Math.max(
                     8,
-                    Math.min(85, (textOverlaySize.width / 100) * 60)
+                    Math.min(85, (textOverlaySize.width / 100) * 60),
                   )}%`,
                   // Match server-side font sizing (in video pixels), then scale to CSS pixels.
                   fontSize: `${(() => {
@@ -3665,8 +3666,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         500,
                         (textOverlaySize.width / 100) *
                           Math.min(v.videoWidth, v.videoHeight) *
-                          0.2
-                      )
+                          0.2,
+                      ),
                     );
                     return Math.max(1, fontSizeVideoPx * videoToCssScale);
                   })()}px`,
@@ -4042,7 +4043,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 if (!handleTranscribeScene) return;
                 setIsTranscribing(true);
                 try {
-                  await handleTranscribeScene(sceneId, undefined, 'final');
+                  await handleTranscribeScene(
+                    sceneId,
+                    undefined,
+                    'final',
+                    false,
+                    false,
+                    false,
+                  );
                   if (
                     !useAppStore.getState().batchOperations
                       .transcribingAllFinalScenes
@@ -4059,7 +4067,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 if (!handleTranscribeScene) return;
                 setIsTranscribing(true);
                 try {
-                  await handleTranscribeScene(sceneId, undefined, 'final');
+                  await handleTranscribeScene(
+                    sceneId,
+                    undefined,
+                    'final',
+                    false,
+                    false,
+                    false,
+                  );
                   if (
                     !useAppStore.getState().batchOperations
                       .transcribingAllFinalScenes
@@ -4530,7 +4545,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   onClick={async () => {
                     console.log(
                       'Apply crop clicked, cropperRef.current:',
-                      cropperRef.current
+                      cropperRef.current,
                     );
                     console.log('overlayImage:', overlayImage);
                     if (cropperRef.current && overlayImage) {
@@ -4666,7 +4681,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   step={0.01}
                   value={Math.min(
                     previewCurrentTimeSeconds,
-                    previewDurationSeconds || 0
+                    previewDurationSeconds || 0,
                   )}
                   className='flex-1'
                   onChange={(e) => {

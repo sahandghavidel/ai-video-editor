@@ -47,73 +47,73 @@ interface SceneCardProps {
       model?: string,
       sceneData?: BaserowRow,
       skipRefresh?: boolean,
-      enforceLongerSentences?: boolean
+      enforceLongerSentences?: boolean,
     ) => Promise<void>;
     handleTTSProduce: (
       sceneId: number,
       text: string,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleVideoGenerate: (
       sceneId: number,
       videoUrl: string,
-      audioUrl: string
+      audioUrl: string,
     ) => Promise<void>;
     handleSpeedUpVideo: (
       sceneId: number,
       sceneData?: BaserowRow,
-      skipRefresh?: boolean
+      skipRefresh?: boolean,
     ) => Promise<void>;
     handleTranscribeScene: (
       sceneId: number,
       sceneData?: unknown,
       videoType?: 'original' | 'final',
       skipRefresh?: boolean,
-      skipSound?: boolean
+      skipSound?: boolean,
     ) => Promise<void>;
     handleTypingEffect: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleConvertToCFR: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleConvertOriginalToCFR: (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound?: boolean
+      playSound?: boolean,
     ) => Promise<void>;
     handleConvertFinalToCFR: (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound?: boolean
+      playSound?: boolean,
     ) => Promise<void>;
     handleNormalizeAudio: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleNormalizeOriginalVideo: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleNormalizeFinalVideo: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleOptimizeSilence: (
       sceneId: number,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleOptimizeSilenceOriginal: (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound?: boolean
+      playSound?: boolean,
     ) => Promise<void>;
     handleOptimizeSilenceFinal: (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound?: boolean
+      playSound?: boolean,
     ) => Promise<void>;
   }) => void;
 }
@@ -136,7 +136,7 @@ export default function SceneCard({
     number | null
   >(null);
   const [uploadingSceneVideo, setUploadingSceneVideo] = useState<number | null>(
-    null
+    null,
   );
   const [applyCfrAfterUpload, setApplyCfrAfterUpload] = useState<boolean>(true);
   const [applyNormalizeAfterUpload, setApplyNormalizeAfterUpload] =
@@ -165,7 +165,7 @@ export default function SceneCard({
 
   // Filter and sort states
   const [sortByDuration, setSortByDuration] = useState<'asc' | 'desc' | null>(
-    null
+    null,
   );
   const [sortByLastModified, setSortByLastModified] = useState<
     'asc' | 'desc' | null
@@ -174,7 +174,7 @@ export default function SceneCard({
   const [showOnlyNotEmptyText, setShowOnlyNotEmptyText] =
     useState<boolean>(false);
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
-    null
+    null,
   );
   const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
     useState<boolean>(false);
@@ -193,7 +193,7 @@ export default function SceneCard({
   >('none');
   // Dropdown open state for pan mode selector - stores the scene ID of the open dropdown (null if closed)
   const [panModeDropdownOpen, setPanModeDropdownOpen] = useState<number | null>(
-    null
+    null,
   );
 
   // Image overlay modal state
@@ -207,7 +207,7 @@ export default function SceneCard({
     videoUrl: null,
   });
   const [addingImageOverlay, setAddingImageOverlay] = useState<number | null>(
-    null
+    null,
   );
 
   // State for improving all sentences
@@ -361,7 +361,7 @@ export default function SceneCard({
       mediaPlayer.playingVideoId,
       videoSettings.playerSpeed,
       scrollCardToTop,
-    ]
+    ],
   );
 
   // Keyboard shortcuts for player speed
@@ -394,7 +394,7 @@ export default function SceneCard({
         if (showOnlyEmptyText) {
           filtered = filtered.filter((scene) => {
             const sentence = String(
-              scene['field_6890'] || scene.field_6890 || ''
+              scene['field_6890'] || scene.field_6890 || '',
             );
             return !sentence.trim();
           });
@@ -404,10 +404,10 @@ export default function SceneCard({
         if (showOnlyNotEmptyText) {
           filtered = filtered.filter((scene) => {
             const orig = String(
-              scene['field_6901'] || scene.field_6901 || ''
+              scene['field_6901'] || scene.field_6901 || '',
             ).trim();
             const other = String(
-              scene['field_6900'] || scene.field_6900 || ''
+              scene['field_6900'] || scene.field_6900 || '',
             ).trim();
             return !!orig || !!other;
           });
@@ -467,7 +467,7 @@ export default function SceneCard({
 
         // Find the current scene index in filtered and sorted data
         const currentIndex = filtered.findIndex(
-          (scene) => scene.id === currentPlayingSceneId
+          (scene) => scene.id === currentPlayingSceneId,
         );
         if (currentIndex === -1) return;
 
@@ -525,12 +525,12 @@ export default function SceneCard({
         // Restart currently playing video with new speed (temporary change)
         const restartVideo = (
           video: HTMLVideoElement | null,
-          sceneId: number
+          sceneId: number,
         ) => {
           if (video) {
             // Find the current scene data to get the latest URL
             const currentScene = dataRef.current.find(
-              (scene) => scene.id === sceneId
+              (scene) => scene.id === sceneId,
             );
             if (currentScene) {
               // Update video source with the latest URL
@@ -604,7 +604,7 @@ export default function SceneCard({
     setRevertingId(sceneId);
     // Optimistic update
     const optimisticData = data.map((scene) =>
-      scene.id === sceneId ? { ...scene, field_6890: originalSentence } : scene
+      scene.id === sceneId ? { ...scene, field_6890: originalSentence } : scene,
     );
     onDataUpdate?.(optimisticData);
     try {
@@ -628,7 +628,7 @@ export default function SceneCard({
     }
     // Optimistic update
     const optimisticData = data.map((scene) =>
-      scene.id === sceneId ? { ...scene, field_6891: '' } : scene
+      scene.id === sceneId ? { ...scene, field_6891: '' } : scene,
     );
     onDataUpdate?.(optimisticData);
     try {
@@ -652,7 +652,7 @@ export default function SceneCard({
     }
     // Optimistic update
     const optimisticData = data.map((scene) =>
-      scene.id === sceneId ? { ...scene, field_6886: '' } : scene
+      scene.id === sceneId ? { ...scene, field_6886: '' } : scene,
     );
     onDataUpdate?.(optimisticData);
     try {
@@ -687,16 +687,16 @@ export default function SceneCard({
     // Prepare new text fields
     const currSentence = String(currentScene.field_6890 || '').trim();
     const nextSentence = String(
-      nextScene.field_6890 || nextScene.field_6901 || ''
+      nextScene.field_6890 || nextScene.field_6901 || '',
     ).trim();
     const sep = currSentence && nextSentence ? ' ' : '';
     const newSentence = (currSentence + sep + nextSentence).trim();
 
     const currOriginal = String(
-      currentScene.field_6901 || currentScene.field_6890 || ''
+      currentScene.field_6901 || currentScene.field_6890 || '',
     ).trim();
     const nextOriginal = String(
-      nextScene.field_6901 || nextScene.field_6890 || ''
+      nextScene.field_6901 || nextScene.field_6890 || '',
     ).trim();
     const newOriginal = (currOriginal + sep + nextOriginal).trim();
 
@@ -704,7 +704,7 @@ export default function SceneCard({
     const currentStart = Number(currentScene.field_6896) || 0;
     const newDuration = Math.max(
       0,
-      Number((newEndTime - currentStart).toFixed(2))
+      Number((newEndTime - currentStart).toFixed(2)),
     );
 
     setCombiningId(sceneId);
@@ -720,7 +720,7 @@ export default function SceneCard({
               field_6897: newEndTime,
               field_6884: newDuration,
             }
-          : s
+          : s,
       )
       .filter((s) => s.id !== nextScene.id);
 
@@ -782,7 +782,7 @@ export default function SceneCard({
     applyCfrAfterUpload: boolean = false,
     applyNormalizeAfterUpload: boolean = false,
     applySilenceAfterUpload: boolean = false,
-    applyTranscribeAfterUpload: boolean = true
+    applyTranscribeAfterUpload: boolean = true,
   ) => {
     if (!file.type.startsWith('video/')) {
       alert('Please select a video file');
@@ -833,11 +833,11 @@ export default function SceneCard({
       formData.append('applyTranscribe', applyTranscribeAfterUpload.toString());
       formData.append(
         'transcriptionModel',
-        transcriptionSettings.selectedModel
+        transcriptionSettings.selectedModel,
       );
       formData.append(
         'transcriptionVideoType',
-        transcriptionSettings.selectedVideoType
+        transcriptionSettings.selectedVideoType,
       );
 
       console.log('Processing file:', file.name, 'Size:', file.size);
@@ -850,7 +850,7 @@ export default function SceneCard({
         'Silence:',
         applySilenceAfterUpload,
         'Transcribe:',
-        applyTranscribeAfterUpload
+        applyTranscribeAfterUpload,
       );
 
       const response = await fetch('/api/process-scene-video', {
@@ -884,7 +884,7 @@ export default function SceneCard({
       const updatedData = data.map((scene) =>
         scene.id === sceneId
           ? { ...scene, field_6886: processedUrl, field_6888: processedUrl }
-          : scene
+          : scene,
       );
       onDataUpdate?.(updatedData);
 
@@ -912,11 +912,11 @@ export default function SceneCard({
     const currentEndTime = Number(currentScene.field_6897) || 0;
     const newStartTime = Math.max(
       0,
-      Number((currentStartTime + adjustment).toFixed(2))
+      Number((currentStartTime + adjustment).toFixed(2)),
     );
     const newDuration = Math.max(
       0,
-      Number((currentEndTime - newStartTime).toFixed(2))
+      Number((currentEndTime - newStartTime).toFixed(2)),
     );
 
     // Optimistic update
@@ -928,7 +928,7 @@ export default function SceneCard({
             field_6898: newStartTime,
             field_6884: newDuration,
           }
-        : scene
+        : scene,
     );
     onDataUpdate?.(optimisticData);
 
@@ -965,18 +965,18 @@ export default function SceneCard({
     const currentStartTime = Number(currentScene.field_6896) || 0;
     const newEndTime = Math.max(
       0,
-      Number((currentEndTime + adjustment).toFixed(2))
+      Number((currentEndTime + adjustment).toFixed(2)),
     );
     const newDuration = Math.max(
       0,
-      Number((newEndTime - currentStartTime).toFixed(2))
+      Number((newEndTime - currentStartTime).toFixed(2)),
     );
 
     // Optimistic update
     const optimisticData = data.map((scene) =>
       scene.id === sceneId
         ? { ...scene, field_6897: newEndTime, field_6884: newDuration }
-        : scene
+        : scene,
     );
     onDataUpdate?.(optimisticData);
 
@@ -1012,7 +1012,7 @@ export default function SceneCard({
     const currentEndTime = Number(currentScene.field_6897) || 0;
     const newDuration = Math.max(
       0,
-      Number((currentEndTime - clampedStartTime).toFixed(2))
+      Number((currentEndTime - clampedStartTime).toFixed(2)),
     );
 
     // Optimistic update
@@ -1024,7 +1024,7 @@ export default function SceneCard({
             field_6898: clampedStartTime,
             field_6884: newDuration,
           }
-        : scene
+        : scene,
     );
     onDataUpdate?.(optimisticData);
 
@@ -1061,14 +1061,14 @@ export default function SceneCard({
     const currentStartTime = Number(currentScene.field_6896) || 0;
     const newDuration = Math.max(
       0,
-      Number((clampedEndTime - currentStartTime).toFixed(2))
+      Number((clampedEndTime - currentStartTime).toFixed(2)),
     );
 
     // Optimistic update
     const optimisticData = data.map((scene) =>
       scene.id === sceneId
         ? { ...scene, field_6897: clampedEndTime, field_6884: newDuration }
-        : scene
+        : scene,
     );
     onDataUpdate?.(optimisticData);
 
@@ -1129,7 +1129,7 @@ export default function SceneCard({
           'videoId:',
           videoId,
           'with video:',
-          videoUrl
+          videoUrl,
         );
 
         const response = await fetch('/api/speed-up-video', {
@@ -1164,7 +1164,7 @@ export default function SceneCard({
         const optimisticData = data.map((scene) =>
           scene.id === sceneId
             ? { ...scene, field_6886: result.videoUrl }
-            : scene
+            : scene,
         );
         onDataUpdate?.(optimisticData);
 
@@ -1190,7 +1190,7 @@ export default function SceneCard({
       setSpeedingUpVideo,
       onDataUpdate,
       refreshData,
-    ]
+    ],
   );
 
   // Transcribe scene handler
@@ -1200,7 +1200,8 @@ export default function SceneCard({
       sceneData?: unknown,
       videoType: 'original' | 'final' = 'original',
       skipRefresh: boolean = false,
-      skipSound: boolean = false
+      skipSound: boolean = false,
+      updateSentence: boolean = true,
     ) => {
       const currentScene =
         (sceneData as BaserowRow | undefined) ||
@@ -1217,7 +1218,7 @@ export default function SceneCard({
         console.log(
           `No ${videoType} video found in field ${
             videoType === 'final' ? '6886' : '6888'
-          } to transcribe`
+          } to transcribe`,
         );
         return;
       }
@@ -1227,7 +1228,7 @@ export default function SceneCard({
       try {
         console.log(
           `Starting scene transcription for scene: ${sceneId}, video type: ${videoType}, with video:`,
-          videoUrl
+          videoUrl,
         );
 
         // Step 1: Transcribe the scene video using selected model
@@ -1292,7 +1293,7 @@ export default function SceneCard({
         const fullText = wordTimestamps.map((word) => word.word).join(' ');
         console.log('Extracted full text from transcription:', fullText);
 
-        // Step 5: Update the scene record with the captions URL (field_6910) and new sentence text (field_6890)
+        // Step 5: Update the scene record with the captions URL (field_6910) and optional sentence text (field_6890)
         const captionsUrl = uploadResult.url || uploadResult.file_url;
         if (captionsUrl) {
           const updateData: Record<string, unknown> = {
@@ -1300,7 +1301,7 @@ export default function SceneCard({
           };
 
           // Only update the sentence if we have extracted text
-          if (fullText.trim()) {
+          if (updateSentence && fullText.trim()) {
             updateData.field_6890 = fullText.trim(); // Update Sentence field with transcribed text
             console.log('Updating scene sentence with transcribed text');
           }
@@ -1316,7 +1317,7 @@ export default function SceneCard({
           if (!patchRes.ok) {
             const errorText = await patchRes.text();
             throw new Error(
-              `Failed to update scene ${sceneId}: ${patchRes.status} ${errorText}`
+              `Failed to update scene ${sceneId}: ${patchRes.status} ${errorText}`,
             );
           }
 
@@ -1329,9 +1330,11 @@ export default function SceneCard({
               ? {
                   ...scene,
                   field_6910: captionsUrl,
-                  ...(fullText.trim() && { field_6890: fullText.trim() }),
+                  ...(updateSentence && fullText.trim()
+                    ? { field_6890: fullText.trim() }
+                    : {}),
                 }
-              : scene
+              : scene,
           );
           onDataUpdate?.(optimisticStoreData);
           setData(optimisticStoreData);
@@ -1370,13 +1373,13 @@ export default function SceneCard({
       refreshData,
       playSuccessSound,
       playErrorSound,
-    ]
+    ],
   );
 
   // Generate single clip handler
   const handleGenerateSingleClip = async (
     sceneId: number,
-    sceneData?: BaserowRow
+    sceneData?: BaserowRow,
   ) => {
     const currentScene =
       sceneData || data.find((scene) => scene.id === sceneId);
@@ -1436,7 +1439,7 @@ export default function SceneCard({
 
       // Optimistic update - update the scene with the new clip URL
       const optimisticData = data.map((scene) =>
-        scene.id === sceneId ? { ...scene, field_6897: result.clipUrl } : scene
+        scene.id === sceneId ? { ...scene, field_6897: result.clipUrl } : scene,
       );
       onDataUpdate?.(optimisticData);
 
@@ -1599,7 +1602,7 @@ export default function SceneCard({
         setIsUpdating(false);
       }
     },
-    [data, onDataUpdate, refreshData, isUpdating]
+    [data, onDataUpdate, refreshData, isUpdating],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent, sceneId: number) => {
@@ -1780,7 +1783,7 @@ export default function SceneCard({
       | 'slideLeft'
       | 'slideRight'
       | 'slideUp',
-    gifLoop?: boolean
+    gifLoop?: boolean,
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -1873,7 +1876,7 @@ export default function SceneCard({
       sceneId: number,
       text: string,
       sceneData?: BaserowRow,
-      opts?: { seedOverride?: number }
+      opts?: { seedOverride?: number },
     ) => {
       try {
         setProducingTTS(sceneId);
@@ -1965,7 +1968,7 @@ export default function SceneCard({
         setProducingTTS(null);
       }
     },
-    [setProducingTTS, ttsSettings, videoSettings.autoGenerateVideo]
+    [setProducingTTS, ttsSettings, videoSettings.autoGenerateVideo],
   );
 
   const handleVideoGenerate = useCallback(
@@ -1975,7 +1978,7 @@ export default function SceneCard({
       audioUrl: string,
       sceneData?: BaserowRow,
       zoomLevel: number = 0,
-      panMode: 'none' | 'zoom' | 'zoomOut' | 'topToBottom' = 'none'
+      panMode: 'none' | 'zoom' | 'zoomOut' | 'topToBottom' = 'none',
     ) => {
       try {
         setGeneratingVideo(sceneId);
@@ -2058,7 +2061,7 @@ export default function SceneCard({
         setGeneratingVideo(null);
       }
     },
-    [setGeneratingVideo]
+    [setGeneratingVideo],
   );
 
   const handleSentenceImprovement = useCallback(
@@ -2068,12 +2071,12 @@ export default function SceneCard({
       modelOverride?: string,
       sceneData?: BaserowRow,
       skipRefresh = false,
-      enforceLongerSentences?: boolean
+      enforceLongerSentences?: boolean,
     ) => {
       setImprovingSentence(sceneId);
 
       console.log(
-        `Improving sentence for scene ${sceneId}: "${currentSentence}"`
+        `Improving sentence for scene ${sceneId}: "${currentSentence}"`,
       );
 
       // Call our sentence improvement API route
@@ -2118,7 +2121,7 @@ export default function SceneCard({
       } catch (updateError) {
         console.error(
           `Failed to update Baserow for scene ${sceneId}:`,
-          updateError
+          updateError,
         );
         // Don't throw error - just log it and continue
         setImprovingSentence(null);
@@ -2154,7 +2157,7 @@ export default function SceneCard({
       modelSelection.selectedModel,
       modelSelection.enforceLongerSentences,
       videoSettings.autoGenerateTTS,
-    ]
+    ],
   );
 
   const handleTypingEffect = useCallback(
@@ -2164,7 +2167,7 @@ export default function SceneCard({
 
         // Get the scene text
         const sceneText = String(
-          sceneData?.['field_6890'] || sceneData?.field_6890 || ''
+          sceneData?.['field_6890'] || sceneData?.field_6890 || '',
         ).trim();
         if (!sceneText) {
           throw new Error('No text available for typing effect');
@@ -2249,7 +2252,7 @@ export default function SceneCard({
         setCreatingTypingEffect(null);
       }
     },
-    [setCreatingTypingEffect]
+    [setCreatingTypingEffect],
   );
 
   const handleConvertToCFR = useCallback(
@@ -2341,7 +2344,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo]
+    [setConvertingToCFRVideo],
   );
 
   // Convert original video to CFR handler
@@ -2349,7 +2352,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound: boolean = true
+      playSound: boolean = true,
     ) => {
       try {
         setConvertingToCFRVideo(sceneId);
@@ -2441,13 +2444,13 @@ export default function SceneCard({
         alert(
           `Original video CFR conversion failed: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       } finally {
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo]
+    [setConvertingToCFRVideo],
   );
 
   // Convert final video to CFR handler
@@ -2455,7 +2458,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound: boolean = true
+      playSound: boolean = true,
     ) => {
       try {
         setConvertingToCFRVideo(sceneId);
@@ -2547,13 +2550,13 @@ export default function SceneCard({
         alert(
           `Final video CFR conversion failed: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       } finally {
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo]
+    [setConvertingToCFRVideo],
   );
 
   // Normalize audio handler
@@ -2561,7 +2564,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound: boolean = true
+      playSound: boolean = true,
     ) => {
       try {
         setNormalizingAudio(sceneId);
@@ -2570,7 +2573,7 @@ export default function SceneCard({
         const videoUrl = sceneData?.['field_6886'] || sceneData?.field_6886;
         if (!videoUrl || typeof videoUrl !== 'string') {
           throw new Error(
-            'No processed video available for audio normalization'
+            'No processed video available for audio normalization',
           );
         }
 
@@ -2629,13 +2632,13 @@ export default function SceneCard({
         alert(
           `Audio normalization failed: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       } finally {
         setNormalizingAudio(null);
       }
     },
-    [setNormalizingAudio]
+    [setNormalizingAudio],
   );
 
   // Normalize original video handler
@@ -2643,7 +2646,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound: boolean = true
+      playSound: boolean = true,
     ) => {
       try {
         setNormalizingAudio(sceneId);
@@ -2652,7 +2655,7 @@ export default function SceneCard({
         const videoUrl = sceneData?.['field_6888'] || sceneData?.field_6888;
         if (!videoUrl || typeof videoUrl !== 'string') {
           throw new Error(
-            'No original video available for audio normalization'
+            'No original video available for audio normalization',
           );
         }
 
@@ -2701,7 +2704,7 @@ export default function SceneCard({
 
         console.log(
           'Original video audio normalization successful, URL:',
-          normalizedVideoUrl
+          normalizedVideoUrl,
         );
 
         // Update the scene with the normalized video URL for the original video field
@@ -2730,13 +2733,13 @@ export default function SceneCard({
         alert(
           `Original video audio normalization failed: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       } finally {
         setNormalizingAudio(null);
       }
     },
-    [setNormalizingAudio]
+    [setNormalizingAudio],
   );
 
   // Normalize final video handler
@@ -2744,7 +2747,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound: boolean = true
+      playSound: boolean = true,
     ) => {
       try {
         setNormalizingAudio(sceneId);
@@ -2800,7 +2803,7 @@ export default function SceneCard({
 
         console.log(
           'Final video audio normalization successful, URL:',
-          normalizedVideoUrl
+          normalizedVideoUrl,
         );
 
         // Update the scene with the normalized video URL for the final video field
@@ -2829,13 +2832,13 @@ export default function SceneCard({
         alert(
           `Final video audio normalization failed: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       } finally {
         setNormalizingAudio(null);
       }
     },
-    [setNormalizingAudio]
+    [setNormalizingAudio],
   );
 
   // Optimize silence handler
@@ -2848,7 +2851,7 @@ export default function SceneCard({
         const videoUrl = sceneData?.['field_6886'] || sceneData?.field_6886;
         if (!videoUrl || typeof videoUrl !== 'string') {
           throw new Error(
-            'No processed video available for silence optimization'
+            'No processed video available for silence optimization',
           );
         }
 
@@ -2927,7 +2930,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo]
+    [setConvertingToCFRVideo],
   );
 
   // Optimize silence for original video handler
@@ -2935,7 +2938,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound: boolean = true
+      playSound: boolean = true,
     ) => {
       try {
         setConvertingToCFRVideo(sceneId);
@@ -2944,7 +2947,7 @@ export default function SceneCard({
         const videoUrl = sceneData?.['field_6888'] || sceneData?.field_6888;
         if (!videoUrl || typeof videoUrl !== 'string') {
           throw new Error(
-            'No original video available for silence optimization'
+            'No original video available for silence optimization',
           );
         }
 
@@ -3028,13 +3031,13 @@ export default function SceneCard({
         alert(
           `Original video silence optimization failed: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       } finally {
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo]
+    [setConvertingToCFRVideo],
   );
 
   // Optimize silence for final video handler
@@ -3042,7 +3045,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      playSound: boolean = true
+      playSound: boolean = true,
     ) => {
       try {
         setConvertingToCFRVideo(sceneId);
@@ -3133,13 +3136,13 @@ export default function SceneCard({
         alert(
           `Final video silence optimization failed: ${
             error instanceof Error ? error.message : 'Unknown error'
-          }`
+          }`,
         );
       } finally {
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo]
+    [setConvertingToCFRVideo],
   );
 
   // Expose handler functions to parent component (only once on mount)
@@ -3182,10 +3185,10 @@ export default function SceneCard({
     if (showOnlyNotEmptyText) {
       filtered = filtered.filter((scene) => {
         const orig = String(
-          scene['field_6901'] || scene.field_6901 || ''
+          scene['field_6901'] || scene.field_6901 || '',
         ).trim();
         const other = String(
-          scene['field_6900'] || scene.field_6900 || ''
+          scene['field_6900'] || scene.field_6900 || '',
         ).trim();
         return !!orig || !!other;
       });
@@ -3243,7 +3246,7 @@ export default function SceneCard({
               '-> timestamp:',
               timestamp,
               'valid:',
-              !isNaN(timestamp)
+              !isNaN(timestamp),
             );
             return isNaN(timestamp) ? 0 : timestamp;
           } else if (typeof lastModified === 'number') {
@@ -3324,7 +3327,7 @@ export default function SceneCard({
                   <button
                     onClick={() =>
                       setSortByDuration(
-                        sortByDuration === 'desc' ? null : 'desc'
+                        sortByDuration === 'desc' ? null : 'desc',
                       )
                     }
                     className={`px-2 py-1 text-xs rounded transition-colors ${
@@ -3347,7 +3350,7 @@ export default function SceneCard({
                   <button
                     onClick={() =>
                       setSortByLastModified(
-                        sortByLastModified === 'asc' ? null : 'asc'
+                        sortByLastModified === 'asc' ? null : 'asc',
                       )
                     }
                     className={`px-2 py-1 text-xs rounded transition-colors ${
@@ -3361,7 +3364,7 @@ export default function SceneCard({
                   <button
                     onClick={() =>
                       setSortByLastModified(
-                        sortByLastModified === 'desc' ? null : 'desc'
+                        sortByLastModified === 'desc' ? null : 'desc',
                       )
                     }
                     className={`px-2 py-1 text-xs rounded transition-colors ${
@@ -3521,7 +3524,7 @@ export default function SceneCard({
                     console.error(
                       'Produced video error for scene',
                       scene.id,
-                      e
+                      e,
                     );
                     setLoadingProducedVideo(null);
                     setPlayingProducedVideo(null);
@@ -3616,7 +3619,7 @@ export default function SceneCard({
                               onBlur={() => {
                                 const value =
                                   parseFloat(
-                                    inputValues[scene.id]?.start || '0'
+                                    inputValues[scene.id]?.start || '0',
                                   ) || 0;
                                 handleSetStartTime(scene.id, value);
                                 // Clear the local input value after setting
@@ -3632,7 +3635,7 @@ export default function SceneCard({
                                 if (e.key === 'Enter') {
                                   const value =
                                     parseFloat(
-                                      inputValues[scene.id]?.start || '0'
+                                      inputValues[scene.id]?.start || '0',
                                     ) || 0;
                                   handleSetStartTime(scene.id, value);
                                   setInputValues((prev) => ({
@@ -3697,7 +3700,7 @@ export default function SceneCard({
                               onBlur={() => {
                                 const value =
                                   parseFloat(
-                                    inputValues[scene.id]?.end || '0'
+                                    inputValues[scene.id]?.end || '0',
                                   ) || 0;
                                 handleSetEndTime(scene.id, value);
                                 setInputValues((prev) => ({
@@ -3712,7 +3715,7 @@ export default function SceneCard({
                                 if (e.key === 'Enter') {
                                   const value =
                                     parseFloat(
-                                      inputValues[scene.id]?.end || '0'
+                                      inputValues[scene.id]?.end || '0',
                                     ) || 0;
                                   handleSetEndTime(scene.id, value);
                                   setInputValues((prev) => ({
@@ -3785,7 +3788,7 @@ export default function SceneCard({
                                       applyCfrAfterUpload,
                                       applyNormalizeAfterUpload,
                                       applySilenceAfterUpload,
-                                      applyTranscribeAfterUpload
+                                      applyTranscribeAfterUpload,
                                     );
                                     setShowTimeAdjustment(null); // Close dropdown
                                   }
@@ -3804,7 +3807,7 @@ export default function SceneCard({
                                   checked={applyNormalizeAfterUpload}
                                   onChange={(e) =>
                                     setApplyNormalizeAfterUpload(
-                                      e.target.checked
+                                      e.target.checked,
                                     )
                                   }
                                   className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
@@ -3860,7 +3863,7 @@ export default function SceneCard({
                                   checked={applyTranscribeAfterUpload}
                                   onChange={(e) =>
                                     setApplyTranscribeAfterUpload(
-                                      e.target.checked
+                                      e.target.checked,
                                     )
                                   }
                                   className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
@@ -3888,7 +3891,7 @@ export default function SceneCard({
                                 handleTranscribeScene(
                                   scene.id,
                                   scene,
-                                  transcriptionSettings.selectedVideoType
+                                  transcriptionSettings.selectedVideoType,
                                 );
                                 setShowTimeAdjustment(null); // Close dropdown
                               }}
@@ -3897,18 +3900,18 @@ export default function SceneCard({
                                 sceneLoading.transcribingScene === scene.id
                                   ? 'opacity-50 cursor-not-allowed'
                                   : sceneLoading.transcribingScene !== null
-                                  ? 'opacity-50 cursor-not-allowed'
-                                  : ''
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : ''
                               }`}
                               title={
                                 sceneLoading.transcribingScene === scene.id
                                   ? 'Transcribing scene audio...'
                                   : sceneLoading.transcribingScene !== null
-                                  ? `Scene transcription is in progress for scene ${sceneLoading.transcribingScene}`
-                                  : typeof scene['field_6910'] === 'string' &&
-                                    scene['field_6910']
-                                  ? 'Scene already transcribed - click to re-transcribe'
-                                  : `Transcribe ${transcriptionSettings.selectedVideoType} video and save captions`
+                                    ? `Scene transcription is in progress for scene ${sceneLoading.transcribingScene}`
+                                    : typeof scene['field_6910'] === 'string' &&
+                                        scene['field_6910']
+                                      ? 'Scene already transcribed - click to re-transcribe'
+                                      : `Transcribe ${transcriptionSettings.selectedVideoType} video and save captions`
                               }
                             >
                               {sceneLoading.transcribingScene === scene.id ? (
@@ -3946,11 +3949,11 @@ export default function SceneCard({
                                 {sceneLoading.transcribingScene === scene.id
                                   ? 'Transcribing...'
                                   : sceneLoading.transcribingScene !== null
-                                  ? 'Transcribe Busy'
-                                  : typeof scene['field_6910'] === 'string' &&
-                                    scene['field_6910']
-                                  ? 'Re-transcribe'
-                                  : 'Transcribe'}
+                                    ? 'Transcribe Busy'
+                                    : typeof scene['field_6910'] === 'string' &&
+                                        scene['field_6910']
+                                      ? 'Re-transcribe'
+                                      : 'Transcribe'}
                               </span>
                             </button>
                           </div>
@@ -3970,7 +3973,7 @@ export default function SceneCard({
                                     onClick={() => {
                                       handleNormalizeOriginalVideo(
                                         scene.id,
-                                        scene
+                                        scene,
                                       );
                                       setShowTimeAdjustment(null); // Close dropdown
                                     }}
@@ -3981,15 +3984,15 @@ export default function SceneCard({
                                       sceneLoading.normalizingAudio === scene.id
                                         ? 'opacity-50 cursor-not-allowed'
                                         : sceneLoading.normalizingAudio !== null
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
                                     }`}
                                     title={
                                       sceneLoading.normalizingAudio === scene.id
                                         ? 'Normalizing original video audio...'
                                         : sceneLoading.normalizingAudio !== null
-                                        ? `Audio normalization is in progress for scene ${sceneLoading.normalizingAudio}`
-                                        : 'Normalize original video audio using EBU R128 standard'
+                                          ? `Audio normalization is in progress for scene ${sceneLoading.normalizingAudio}`
+                                          : 'Normalize original video audio using EBU R128 standard'
                                     }
                                   >
                                     {sceneLoading.normalizingAudio ===
@@ -4014,7 +4017,7 @@ export default function SceneCard({
                                     onClick={() => {
                                       handleNormalizeFinalVideo(
                                         scene.id,
-                                        scene
+                                        scene,
                                       );
                                       setShowTimeAdjustment(null); // Close dropdown
                                     }}
@@ -4025,15 +4028,15 @@ export default function SceneCard({
                                       sceneLoading.normalizingAudio === scene.id
                                         ? 'opacity-50 cursor-not-allowed'
                                         : sceneLoading.normalizingAudio !== null
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
                                     }`}
                                     title={
                                       sceneLoading.normalizingAudio === scene.id
                                         ? 'Normalizing final video audio...'
                                         : sceneLoading.normalizingAudio !== null
-                                        ? `Audio normalization is in progress for scene ${sceneLoading.normalizingAudio}`
-                                        : 'Normalize final video audio using EBU R128 standard'
+                                          ? `Audio normalization is in progress for scene ${sceneLoading.normalizingAudio}`
+                                          : 'Normalize final video audio using EBU R128 standard'
                                     }
                                   >
                                     {sceneLoading.normalizingAudio ===
@@ -4068,7 +4071,7 @@ export default function SceneCard({
                                     onClick={() => {
                                       handleOptimizeSilenceOriginal(
                                         scene.id,
-                                        scene
+                                        scene,
                                       );
                                       setShowTimeAdjustment(null); // Close dropdown
                                     }}
@@ -4080,18 +4083,18 @@ export default function SceneCard({
                                       scene.id
                                         ? 'opacity-50 cursor-not-allowed'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
+                                            null
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
                                     }`}
                                     title={
                                       sceneLoading.convertingToCFRVideo ===
                                       scene.id
                                         ? 'Optimizing silence in original video...'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? `Silence optimization is in progress for scene ${sceneLoading.convertingToCFRVideo}`
-                                        : 'Detect and speed up silent parts in original video'
+                                            null
+                                          ? `Silence optimization is in progress for scene ${sceneLoading.convertingToCFRVideo}`
+                                          : 'Detect and speed up silent parts in original video'
                                     }
                                   >
                                     {sceneLoading.convertingToCFRVideo ===
@@ -4116,7 +4119,7 @@ export default function SceneCard({
                                     onClick={() => {
                                       handleOptimizeSilenceFinal(
                                         scene.id,
-                                        scene
+                                        scene,
                                       );
                                       setShowTimeAdjustment(null); // Close dropdown
                                     }}
@@ -4128,18 +4131,18 @@ export default function SceneCard({
                                       scene.id
                                         ? 'opacity-50 cursor-not-allowed'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
+                                            null
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
                                     }`}
                                     title={
                                       sceneLoading.convertingToCFRVideo ===
                                       scene.id
                                         ? 'Optimizing silence in final video...'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? `Silence optimization is in progress for scene ${sceneLoading.convertingToCFRVideo}`
-                                        : 'Detect and speed up silent parts in final video'
+                                            null
+                                          ? `Silence optimization is in progress for scene ${sceneLoading.convertingToCFRVideo}`
+                                          : 'Detect and speed up silent parts in final video'
                                     }
                                   >
                                     {sceneLoading.convertingToCFRVideo ===
@@ -4164,7 +4167,7 @@ export default function SceneCard({
                         {typeof scene['field_6888'] === 'string' &&
                           scene['field_6888'] &&
                           String(
-                            scene['field_6890'] || scene.field_6890 || ''
+                            scene['field_6890'] || scene.field_6890 || '',
                           ).trim() && (
                             <div className='border-t border-gray-200 pt-3'>
                               <button
@@ -4180,19 +4183,19 @@ export default function SceneCard({
                                   sceneLoading.creatingTypingEffect === scene.id
                                     ? 'opacity-50 cursor-not-allowed'
                                     : sceneLoading.creatingTypingEffect !==
-                                        null ||
-                                      batchOperations.generatingAllVideos
-                                    ? 'opacity-50 cursor-not-allowed'
-                                    : ''
+                                          null ||
+                                        batchOperations.generatingAllVideos
+                                      ? 'opacity-50 cursor-not-allowed'
+                                      : ''
                                 }`}
                                 title={
                                   sceneLoading.creatingTypingEffect === scene.id
                                     ? 'Creating typing effect for this scene...'
                                     : sceneLoading.creatingTypingEffect !== null
-                                    ? `Typing effect is being created for scene ${sceneLoading.creatingTypingEffect}`
-                                    : batchOperations.generatingAllVideos
-                                    ? 'Batch video generation is in progress'
-                                    : 'Create typing effect video with animated text overlay'
+                                      ? `Typing effect is being created for scene ${sceneLoading.creatingTypingEffect}`
+                                      : batchOperations.generatingAllVideos
+                                        ? 'Batch video generation is in progress'
+                                        : 'Create typing effect video with animated text overlay'
                                 }
                               >
                                 {sceneLoading.creatingTypingEffect ===
@@ -4206,10 +4209,10 @@ export default function SceneCard({
                                   scene.id
                                     ? 'Creating Typing Effect...'
                                     : sceneLoading.creatingTypingEffect !==
-                                        null ||
-                                      batchOperations.generatingAllVideos
-                                    ? 'Typing Effect Busy'
-                                    : 'Create Typing Effect'}
+                                          null ||
+                                        batchOperations.generatingAllVideos
+                                      ? 'Typing Effect Busy'
+                                      : 'Create Typing Effect'}
                                 </span>
                               </button>
                             </div>
@@ -4229,7 +4232,7 @@ export default function SceneCard({
                                     onClick={() => {
                                       handleConvertOriginalToCFR(
                                         scene.id,
-                                        scene
+                                        scene,
                                       );
                                       setShowTimeAdjustment(null); // Close dropdown
                                     }}
@@ -4241,18 +4244,18 @@ export default function SceneCard({
                                       scene.id
                                         ? 'opacity-50 cursor-not-allowed'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
+                                            null
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
                                     }`}
                                     title={
                                       sceneLoading.convertingToCFRVideo ===
                                       scene.id
                                         ? 'Converting original video to CFR...'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? `CFR conversion is in progress for scene ${sceneLoading.convertingToCFRVideo}`
-                                        : 'Convert original video to Constant Frame Rate (30fps)'
+                                            null
+                                          ? `CFR conversion is in progress for scene ${sceneLoading.convertingToCFRVideo}`
+                                          : 'Convert original video to Constant Frame Rate (30fps)'
                                     }
                                   >
                                     {sceneLoading.convertingToCFRVideo ===
@@ -4286,18 +4289,18 @@ export default function SceneCard({
                                       scene.id
                                         ? 'opacity-50 cursor-not-allowed'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
+                                            null
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
                                     }`}
                                     title={
                                       sceneLoading.convertingToCFRVideo ===
                                       scene.id
                                         ? 'Converting final video to CFR...'
                                         : sceneLoading.convertingToCFRVideo !==
-                                          null
-                                        ? `CFR conversion is in progress for scene ${sceneLoading.convertingToCFRVideo}`
-                                        : 'Convert final video to Constant Frame Rate (30fps)'
+                                            null
+                                          ? `CFR conversion is in progress for scene ${sceneLoading.convertingToCFRVideo}`
+                                          : 'Convert final video to Constant Frame Rate (30fps)'
                                     }
                                   >
                                     {sceneLoading.convertingToCFRVideo ===
@@ -4332,7 +4335,7 @@ export default function SceneCard({
                       handleTTSProduce(
                         scene.id,
                         String(scene['field_6890'] || scene.field_6890 || ''),
-                        scene
+                        scene,
                       )
                     }
                     onContextMenu={(e) => {
@@ -4350,32 +4353,32 @@ export default function SceneCard({
                         scene.id,
                         String(scene['field_6890'] || scene.field_6890 || ''),
                         scene,
-                        { seedOverride: Number(randomSeed) }
+                        { seedOverride: Number(randomSeed) },
                       );
                     }}
                     disabled={
                       sceneLoading.producingTTS !== null ||
                       batchOperations.generatingAllTTS ||
                       !String(
-                        scene['field_6890'] || scene.field_6890 || ''
+                        scene['field_6890'] || scene.field_6890 || '',
                       ).trim()
                     }
                     className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                       sceneLoading.producingTTS === scene.id
                         ? 'bg-gray-100 text-gray-500'
                         : sceneLoading.producingTTS !== null ||
-                          batchOperations.generatingAllTTS
-                        ? 'bg-gray-50 text-gray-400'
-                        : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                            batchOperations.generatingAllTTS
+                          ? 'bg-gray-50 text-gray-400'
+                          : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                     title={
                       sceneLoading.producingTTS === scene.id
                         ? 'Generating TTS for this scene...'
                         : sceneLoading.producingTTS !== null
-                        ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
-                        : batchOperations.generatingAllTTS
-                        ? 'Batch TTS generation is in progress'
-                        : 'Generate TTS from sentence (right-click: random seed)'
+                          ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
+                          : batchOperations.generatingAllTTS
+                            ? 'Batch TTS generation is in progress'
+                            : 'Generate TTS from sentence (right-click: random seed)'
                     }
                   >
                     {sceneLoading.producingTTS === scene.id ? (
@@ -4402,7 +4405,7 @@ export default function SceneCard({
                             e.stopPropagation();
                             handleAudioPlay(
                               scene.id,
-                              scene['field_6891'] as string
+                              scene['field_6891'] as string,
                             );
                           }}
                           className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
@@ -4428,12 +4431,12 @@ export default function SceneCard({
                       {sceneLoading.producingTTS === scene.id
                         ? 'Producing...'
                         : sceneLoading.producingTTS !== null ||
-                          batchOperations.generatingAllTTS
-                        ? 'TTS Busy'
-                        : typeof scene['field_6891'] === 'string' &&
-                          scene['field_6891']
-                        ? 'TTS'
-                        : 'Gen TTS'}
+                            batchOperations.generatingAllTTS
+                          ? 'TTS Busy'
+                          : typeof scene['field_6891'] === 'string' &&
+                              scene['field_6891']
+                            ? 'TTS'
+                            : 'Gen TTS'}
                     </span>
                   </button>
 
@@ -4443,34 +4446,34 @@ export default function SceneCard({
                       handleSentenceImprovement(
                         scene.id,
                         String(scene['field_6890'] || scene.field_6890 || ''),
-                        modelSelection.selectedModel || undefined
+                        modelSelection.selectedModel || undefined,
                       )
                     }
                     disabled={
                       sceneLoading.improvingSentence !== null ||
                       batchOperations.improvingAll ||
                       !String(
-                        scene['field_6890'] || scene.field_6890 || ''
+                        scene['field_6890'] || scene.field_6890 || '',
                       ).trim()
                     }
                     className={`flex items-center justify-center space-x-1 px-1 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                       sceneLoading.improvingSentence === scene.id
                         ? 'bg-gray-100 text-gray-500'
                         : sceneLoading.improvingSentence !== null ||
-                          batchOperations.improvingAll
-                        ? 'bg-gray-50 text-gray-400'
-                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                            batchOperations.improvingAll
+                          ? 'bg-gray-50 text-gray-400'
+                          : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                     title={
                       sceneLoading.improvingSentence === scene.id
                         ? 'Improving this sentence...'
                         : sceneLoading.improvingSentence !== null
-                        ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
-                        : batchOperations.improvingAll
-                        ? 'Batch AI improvement is in progress'
-                        : modelSelection.selectedModel
-                        ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
-                        : 'Improve sentence with AI (no model selected)'
+                          ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
+                          : batchOperations.improvingAll
+                            ? 'Batch AI improvement is in progress'
+                            : modelSelection.selectedModel
+                              ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
+                              : 'Improve sentence with AI (no model selected)'
                     }
                   >
                     {sceneLoading.improvingSentence === scene.id ? (
@@ -4483,12 +4486,12 @@ export default function SceneCard({
                             handleSentenceImprovement(
                               scene.id,
                               String(
-                                scene['field_6890'] || scene.field_6890 || ''
+                                scene['field_6890'] || scene.field_6890 || '',
                               ),
                               modelSelection.selectedModel || undefined,
                               scene,
                               false,
-                              true // enforce longer sentences
+                              true, // enforce longer sentences
                             );
                           }}
                           className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
@@ -4503,9 +4506,9 @@ export default function SceneCard({
                       {sceneLoading.improvingSentence === scene.id
                         ? 'Improving...'
                         : sceneLoading.improvingSentence !== null ||
-                          batchOperations.improvingAll
-                        ? 'Busy'
-                        : 'AI'}
+                            batchOperations.improvingAll
+                          ? 'Busy'
+                          : 'AI'}
                     </span>
                   </button>
 
@@ -4516,7 +4519,7 @@ export default function SceneCard({
                         onClick={() =>
                           handleVideoPlay(
                             scene.id,
-                            scene['field_6888'] as string
+                            scene['field_6888'] as string,
                           )
                         }
                         disabled={loadingVideo === scene.id}
@@ -4559,22 +4562,22 @@ export default function SceneCard({
                           sceneLoading.speedingUpVideo === scene.id
                             ? 'bg-gray-100 text-gray-500'
                             : sceneLoading.speedingUpVideo !== null ||
-                              batchOperations.speedingUpAllVideos
-                            ? 'bg-gray-50 text-gray-400'
-                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                batchOperations.speedingUpAllVideos
+                              ? 'bg-gray-50 text-gray-400'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                         }`}
                         title={
                           sceneLoading.speedingUpVideo === scene.id
                             ? 'Speed up video processing for this scene...'
                             : sceneLoading.speedingUpVideo !== null
-                            ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
-                            : batchOperations.speedingUpAllVideos
-                            ? 'Batch video speed-up is in progress'
-                            : `Speed up video ${
-                                videoSettings.selectedSpeed
-                              }x and ${
-                                videoSettings.muteAudio ? 'mute' : 'keep'
-                              } audio (saves to field 6886)`
+                              ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
+                              : batchOperations.speedingUpAllVideos
+                                ? 'Batch video speed-up is in progress'
+                                : `Speed up video ${
+                                    videoSettings.selectedSpeed
+                                  }x and ${
+                                    videoSettings.muteAudio ? 'mute' : 'keep'
+                                  } audio (saves to field 6886)`
                         }
                       >
                         {sceneLoading.speedingUpVideo === scene.id ? (
@@ -4615,9 +4618,9 @@ export default function SceneCard({
                           {sceneLoading.speedingUpVideo === scene.id
                             ? 'Processing...'
                             : sceneLoading.speedingUpVideo !== null ||
-                              batchOperations.speedingUpAllVideos
-                            ? 'Speed Busy'
-                            : 'Speed'}
+                                batchOperations.speedingUpAllVideos
+                              ? 'Speed Busy'
+                              : 'Speed'}
                         </span>
                       </button>
                     )}
@@ -4637,18 +4640,18 @@ export default function SceneCard({
                           clipGeneration.generatingSingleClip === scene.id
                             ? 'bg-purple-100 text-purple-500'
                             : clipGeneration.generatingSingleClip !== null ||
-                              clipGeneration.generatingClips !== null
-                            ? 'bg-gray-50 text-gray-400'
-                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                clipGeneration.generatingClips !== null
+                              ? 'bg-gray-50 text-gray-400'
+                              : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                         }`}
                         title={
                           clipGeneration.generatingSingleClip === scene.id
                             ? 'Generating clip for this scene...'
                             : clipGeneration.generatingSingleClip !== null
-                            ? `Clip is being generated for scene ${clipGeneration.generatingSingleClip}`
-                            : clipGeneration.generatingClips !== null
-                            ? 'Bulk clip generation is in progress'
-                            : 'Generate video clip for this scene'
+                              ? `Clip is being generated for scene ${clipGeneration.generatingSingleClip}`
+                              : clipGeneration.generatingClips !== null
+                                ? 'Bulk clip generation is in progress'
+                                : 'Generate video clip for this scene'
                         }
                       >
                         {clipGeneration.generatingSingleClip === scene.id ? (
@@ -4679,9 +4682,9 @@ export default function SceneCard({
                           {clipGeneration.generatingSingleClip === scene.id
                             ? 'Generating...'
                             : clipGeneration.generatingSingleClip !== null ||
-                              clipGeneration.generatingClips !== null
-                            ? 'Clip Busy'
-                            : 'Gen Clip'}
+                                clipGeneration.generatingClips !== null
+                              ? 'Clip Busy'
+                              : 'Gen Clip'}
                         </span>
                       </button>
                     )}
@@ -4699,7 +4702,7 @@ export default function SceneCard({
                             scene['field_6891'] as string,
                             scene,
                             syncZoomLevel,
-                            syncPanMode
+                            syncPanMode,
                           )
                         }
                         disabled={
@@ -4710,20 +4713,22 @@ export default function SceneCard({
                           sceneLoading.generatingVideo === scene.id
                             ? 'bg-gray-100 text-gray-500'
                             : sceneLoading.generatingVideo !== null ||
-                              batchOperations.generatingAllVideos
-                            ? 'bg-gray-50 text-gray-400'
-                            : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                                batchOperations.generatingAllVideos
+                              ? 'bg-gray-50 text-gray-400'
+                              : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                         title={
                           sceneLoading.generatingVideo === scene.id
                             ? 'Generating synchronized video for this scene...'
                             : sceneLoading.generatingVideo !== null
-                            ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
-                            : batchOperations.generatingAllVideos
-                            ? 'Batch video generation is in progress'
-                            : `Generate synchronized video (Zoom: ${syncZoomLevel}%${
-                                syncPanMode !== 'none' ? ` ${syncPanMode}` : ''
-                              })`
+                              ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
+                              : batchOperations.generatingAllVideos
+                                ? 'Batch video generation is in progress'
+                                : `Generate synchronized video (Zoom: ${syncZoomLevel}%${
+                                    syncPanMode !== 'none'
+                                      ? ` ${syncPanMode}`
+                                      : ''
+                                  })`
                         }
                       >
                         {sceneLoading.generatingVideo === scene.id ? (
@@ -4736,7 +4741,7 @@ export default function SceneCard({
                                 e.stopPropagation();
                                 // Cycle zoom: 0 -> 10 -> 20 -> 30 -> 40 -> 50 -> 0
                                 setSyncZoomLevel((prev) =>
-                                  prev >= 50 ? 0 : prev + 10
+                                  prev >= 50 ? 0 : prev + 10,
                                 );
                               }}
                               className='px-1 py-0.5 text-xs font-bold text-teal-700 hover:bg-teal-600/20 rounded transition-colors duration-200 cursor-pointer'
@@ -4749,7 +4754,7 @@ export default function SceneCard({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setPanModeDropdownOpen((prev) =>
-                                    prev === scene.id ? null : scene.id
+                                    prev === scene.id ? null : scene.id,
                                   );
                                 }}
                                 className={`px-1 py-0.5 text-xs font-bold rounded transition-colors duration-200 cursor-pointer ${
@@ -4762,10 +4767,10 @@ export default function SceneCard({
                                 {syncPanMode === 'none'
                                   ? '▼'
                                   : syncPanMode === 'zoom'
-                                  ? 'Z▼'
-                                  : syncPanMode === 'zoomOut'
-                                  ? 'O▼'
-                                  : 'T▼'}
+                                    ? 'Z▼'
+                                    : syncPanMode === 'zoomOut'
+                                      ? 'O▼'
+                                      : 'T▼'}
                               </div>
                               {panModeDropdownOpen === scene.id && (
                                 <div
@@ -4833,10 +4838,10 @@ export default function SceneCard({
                           {sceneLoading.generatingVideo === scene.id
                             ? 'Generating...'
                             : sceneLoading.generatingVideo !== null
-                            ? 'Video Busy'
-                            : batchOperations.generatingAllVideos
-                            ? 'Video Busy'
-                            : 'Sync'}
+                              ? 'Video Busy'
+                              : batchOperations.generatingAllVideos
+                                ? 'Video Busy'
+                                : 'Sync'}
                         </span>
                       </button>
                     )}
@@ -4848,7 +4853,7 @@ export default function SceneCard({
                         onClick={() =>
                           handleOpenImageOverlayModal(
                             scene.id,
-                            scene['field_6886'] as string
+                            scene['field_6886'] as string,
                           )
                         }
                         disabled={addingImageOverlay === scene.id}
@@ -4903,7 +4908,7 @@ export default function SceneCard({
                         onClick={() =>
                           handleProducedVideoPlay(
                             scene.id,
-                            scene['field_6886'] as string
+                            scene['field_6886'] as string,
                           )
                         }
                         disabled={loadingProducedVideo === scene.id}
@@ -4990,7 +4995,7 @@ export default function SceneCard({
                 onClick={() =>
                   handleEditStart(
                     scene.id,
-                    String(scene['field_6890'] || scene.field_6890 || '')
+                    String(scene['field_6890'] || scene.field_6890 || ''),
                   )
                 }
                 onContextMenu={(e) => {
@@ -5011,7 +5016,7 @@ export default function SceneCard({
                 }}
                 title={(() => {
                   const original = String(
-                    scene?.field_6901 || scene.field_6901 || ''
+                    scene?.field_6901 || scene.field_6901 || '',
                   );
                   const base =
                     'Click to edit (Right-click to clear sentence; if empty, restore original)';
@@ -5021,7 +5026,7 @@ export default function SceneCard({
                 {String(
                   scene['field_6890'] ||
                     scene.field_6890 ||
-                    'No sentence - Click to add'
+                    'No sentence - Click to add',
                 )}
               </div>
             )}
