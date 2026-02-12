@@ -5003,7 +5003,7 @@ export default function SceneCard({
                         <span>
                           {mediaPlayer.playingVideoId === scene.id
                             ? 'Stop'
-                            : 'Orig Vid'}
+                            : 'Orig'}
                         </span>
                       </button>
                     )}
@@ -5143,7 +5143,7 @@ export default function SceneCard({
                             : clipGeneration.generatingSingleClip !== null ||
                                 clipGeneration.generatingClips !== null
                               ? 'Clip Busy'
-                              : 'Gen Clip'}
+                              : 'Gen'}
                         </span>
                       </button>
                     )}
@@ -5316,11 +5316,16 @@ export default function SceneCard({
                               scene as BaserowRow,
                             );
                           }}
+                          aria-label={
+                            autoFixingMismatchSceneId === scene.id
+                              ? 'Fix mismatch (running)'
+                              : 'Fix mismatch'
+                          }
                           disabled={
                             addingImageOverlay === scene.id ||
                             autoFixingMismatchSceneId !== null
                           }
-                          className={`flex items-center justify-center space-x-1 px-2 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
+                          className={`inline-flex items-center justify-center w-9 h-7 rounded-full text-xs font-medium transition-colors ${
                             autoFixingMismatchSceneId === scene.id
                               ? 'bg-gray-100 text-gray-500'
                               : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
@@ -5336,11 +5341,6 @@ export default function SceneCard({
                           ) : (
                             <Wand2 className='h-3 w-3' />
                           )}
-                          <span>
-                            {autoFixingMismatchSceneId === scene.id
-                              ? 'Fixing...'
-                              : 'Fix'}
-                          </span>
                         </button>
 
                         <button
@@ -5351,7 +5351,7 @@ export default function SceneCard({
                             )
                           }
                           disabled={addingImageOverlay === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[95px] rounded-full text-xs font-medium transition-colors ${
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-colors ${
                             addingImageOverlay === scene.id
                               ? 'bg-gray-100 text-gray-500'
                               : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
@@ -5366,7 +5366,7 @@ export default function SceneCard({
                           <span>
                             {addingImageOverlay === scene.id
                               ? 'Adding...'
-                              : 'Add Image'}
+                              : 'Image'}
                           </span>
                         </button>
                       </>
