@@ -43,6 +43,10 @@ interface SceneCardProps {
   refreshing?: boolean;
   onDataUpdate?: (updatedData: BaserowRow[]) => void;
   onHandlersReady?: (handlers: {
+    handleAutoFixMismatch: (
+      sceneId: number,
+      sceneData?: BaserowRow,
+    ) => Promise<void>;
     handleSentenceImprovement: (
       sceneId: number,
       sentence: string,
@@ -3608,6 +3612,7 @@ export default function SceneCard({
   useEffect(() => {
     if (onHandlersReady) {
       onHandlersReady({
+        handleAutoFixMismatch,
         handleSentenceImprovement,
         handleTTSProduce,
         handleVideoGenerate,

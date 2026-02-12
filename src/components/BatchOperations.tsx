@@ -9,7 +9,6 @@ import {
   handleGenerateAllVideos,
   handleConcatenateAllVideos,
   handleSpeedUpAllVideos,
-  handleTranscribeAllFinalScenes,
   cycleSpeed as cycleThroughSpeeds,
 } from '@/utils/batchOperations';
 import { playSuccessSound } from '@/utils/soundManager';
@@ -19,6 +18,7 @@ import {
   Mic,
   Film,
   RefreshCw,
+  Wand2,
   Volume2,
   VolumeX,
   Download,
@@ -36,27 +36,31 @@ interface BatchOperationsProps {
   data: BaserowRow[];
   onRefresh?: () => void;
   refreshing?: boolean;
+  handleAutoFixMismatch: (
+    sceneId: number,
+    sceneData?: BaserowRow,
+  ) => Promise<void>;
   handleSentenceImprovement: (
     sceneId: number,
     sentence: string,
     model?: string,
     sceneData?: BaserowRow,
     skipRefresh?: boolean,
-    enforceLongerSentences?: boolean
+    enforceLongerSentences?: boolean,
   ) => Promise<void>;
   handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
   handleVideoGenerate: (
     sceneId: number,
     videoUrl: string,
     audioUrl: string,
-    sceneData?: BaserowRow
+    sceneData?: BaserowRow,
   ) => Promise<void>;
   handleTranscribeScene: (
     sceneId: number,
     sceneData?: BaserowRow,
     videoType?: 'original' | 'final',
     skipRefresh?: boolean,
-    skipSound?: boolean
+    skipSound?: boolean,
   ) => Promise<void>;
 }
 
@@ -64,6 +68,7 @@ export default function BatchOperations({
   data,
   onRefresh,
   refreshing = false,
+  handleAutoFixMismatch,
   handleSentenceImprovement,
   handleTTSProduce,
   handleVideoGenerate,
@@ -222,7 +227,7 @@ export default function BatchOperations({
   const handleClearSettings = () => {
     if (
       confirm(
-        'Are you sure you want to clear all saved settings? This will reset everything to defaults.'
+        'Are you sure you want to clear all saved settings? This will reset everything to defaults.',
       )
     ) {
       clearLocalStorageSettings();
@@ -237,7 +242,7 @@ export default function BatchOperations({
     const emptyScenes = data.filter((scene) => {
       const sentence = String(scene['field_6890'] ?? '').trim();
       const original = String(
-        scene['field_6901'] ?? scene['field_6900'] ?? ''
+        scene['field_6901'] ?? scene['field_6900'] ?? '',
       ).trim();
       return sentence === '' && original === '';
     });
@@ -260,7 +265,7 @@ export default function BatchOperations({
         if (!res.ok) {
           const errorText = await res.text();
           throw new Error(
-            `Failed to delete scene ${scene.id}: ${res.status} ${errorText}`
+            `Failed to delete scene ${scene.id}: ${res.status} ${errorText}`,
           );
         }
 
@@ -314,7 +319,7 @@ export default function BatchOperations({
       modelSelection.selectedModel,
       startBatchOperation,
       completeBatchOperation,
-      setImprovingSentence
+      setImprovingSentence,
     );
   };
 
@@ -356,7 +361,7 @@ export default function BatchOperations({
     const scenesToPrompt = data.filter((scene) => {
       const sentence = String(scene['field_6890'] ?? '').trim();
       const original = String(
-        scene['field_6901'] ?? scene['field_6900'] ?? ''
+        scene['field_6901'] ?? scene['field_6900'] ?? '',
       ).trim();
       if (!(sentence || original)) return false;
 
@@ -392,7 +397,7 @@ export default function BatchOperations({
         if (!genRes.ok) {
           const t = await genRes.text().catch(() => '');
           throw new Error(
-            `Prompt generation failed for scene ${scene.id}: ${genRes.status} ${t}`
+            `Prompt generation failed for scene ${scene.id}: ${genRes.status} ${t}`,
           );
         }
 
@@ -418,7 +423,7 @@ export default function BatchOperations({
         if (!patchRes.ok) {
           const t = await patchRes.text().catch(() => '');
           throw new Error(
-            `Failed to save prompt for scene ${scene.id}: ${patchRes.status} ${t}`
+            `Failed to save prompt for scene ${scene.id}: ${patchRes.status} ${t}`,
           );
         }
 
@@ -442,7 +447,7 @@ export default function BatchOperations({
       handleTTSProduce,
       startBatchOperation,
       completeBatchOperation,
-      setProducingTTS
+      setProducingTTS,
     );
   };
 
@@ -453,7 +458,7 @@ export default function BatchOperations({
       startBatchOperation,
       completeBatchOperation,
       setGeneratingVideo,
-      onRefresh
+      onRefresh,
     );
   };
 
@@ -463,21 +468,51 @@ export default function BatchOperations({
       startBatchOperation,
       completeBatchOperation,
       setMergedVideo,
-      selectedOriginalVideo.id
+      selectedOriginalVideo.id,
     );
   };
 
-  const onTranscribeAllFinal = () => {
+  const onFixAllFinalTTS = async () => {
     // This batch action must only run for the currently selected original video.
     if (!selectedOriginalVideo.id) return;
 
-    handleTranscribeAllFinalScenes(
-      data,
-      handleTranscribeScene,
-      startBatchOperation,
-      completeBatchOperation,
-      setTranscribingScene
-    );
+    startBatchOperation('transcribingAllFinalScenes');
+    try {
+      // Run sequentially, ordered, to avoid concurrency issues and ensure robust per-scene comparison.
+      const scenesToFix = [...data]
+        .filter((scene) => {
+          const hasFinal =
+            typeof scene['field_6886'] === 'string' &&
+            String(scene['field_6886']).trim();
+          const hasText = String(scene['field_6890'] || '').trim();
+          return Boolean(hasFinal && hasText);
+        })
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+      if (scenesToFix.length === 0) {
+        console.log('No scenes with final video + text found to fix.');
+        return;
+      }
+
+      for (const scene of scenesToFix) {
+        setTranscribingScene(scene.id);
+        try {
+          await handleAutoFixMismatch(scene.id, scene);
+        } catch (error) {
+          console.error(`Fix TTS failed for scene ${scene.id}:`, error);
+        } finally {
+          setTranscribingScene(null);
+        }
+
+        // Small delay between scenes to be gentle on the backend.
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      onRefresh?.();
+    } finally {
+      completeBatchOperation('transcribingAllFinalScenes');
+      playSuccessSound();
+    }
   };
 
   const onSpeedUpAllVideos = () => {
@@ -489,7 +524,7 @@ export default function BatchOperations({
       onRefresh,
       startBatchOperation,
       completeBatchOperation,
-      setSpeedingUpVideo
+      setSpeedingUpVideo,
     );
   };
 
@@ -950,8 +985,8 @@ export default function BatchOperations({
                   batchOperations.improvingAll
                     ? 'Improving all sentences with AI...'
                     : sceneLoading.improvingSentence !== null
-                    ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
-                    : 'Improve all sentences with AI'
+                      ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
+                      : 'Improve all sentences with AI'
                 }
               >
                 {(batchOperations.improvingAll ||
@@ -964,8 +999,8 @@ export default function BatchOperations({
                       ? `Scene #${sceneLoading.improvingSentence}`
                       : 'Processing...'
                     : sceneLoading.improvingSentence !== null
-                    ? `Busy (#${sceneLoading.improvingSentence})`
-                    : 'Improve All'}
+                      ? `Busy (#${sceneLoading.improvingSentence})`
+                      : 'Improve All'}
                 </span>
               </button>
 
@@ -1020,8 +1055,8 @@ export default function BatchOperations({
                   batchOperations.generatingAllTTS
                     ? 'Generating TTS for all scenes...'
                     : sceneLoading.producingTTS !== null
-                    ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
-                    : 'Generate TTS for all scenes'
+                      ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
+                      : 'Generate TTS for all scenes'
                 }
               >
                 {(batchOperations.generatingAllTTS ||
@@ -1034,8 +1069,8 @@ export default function BatchOperations({
                       ? `Scene #${sceneLoading.producingTTS}`
                       : 'Processing...'
                     : sceneLoading.producingTTS !== null
-                    ? `Busy (#${sceneLoading.producingTTS})`
-                    : 'Generate All'}
+                      ? `Busy (#${sceneLoading.producingTTS})`
+                      : 'Generate All'}
                 </span>
               </button>
             </div>
@@ -1053,15 +1088,13 @@ export default function BatchOperations({
               <div className='bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200'>
                 <div className='flex items-center gap-2 mb-3'>
                   <div className='p-2 bg-emerald-500 rounded-lg'>
-                    <RefreshCw className='w-4 h-4 text-white' />
+                    <Wand2 className='w-4 h-4 text-white' />
                   </div>
-                  <h3 className='font-semibold text-emerald-900'>
-                    Transcribe Final
-                  </h3>
+                  <h3 className='font-semibold text-emerald-900'>Fix TTS</h3>
                 </div>
                 {/* Removed extra description text to keep UI concise */}
                 <button
-                  onClick={onTranscribeAllFinal}
+                  onClick={onFixAllFinalTTS}
                   disabled={
                     !selectedOriginalVideo.id ||
                     batchOperations.transcribingAllFinalScenes ||
@@ -1072,10 +1105,10 @@ export default function BatchOperations({
                     !selectedOriginalVideo.id
                       ? 'Select an original video first'
                       : batchOperations.transcribingAllFinalScenes
-                      ? 'Transcribing final scenes...'
-                      : sceneLoading.transcribingScene !== null
-                      ? `Transcribing scene ${sceneLoading.transcribingScene}`
-                      : 'Transcribe final scenes'
+                        ? 'Fixing TTS for all scenes (TTS → sync → retranscribe)...'
+                        : sceneLoading.transcribingScene !== null
+                          ? `Fixing scene ${sceneLoading.transcribingScene}`
+                          : 'Fix TTS mismatches for all scenes'
                   }
                 >
                   {(batchOperations.transcribingAllFinalScenes ||
@@ -1088,8 +1121,8 @@ export default function BatchOperations({
                         ? `Scene #${sceneLoading.transcribingScene}`
                         : 'Processing...'
                       : sceneLoading.transcribingScene !== null
-                      ? `Busy (#${sceneLoading.transcribingScene})`
-                      : 'Transcribe All'}
+                        ? `Busy (#${sceneLoading.transcribingScene})`
+                        : 'Fix All'}
                   </span>
                 </button>
               </div>
@@ -1105,8 +1138,8 @@ export default function BatchOperations({
                   batchOperations.generatingAllVideos
                     ? 'Generate videos for all scenes with TTS audio...'
                     : sceneLoading.generatingVideo !== null
-                    ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
-                    : 'Generate synchronized videos'
+                      ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
+                      : 'Generate synchronized videos'
                 }
               >
                 {(batchOperations.generatingAllVideos ||
@@ -1119,8 +1152,8 @@ export default function BatchOperations({
                       ? `Scene #${sceneLoading.generatingVideo}`
                       : 'Processing...'
                     : sceneLoading.generatingVideo !== null
-                    ? `Busy (#${sceneLoading.generatingVideo})`
-                    : 'Sync All'}
+                      ? `Busy (#${sceneLoading.generatingVideo})`
+                      : 'Sync All'}
                 </span>
               </button>
             </div>
@@ -1197,8 +1230,8 @@ export default function BatchOperations({
                       ? `Scene #${sceneLoading.speedingUpVideo}`
                       : 'Processing...'
                     : sceneLoading.speedingUpVideo !== null
-                    ? `Busy (#${sceneLoading.speedingUpVideo})`
-                    : getSpeedUpButtonText()}
+                      ? `Busy (#${sceneLoading.speedingUpVideo})`
+                      : getSpeedUpButtonText()}
                 </span>
               </button>
 

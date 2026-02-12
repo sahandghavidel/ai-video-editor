@@ -36,35 +36,39 @@ export default function Home() {
   const displayData = filteredData;
 
   const [sceneHandlers, setSceneHandlers] = useState<{
+    handleAutoFixMismatch: (
+      sceneId: number,
+      sceneData?: BaserowRow,
+    ) => Promise<void>;
     handleSentenceImprovement: (
       sceneId: number,
       sentence: string,
       model?: string,
       sceneData?: BaserowRow,
       skipRefresh?: boolean,
-      enforceLongerSentences?: boolean
+      enforceLongerSentences?: boolean,
     ) => Promise<void>;
     handleTTSProduce: (
       sceneId: number,
       text: string,
-      sceneData?: BaserowRow
+      sceneData?: BaserowRow,
     ) => Promise<void>;
     handleVideoGenerate: (
       sceneId: number,
       videoUrl: string,
-      audioUrl: string
+      audioUrl: string,
     ) => Promise<void>;
     handleSpeedUpVideo: (
       sceneId: number,
       sceneData?: BaserowRow,
-      skipRefresh?: boolean
+      skipRefresh?: boolean,
     ) => Promise<void>;
     handleTranscribeScene: (
       sceneId: number,
       sceneData?: BaserowRow,
       videoType?: 'original' | 'final',
       skipRefresh?: boolean,
-      skipSound?: boolean
+      skipSound?: boolean,
     ) => Promise<void>;
   } | null>(null);
 
@@ -106,39 +110,43 @@ export default function Home() {
 
   const handleSceneHandlersReady = useCallback(
     (handlers: {
+      handleAutoFixMismatch: (
+        sceneId: number,
+        sceneData?: BaserowRow,
+      ) => Promise<void>;
       handleSentenceImprovement: (
         sceneId: number,
         sentence: string,
         model?: string,
         sceneData?: BaserowRow,
-        skipRefresh?: boolean
+        skipRefresh?: boolean,
       ) => Promise<void>;
       handleTTSProduce: (
         sceneId: number,
         text: string,
-        sceneData?: BaserowRow
+        sceneData?: BaserowRow,
       ) => Promise<void>;
       handleVideoGenerate: (
         sceneId: number,
         videoUrl: string,
-        audioUrl: string
+        audioUrl: string,
       ) => Promise<void>;
       handleSpeedUpVideo: (
         sceneId: number,
         sceneData?: BaserowRow,
-        skipRefresh?: boolean
+        skipRefresh?: boolean,
       ) => Promise<void>;
       handleTranscribeScene: (
         sceneId: number,
         sceneData?: BaserowRow,
         videoType?: 'original' | 'final',
         skipRefresh?: boolean,
-        skipSound?: boolean
+        skipSound?: boolean,
       ) => Promise<void>;
     }) => {
       setSceneHandlers(handlers);
     },
-    []
+    [],
   );
 
   const refreshData = () => {
@@ -353,6 +361,7 @@ export default function Home() {
                 data={displayData}
                 onRefresh={refreshData}
                 refreshing={refreshing}
+                handleAutoFixMismatch={sceneHandlers.handleAutoFixMismatch}
                 handleSentenceImprovement={
                   sceneHandlers.handleSentenceImprovement
                 }
