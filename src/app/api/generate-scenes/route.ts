@@ -321,7 +321,10 @@ async function uploadStockVideoForScriptScenes(
   }
 
   const filePath = path.join(videosDir, filename);
-  const uploadName = `video_${videoId}_${filename}`;
+  // Use a stable, minimal naming format requested:
+  // video_<videoId>_clip_<timestamp>.mp4
+  // (Do not include the original local filename.)
+  const uploadName = `video_${videoId}_clip_${Date.now()}.mp4`;
   return uploadToMinio(filePath, uploadName, 'video/mp4');
 }
 
