@@ -2269,6 +2269,24 @@ export default function SceneCard({
       try {
         const maxAttempts = 3;
 
+        const setFlaggedTrue = async () => {
+          try {
+            const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ field_7096: 'true' }),
+            });
+            if (!res.ok) {
+              const t = await res.text().catch(() => '');
+              console.warn(
+                `Failed to set Flagged=true for scene ${sceneId}: ${res.status} ${t}`,
+              );
+            }
+          } catch (e) {
+            console.warn(`Failed to set Flagged=true for scene ${sceneId}:`, e);
+          }
+        };
+
         const initialScene =
           (sceneData as BaserowRow | undefined) ||
           (dataRef.current.find((s) => s.id === sceneId) as
@@ -2501,7 +2519,9 @@ export default function SceneCard({
           }
         }
 
-        setStatus('Still mismatched after 3 attempts.');
+        setStatus('Still mismatched after 3 attempts — flagging.');
+        await setFlaggedTrue();
+        setStatus('Still mismatched after 3 attempts. (Flagged=true)');
         refreshDataRef.current?.();
       } catch (err) {
         console.error('Auto-fix mismatch failed:', err);
