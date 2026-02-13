@@ -35,14 +35,17 @@ async function resolveFlaggedTrueOptionId(
     return cachedFlaggedTrueOptionId;
   }
 
-  const res = await fetch(`${baserowUrl}/database/fields/table/${SCENES_TABLE_ID}/`, {
-    method: 'GET',
-    headers: {
-      Authorization: `JWT ${token}`,
+  const res = await fetch(
+    `${baserowUrl}/database/fields/table/${SCENES_TABLE_ID}/`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `JWT ${token}`,
+      },
+      // This is server-side; ensure we don't cache across deployments unexpectedly.
+      cache: 'no-store',
     },
-    // This is server-side; ensure we don't cache across deployments unexpectedly.
-    cache: 'no-store',
-  });
+  );
 
   if (!res.ok) {
     const t = await res.text().catch(() => '');
@@ -74,7 +77,9 @@ async function resolveFlaggedTrueOptionId(
   return trueOpt.id;
 }
 
-function normalizeSelectValueToBoolLabel(value: unknown): 'true' | 'false' | null {
+function normalizeSelectValueToBoolLabel(
+  value: unknown,
+): 'true' | 'false' | null {
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'string') {
     const v = value.trim().toLowerCase();
@@ -120,7 +125,7 @@ async function getJWTToken(): Promise<string> {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -138,7 +143,7 @@ export async function PATCH(
     if (!baserowUrl) {
       return NextResponse.json(
         { error: 'Missing Baserow URL' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -169,7 +174,7 @@ export async function PATCH(
           Authorization: `JWT ${token}`,
         },
         body: JSON.stringify(body),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -177,7 +182,7 @@ export async function PATCH(
       console.error('Failed to update scene:', errorText);
       return NextResponse.json(
         { error: `Failed to update scene: ${response.status} ${errorText}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -187,14 +192,14 @@ export async function PATCH(
     console.error('Error updating scene:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -209,7 +214,7 @@ export async function DELETE(
     if (!baserowUrl) {
       return NextResponse.json(
         { error: 'Missing Baserow URL' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -224,7 +229,7 @@ export async function DELETE(
         headers: {
           Authorization: `JWT ${token}`,
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -232,7 +237,7 @@ export async function DELETE(
       console.error('Failed to delete scene:', errorText);
       return NextResponse.json(
         { error: `Failed to delete scene: ${response.status} ${errorText}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -241,7 +246,7 @@ export async function DELETE(
     console.error('Error deleting scene:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
