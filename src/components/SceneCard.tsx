@@ -179,6 +179,7 @@ export default function SceneCard({
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
   const [showOnlyNotEmptyText, setShowOnlyNotEmptyText] =
     useState<boolean>(false);
+  const [showOnlyFlagged, setShowOnlyFlagged] = useState<boolean>(false);
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null,
   );
@@ -405,6 +406,45 @@ export default function SceneCard({
         // Compute filtered and sorted data locally to avoid dependency issues
         let filtered = data;
 
+        const isSceneFlagged = (scene: Record<string, unknown>): boolean => {
+          const raw = scene.field_7096 ?? scene['field_7096'];
+          if (raw === true) return true;
+          if (!raw) return false;
+
+          if (Array.isArray(raw)) {
+            return raw.some((item) => {
+              if (!item || typeof item !== 'object') return false;
+              const obj = item as Record<string, unknown>;
+              const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+              if (value === true) return true;
+              if (typeof value === 'string') {
+                return value.trim().toLowerCase() === 'true';
+              }
+              return false;
+            });
+          }
+
+          if (typeof raw === 'string') {
+            return raw.trim().toLowerCase() === 'true';
+          }
+
+          if (typeof raw === 'object') {
+            const obj = raw as Record<string, unknown>;
+            const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+            if (value === true) return true;
+            if (typeof value === 'string') {
+              return value.trim().toLowerCase() === 'true';
+            }
+          }
+
+          return false;
+        };
+
+        // Filter by flagged scenes
+        if (showOnlyFlagged) {
+          filtered = filtered.filter((scene) => isSceneFlagged(scene));
+        }
+
         // Filter by empty text
         if (showOnlyEmptyText) {
           filtered = filtered.filter((scene) => {
@@ -588,6 +628,7 @@ export default function SceneCard({
     imageOverlayModal.isOpen,
     handleProducedVideoPlay,
     data,
+    showOnlyFlagged,
     showOnlyEmptyText,
     showOnlyNotEmptyText,
     sortByDuration,
@@ -3657,6 +3698,45 @@ export default function SceneCard({
   const filteredAndSortedData = React.useMemo(() => {
     let filtered = data;
 
+    const isSceneFlagged = (scene: Record<string, unknown>): boolean => {
+      const raw = scene.field_7096 ?? scene['field_7096'];
+      if (raw === true) return true;
+      if (!raw) return false;
+
+      if (Array.isArray(raw)) {
+        return raw.some((item) => {
+          if (!item || typeof item !== 'object') return false;
+          const obj = item as Record<string, unknown>;
+          const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+          if (value === true) return true;
+          if (typeof value === 'string') {
+            return value.trim().toLowerCase() === 'true';
+          }
+          return false;
+        });
+      }
+
+      if (typeof raw === 'string') {
+        return raw.trim().toLowerCase() === 'true';
+      }
+
+      if (typeof raw === 'object') {
+        const obj = raw as Record<string, unknown>;
+        const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+        if (value === true) return true;
+        if (typeof value === 'string') {
+          return value.trim().toLowerCase() === 'true';
+        }
+      }
+
+      return false;
+    };
+
+    // Filter by flagged scenes
+    if (showOnlyFlagged) {
+      filtered = filtered.filter((scene) => isSceneFlagged(scene));
+    }
+
     // Filter by empty text
     if (showOnlyEmptyText) {
       filtered = filtered.filter((scene) => {
@@ -3753,6 +3833,7 @@ export default function SceneCard({
     return filtered;
   }, [
     data,
+    showOnlyFlagged,
     showOnlyEmptyText,
     showOnlyNotEmptyText,
     sortByDuration,
@@ -3867,6 +3948,17 @@ export default function SceneCard({
 
               {/* Filter Buttons */}
               <div className='flex flex-wrap items-center gap-2'>
+                <button
+                  onClick={() => setShowOnlyFlagged(!showOnlyFlagged)}
+                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                    showOnlyFlagged
+                      ? 'bg-red-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  }`}
+                  title='Show only scenes where Flagged (7096) is true'
+                >
+                  {showOnlyFlagged ? '✓ ' : ''}Flagged
+                </button>
                 <button
                   onClick={() => {
                     // Make Empty / Not Empty mutually exclusive
