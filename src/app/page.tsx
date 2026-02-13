@@ -12,6 +12,7 @@ import SilenceSpeedSettings from '@/components/SilenceSpeedSettings';
 import AudioEnhancementSettings from '@/components/AudioEnhancementSettings';
 import AdvancedAudioSettings from '@/components/AdvancedAudioSettings';
 import DeletionSettings from '@/components/DeletionSettings';
+import SubtitleGenerationSettings from '@/components/SubtitleGenerationSettings';
 import OriginalVideosList from '@/components/OriginalVideosList';
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
@@ -320,6 +321,7 @@ export default function Home() {
                     >
                       <ModelSelection />
                       <TranscriptionModelSelection />
+                      <SubtitleGenerationSettings />
                       <TTSSettings />
                       <VideoSpeedSettings />
                       <SilenceSpeedSettings />

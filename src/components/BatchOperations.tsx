@@ -79,6 +79,7 @@ export default function BatchOperations({
     batchOperations,
     modelSelection,
     videoSettings,
+    subtitleGenerationSettings,
     updateVideoSettings,
     startBatchOperation,
     completeBatchOperation,
@@ -538,6 +539,37 @@ export default function BatchOperations({
     return `${u}${sep}t=${Date.now()}`;
   };
 
+  const buildTranscriptionTextForCharCount = (words: unknown[]): string => {
+    const tokens = words
+      .map((w) => {
+        if (!w || typeof w !== 'object') return '';
+        const maybeWord = (w as { word?: unknown }).word;
+        return typeof maybeWord === 'string' ? maybeWord.trim() : '';
+      })
+      .filter(Boolean);
+
+    // Join while avoiding spaces before punctuation tokens.
+    // Punctuation still counts as characters.
+    const noSpaceBefore = /^[,.;:!?%\]\)\}]+$/;
+    const noSpaceAfter = /[\[\(\{]$/;
+
+    let out = '';
+    for (const t of tokens) {
+      if (!out) {
+        out = t;
+        continue;
+      }
+
+      if (noSpaceBefore.test(t) || noSpaceAfter.test(out)) {
+        out += t;
+      } else {
+        out += ` ${t}`;
+      }
+    }
+
+    return out.trim();
+  };
+
   const onGenerateAllSubtitles = async () => {
     if (generatingAllSubtitles) return;
     if (!selectedOriginalVideo.id) return;
@@ -592,6 +624,25 @@ export default function BatchOperations({
           );
           await new Promise((r) => setTimeout(r, 150));
           continue;
+        }
+
+        if (subtitleGenerationSettings.enableCharLimit) {
+          const maxChars = Math.max(
+            1,
+            Math.floor(subtitleGenerationSettings.maxChars),
+          );
+          const transcriptionText =
+            buildTranscriptionTextForCharCount(transcriptionWords);
+          const charCount = transcriptionText.length;
+
+          // User requested strictly "less than".
+          if (charCount >= maxChars) {
+            console.log(
+              `Skipping scene ${scene.id}: transcription has ${charCount} chars (limit < ${maxChars})`,
+            );
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
         }
 
         try {

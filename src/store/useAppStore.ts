@@ -34,6 +34,12 @@ export interface DeletionSettings {
   enablePrefixCleanup: boolean; // Enable extra prefix-based cleanup when deleting videos
 }
 
+// Subtitle generation settings interface
+export interface SubtitleGenerationSettings {
+  enableCharLimit: boolean;
+  maxChars: number;
+}
+
 // Batch operations state interface
 export interface BatchOperationsState {
   improvingAll: boolean;
@@ -169,6 +175,9 @@ interface AppState {
   // Deletion Settings
   deletionSettings: DeletionSettings;
 
+  // Subtitle Generation Settings
+  subtitleGenerationSettings: SubtitleGenerationSettings;
+
   // Batch Operations State
   batchOperations: BatchOperationsState;
 
@@ -221,13 +230,19 @@ interface AppState {
 
   // Transcription Settings Actions
   updateTranscriptionSettings: (
-    updates: Partial<TranscriptionSettings>
+    updates: Partial<TranscriptionSettings>,
   ) => void;
   resetTranscriptionSettings: () => void;
 
   // Deletion Settings Actions
   updateDeletionSettings: (updates: Partial<DeletionSettings>) => void;
   resetDeletionSettings: () => void;
+
+  // Subtitle Generation Settings Actions
+  updateSubtitleGenerationSettings: (
+    updates: Partial<SubtitleGenerationSettings>,
+  ) => void;
+  resetSubtitleGenerationSettings: () => void;
 
   // Batch Operations Actions
   startBatchOperation: (operation: keyof BatchOperationsState) => void;
@@ -273,7 +288,7 @@ interface AppState {
     id: number | null,
     videoUrl?: string | null,
     status?: string | null,
-    sceneIds?: number[]
+    sceneIds?: number[],
   ) => void;
   clearSelectedOriginalVideo: () => void;
 
@@ -284,7 +299,7 @@ interface AppState {
       current: number;
       total: number;
       percentage: number;
-    } | null
+    } | null,
   ) => void;
   clearClipGeneration: () => void;
   setGeneratingSingleClip: (sceneId: number | null) => void;
@@ -301,7 +316,7 @@ interface AppState {
   // Audio Enhancement Actions
   setAudioEnhancementMode: (mode: AudioEnhancementMode) => void;
   updateAdvancedAudioSettings: (
-    updates: Partial<AdvancedAudioSettings>
+    updates: Partial<AdvancedAudioSettings>,
   ) => void;
 
   // Settings Persistence Actions
@@ -342,6 +357,11 @@ const defaultTranscriptionSettings: TranscriptionSettings = {
 // Default deletion settings
 const defaultDeletionSettings: DeletionSettings = {
   enablePrefixCleanup: false, // Disabled by default - enable for extra safety
+};
+
+const defaultSubtitleGenerationSettings: SubtitleGenerationSettings = {
+  enableCharLimit: false,
+  maxChars: 100,
 };
 
 // Default batch operations settings
@@ -451,6 +471,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Deletion Settings
   deletionSettings: defaultDeletionSettings,
 
+  // Subtitle Generation Settings
+  subtitleGenerationSettings: defaultSubtitleGenerationSettings,
+
   // Batch Operations State
   batchOperations: defaultBatchOperations,
 
@@ -558,7 +581,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Save to localStorage when reset
       localStorage.setItem(
         'videoSettings',
-        JSON.stringify(defaultVideoSettings)
+        JSON.stringify(defaultVideoSettings),
       );
       return { videoSettings: defaultVideoSettings };
     }),
@@ -570,7 +593,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Save to localStorage whenever updated
       localStorage.setItem(
         'transcriptionSettings',
-        JSON.stringify(newSettings)
+        JSON.stringify(newSettings),
       );
       return { transcriptionSettings: newSettings };
     }),
@@ -580,7 +603,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Save to localStorage when reset
       localStorage.setItem(
         'transcriptionSettings',
-        JSON.stringify(defaultTranscriptionSettings)
+        JSON.stringify(defaultTranscriptionSettings),
       );
       return { transcriptionSettings: defaultTranscriptionSettings };
     }),
@@ -599,9 +622,35 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Save to localStorage when reset
       localStorage.setItem(
         'deletionSettings',
-        JSON.stringify(defaultDeletionSettings)
+        JSON.stringify(defaultDeletionSettings),
       );
       return { deletionSettings: defaultDeletionSettings };
+    }),
+
+  // Subtitle Generation Settings Actions
+  updateSubtitleGenerationSettings: (updates) =>
+    set((state) => {
+      const maxCharsRaw =
+        typeof updates.maxChars === 'number' ? updates.maxChars : undefined;
+      const next: SubtitleGenerationSettings = {
+        ...state.subtitleGenerationSettings,
+        ...updates,
+        ...(typeof maxCharsRaw === 'number'
+          ? { maxChars: Math.max(1, Math.floor(maxCharsRaw)) }
+          : null),
+      };
+
+      localStorage.setItem('subtitleGenerationSettings', JSON.stringify(next));
+      return { subtitleGenerationSettings: next };
+    }),
+
+  resetSubtitleGenerationSettings: () =>
+    set(() => {
+      localStorage.setItem(
+        'subtitleGenerationSettings',
+        JSON.stringify(defaultSubtitleGenerationSettings),
+      );
+      return { subtitleGenerationSettings: defaultSubtitleGenerationSettings };
     }),
 
   // Batch Operations Actions
@@ -830,27 +879,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Only save if we have both a merged video and a selected original video
     if (!mergedVideo.url || !selectedOriginalVideo.id) {
       console.warn(
-        'Cannot save merged video: missing video URL or selected original video'
+        'Cannot save merged video: missing video URL or selected original video',
       );
       return;
     }
 
     try {
       // Import the required functions (this will be available at runtime)
-      const { updateOriginalVideoRow, getOriginalVideoRow } = await import(
-        '@/lib/baserow-actions'
-      );
+      const { updateOriginalVideoRow, getOriginalVideoRow } =
+        await import('@/lib/baserow-actions');
 
       // Step 1: Fetch the current original video row to get the old merged video URL
       const currentVideoRow = await getOriginalVideoRow(
-        selectedOriginalVideo.id
+        selectedOriginalVideo.id,
       );
       const oldMergedVideoUrl = currentVideoRow.field_6858 as string | null; // Final Merged Video URL field
 
       // Step 2: Delete the old merged video from MinIO if it exists
       if (oldMergedVideoUrl && typeof oldMergedVideoUrl === 'string') {
         console.log(
-          `Deleting old merged video from MinIO: ${oldMergedVideoUrl}`
+          `Deleting old merged video from MinIO: ${oldMergedVideoUrl}`,
         );
         try {
           // Dynamic import of the minio-client module
@@ -860,13 +908,13 @@ export const useAppStore = create<AppState>((set, get) => ({
             console.log('Successfully deleted old merged video from MinIO');
           } else {
             console.warn(
-              'Failed to delete old merged video from MinIO (continuing anyway)'
+              'Failed to delete old merged video from MinIO (continuing anyway)',
             );
           }
         } catch (deleteError) {
           console.warn(
             'Error deleting old merged video from MinIO (continuing anyway):',
-            deleteError
+            deleteError,
           );
         }
       }
@@ -877,12 +925,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
 
       console.log(
-        `Merged video URL saved to original video #${selectedOriginalVideo.id}`
+        `Merged video URL saved to original video #${selectedOriginalVideo.id}`,
       );
     } catch (error) {
       console.error(
         'Failed to save merged video URL to original table:',
-        error
+        error,
       );
       throw error;
     }
@@ -962,7 +1010,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Save to localStorage when reset
       localStorage.setItem(
         'pipelineConfig',
-        JSON.stringify(defaultPipelineConfig)
+        JSON.stringify(defaultPipelineConfig),
       );
       return { pipelineConfig: defaultPipelineConfig };
     }),
@@ -995,7 +1043,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Save to localStorage whenever updated
       localStorage.setItem(
         'advancedAudioSettings',
-        JSON.stringify(newSettings)
+        JSON.stringify(newSettings),
       );
       return { advancedAudioSettings: newSettings };
     }),
@@ -1004,7 +1052,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateRow: (id, updates) =>
     set((state) => ({
       data: state.data.map((row) =>
-        row.id === id ? { ...row, ...updates } : row
+        row.id === id ? { ...row, ...updates } : row,
       ),
     })),
 
@@ -1021,6 +1069,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       videoSettings: state.videoSettings,
       transcriptionSettings: state.transcriptionSettings,
       deletionSettings: state.deletionSettings,
+      subtitleGenerationSettings: state.subtitleGenerationSettings,
       modelSelection: {
         selectedModel: state.modelSelection.selectedModel,
         modelSearch: state.modelSelection.modelSearch,
@@ -1031,7 +1080,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       localStorage.setItem(
         'video-editor-settings',
-        JSON.stringify(settingsToSave)
+        JSON.stringify(settingsToSave),
       );
       console.log('Settings saved to localStorage');
     } catch (error) {
@@ -1055,6 +1104,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           deletionSettings: {
             ...defaultDeletionSettings,
             ...settings.deletionSettings,
+          },
+          subtitleGenerationSettings: {
+            ...defaultSubtitleGenerationSettings,
+            ...settings.subtitleGenerationSettings,
           },
           modelSelection: {
             ...state.modelSelection,
@@ -1107,7 +1160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (
         savedAudioMode &&
         ['normalize', 'enhance', 'enhance-denoise-only'].includes(
-          savedAudioMode
+          savedAudioMode,
         )
       ) {
         set({ audioEnhancementMode: savedAudioMode as AudioEnhancementMode });
@@ -1126,7 +1179,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       // Load transcriptionSettings from localStorage
       const savedTranscriptionSettings = localStorage.getItem(
-        'transcriptionSettings'
+        'transcriptionSettings',
       );
       if (savedTranscriptionSettings) {
         try {
@@ -1155,6 +1208,31 @@ export const useAppStore = create<AppState>((set, get) => ({
           });
         } catch (e) {
           console.error('Failed to parse deletionSettings:', e);
+        }
+      }
+
+      // Load subtitleGenerationSettings from localStorage
+      const savedSubtitleGenerationSettings = localStorage.getItem(
+        'subtitleGenerationSettings',
+      );
+      if (savedSubtitleGenerationSettings) {
+        try {
+          const settings = JSON.parse(savedSubtitleGenerationSettings);
+          const maxChars =
+            typeof settings?.maxChars === 'number'
+              ? Math.max(1, Math.floor(settings.maxChars))
+              : defaultSubtitleGenerationSettings.maxChars;
+          const enableCharLimit = settings?.enableCharLimit === true;
+          set({
+            subtitleGenerationSettings: {
+              ...defaultSubtitleGenerationSettings,
+              ...settings,
+              enableCharLimit,
+              maxChars,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to parse subtitleGenerationSettings:', e);
         }
       }
 
@@ -1216,10 +1294,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       localStorage.removeItem('video-editor-settings');
       localStorage.removeItem('pipelineConfig');
+      localStorage.removeItem('subtitleGenerationSettings');
       set({
         ttsSettings: defaultTTSSettings,
         videoSettings: defaultVideoSettings,
         transcriptionSettings: defaultTranscriptionSettings,
+        subtitleGenerationSettings: defaultSubtitleGenerationSettings,
         modelSelection: {
           ...get().modelSelection,
           selectedModel: defaultModelSelection.selectedModel,
