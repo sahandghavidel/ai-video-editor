@@ -548,26 +548,9 @@ export default function BatchOperations({
       })
       .filter(Boolean);
 
-    // Join while avoiding spaces before punctuation tokens.
-    // Punctuation still counts as characters.
-    const noSpaceBefore = /^[,.;:!?%\]\)\}]+$/;
-    const noSpaceAfter = /[\[\(\{]$/;
-
-    let out = '';
-    for (const t of tokens) {
-      if (!out) {
-        out = t;
-        continue;
-      }
-
-      if (noSpaceBefore.test(t) || noSpaceAfter.test(out)) {
-        out += t;
-      } else {
-        out += ` ${t}`;
-      }
-    }
-
-    return out.trim();
+    // Count spaces too: build the exact text shape we pass to the subtitle
+    // renderer (words joined by single spaces).
+    return tokens.join(' ');
   };
 
   const onGenerateAllSubtitles = async () => {
