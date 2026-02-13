@@ -2155,7 +2155,8 @@ export default function SceneCard({
 
     if (!normalized) return '';
 
-    const numberWords0to9 = new Set([
+    const integerNumberWordsUpTo999 = new Set([
+      // 0-9
       'zero',
       'one',
       'two',
@@ -2166,6 +2167,28 @@ export default function SceneCard({
       'seven',
       'eight',
       'nine',
+      // 10-19
+      'ten',
+      'eleven',
+      'twelve',
+      'thirteen',
+      'fourteen',
+      'fifteen',
+      'sixteen',
+      'seventeen',
+      'eighteen',
+      'nineteen',
+      // tens
+      'twenty',
+      'thirty',
+      'forty',
+      'fifty',
+      'sixty',
+      'seventy',
+      'eighty',
+      'ninety',
+      // hundreds
+      'hundred',
     ]);
 
     return normalized
@@ -2177,8 +2200,9 @@ export default function SceneCard({
         // Drop integer-only tokens up to 3 digits ("4", "09", "10", "123").
         // Keep decimals like "3.5" important.
         if (/^\d{1,3}$/.test(token)) return false;
-        // Drop English number words for 0–9.
-        if (numberWords0to9.has(token)) return false;
+        // Drop common English integer number words (up to 999).
+        // This avoids false mismatches like "ten" vs "10".
+        if (integerNumberWordsUpTo999.has(token)) return false;
         return true;
       })
       .join(' ')
