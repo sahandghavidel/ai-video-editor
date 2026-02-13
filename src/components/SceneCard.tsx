@@ -2191,11 +2191,33 @@ export default function SceneCard({
       'hundred',
     ]);
 
-    return normalized
-      .split(' ')
-      .filter(Boolean)
-      .map((token) => token.replace(/^\.+|\.+$/g, ''))
-      .filter(Boolean)
+    const rawTokens = normalized.split(' ').filter(Boolean);
+
+    // Expand dotted word tokens like "next.js" into ["next", "js"], but keep true decimals like "3.5".
+    const expandedTokens: string[] = [];
+    for (const t of rawTokens) {
+      const token = t.replace(/^\.+|\.+$/g, '');
+      if (!token) continue;
+
+      // Preserve decimals (digits dot digits).
+      if (/^\d+\.\d+$/.test(token)) {
+        expandedTokens.push(token);
+        continue;
+      }
+
+      if (token.includes('.')) {
+        const parts = token
+          .split('.')
+          .map((p) => p.trim())
+          .filter(Boolean);
+        expandedTokens.push(...parts);
+        continue;
+      }
+
+      expandedTokens.push(token);
+    }
+
+    return expandedTokens
       .filter((token) => {
         // Drop integer-only tokens up to 3 digits ("4", "09", "10", "123").
         // Keep decimals like "3.5" important.
