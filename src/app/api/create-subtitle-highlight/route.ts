@@ -96,23 +96,40 @@ async function probeVideoDimensions(inputPathOrUrl: string): Promise<{
   const { stdout } = await runSpawnCaptureStdout('ffprobe', [
     '-v',
     'error',
-    '-select_streams',
-    'v:0',
     '-show_entries',
-    'stream=width,height,duration',
+    'stream=width,height,duration:format=duration',
     '-of',
     'json',
     inputPathOrUrl,
   ]);
 
   const data = JSON.parse(stdout) as {
-    streams?: Array<{ width?: number; height?: number; duration?: string }>;
+    streams?: Array<{
+      codec_type?: string;
+      width?: number;
+      height?: number;
+      duration?: string;
+    }>;
+    format?: { duration?: string };
   };
-  const s = Array.isArray(data.streams) ? data.streams[0] : undefined;
+  const s = Array.isArray(data.streams)
+    ? (data.streams.find(
+        (st) =>
+          st &&
+          (st.codec_type === 'video' ||
+            (typeof st.width === 'number' && typeof st.height === 'number')),
+      ) ?? data.streams[0])
+    : undefined;
   const width = typeof s?.width === 'number' && s.width > 0 ? s.width : 1920;
   const height =
     typeof s?.height === 'number' && s.height > 0 ? s.height : 1080;
-  const parsedDuration = s?.duration ? Number(s.duration) : Number.NaN;
+  const parsedDurationStream = s?.duration ? Number(s.duration) : Number.NaN;
+  const parsedDurationFormat = data?.format?.duration
+    ? Number(data.format.duration)
+    : Number.NaN;
+  const parsedDuration = Number.isFinite(parsedDurationStream)
+    ? parsedDurationStream
+    : parsedDurationFormat;
   const durationSeconds = Number.isFinite(parsedDuration)
     ? Math.max(0, parsedDuration)
     : undefined;
@@ -128,6 +145,7 @@ function buildSubtitleHighlightAss(opts: {
   words: TranscriptionWord[];
   videoWidth: number;
   videoHeight: number;
+  sceneEndSeconds?: number;
   positionXPercent: number;
   positionYPercent: number;
   sizeHeightPercent: number;
@@ -140,6 +158,7 @@ function buildSubtitleHighlightAss(opts: {
     words,
     videoWidth,
     videoHeight,
+    sceneEndSeconds,
     positionXPercent,
     positionYPercent,
     sizeHeightPercent,
@@ -212,7 +231,16 @@ function buildSubtitleHighlightAss(opts: {
 
     const start = w.start;
     // Keep text continuous: each segment lasts until the next word starts.
-    const end = next ? Math.max(w.end, next.start) : Math.max(w.end, w.start);
+    const isLast = i === safeWords.length - 1;
+    const end = isLast
+      ? typeof sceneEndSeconds === 'number' && Number.isFinite(sceneEndSeconds)
+        ? // Add a tiny pad because ffprobe duration + ASS centisecond formatting can
+          // truncate slightly and leave a few ms "empty" at the very end.
+          Math.max(sceneEndSeconds + 0.35, w.end, w.start)
+        : Math.max(w.end, w.start)
+      : next
+        ? Math.max(w.end, next.start)
+        : Math.max(w.end, w.start);
     const safeEnd = end > start ? end : start + 0.08;
 
     const tokens = safeWords.map((t, idx) => {
@@ -322,14 +350,18 @@ export async function POST(request: NextRequest) {
         : await ensureVideoCached(inputPath, { maxAgeMs });
     }
 
-    const { width: videoWidth, height: videoHeight } =
-      await probeVideoDimensions(inputPath);
+    const {
+      width: videoWidth,
+      height: videoHeight,
+      durationSeconds,
+    } = await probeVideoDimensions(inputPath);
 
     const assPath = path.join(tempDir, 'highlight.ass');
     const assText = buildSubtitleHighlightAss({
       words: transcriptionWords,
       videoWidth,
       videoHeight,
+      sceneEndSeconds: durationSeconds,
       positionXPercent,
       positionYPercent,
       sizeHeightPercent,
