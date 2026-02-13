@@ -21,6 +21,7 @@ import {
   Wand2,
   Volume2,
   VolumeX,
+  Type,
   Download,
   ExternalLink,
   X,
@@ -118,6 +119,11 @@ export default function BatchOperations({
 
   const [deletingEmptyScenes, setDeletingEmptyScenes] = useState(false);
   const [deletingEmptySceneId, setDeletingEmptySceneId] = useState<
+    number | null
+  >(null);
+
+  const [generatingAllSubtitles, setGeneratingAllSubtitles] = useState(false);
+  const [generatingSubtitleSceneId, setGeneratingSubtitleSceneId] = useState<
     number | null
   >(null);
 
@@ -512,6 +518,117 @@ export default function BatchOperations({
     } finally {
       completeBatchOperation('transcribingAllFinalScenes');
       playSuccessSound();
+    }
+  };
+
+  const withCacheBust = (url: string) => {
+    const u = String(url || '').trim();
+    if (!u) return u;
+
+    const lower = u.toLowerCase();
+    const looksSigned =
+      lower.includes('x-amz-signature=') ||
+      lower.includes('x-amz-algorithm=') ||
+      lower.includes('x-amz-credential=') ||
+      lower.includes('signature=') ||
+      lower.includes('x-goog-signature=');
+    if (looksSigned) return u;
+
+    const sep = u.includes('?') ? '&' : '?';
+    return `${u}${sep}t=${Date.now()}`;
+  };
+
+  const onGenerateAllSubtitles = async () => {
+    if (generatingAllSubtitles) return;
+    if (!selectedOriginalVideo.id) return;
+
+    const scenesToSubtitle = [...data]
+      .filter((scene) => {
+        const finalVideoUrl = String(scene['field_6886'] ?? '').trim();
+        const captionsUrl = String(scene['field_6910'] ?? '').trim();
+        return Boolean(finalVideoUrl && captionsUrl);
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToSubtitle.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setGeneratingAllSubtitles(true);
+    setGeneratingSubtitleSceneId(null);
+
+    try {
+      for (const scene of scenesToSubtitle) {
+        setGeneratingSubtitleSceneId(scene.id);
+
+        const finalVideoUrl = String(scene['field_6886'] ?? '').trim();
+        const captionsUrl = String(scene['field_6910'] ?? '').trim();
+
+        if (!finalVideoUrl || !captionsUrl) continue;
+
+        let transcriptionWords: unknown = null;
+        try {
+          const capRes = await fetch(withCacheBust(captionsUrl), {
+            cache: 'no-store',
+          });
+          if (capRes.ok) {
+            transcriptionWords = await capRes.json();
+          }
+        } catch (error) {
+          console.error(
+            `Failed to fetch captions for scene ${scene.id}:`,
+            error,
+          );
+          transcriptionWords = null;
+        }
+
+        if (
+          !Array.isArray(transcriptionWords) ||
+          transcriptionWords.length === 0
+        ) {
+          console.warn(
+            `Skipping scene ${scene.id}: missing/empty transcription words`,
+          );
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+
+        try {
+          const res = await fetch('/api/create-subtitle-highlight', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sceneId: scene.id,
+              videoUrl: finalVideoUrl,
+              transcriptionWords,
+              position: { x: 50, y: 50 },
+              size: { height: 100 },
+              fontFamily: 'Lilita One',
+              uppercase: true,
+            }),
+          });
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Subtitle generation failed (${res.status}) ${t}`);
+          }
+        } catch (error) {
+          console.error(
+            `Subtitle generation failed for scene ${scene.id}:`,
+            error,
+          );
+        }
+
+        // gentle pacing to avoid hammering FFmpeg/server
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setGeneratingAllSubtitles(false);
+      setGeneratingSubtitleSceneId(null);
     }
   };
 
@@ -961,7 +1078,7 @@ export default function BatchOperations({
           )}
 
           {/* Operation Cards Grid */}
-          <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4'>
+          <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4'>
             {/* AI Improve All */}
             <div className='bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200'>
               <div className='flex items-center gap-2 mb-3'>
@@ -1154,6 +1271,45 @@ export default function BatchOperations({
                     : sceneLoading.generatingVideo !== null
                       ? `Busy (#${sceneLoading.generatingVideo})`
                       : 'Sync All'}
+                </span>
+              </button>
+            </div>
+
+            {/* Subtitle Generation */}
+            <div className='bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border border-yellow-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-yellow-500 rounded-lg'>
+                  <Type className='w-4 h-4 text-white' />
+                </div>
+                <h3 className='font-semibold text-yellow-900'>Subtitles</h3>
+              </div>
+              <p className='text-sm text-yellow-800 mb-4 leading-relaxed'>
+                Burn in subtitle highlight (grey sentence + highlighted current
+                word) for all scenes
+              </p>
+              <button
+                onClick={onGenerateAllSubtitles}
+                disabled={!selectedOriginalVideo.id || generatingAllSubtitles}
+                className='w-full h-12 bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  !selectedOriginalVideo.id
+                    ? 'Select an original video first'
+                    : generatingAllSubtitles
+                      ? generatingSubtitleSceneId
+                        ? `Generating subtitles for scene ${generatingSubtitleSceneId}`
+                        : 'Generating subtitles for all scenes...'
+                      : 'Generate subtitles for all scenes'
+                }
+              >
+                {generatingAllSubtitles && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {generatingAllSubtitles
+                    ? generatingSubtitleSceneId
+                      ? `Scene #${generatingSubtitleSceneId}`
+                      : 'Processing...'
+                    : 'Generate All'}
                 </span>
               </button>
             </div>

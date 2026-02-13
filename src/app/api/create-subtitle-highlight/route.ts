@@ -317,14 +317,14 @@ export async function POST(request: NextRequest) {
     const positionXPercent =
       typeof body?.position?.x === 'number' ? body.position.x : 50;
     const positionYPercent =
-      typeof body?.position?.y === 'number' ? body.position.y : 70;
+      typeof body?.position?.y === 'number' ? body.position.y : 50;
     const sizeHeightPercent =
       typeof body?.size?.height === 'number' ? body.size.height : 100;
 
     const fontFamily =
       typeof body?.fontFamily === 'string' && body.fontFamily.trim()
         ? body.fontFamily.trim()
-        : 'Helvetica';
+        : 'Lilita One';
 
     const uppercase = body?.uppercase !== false;
 

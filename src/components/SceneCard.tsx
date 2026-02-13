@@ -5499,9 +5499,9 @@ export default function SceneCard({
                           {sceneLoading.generatingVideo === scene.id
                             ? 'Generating...'
                             : sceneLoading.generatingVideo !== null
-                              ? 'Video Busy'
+                              ? 'Busy'
                               : batchOperations.generatingAllVideos
-                                ? 'Video Busy'
+                                ? 'Busy'
                                 : 'Sync'}
                         </span>
                       </button>
