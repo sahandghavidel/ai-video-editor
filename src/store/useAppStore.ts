@@ -38,6 +38,10 @@ export interface DeletionSettings {
 export interface SubtitleGenerationSettings {
   enableCharLimit: boolean;
   maxChars: number;
+  positionXPercent: number;
+  positionYPercent: number;
+  sizeHeightPercent: number;
+  fontFamily: string;
 }
 
 // Batch operations state interface
@@ -362,6 +366,10 @@ const defaultDeletionSettings: DeletionSettings = {
 const defaultSubtitleGenerationSettings: SubtitleGenerationSettings = {
   enableCharLimit: false,
   maxChars: 100,
+  positionXPercent: 50,
+  positionYPercent: 50,
+  sizeHeightPercent: 100,
+  fontFamily: 'Lilita One',
 };
 
 // Default batch operations settings
@@ -630,13 +638,49 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Subtitle Generation Settings Actions
   updateSubtitleGenerationSettings: (updates) =>
     set((state) => {
+      const clamp = (min: number, v: number, max: number) =>
+        Math.max(min, Math.min(max, v));
+
       const maxCharsRaw =
         typeof updates.maxChars === 'number' ? updates.maxChars : undefined;
+      const xRaw =
+        typeof updates.positionXPercent === 'number'
+          ? updates.positionXPercent
+          : undefined;
+      const yRaw =
+        typeof updates.positionYPercent === 'number'
+          ? updates.positionYPercent
+          : undefined;
+      const sizeRaw =
+        typeof updates.sizeHeightPercent === 'number'
+          ? updates.sizeHeightPercent
+          : undefined;
+
+      const fontFamilyRaw =
+        typeof updates.fontFamily === 'string' ? updates.fontFamily : undefined;
+
       const next: SubtitleGenerationSettings = {
         ...state.subtitleGenerationSettings,
         ...updates,
         ...(typeof maxCharsRaw === 'number'
           ? { maxChars: Math.max(1, Math.floor(maxCharsRaw)) }
+          : null),
+        ...(typeof xRaw === 'number'
+          ? { positionXPercent: clamp(0, xRaw, 100) }
+          : null),
+        ...(typeof yRaw === 'number'
+          ? { positionYPercent: clamp(0, yRaw, 100) }
+          : null),
+        ...(typeof sizeRaw === 'number'
+          ? { sizeHeightPercent: clamp(5, sizeRaw, 100) }
+          : null),
+        ...(typeof fontFamilyRaw === 'string'
+          ? {
+              fontFamily:
+                fontFamilyRaw.trim() ||
+                state.subtitleGenerationSettings.fontFamily ||
+                defaultSubtitleGenerationSettings.fontFamily,
+            }
           : null),
       };
 
@@ -1223,12 +1267,35 @@ export const useAppStore = create<AppState>((set, get) => ({
               ? Math.max(1, Math.floor(settings.maxChars))
               : defaultSubtitleGenerationSettings.maxChars;
           const enableCharLimit = settings?.enableCharLimit === true;
+
+          const positionXPercent =
+            typeof settings?.positionXPercent === 'number'
+              ? Math.max(0, Math.min(100, settings.positionXPercent))
+              : defaultSubtitleGenerationSettings.positionXPercent;
+          const positionYPercent =
+            typeof settings?.positionYPercent === 'number'
+              ? Math.max(0, Math.min(100, settings.positionYPercent))
+              : defaultSubtitleGenerationSettings.positionYPercent;
+          const sizeHeightPercent =
+            typeof settings?.sizeHeightPercent === 'number'
+              ? Math.max(5, Math.min(100, settings.sizeHeightPercent))
+              : defaultSubtitleGenerationSettings.sizeHeightPercent;
+          const fontFamily =
+            typeof settings?.fontFamily === 'string' &&
+            settings.fontFamily.trim()
+              ? settings.fontFamily.trim()
+              : defaultSubtitleGenerationSettings.fontFamily;
+
           set({
             subtitleGenerationSettings: {
               ...defaultSubtitleGenerationSettings,
               ...settings,
               enableCharLimit,
               maxChars,
+              positionXPercent,
+              positionYPercent,
+              sizeHeightPercent,
+              fontFamily,
             },
           });
         } catch (e) {

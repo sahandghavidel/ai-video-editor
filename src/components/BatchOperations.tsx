@@ -636,9 +636,12 @@ export default function BatchOperations({
               sceneId: scene.id,
               videoUrl: finalVideoUrl,
               transcriptionWords,
-              position: { x: 50, y: 50 },
-              size: { height: 100 },
-              fontFamily: 'Lilita One',
+              position: {
+                x: subtitleGenerationSettings.positionXPercent,
+                y: subtitleGenerationSettings.positionYPercent,
+              },
+              size: { height: subtitleGenerationSettings.sizeHeightPercent },
+              fontFamily: subtitleGenerationSettings.fontFamily,
               uppercase: true,
             }),
           });
