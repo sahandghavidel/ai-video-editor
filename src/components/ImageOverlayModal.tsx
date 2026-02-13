@@ -414,6 +414,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [, setIsResizing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isSubtitleHighlightLoading, setIsSubtitleHighlightLoading] =
+    useState(false);
   const [isGeneratingScenePrompt, setIsGeneratingScenePrompt] = useState(false);
   const [scenePromptStatus, setScenePromptStatus] = useState<string | null>(
     null,
@@ -2620,6 +2622,97 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     originalVideoUrl,
   ]);
 
+  const handleApplySubtitleHighlight = useCallback(async () => {
+    if (isApplying || isSubtitleHighlightLoading) return;
+    if (!sceneId) return;
+    if (!originalVideoUrl) return;
+    if (!transcriptionWords || transcriptionWords.length === 0) {
+      alert('No transcription found for this scene. Please transcribe first.');
+      return;
+    }
+
+    const undoKey = `scene-undo-video-url:${sceneId}`;
+    const urlBeforeApply = originalVideoUrl;
+
+    setIsSubtitleHighlightLoading(true);
+    try {
+      // Close any existing preview overlay; we'll update the main video instead.
+      setPreviewUrl(null);
+      setIsPreviewLoading(false);
+
+      const res = await fetch('/api/create-subtitle-highlight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sceneId,
+          videoUrl: originalVideoUrl,
+          transcriptionWords,
+          position: textOverlayPosition,
+          size: { height: textOverlaySize.height },
+          fontFamily: textStyling?.fontFamily,
+          uppercase: true,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as {
+        videoUrl?: unknown;
+        error?: unknown;
+      } | null;
+
+      if (!res.ok) {
+        const msg =
+          typeof data?.error === 'string'
+            ? data.error
+            : `Failed to create subtitle highlight (${res.status})`;
+        throw new Error(msg);
+      }
+
+      const newUrl =
+        data && typeof data.videoUrl === 'string' ? data.videoUrl : null;
+      if (!newUrl) {
+        throw new Error('Subtitle highlight did not return a videoUrl');
+      }
+
+      // Save previous URL for undo (best-effort, client-side persistence).
+      if (urlBeforeApply && urlBeforeApply !== newUrl) {
+        setPreviousVideoUrl(urlBeforeApply);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(undoKey, urlBeforeApply);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      setOriginalVideoUrl(newUrl);
+      onUpdateModalVideoUrl?.(newUrl);
+
+      if (!useAppStore.getState().batchOperations.transcribingAllFinalScenes) {
+        setRefetchTrigger((prev) => prev + 1);
+      }
+    } catch (err) {
+      console.error('Failed to apply subtitle highlight:', err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : 'Failed to create subtitle highlight effect',
+      );
+    } finally {
+      setIsSubtitleHighlightLoading(false);
+    }
+  }, [
+    isApplying,
+    isSubtitleHighlightLoading,
+    sceneId,
+    originalVideoUrl,
+    transcriptionWords,
+    textOverlayPosition,
+    textOverlaySize.height,
+    textStyling?.fontFamily,
+    onUpdateModalVideoUrl,
+  ]);
+
   const handleGenerateScenePrompt = useCallback(async () => {
     if (!sceneId) return;
     if (!selectedOpenRouterModel) {
@@ -2867,6 +2960,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsAnimationSectionOpen(false);
     setPreviewUrl(null);
     setIsPreviewLoading(false);
+    setIsSubtitleHighlightLoading(false);
     setIsGeneratingScenePrompt(false);
     setScenePromptStatus(null);
     setSceneImageStatus(null);
@@ -4172,6 +4266,26 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             disabled={isApplying}
           >
             Cancel
+          </button>
+          <button
+            onClick={handleApplySubtitleHighlight}
+            disabled={
+              !transcriptionWords ||
+              transcriptionWords.length === 0 ||
+              isApplying ||
+              isSubtitleHighlightLoading
+            }
+            className='flex items-center space-x-2 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            title='Burn in subtitle highlight effect using the scene transcription'
+          >
+            {isSubtitleHighlightLoading ? (
+              <Loader2 className='animate-spin h-4 w-4' />
+            ) : null}
+            <span>
+              {isSubtitleHighlightLoading
+                ? 'Creating...'
+                : 'Subtitle Highlight'}
+            </span>
           </button>
           <button
             onClick={handlePreview}
