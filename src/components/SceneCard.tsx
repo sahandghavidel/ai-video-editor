@@ -2138,11 +2138,50 @@ export default function SceneCard({
   );
 
   const normalizeSpeechTextForCompare = useCallback((s: string) => {
-    return String(s || '')
+    // NOTE: This normalization is intentionally tuned for *mismatch detection*.
+    // Requirements:
+    // - Ignore integer tokens up to 3 digits (0–999) because ASR/TTS often varies there.
+    // - Keep decimal numbers important (e.g., 3.5 should NOT be ignored).
+    // - Also ignore "zero".."nine" word tokens to avoid false mismatches like "four" vs "4".
+    //
+    // Implementation detail: keep '.' during cleanup so we can preserve decimals,
+    // then strip leading/trailing dots per-token.
+    const normalized = String(s || '')
       .toLowerCase()
       .replace(/[’']/g, '')
-      .replace(/[^a-z0-9\s]+/g, ' ')
+      .replace(/[^a-z0-9.\s]+/g, ' ')
       .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized) return '';
+
+    const numberWords0to9 = new Set([
+      'zero',
+      'one',
+      'two',
+      'three',
+      'four',
+      'five',
+      'six',
+      'seven',
+      'eight',
+      'nine',
+    ]);
+
+    return normalized
+      .split(' ')
+      .filter(Boolean)
+      .map((token) => token.replace(/^\.+|\.+$/g, ''))
+      .filter(Boolean)
+      .filter((token) => {
+        // Drop integer-only tokens up to 3 digits ("4", "09", "10", "123").
+        // Keep decimals like "3.5" important.
+        if (/^\d{1,3}$/.test(token)) return false;
+        // Drop English number words for 0–9.
+        if (numberWords0to9.has(token)) return false;
+        return true;
+      })
+      .join(' ')
       .trim();
   }, []);
 
