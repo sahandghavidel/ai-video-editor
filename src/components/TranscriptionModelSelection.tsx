@@ -86,6 +86,30 @@ export default function TranscriptionModelSelection() {
             ))}
           </div>
         </div>
+
+        {/* Options */}
+        <div className='pt-1 border-t border-gray-200'>
+          <label className='flex items-center justify-between gap-3 text-sm text-gray-700 select-none cursor-pointer'>
+            <span>
+              Skip flagged scenes
+              <span className='ml-2 text-xs text-gray-400'>
+                (applies to Subtitles batch)
+              </span>
+            </span>
+            <input
+              type='checkbox'
+              className='h-4 w-4 accent-blue-600'
+              checked={Boolean(
+                transcriptionSettings.skipFlaggedScenesInSubtitleBatch,
+              )}
+              onChange={(e) =>
+                updateTranscriptionSettings({
+                  skipFlaggedScenesInSubtitleBatch: e.target.checked,
+                })
+              }
+            />
+          </label>
+        </div>
       </div>
     </div>
   );

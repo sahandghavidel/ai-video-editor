@@ -79,6 +79,7 @@ export default function BatchOperations({
     batchOperations,
     modelSelection,
     videoSettings,
+    transcriptionSettings,
     subtitleGenerationSettings,
     updateVideoSettings,
     startBatchOperation,
@@ -133,6 +134,43 @@ export default function BatchOperations({
 
   const playBatchDoneSound = () => {
     playSuccessSound();
+  };
+
+  const isSceneFlagged = (scene: unknown): boolean => {
+    if (!scene || typeof scene !== 'object') return false;
+    const rec = scene as Record<string, unknown>;
+    const raw =
+      (scene as { field_7096?: unknown }).field_7096 ?? rec['field_7096'];
+    if (raw === true) return true;
+    if (!raw) return false;
+
+    if (Array.isArray(raw)) {
+      return raw.some((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const obj = item as Record<string, unknown>;
+        const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+        if (value === true) return true;
+        if (typeof value === 'string') {
+          return value.trim().toLowerCase() === 'true';
+        }
+        return false;
+      });
+    }
+
+    if (typeof raw === 'string') {
+      return raw.trim().toLowerCase() === 'true';
+    }
+
+    if (typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+      if (value === true) return true;
+      if (typeof value === 'string') {
+        return value.trim().toLowerCase() === 'true';
+      }
+    }
+
+    return false;
   };
 
   // Load settings on component mount
@@ -559,6 +597,12 @@ export default function BatchOperations({
 
     const scenesToSubtitle = [...data]
       .filter((scene) => {
+        if (
+          transcriptionSettings.skipFlaggedScenesInSubtitleBatch &&
+          isSceneFlagged(scene)
+        ) {
+          return false;
+        }
         const finalVideoUrl = String(scene['field_6886'] ?? '').trim();
         const captionsUrl = String(scene['field_6910'] ?? '').trim();
         return Boolean(finalVideoUrl && captionsUrl);

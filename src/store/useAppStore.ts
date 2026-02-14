@@ -27,6 +27,9 @@ export interface VideoSettings {
 export interface TranscriptionSettings {
   selectedModel: string;
   selectedVideoType: 'original' | 'final';
+  // UI lives under Transcription Settings, but currently only used by the
+  // Subtitles batch in BatchOperations.
+  skipFlaggedScenesInSubtitleBatch: boolean;
 }
 
 // Deletion settings interface
@@ -356,6 +359,7 @@ const defaultVideoSettings: VideoSettings = {
 const defaultTranscriptionSettings: TranscriptionSettings = {
   selectedModel: 'parakeet', // Default to Parakeet model
   selectedVideoType: 'original', // Default to original video
+  skipFlaggedScenesInSubtitleBatch: false,
 };
 
 // Default deletion settings
