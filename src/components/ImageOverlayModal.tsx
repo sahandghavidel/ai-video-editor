@@ -2644,6 +2644,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          videoId: useAppStore.getState().selectedOriginalVideo.id || undefined,
           sceneId,
           videoUrl: originalVideoUrl,
           transcriptionWords,

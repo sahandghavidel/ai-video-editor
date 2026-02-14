@@ -280,6 +280,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json().catch(() => null)) as {
+      videoId?: number | string;
       sceneId?: number;
       videoUrl?: string;
       transcriptionWords?: TranscriptionWord[];
@@ -291,6 +292,18 @@ export async function POST(request: NextRequest) {
       highlightColorHex?: string;
       preview?: boolean;
     } | null;
+
+    const videoIdRaw =
+      typeof body?.videoId === 'number' || typeof body?.videoId === 'string'
+        ? body.videoId
+        : null;
+    const videoIdDigits =
+      videoIdRaw === null
+        ? ''
+        : String(videoIdRaw)
+            .trim()
+            .replace(/[^0-9]/g, '');
+    const safeVideoId = videoIdDigits || '0';
 
     const sceneId = typeof body?.sceneId === 'number' ? body.sceneId : null;
     const videoUrl = typeof body?.videoUrl === 'string' ? body.videoUrl : '';
@@ -415,7 +428,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const fileName = `scene-${sceneId}-subtitle-highlight-${Date.now()}.mp4`;
+    const ts = Date.now();
+    const fileName = `video_${safeVideoId}_scene_${sceneId}_subtitle_${ts}.mp4`;
     const uploadUrl = await uploadToMinio(outputPath, fileName, 'video/mp4');
 
     await updateSceneRow(sceneId, { field_6886: uploadUrl });

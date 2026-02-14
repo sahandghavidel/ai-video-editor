@@ -633,6 +633,7 @@ export default function BatchOperations({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              videoId: selectedOriginalVideo.id,
               sceneId: scene.id,
               videoUrl: finalVideoUrl,
               transcriptionWords,
