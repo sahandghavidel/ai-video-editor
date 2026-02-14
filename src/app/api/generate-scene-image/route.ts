@@ -11,7 +11,8 @@ const IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
 const KIE_MODEL = 'nano-banana-pro';
 const KIE_POLL_INTERVAL_MS = 3000;
-const KIE_MAX_WAIT_MS = 300000;
+// Allow more time for KIE Nano Banana jobs to complete (10 minutes).
+const KIE_MAX_WAIT_MS = 600000;
 
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
