@@ -1,6 +1,5 @@
-import { writeFile, unlink } from 'fs/promises';
-import path from 'path';
-import { uploadToMinio } from '@/utils/ffmpeg-cfr';
+// Nano Banana image generation: store the provider-returned URL directly.
+// We intentionally avoid re-uploading the generated image to MinIO.
 
 type BaserowRow = {
   id: number;
@@ -176,24 +175,6 @@ function getSceneText(scene: BaserowRow): string {
 function formatScriptLine(scene: BaserowRow): string {
   const text = getSceneText(scene).trim();
   return `${scene.id} ${text}`.trim();
-}
-
-function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
-  const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
-  if (!match) {
-    throw new Error('Returned image is not a valid data URL');
-  }
-  const mime = match[1];
-  const buffer = Buffer.from(match[2], 'base64');
-  return { mime, buffer };
-}
-
-function mimeToExt(mime: string): string {
-  const m = mime.toLowerCase();
-  if (m.includes('png')) return 'png';
-  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
-  if (m.includes('webp')) return 'webp';
-  return 'png';
 }
 
 function getKieApiKey(): string {
@@ -534,50 +515,24 @@ export async function POST(req: Request) {
       );
     }
 
-    let imageMime = 'image/png';
-    let imageBuffer: Buffer;
-
-    if (imageUrl.startsWith('data:')) {
-      const parsed = parseDataUrl(imageUrl);
-      imageMime = parsed.mime;
-      imageBuffer = parsed.buffer;
-    } else if (imageUrl.startsWith('http')) {
-      const res = await fetch(imageUrl);
-      if (!res.ok) {
-        throw new Error(`Failed to download generated image (${res.status})`);
-      }
-      const ab = await res.arrayBuffer();
-      imageBuffer = Buffer.from(ab);
-      const ct = res.headers.get('content-type');
-      if (ct) imageMime = ct;
-    } else {
-      throw new Error('Nano Banana returned an unsupported image URL format');
-    }
-
-    const ext = mimeToExt(imageMime);
-    const filename = `scene_${sceneId}_nano_banana.${ext}`;
-    const tmpPath = path.join('/tmp', filename);
-
-    await writeFile(tmpPath, imageBuffer);
-
-    try {
-      const minioUrl = await uploadToMinio(tmpPath, filename, imageMime);
-
-      await baserowPatchJson(
-        `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
-        {
-          [IMAGE_FIELD_KEY]: minioUrl,
-        },
+    // The user wants us to store the URL returned by the image generation
+    // service and NOT upload the image again to MinIO.
+    if (!imageUrl.startsWith('http')) {
+      // If the provider ever returns a data URL, we refuse rather than silently
+      // re-uploading, since that violates the desired behavior.
+      throw new Error(
+        'Nano Banana returned a non-http imageUrl. Please configure it to return a hosted URL.',
       );
-
-      return Response.json({ imageUrl: minioUrl });
-    } finally {
-      try {
-        await unlink(tmpPath);
-      } catch {
-        // ignore
-      }
     }
+
+    await baserowPatchJson(
+      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
+      {
+        [IMAGE_FIELD_KEY]: imageUrl,
+      },
+    );
+
+    return Response.json({ imageUrl });
   } catch (error) {
     console.error('Error generating scene image:', error);
     return Response.json(
