@@ -615,14 +615,17 @@ export default function BatchOperations({
             1,
             Math.floor(subtitleGenerationSettings.maxChars),
           );
-          const transcriptionText =
+          // Count based on the scene text (sentence) since we render punctuation
+          // from that text now. Fallback to transcription if sentence is missing.
+          const textForCharCount =
+            sentenceText ||
             buildTranscriptionTextForCharCount(transcriptionWords);
-          const charCount = transcriptionText.length;
+          const charCount = textForCharCount.length;
 
           // User requested strictly "less than".
           if (charCount >= maxChars) {
             console.log(
-              `Skipping scene ${scene.id}: transcription has ${charCount} chars (limit < ${maxChars})`,
+              `Skipping scene ${scene.id}: scene text has ${charCount} chars (limit < ${maxChars})`,
             );
             await new Promise((r) => setTimeout(r, 150));
             continue;
