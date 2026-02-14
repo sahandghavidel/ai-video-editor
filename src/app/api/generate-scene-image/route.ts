@@ -9,7 +9,8 @@ type BaserowRow = {
 const SCENES_TABLE_ID = 714;
 const IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
-const KIE_MODEL = 'nano-banana-pro';
+// Nano Banana Edit model identifier (must match KIE API exactly)
+const KIE_MODEL = 'google/nano-banana-edit';
 const KIE_POLL_INTERVAL_MS = 3000;
 // Allow more time for KIE Nano Banana jobs to complete (10 minutes).
 const KIE_MAX_WAIT_MS = 600000;
@@ -211,9 +212,8 @@ type KieRecordInfoResponse = {
 
 async function createNanoBananaTask(
   prompt: string,
-  imageInputs: string[],
-  aspectRatio: string = '16:9',
-  resolution: string = '2K',
+  imageUrls: string[],
+  imageSize: string = '16:9',
   outputFormat: string = 'png',
 ): Promise<string> {
   const apiKey = getKieApiKey();
@@ -228,10 +228,11 @@ async function createNanoBananaTask(
       model: KIE_MODEL,
       input: {
         prompt,
-        image_input: imageInputs,
-        aspect_ratio: aspectRatio,
-        resolution,
+        // Nano Banana Edit expects image URLs of the uploaded file(s)
+        // (up to 10). We'll pass our reference image URL(s) here.
+        image_urls: imageUrls,
         output_format: outputFormat,
+        image_size: imageSize,
       },
     }),
   });
@@ -471,13 +472,24 @@ export async function POST(req: Request) {
 
   current scene: ${sceneId} ${currentText} Full script: ${fullScript}`;
 
-    console.log('generate-scene-image: sending prompt to Nano Banana Pro');
+    console.log('generate-scene-image: sending prompt to Nano Banana Edit');
     console.log(prompt);
 
     const characterImageUrl = process.env.KIE_CHARACTER_IMAGE_URL?.trim();
-    const imageInputs = characterImageUrl ? [characterImageUrl] : [];
+    const imageUrls = characterImageUrl ? [characterImageUrl] : [];
 
-    const taskId = await createNanoBananaTask(prompt, imageInputs);
+    // Nano Banana Edit requires at least 1 input image URL.
+    if (imageUrls.length === 0) {
+      return Response.json(
+        {
+          error:
+            'Missing KIE_CHARACTER_IMAGE_URL (Nano Banana Edit requires at least one image URL in input.image_urls)',
+        },
+        { status: 400 },
+      );
+    }
+
+    const taskId = await createNanoBananaTask(prompt, imageUrls);
 
     let imageUrl = '';
     let lastState: string | null = null;
