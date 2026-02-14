@@ -579,6 +579,7 @@ export default function BatchOperations({
 
         const finalVideoUrl = String(scene['field_6886'] ?? '').trim();
         const captionsUrl = String(scene['field_6910'] ?? '').trim();
+        const sentenceText = String(scene['field_6890'] ?? '').trim();
 
         if (!finalVideoUrl || !captionsUrl) continue;
 
@@ -637,6 +638,7 @@ export default function BatchOperations({
               sceneId: scene.id,
               videoUrl: finalVideoUrl,
               transcriptionWords,
+              displayText: sentenceText,
               position: {
                 x: subtitleGenerationSettings.positionXPercent,
                 y: subtitleGenerationSettings.positionYPercent,

@@ -143,6 +143,7 @@ async function probeVideoDimensions(inputPathOrUrl: string): Promise<{
 
 function buildSubtitleHighlightAss(opts: {
   words: TranscriptionWord[];
+  displayText?: string;
   videoWidth: number;
   videoHeight: number;
   sceneEndSeconds?: number;
@@ -156,6 +157,7 @@ function buildSubtitleHighlightAss(opts: {
 }): string {
   const {
     words,
+    displayText,
     videoWidth,
     videoHeight,
     sceneEndSeconds,
@@ -167,6 +169,53 @@ function buildSubtitleHighlightAss(opts: {
     baseColorHex,
     highlightColorHex,
   } = opts;
+
+  const normalizeTokenForMatch = (token: string) =>
+    String(token)
+      .toLowerCase()
+      // remove anything that's not alphanumeric, so we match across punctuation
+      // differences like "." vs ":".
+      .replace(/[^a-z0-9]+/g, '');
+
+  const buildRenderTokens = (safe: Array<{ word: string }>): string[] => {
+    const fallback = safe.map((w) => w.word);
+    const raw = typeof displayText === 'string' ? displayText.trim() : '';
+    if (!raw) return fallback;
+
+    // Tokenize by whitespace; punctuation remains attached to its word.
+    const displayTokens = raw
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((t) => (uppercase ? t.toUpperCase() : t));
+
+    // Best case: same token count.
+    if (displayTokens.length === safe.length) return displayTokens;
+
+    // Otherwise, do a simple sequential alignment by normalized (punctuation-
+    // insensitive) token content.
+    const out: string[] = [];
+    let j = 0;
+    for (let i = 0; i < safe.length; i++) {
+      const target = normalizeTokenForMatch(safe[i].word);
+      let picked: string | null = null;
+
+      while (j < displayTokens.length) {
+        const cand = displayTokens[j];
+        const candNorm = normalizeTokenForMatch(cand);
+        if (candNorm && target && candNorm === target) {
+          picked = cand;
+          j++;
+          break;
+        }
+        j++;
+      }
+
+      out.push(picked ?? safe[i].word);
+    }
+
+    return out;
+  };
 
   const safeWords = words
     .filter(
@@ -185,6 +234,8 @@ function buildSubtitleHighlightAss(opts: {
       start: Math.max(0, w.start),
       end: Math.max(0, w.end),
     }));
+
+  const renderTokens = buildRenderTokens(safeWords);
 
   const x = Math.round((clamp(0, positionXPercent, 100) / 100) * videoWidth);
   const y = Math.round((clamp(0, positionYPercent, 100) / 100) * videoHeight);
@@ -244,7 +295,11 @@ function buildSubtitleHighlightAss(opts: {
     const safeEnd = end > start ? end : start + 0.08;
 
     const tokens = safeWords.map((t, idx) => {
-      const escaped = escapeAssText(t.word);
+      const displayToken =
+        typeof renderTokens[idx] === 'string' && renderTokens[idx].trim()
+          ? renderTokens[idx]
+          : t.word;
+      const escaped = escapeAssText(displayToken);
       if (idx !== i) return escaped;
       return `{\\c${highlight}}${escaped}{\\c${primary}}`;
     });
@@ -284,6 +339,7 @@ export async function POST(request: NextRequest) {
       sceneId?: number;
       videoUrl?: string;
       transcriptionWords?: TranscriptionWord[];
+      displayText?: string;
       position?: { x?: number; y?: number };
       size?: { height?: number };
       fontFamily?: string;
@@ -310,6 +366,11 @@ export async function POST(request: NextRequest) {
     const transcriptionWords = Array.isArray(body?.transcriptionWords)
       ? body?.transcriptionWords
       : [];
+
+    const displayText =
+      typeof body?.displayText === 'string' && body.displayText.trim()
+        ? body.displayText.trim()
+        : '';
 
     if (!sceneId || !videoUrl.trim()) {
       return NextResponse.json(
@@ -372,6 +433,7 @@ export async function POST(request: NextRequest) {
     const assPath = path.join(tempDir, 'highlight.ass');
     const assText = buildSubtitleHighlightAss({
       words: transcriptionWords,
+      displayText,
       videoWidth,
       videoHeight,
       sceneEndSeconds: durationSeconds,

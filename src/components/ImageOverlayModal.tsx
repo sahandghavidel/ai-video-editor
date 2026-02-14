@@ -2640,6 +2640,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setPreviewUrl(null);
       setIsPreviewLoading(false);
 
+      // Best-effort: prefer rendering punctuation from the scene sentence text
+      // (field_6890) while keeping timing from transcription words.
+      let displayText = '';
+      try {
+        const sceneData = (await getSceneById(sceneId)) as {
+          field_6890?: unknown;
+          [k: string]: unknown;
+        } | null;
+        displayText =
+          sceneData && typeof sceneData.field_6890 === 'string'
+            ? sceneData.field_6890.trim()
+            : typeof sceneData?.['field_6890'] === 'string'
+              ? String(sceneData['field_6890']).trim()
+              : '';
+      } catch {
+        // ignore best-effort
+      }
+
       const res = await fetch('/api/create-subtitle-highlight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2648,6 +2666,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           sceneId,
           videoUrl: originalVideoUrl,
           transcriptionWords,
+          displayText,
           position: textOverlayPosition,
           size: { height: textOverlaySize.height },
           fontFamily: textStyling?.fontFamily,
