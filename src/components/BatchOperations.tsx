@@ -17,6 +17,7 @@ import {
   Sparkles,
   Mic,
   Film,
+  Image as ImageIcon,
   RefreshCw,
   Wand2,
   Volume2,
@@ -73,7 +74,6 @@ export default function BatchOperations({
   handleSentenceImprovement,
   handleTTSProduce,
   handleVideoGenerate,
-  handleTranscribeScene,
 }: BatchOperationsProps) {
   const {
     batchOperations,
@@ -129,6 +129,12 @@ export default function BatchOperations({
     number | null
   >(null);
 
+  const [generatingAllSceneImages, setGeneratingAllSceneImages] =
+    useState(false);
+  const [generatingImageSceneId, setGeneratingImageSceneId] = useState<
+    number | null
+  >(null);
+
   const [promptingAllScenes, setPromptingAllScenes] = useState(false);
   const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
 
@@ -180,7 +186,7 @@ export default function BatchOperations({
 
   // Close settings menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = () => {
       if (showSettingsMenu) {
         setShowSettingsMenu(false);
       }
@@ -589,6 +595,100 @@ export default function BatchOperations({
     // Count spaces too: build the exact text shape we pass to the subtitle
     // renderer (words joined by single spaces).
     return tokens.join(' ');
+  };
+
+  const getExistingSceneImageUrl = (scene: BaserowRow): string => {
+    const raw =
+      scene['field_7094'] ??
+      (scene as unknown as { field_7094?: unknown }).field_7094;
+
+    if (typeof raw === 'string') return raw.trim();
+    if (!raw) return '';
+
+    // If this ever becomes a Baserow "file" field, it may come back as an array of objects.
+    if (Array.isArray(raw) && raw.length > 0) {
+      const first = raw[0] as unknown;
+      if (typeof first === 'string') return first.trim();
+      if (first && typeof first === 'object') {
+        const obj = first as Record<string, unknown>;
+        const url = obj.url ?? obj.file ?? obj.link;
+        if (typeof url === 'string') return url.trim();
+      }
+      return '';
+    }
+
+    if (typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const url = obj.url ?? obj.file ?? obj.link;
+      if (typeof url === 'string') return url.trim();
+    }
+
+    return '';
+  };
+
+  const sceneHasSubtitleInUrl = (scene: BaserowRow): boolean => {
+    const finalVideoUrl = String(scene['field_6886'] ?? '').trim();
+    return finalVideoUrl.toLowerCase().includes('subtitle');
+  };
+
+  const onGenerateAllSceneImages = async () => {
+    if (generatingAllSceneImages) return;
+    if (!selectedOriginalVideo.id) return;
+
+    const scenesToImage = [...data]
+      .filter((scene) => {
+        // Skip if already filled
+        if (getExistingSceneImageUrl(scene)) return false;
+
+        // Skip if this scene already has subtitles (detected by URL naming)
+        if (sceneHasSubtitleInUrl(scene)) return false;
+
+        // Skip empty scenes (API will 400 anyway)
+        const sentenceText = String(scene['field_6890'] ?? '').trim();
+        return Boolean(sentenceText);
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToImage.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setGeneratingAllSceneImages(true);
+    setGeneratingImageSceneId(null);
+
+    try {
+      for (const scene of scenesToImage) {
+        setGeneratingImageSceneId(scene.id);
+
+        try {
+          const res = await fetch('/api/generate-scene-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneId: scene.id }),
+          });
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Image generation failed (${res.status}) ${t}`);
+          }
+        } catch (error) {
+          console.error(
+            `Image generation failed for scene ${scene.id}:`,
+            error,
+          );
+        }
+
+        // Gentle pacing. Note: each request may itself take minutes.
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setGeneratingAllSceneImages(false);
+      setGeneratingImageSceneId(null);
+    }
   };
 
   const onGenerateAllSubtitles = async () => {
@@ -1395,6 +1495,45 @@ export default function BatchOperations({
                   {generatingAllSubtitles
                     ? generatingSubtitleSceneId
                       ? `Scene #${generatingSubtitleSceneId}`
+                      : 'Processing...'
+                    : 'Generate All'}
+                </span>
+              </button>
+            </div>
+
+            {/* Scene Image Generation */}
+            <div className='bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-4 border border-pink-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-pink-500 rounded-lg'>
+                  <ImageIcon className='w-4 h-4 text-white' />
+                </div>
+                <h3 className='font-semibold text-pink-900'>Images</h3>
+              </div>
+              <p className='text-sm text-pink-800 mb-4 leading-relaxed'>
+                Generate and save “Image for Scene” for scenes that don’t have
+                one. Skips scenes whose final video URL includes “subtitle”.
+              </p>
+              <button
+                onClick={onGenerateAllSceneImages}
+                disabled={!selectedOriginalVideo.id || generatingAllSceneImages}
+                className='w-full h-12 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  !selectedOriginalVideo.id
+                    ? 'Select an original video first'
+                    : generatingAllSceneImages
+                      ? generatingImageSceneId
+                        ? `Generating image for scene ${generatingImageSceneId}`
+                        : 'Generating images for all scenes...'
+                      : 'Generate images for all scenes'
+                }
+              >
+                {generatingAllSceneImages && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {generatingAllSceneImages
+                    ? generatingImageSceneId
+                      ? `Scene #${generatingImageSceneId}`
                       : 'Processing...'
                     : 'Generate All'}
                 </span>
