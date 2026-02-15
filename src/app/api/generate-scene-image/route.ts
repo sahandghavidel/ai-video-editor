@@ -1,6 +1,8 @@
 // Nano Banana image generation: store the provider-returned URL directly.
 // We intentionally avoid re-uploading the generated image to MinIO.
 
+import { randomInt } from 'crypto';
+
 type BaserowRow = {
   id: number;
   [key: string]: unknown;
@@ -14,6 +16,39 @@ const KIE_MODEL = 'google/nano-banana-edit';
 const KIE_POLL_INTERVAL_MS = 3000;
 // Allow more time for KIE Nano Banana jobs to complete (10 minutes).
 const KIE_MAX_WAIT_MS = 600000;
+
+function parseKieCharacterImageUrls(raw: string | undefined): string[] {
+  const s = String(raw ?? '').trim();
+  if (!s) return [];
+
+  // Support JSON array: ["https://...", "https://..."]
+  if (s.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(s) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((v): v is string => typeof v === 'string')
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0)
+          .filter((v) => v.startsWith('http://') || v.startsWith('https://'));
+      }
+    } catch {
+      // fall through to delimiter parsing
+    }
+  }
+
+  // Support comma/semicolon/newline/whitespace separated lists.
+  return s
+    .split(/[\s,;\n\r]+/g)
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+    .filter((v) => v.startsWith('http://') || v.startsWith('https://'));
+}
+
+function pickRandom<T>(arr: T[]): T {
+  if (arr.length === 0) throw new Error('pickRandom called with empty array');
+  return arr[randomInt(arr.length)] as T;
+}
 
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
@@ -475,17 +510,29 @@ export async function POST(req: Request) {
     console.log('generate-scene-image: sending prompt to Nano Banana Edit');
     console.log(prompt);
 
-    const characterImageUrl = process.env.KIE_CHARACTER_IMAGE_URL?.trim();
-    const imageUrls = characterImageUrl ? [characterImageUrl] : [];
+    const characterImageUrls = parseKieCharacterImageUrls(
+      process.env.KIE_CHARACTER_IMAGE_URL,
+    );
+    const selectedCharacterImageUrl =
+      characterImageUrls.length > 0 ? pickRandom(characterImageUrls) : null;
+    const imageUrls = selectedCharacterImageUrl
+      ? [selectedCharacterImageUrl]
+      : [];
 
     // Nano Banana Edit requires at least 1 input image URL.
     if (imageUrls.length === 0) {
       return Response.json(
         {
           error:
-            'Missing KIE_CHARACTER_IMAGE_URL (Nano Banana Edit requires at least one image URL in input.image_urls)',
+            'Missing KIE_CHARACTER_IMAGE_URL (Nano Banana Edit requires at least one image URL in input.image_urls). You can set a single URL or a list (CSV/whitespace/JSON array).',
         },
         { status: 400 },
+      );
+    }
+
+    if (selectedCharacterImageUrl) {
+      console.log(
+        `generate-scene-image: using character reference (${characterImageUrls.length} candidates): ${selectedCharacterImageUrl}`,
       );
     }
 
