@@ -466,7 +466,7 @@ export async function POST(req: Request) {
   Art Style: thick black vector outlines, flat 2D art, high contrast.
 
   For each scene:
-  Create a strong visual metaphor that explains the concept. Do not just show the character talking; show the character interacting with relevant objects, symbols, UI elements, diagrams, or metaphorical props (e.g., charts, clocks, ladders, puzzles, obstacles, tools). Keep the composition simple and readable.
+  Create a strong visual metaphor that explains the concept. Do not just show the character talking; show the character interacting with relevant objects, symbols, UI elements, diagrams, or metaphorical props (e.g., charts, clocks, ladders, puzzles, obstacles, tools). Keep the composition simple, large and readable.
 
   Create an image for the current scene:
 

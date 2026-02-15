@@ -18,9 +18,14 @@ type BaserowField = {
 const SCENES_TABLE_ID = '714';
 const FLAGGED_FIELD_ID = 7096;
 const FLAGGED_FIELD_KEY = 'field_7096';
+const HAS_TEXT_FIELD_ID = 7097;
+const HAS_TEXT_FIELD_KEY = 'field_7097';
 
 let cachedFlaggedTrueOptionId: number | null = null;
 let cachedFlaggedTrueOptionIdAt = 0;
+
+let cachedHasTextTrueOptionId: number | null = null;
+let cachedHasTextTrueOptionIdAt = 0;
 
 async function resolveFlaggedTrueOptionId(
   baserowUrl: string,
@@ -74,6 +79,61 @@ async function resolveFlaggedTrueOptionId(
 
   cachedFlaggedTrueOptionId = trueOpt.id;
   cachedFlaggedTrueOptionIdAt = Date.now();
+  return trueOpt.id;
+}
+
+async function resolveHasTextTrueOptionId(
+  baserowUrl: string,
+  token: string,
+): Promise<number | null> {
+  // Cache for 10 minutes to avoid hammering the Baserow metadata endpoint.
+  const ttlMs = 10 * 60 * 1000;
+  if (
+    cachedHasTextTrueOptionId !== null &&
+    Date.now() - cachedHasTextTrueOptionIdAt < ttlMs
+  ) {
+    return cachedHasTextTrueOptionId;
+  }
+
+  const res = await fetch(
+    `${baserowUrl}/database/fields/table/${SCENES_TABLE_ID}/`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `JWT ${token}`,
+      },
+      cache: 'no-store',
+    },
+  );
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    console.warn(
+      `Failed to fetch Baserow fields for scenes table: ${res.status} ${t}`,
+    );
+    return null;
+  }
+
+  const fields = (await res.json().catch(() => null)) as unknown;
+  if (!Array.isArray(fields)) return null;
+
+  const hasTextField = (fields as BaserowField[]).find((f) => {
+    if (typeof f?.id === 'number' && f.id === HAS_TEXT_FIELD_ID) return true;
+    if (typeof f?.name !== 'string') return false;
+    const n = f.name.trim().toLowerCase().replace(/\s+/g, '');
+    return n === 'hastext';
+  });
+
+  const options = hasTextField?.select_options;
+  if (!Array.isArray(options) || options.length === 0) return null;
+
+  const trueOpt = options.find(
+    (o) => typeof o?.value === 'string' && o.value.toLowerCase() === 'true',
+  );
+  if (!trueOpt || typeof trueOpt.id !== 'number') return null;
+
+  cachedHasTextTrueOptionId = trueOpt.id;
+  cachedHasTextTrueOptionIdAt = Date.now();
   return trueOpt.id;
 }
 
@@ -160,6 +220,20 @@ export async function PATCH(
         const optId = await resolveFlaggedTrueOptionId(baserowUrl, token);
         if (typeof optId === 'number') {
           body[FLAGGED_FIELD_KEY] = optId;
+        }
+      }
+    }
+
+    // Normalize the hasText single-select field (field_7097) if the client sends the label/boolean.
+    if (Object.prototype.hasOwnProperty.call(body, HAS_TEXT_FIELD_KEY)) {
+      const requested = body[HAS_TEXT_FIELD_KEY];
+      const label = normalizeSelectValueToBoolLabel(requested);
+
+      // For now we only need to support setting it to true.
+      if (label === 'true') {
+        const optId = await resolveHasTextTrueOptionId(baserowUrl, token);
+        if (typeof optId === 'number') {
+          body[HAS_TEXT_FIELD_KEY] = optId;
         }
       }
     }

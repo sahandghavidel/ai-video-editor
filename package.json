@@ -19,6 +19,7 @@
     "react-advanced-cropper": "^0.20.1",
     "react-dom": "19.1.0",
     "sharp": "^0.34.3",
+    "tesseract.js": "^7.0.0",
     "undici": "^7.16.0",
     "zustand": "^5.0.8"
   },

@@ -37,47 +37,66 @@ export async function GET(request: NextRequest) {
         headers: {
           Authorization: `JWT ${token}`,
         },
-      }
+      },
     );
 
     if (!sceneResponse.ok) {
       const errorText = await sceneResponse.text();
       throw new Error(
-        `Failed to fetch scenes: ${sceneResponse.status} ${errorText}`
+        `Failed to fetch scenes: ${sceneResponse.status} ${errorText}`,
       );
     }
 
     const sceneData = await sceneResponse.json();
     console.log('✅ Successfully fetched scene data');
 
-    // Test 3: Try updating a scene (if we have any)
+    const { searchParams } = new URL(request.url);
+    const shouldUpdate = ['1', 'true', 'yes'].includes(
+      String(searchParams.get('update') ?? '').toLowerCase(),
+    );
+
+    // Test 3 (optional): Try updating a scene (if we have any)
     if (sceneData.results && sceneData.results.length > 0) {
       const testScene = sceneData.results[0];
-      console.log('Testing update on scene:', testScene.id);
+      if (shouldUpdate) {
+        console.log('Testing update on scene:', testScene.id);
 
-      const updateResponse = await fetch(
-        `${process.env.BASEROW_API_URL}/database/rows/table/714/${testScene.id}/`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `JWT ${token}`,
-            'Content-Type': 'application/json',
+        const updateResponse = await fetch(
+          `${process.env.BASEROW_API_URL}/database/rows/table/714/${testScene.id}/`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `JWT ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              field_6888: 'test-clip-url.mp4', // Video Clip URL field
+            }),
           },
-          body: JSON.stringify({
-            field_6888: 'test-clip-url.mp4', // Video Clip URL field
-          }),
-        }
-      );
-
-      if (!updateResponse.ok) {
-        const errorText = await updateResponse.text();
-        throw new Error(
-          `Failed to update scene: ${updateResponse.status} ${errorText}`
         );
-      }
 
-      const updateResult = await updateResponse.json();
-      console.log('✅ Successfully updated scene');
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          throw new Error(
+            `Failed to update scene: ${updateResponse.status} ${errorText}`,
+          );
+        }
+
+        const updateResult = await updateResponse.json();
+        console.log('✅ Successfully updated scene');
+
+        return NextResponse.json({
+          success: true,
+          message: 'Baserow connection test successful (with update)',
+          details: {
+            tokenObtained: true,
+            sceneFetched: true,
+            sceneUpdated: true,
+            testSceneId: testScene.id,
+            updateResult,
+          },
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -85,9 +104,9 @@ export async function GET(request: NextRequest) {
         details: {
           tokenObtained: true,
           sceneFetched: true,
-          sceneUpdated: true,
+          sceneUpdated: false,
           testSceneId: testScene.id,
-          updateResult,
+          note: 'Update test skipped by default. Add ?update=1 to run a write test.',
         },
       });
     } else {
@@ -114,7 +133,7 @@ export async function GET(request: NextRequest) {
           password: process.env.BASEROW_PASSWORD ? 'set' : 'missing',
         },
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

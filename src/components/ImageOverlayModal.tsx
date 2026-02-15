@@ -426,6 +426,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [sceneUpscaleStatus, setSceneUpscaleStatus] = useState<string | null>(
     null,
   );
+  const [isDetectingSceneImageText, setIsDetectingSceneImageText] =
+    useState(false);
+  const [sceneHasTextStatus, setSceneHasTextStatus] = useState<string | null>(
+    null,
+  );
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
   >(null);
@@ -2901,6 +2906,156 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [sceneId, loadOverlayFromRemoteUrl]);
 
+  const handleDetectSceneImageText = useCallback(async () => {
+    if (!sceneId) return;
+    if (isApplying) return;
+    if (isDetectingSceneImageText) return;
+
+    const overlayFile = overlayImage
+      ? overlayImage
+      : overlayImageUrl
+        ? await fetchOverlayFileFromUrl(overlayImageUrl)
+        : null;
+
+    if (!overlayFile) {
+      setSceneHasTextStatus('No overlay image loaded');
+      window.setTimeout(() => setSceneHasTextStatus(null), 2500);
+      return;
+    }
+
+    setIsDetectingSceneImageText(true);
+    setSceneHasTextStatus(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', overlayFile);
+
+      const res = await fetch('/api/detect-text-in-image?accurate=1', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`Text detection failed: ${res.status} ${t}`);
+      }
+
+      const data = (await res.json().catch(() => null)) as {
+        hasText?: unknown;
+        method?: unknown;
+        confidence?: unknown;
+        textSnippet?: unknown;
+        reason?: unknown;
+        ignoredBecauseLargeFont?: unknown;
+        largestTextHeightPct?: unknown;
+        smallestMeaningfulTextHeightPct?: unknown;
+        smallestRelevantTextHeightPct?: unknown;
+        thresholds?: unknown;
+        hasSmallText?: unknown;
+      } | null;
+
+      // Helpful in dev: inspect the detector output (method, confidence, estimated font size, etc.)
+      try {
+        console.log('[detect-text-in-image] response', data);
+      } catch {
+        // ignore
+      }
+
+      const hasText = Boolean(data?.hasText);
+      const method =
+        typeof data?.method === 'string' && data.method.trim()
+          ? data.method.trim()
+          : null;
+      const confidence =
+        typeof data?.confidence === 'number' && Number.isFinite(data.confidence)
+          ? data.confidence
+          : null;
+      const snippet =
+        typeof data?.textSnippet === 'string' ? data.textSnippet : '';
+      const reason = typeof data?.reason === 'string' ? data.reason : '';
+      const ignoredLarge =
+        typeof data?.ignoredBecauseLargeFont === 'boolean'
+          ? data.ignoredBecauseLargeFont
+          : Boolean(data?.ignoredBecauseLargeFont);
+
+      const smallestMeaningfulPct =
+        typeof data?.smallestMeaningfulTextHeightPct === 'number' &&
+        Number.isFinite(data.smallestMeaningfulTextHeightPct)
+          ? Math.round(data.smallestMeaningfulTextHeightPct)
+          : null;
+
+      const smallestRelevantPct =
+        typeof data?.smallestRelevantTextHeightPct === 'number' &&
+        Number.isFinite(data.smallestRelevantTextHeightPct)
+          ? Math.round(data.smallestRelevantTextHeightPct)
+          : null;
+
+      const fontPct =
+        smallestRelevantPct !== null
+          ? smallestRelevantPct
+          : smallestMeaningfulPct !== null
+            ? smallestMeaningfulPct
+            : typeof data?.largestTextHeightPct === 'number' &&
+                Number.isFinite(data.largestTextHeightPct)
+              ? Math.round(data.largestTextHeightPct)
+              : null;
+
+      if (hasText) {
+        const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          // NOTE: field_7097 is a single-select; our API normalizes the 'true' label to the option id.
+          body: JSON.stringify({ field_7097: 'true' }),
+        });
+
+        if (!patchRes.ok) {
+          const t = await patchRes.text().catch(() => '');
+          throw new Error(
+            `Failed to save hasText=true: ${patchRes.status} ${t}`,
+          );
+        }
+
+        setSceneHasTextStatus(
+          method
+            ? `Small text detected (${method}) → hasText=true (Saved)`
+            : 'Small text detected → hasText=true (Saved)',
+        );
+      } else {
+        const c =
+          confidence !== null ? ` (conf ${Math.round(confidence)}%)` : '';
+        const m = method ? ` [${method}]` : '';
+        const fontNote =
+          ignoredLarge && fontPct !== null
+            ? ` · ignored (smallest text ~${fontPct}% height)`
+            : ignoredLarge
+              ? ' · ignored (no small text; font too large)'
+              : '';
+        const r = reason.trim() ? ` · ${reason.trim()}` : '';
+        setSceneHasTextStatus(
+          snippet.trim()
+            ? `No small text detected${c}${m}${fontNote}${r} · “${snippet.trim()}”`
+            : `No small text detected${c}${m}${fontNote}${r}`,
+        );
+      }
+
+      window.setTimeout(() => setSceneHasTextStatus(null), 3500);
+    } catch (error) {
+      console.error('Failed to detect/save hasText:', error);
+      setSceneHasTextStatus(
+        error instanceof Error ? error.message : 'Failed to detect text',
+      );
+    } finally {
+      setIsDetectingSceneImageText(false);
+    }
+  }, [
+    sceneId,
+    isApplying,
+    isDetectingSceneImageText,
+    overlayImage,
+    overlayImageUrl,
+    fetchOverlayFileFromUrl,
+  ]);
+
   const handleReturnToPreviousUrl = useCallback(async () => {
     if (!sceneId) return;
     if (!previousVideoUrl) return;
@@ -3556,6 +3711,28 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   'Upscale'
                 )}
               </button>
+              <button
+                type='button'
+                onClick={handleDetectSceneImageText}
+                disabled={
+                  isApplying ||
+                  isDetectingSceneImageText ||
+                  isGeneratingSceneImage ||
+                  isUpscalingSceneImage ||
+                  (!overlayImage && !overlayImageUrl)
+                }
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Detect text in the currently loaded overlay image and, if found, set hasText=true in Baserow'
+              >
+                {isDetectingSceneImageText ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    Text
+                  </span>
+                ) : (
+                  'Text'
+                )}
+              </button>
               {scenePromptStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {scenePromptStatus}
@@ -3569,6 +3746,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               {sceneUpscaleStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {sceneUpscaleStatus}
+                </span>
+              ) : null}
+              {sceneHasTextStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {sceneHasTextStatus}
                 </span>
               ) : null}
             </div>
