@@ -2933,6 +2933,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         body: JSON.stringify({ sceneId }),
       });
 
+      // If we already created a video for the current image, do nothing.
+      if (res.status === 409) {
+        const data = (await res.json().catch(() => null)) as {
+          alreadyCreated?: unknown;
+          videoUrl?: unknown;
+          message?: unknown;
+        } | null;
+
+        const msg =
+          typeof data?.message === 'string' && data.message.trim()
+            ? data.message.trim()
+            : 'Already video created for this image';
+
+        setSceneVideoStatus(msg);
+        window.setTimeout(() => setSceneVideoStatus(null), 3500);
+        return;
+      }
+
       if (!res.ok) {
         let message = `Video generation failed: ${res.status}`;
         const t = await res.text().catch(() => '');

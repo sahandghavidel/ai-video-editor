@@ -38,6 +38,19 @@ function isAlreadyEnhancedVideoUrl(videoUrl: string): boolean {
   }
 }
 
+function extractImageSigFromVideoUrl(videoUrl: string): string | null {
+  try {
+    const pathname = new URL(videoUrl).pathname;
+    const filename = pathname.split('/').filter(Boolean).pop() ?? '';
+    if (!filename) return null;
+    const m = filename.match(/_img_([0-9a-f]{6,40})_/i);
+    return m?.[1] ?? null;
+  } catch {
+    const m = videoUrl.match(/_img_([0-9a-f]{6,40})_/i);
+    return m?.[1] ?? null;
+  }
+}
+
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const email = process.env.BASEROW_EMAIL;
@@ -397,10 +410,11 @@ export async function POST(req: Request) {
     }
 
     const linkedVideoId = extractLinkedVideoId(scene['field_6889']);
+    const imageSig = extractImageSigFromVideoUrl(videoUrl);
     const timestamp = Date.now();
     const filename = linkedVideoId
-      ? `video_${linkedVideoId}_scene_${sceneId}_enhanced_${timestamp}.mp4`
-      : `scene_${sceneId}_enhanced_${timestamp}.mp4`;
+      ? `video_${linkedVideoId}_scene_${sceneId}${imageSig ? `_img_${imageSig}` : ''}_enhanced_${timestamp}.mp4`
+      : `scene_${sceneId}${imageSig ? `_img_${imageSig}` : ''}_enhanced_${timestamp}.mp4`;
 
     console.log('[enhance-scene-video] uploading enhanced video to MinIO', {
       sceneId,

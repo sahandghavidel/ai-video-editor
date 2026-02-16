@@ -1,6 +1,8 @@
 // KIE image-to-video generation: create a 6s 480p clip from the stored scene image URL
 // and save the resulting video URL directly into Baserow.
 
+import { createHash } from 'crypto';
+
 type BaserowRow = {
   id: number;
   [key: string]: unknown;
@@ -9,6 +11,24 @@ type BaserowRow = {
 const SCENES_TABLE_ID = 714;
 const IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
 const VIDEO_FIELD_KEY = 'field_7098'; // Video for Scene (7098)
+
+function getImageSignatureFromUrl(imageUrl: string): string {
+  // Stable across runs; changes when the scene image URL changes.
+  return createHash('sha1').update(imageUrl).digest('hex').slice(0, 10);
+}
+
+function isSceneVideoForImage(videoUrl: string, imageSig: string): boolean {
+  const lower = videoUrl.toLowerCase();
+  const token = `_img_${imageSig.toLowerCase()}_`;
+  try {
+    const pathname = new URL(videoUrl).pathname;
+    const filename = pathname.split('/').filter(Boolean).pop() ?? '';
+    if (!filename) return lower.includes(token);
+    return filename.toLowerCase().includes(token);
+  } catch {
+    return lower.includes(token);
+  }
+}
 
 const MINIO_BUCKET = 'nca-toolkit';
 const MINIO_HOST = 'http://host.docker.internal:9000';
@@ -490,6 +510,34 @@ export async function POST(req: Request) {
       );
     }
 
+    const imageSig = getImageSignatureFromUrl(imageUrl);
+
+    // If we already created a video for THIS exact image (by signature), do not regenerate.
+    const existingVideoUrlRaw = scene[VIDEO_FIELD_KEY];
+    const existingVideoUrl =
+      typeof existingVideoUrlRaw === 'string'
+        ? existingVideoUrlRaw.trim()
+        : String(existingVideoUrlRaw ?? '').trim();
+
+    if (
+      existingVideoUrl &&
+      (existingVideoUrl.startsWith('http://') ||
+        existingVideoUrl.startsWith('https://')) &&
+      isSceneVideoForImage(existingVideoUrl, imageSig)
+    ) {
+      return Response.json(
+        {
+          alreadyCreated: true,
+          sceneId,
+          imageUrl,
+          imageSig,
+          videoUrl: existingVideoUrl,
+          message: 'Already video created for this image',
+        },
+        { status: 409 },
+      );
+    }
+
     const prompt = buildVideoPrompt(sceneText);
 
     console.log('generate-scene-video: creating KIE image-to-video task');
@@ -560,8 +608,8 @@ export async function POST(req: Request) {
     const timestamp = Date.now();
     const linkedVideoId = extractLinkedVideoId(scene['field_6889']);
     const filename = linkedVideoId
-      ? `video_${linkedVideoId}_scene_${sceneId}_kie_${timestamp}.mp4`
-      : `scene_${sceneId}_kie_${timestamp}.mp4`;
+      ? `video_${linkedVideoId}_scene_${sceneId}_img_${imageSig}_kie_${timestamp}.mp4`
+      : `scene_${sceneId}_img_${imageSig}_kie_${timestamp}.mp4`;
 
     console.log('generate-scene-video: uploading MP4 to MinIO', {
       sceneId,
@@ -588,6 +636,7 @@ export async function POST(req: Request) {
       taskId,
       filename,
       bucket: MINIO_BUCKET,
+      imageSig,
     });
   } catch (error) {
     console.error('generate-scene-video failed:', error);
