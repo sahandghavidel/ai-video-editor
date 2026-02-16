@@ -17,8 +17,11 @@ const SCENES_TABLE_ID = 714;
 const SOURCE_IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
 const UPSCALED_IMAGE_FIELD_KEY = 'field_7095'; // Upscaled Image for Scene (7095)
 
-const REAL_ESRGAN_WEIGHTS_URL =
-  'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth';
+const REAL_ESRGAN_WEIGHTS_URLS: Record<2 | 4, string> = {
+  4: 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth',
+  // Real-ESRGAN provides a native x2 model; we use it when the user asks for 2x.
+  2: 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth',
+};
 
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
@@ -53,7 +56,7 @@ async function getJWTToken(): Promise<string> {
 
 async function baserowGetJson<T>(
   pathName: string,
-  query?: Record<string, string>
+  query?: Record<string, string>,
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
   if (!baserowUrl) {
@@ -85,7 +88,7 @@ async function baserowGetJson<T>(
 
 async function baserowPatchJson<T>(
   pathName: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
   if (!baserowUrl) {
@@ -162,6 +165,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as {
       sceneId?: unknown;
+      scale?: unknown;
     } | null;
 
     const sceneId =
@@ -171,9 +175,14 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Scene ID is required' }, { status: 400 });
     }
 
+    const requestedScaleRaw =
+      typeof body?.scale === 'number' ? body.scale : Number(body?.scale);
+    const requestedScale: 2 | 3 | 4 =
+      requestedScaleRaw === 2 ? 2 : requestedScaleRaw === 3 ? 3 : 4;
+
     // Fetch current scene.
     const currentScene = await baserowGetJson<BaserowRow>(
-      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`
+      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
     );
 
     const sourceUrl = extractImageUrl(currentScene[SOURCE_IMAGE_FIELD_KEY]);
@@ -184,7 +193,7 @@ export async function POST(req: Request) {
           error:
             'Scene is missing Image for Scene (7094); generate/upload an image first',
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -198,26 +207,32 @@ export async function POST(req: Request) {
     const imgBuf = Buffer.from(await imgRes.arrayBuffer());
     inputPath = path.resolve(
       '/tmp',
-      `scene_${sceneId}_image_${Date.now()}.png`
+      `scene_${sceneId}_image_${Date.now()}.png`,
     );
     await writeFile(inputPath, imgBuf);
 
     // Ensure weights exist.
     const weightsDir = path.resolve('/tmp', 'realesrgan-weights');
     await mkdir(weightsDir, { recursive: true });
-    const weightsPath = path.join(weightsDir, 'RealESRGAN_x4plus.pth');
-    await ensureFileDownloaded(REAL_ESRGAN_WEIGHTS_URL, weightsPath);
+    const modelScale: 2 | 4 = requestedScale === 2 ? 2 : 4;
+    const weightsFilename =
+      modelScale === 2 ? 'RealESRGAN_x2plus.pth' : 'RealESRGAN_x4plus.pth';
+    const weightsPath = path.join(weightsDir, weightsFilename);
+    await ensureFileDownloaded(
+      REAL_ESRGAN_WEIGHTS_URLS[modelScale],
+      weightsPath,
+    );
 
     // Run python upscaler (MPS).
     outputPath = path.resolve(
       '/tmp',
-      `scene_${sceneId}_upscaled_${Date.now()}.png`
+      `scene_${sceneId}_upscaled_x${requestedScale}_${Date.now()}.png`,
     );
 
     const pythonPath = path.resolve(process.cwd(), 'parakeet-env/bin/python');
     const scriptPath = path.resolve(
       process.cwd(),
-      'scripts/upscale_image_mps.py'
+      'scripts/upscale_image_mps.py',
     );
 
     const { stdout, stderr } = await execFileAsync(
@@ -236,11 +251,12 @@ export async function POST(req: Request) {
         '512',
         '--tile-pad',
         '10',
+        ...(requestedScale === 3 ? ['--target-scale', '3'] : []),
       ],
       {
         timeout: 15 * 60 * 1000,
         maxBuffer: 50 * 1024 * 1024,
-      }
+      },
     );
 
     if (stderr) {
@@ -253,21 +269,22 @@ export async function POST(req: Request) {
     // Upload to MinIO + save to Baserow.
     const uploadUrl = await uploadToMinio(
       outputPath,
-      `scene_${sceneId}_upscaled_${Date.now()}.png`,
-      'image/png'
+      `scene_${sceneId}_upscaled_x${requestedScale}_${Date.now()}.png`,
+      'image/png',
     );
 
     await baserowPatchJson(
       `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
       {
         [UPSCALED_IMAGE_FIELD_KEY]: uploadUrl,
-      }
+      },
     );
 
     return Response.json({
       success: true,
       imageUrl: uploadUrl,
       sourceUrl,
+      scale: requestedScale,
     });
   } catch (error) {
     console.error('[UPSCALE] Failed:', error);
@@ -275,7 +292,7 @@ export async function POST(req: Request) {
       {
         error: error instanceof Error ? error.message : 'Upscale failed',
       },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     // Best-effort cleanup.

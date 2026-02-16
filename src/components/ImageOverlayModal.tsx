@@ -423,6 +423,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
   const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
   const [isUpscalingSceneImage, setIsUpscalingSceneImage] = useState(false);
+  const [sceneUpscaleScale, setSceneUpscaleScale] = useState<2 | 3 | 4>(4);
   const [sceneUpscaleStatus, setSceneUpscaleStatus] = useState<string | null>(
     null,
   );
@@ -2886,7 +2887,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ sceneId }),
+        body: JSON.stringify({ sceneId, scale: sceneUpscaleScale }),
       });
 
       if (!res.ok) {
@@ -2896,6 +2897,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       const data = (await res.json().catch(() => null)) as {
         imageUrl?: unknown;
+        scale?: unknown;
       } | null;
 
       const imageUrl =
@@ -2904,11 +2906,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         throw new Error('Upscale returned empty imageUrl');
       }
 
+      const effectiveScale =
+        typeof data?.scale === 'number'
+          ? data.scale
+          : Number.isFinite(Number(data?.scale))
+            ? Number(data?.scale)
+            : sceneUpscaleScale;
+
       // Load upscaled image into the overlay slot as well.
       await loadOverlayFromRemoteUrl(imageUrl);
       if (fileInputRef.current) fileInputRef.current.value = '';
 
-      setSceneUpscaleStatus('Saved');
+      setSceneUpscaleStatus(`Saved (x${effectiveScale})`);
       window.setTimeout(() => setSceneUpscaleStatus(null), 2500);
     } catch (error) {
       console.error('Failed to upscale/save scene image:', error);
@@ -2918,7 +2927,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } finally {
       setIsUpscalingSceneImage(false);
     }
-  }, [sceneId, loadOverlayFromRemoteUrl]);
+  }, [sceneId, loadOverlayFromRemoteUrl, sceneUpscaleScale]);
 
   const handleGenerateSceneVideo = useCallback(async () => {
     if (!sceneId) return;
@@ -4120,12 +4129,28 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 {isUpscalingSceneImage ? (
                   <span className='inline-flex items-center gap-2'>
                     <Loader2 className='h-4 w-4 animate-spin' />
-                    Upscale
+                    Upscale x{sceneUpscaleScale}
                   </span>
                 ) : (
-                  'Upscale'
+                  `Upscale x${sceneUpscaleScale}`
                 )}
               </button>
+              <select
+                value={sceneUpscaleScale}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setSceneUpscaleScale(v === 2 ? 2 : v === 3 ? 3 : 4);
+                }}
+                disabled={
+                  isApplying || isUpscalingSceneImage || isGeneratingSceneImage
+                }
+                className='px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Upscale factor (2x uses native x2 model; 3x uses x4 then downscales)'
+              >
+                <option value={2}>2x</option>
+                <option value={3}>3x</option>
+                <option value={4}>4x</option>
+              </select>
               <button
                 type='button'
                 onClick={handleGenerateSceneVideo}

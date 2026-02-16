@@ -31,6 +31,7 @@ def upscale_image(
     device_str: str,
     tile_size: int,
     tile_pad: int,
+    target_scale: int | None = None,
 ) -> int:
     if not input_path.exists():
         raise FileNotFoundError(f"Input not found: {input_path}")
@@ -48,6 +49,14 @@ def upscale_image(
 
     img = Image.open(input_path).convert("RGB")
     w, h = img.size
+
+    if target_scale is not None:
+        if not isinstance(target_scale, int) or target_scale <= 0:
+            raise ValueError(f"Invalid target_scale: {target_scale}")
+        if target_scale > scale:
+            raise ValueError(
+                f"target_scale ({target_scale}) cannot be greater than model scale ({scale})"
+            )
 
     if tile_size and tile_size > 0:
         out_w, out_h = w * scale, h * scale
@@ -87,15 +96,25 @@ def upscale_image(
 
                     out_img[y0 * scale : y1 * scale, x0 * scale : x1 * scale] = out_tile
 
-        Image.fromarray(out_img, mode="RGB").save(output_path)
-        return scale
+        result = Image.fromarray(out_img, mode="RGB")
+
+        if target_scale is not None and target_scale != scale:
+            result = result.resize((w * target_scale, h * target_scale), resample=Image.LANCZOS)
+
+        result.save(output_path)
+        return target_scale if target_scale is not None else scale
 
     with torch.no_grad():
         t = _to_tensor(img, device)
         out = model(t)
 
-    _to_image(out).save(output_path)
-    return scale
+    result = _to_image(out)
+
+    if target_scale is not None and target_scale != scale:
+        result = result.resize((w * target_scale, h * target_scale), resample=Image.LANCZOS)
+
+    result.save(output_path)
+    return target_scale if target_scale is not None else scale
 
 
 def main() -> int:
@@ -106,6 +125,7 @@ def main() -> int:
     parser.add_argument("--device", default="mps")
     parser.add_argument("--tile-size", type=int, default=512)
     parser.add_argument("--tile-pad", type=int, default=10)
+    parser.add_argument("--target-scale", type=int, default=None)
 
     args = parser.parse_args()
 
@@ -115,13 +135,14 @@ def main() -> int:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    scale = upscale_image(
+    effective_scale = upscale_image(
         input_path=input_path,
         output_path=output_path,
         weights_path=weights_path,
         device_str=args.device,
         tile_size=args.tile_size,
         tile_pad=args.tile_pad,
+        target_scale=args.target_scale,
     )
 
     print(
@@ -129,7 +150,8 @@ def main() -> int:
             "success": True,
             "input": str(input_path),
             "output": str(output_path),
-            "scale": scale,
+            "scale": effective_scale,
+            "target_scale": args.target_scale,
         }
     )
     return 0
