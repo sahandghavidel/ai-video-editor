@@ -140,6 +140,11 @@ export default function BatchOperations({
     number | null
   >(null);
 
+  const [applyingAllUpscaledImages, setApplyingAllUpscaledImages] =
+    useState(false);
+  const [applyingUpscaledImageSceneId, setApplyingUpscaledImageSceneId] =
+    useState<number | null>(null);
+
   const [promptingAllScenes, setPromptingAllScenes] = useState(false);
   const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
 
@@ -660,6 +665,32 @@ export default function BatchOperations({
     return '';
   };
 
+  const getExistingFinalVideoUrl = (scene: BaserowRow): string => {
+    const raw =
+      scene['field_6886'] ??
+      (scene as unknown as { field_6886?: unknown }).field_6886;
+
+    if (typeof raw === 'string') return raw.trim();
+    if (!raw) return '';
+    return String(raw).trim();
+  };
+
+  const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {
+    const finalUrl = getExistingFinalVideoUrl(scene);
+    if (!finalUrl) return false;
+
+    try {
+      const pathname = new URL(finalUrl).pathname;
+      const filename = pathname.split('/').filter(Boolean).pop() ?? '';
+      if (!filename) return false;
+
+      const direct = new RegExp(`(^|_)scene_${scene.id}_applied_`, 'i');
+      return direct.test(filename);
+    } catch {
+      return false;
+    }
+  };
+
   const sceneHasSubtitleInUrl = (scene: BaserowRow): boolean => {
     const finalVideoUrl = String(scene['field_6886'] ?? '').trim();
     return finalVideoUrl.toLowerCase().includes('subtitle');
@@ -776,6 +807,73 @@ export default function BatchOperations({
     } finally {
       setUpscalingAllSceneImages(false);
       setUpscalingSceneImageId(null);
+    }
+  };
+
+  const onApplyUpscaledImagesAll = async () => {
+    if (applyingAllUpscaledImages) return;
+
+    const scenesToApply = [...data]
+      .filter((scene) => {
+        // Only scenes with upscaled image
+        if (!getExistingUpscaledSceneImageUrl(scene)) return false;
+
+        // Must have a final video URL to apply onto
+        const finalUrl = getExistingFinalVideoUrl(scene);
+        if (!finalUrl) return false;
+
+        // Skip if already applied (image or video)
+        if (sceneAlreadyAppliedOutput(scene)) return false;
+
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToApply.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setApplyingAllUpscaledImages(true);
+    setApplyingUpscaledImageSceneId(null);
+
+    try {
+      for (const scene of scenesToApply) {
+        setApplyingUpscaledImageSceneId(scene.id);
+
+        try {
+          const res = await fetch('/api/apply-upscaled-scene-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneId: scene.id }),
+          });
+
+          // The API also returns 409 when already applied; treat as a skip.
+          if (res.status === 409) {
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Apply image failed (${res.status}) ${t}`);
+          }
+        } catch (error) {
+          console.error(
+            `Apply upscaled image failed for scene ${scene.id}:`,
+            error,
+          );
+        }
+
+        // Gentle pacing (each apply may take a while)
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setApplyingAllUpscaledImages(false);
+      setApplyingUpscaledImageSceneId(null);
     }
   };
 
@@ -1663,6 +1761,45 @@ export default function BatchOperations({
                       ? `Scene #${upscalingSceneImageId}`
                       : 'Processing...'
                     : 'Upscale All'}
+                </span>
+              </button>
+            </div>
+
+            {/* Apply Upscaled Images */}
+            <div className='bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg p-4 border border-rose-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-rose-500 rounded-lg flex items-center gap-1'>
+                  <Save className='w-4 h-4 text-white' />
+                  <span className='text-white text-xs font-bold'>IMG</span>
+                </div>
+                <h3 className='font-semibold text-rose-900'>Apply Image</h3>
+              </div>
+              <p className='text-sm text-rose-800 mb-4 leading-relaxed'>
+                Apply “Upscaled Image for Scene” (7095) over the current final
+                video (6886) for all scenes that have an upscaled image. Skips
+                scenes that are already applied.
+              </p>
+              <button
+                onClick={onApplyUpscaledImagesAll}
+                disabled={applyingAllUpscaledImages}
+                className='w-full h-12 bg-rose-500 hover:bg-rose-600 disabled:bg-rose-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  applyingAllUpscaledImages
+                    ? applyingUpscaledImageSceneId
+                      ? `Applying upscaled image for scene ${applyingUpscaledImageSceneId}`
+                      : 'Applying upscaled images for all scenes...'
+                    : 'Apply upscaled images for all scenes'
+                }
+              >
+                {applyingAllUpscaledImages && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {applyingAllUpscaledImages
+                    ? applyingUpscaledImageSceneId
+                      ? `Scene #${applyingUpscaledImageSceneId}`
+                      : 'Processing...'
+                    : 'Apply All'}
                 </span>
               </button>
             </div>
