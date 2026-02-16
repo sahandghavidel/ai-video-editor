@@ -428,6 +428,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
   const [isGeneratingSceneVideo, setIsGeneratingSceneVideo] = useState(false);
   const [sceneVideoStatus, setSceneVideoStatus] = useState<string | null>(null);
+  const [isEnhancingSceneVideo, setIsEnhancingSceneVideo] = useState(false);
+  const [sceneEnhanceVideoStatus, setSceneEnhanceVideoStatus] = useState<
+    string | null
+  >(null);
   const [isDetectingSceneImageText, setIsDetectingSceneImageText] =
     useState(false);
   const [sceneHasTextStatus, setSceneHasTextStatus] = useState<string | null>(
@@ -2978,6 +2982,78 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [sceneId, isApplying, isGeneratingSceneVideo]);
 
+  const handleEnhanceSceneVideo = useCallback(async () => {
+    if (!sceneId) return;
+    if (isApplying) return;
+    if (isGeneratingSceneVideo) return;
+    if (isEnhancingSceneVideo) return;
+
+    setIsEnhancingSceneVideo(true);
+    setSceneEnhanceVideoStatus(null);
+
+    try {
+      const res = await fetch('/api/enhance-scene-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sceneId }),
+      });
+
+      if (!res.ok) {
+        let message = `Video enhance failed: ${res.status}`;
+        const t = await res.text().catch(() => '');
+        try {
+          const j = JSON.parse(t) as { error?: unknown };
+          if (typeof j?.error === 'string' && j.error.trim()) {
+            message = j.error;
+          } else if (t.trim()) {
+            message = `${message} ${t}`;
+          }
+        } catch {
+          if (t.trim()) message = `${message} ${t}`;
+        }
+        throw new Error(message);
+      }
+
+      const data = (await res.json().catch(() => null)) as {
+        videoUrl?: unknown;
+        durationMs?: unknown;
+      } | null;
+
+      const videoUrl =
+        typeof data?.videoUrl === 'string' ? data.videoUrl.trim() : '';
+      if (!videoUrl) {
+        throw new Error('Video enhance returned empty videoUrl');
+      }
+
+      const durationMs =
+        typeof data?.durationMs === 'number' && Number.isFinite(data.durationMs)
+          ? data.durationMs
+          : null;
+
+      setSceneEnhanceVideoStatus(
+        durationMs !== null
+          ? `Saved (${Math.round(durationMs / 1000)}s)`
+          : 'Saved',
+      );
+      window.setTimeout(() => setSceneEnhanceVideoStatus(null), 3500);
+
+      try {
+        console.log('[enhance-scene-video] response', data);
+      } catch {
+        // ignore
+      }
+    } catch (error) {
+      console.error('Failed to enhance/save scene video:', error);
+      setSceneEnhanceVideoStatus(
+        error instanceof Error ? error.message : 'Failed to enhance video',
+      );
+    } finally {
+      setIsEnhancingSceneVideo(false);
+    }
+  }, [sceneId, isApplying, isGeneratingSceneVideo, isEnhancingSceneVideo]);
+
   const handleDetectSceneImageText = useCallback(async () => {
     if (!sceneId) return;
     if (isApplying) return;
@@ -3789,6 +3865,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 disabled={
                   isApplying ||
                   isGeneratingSceneVideo ||
+                  isEnhancingSceneVideo ||
                   isGeneratingSceneImage ||
                   isUpscalingSceneImage
                 }
@@ -3806,11 +3883,34 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               </button>
               <button
                 type='button'
+                onClick={handleEnhanceSceneVideo}
+                disabled={
+                  isApplying ||
+                  isEnhancingSceneVideo ||
+                  isGeneratingSceneVideo ||
+                  isGeneratingSceneImage ||
+                  isUpscalingSceneImage
+                }
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Enhance the saved scene video (Video for Scene 7098) using Interpolation Factor 2x + AnimeSR and overwrite field_7098'
+              >
+                {isEnhancingSceneVideo ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    Enhance
+                  </span>
+                ) : (
+                  'Enhance'
+                )}
+              </button>
+              <button
+                type='button'
                 onClick={handleDetectSceneImageText}
                 disabled={
                   isApplying ||
                   isDetectingSceneImageText ||
                   isGeneratingSceneVideo ||
+                  isEnhancingSceneVideo ||
                   isGeneratingSceneImage ||
                   isUpscalingSceneImage ||
                   (!overlayImage && !overlayImageUrl)
@@ -3845,6 +3945,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               {sceneVideoStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {sceneVideoStatus}
+                </span>
+              ) : null}
+              {sceneEnhanceVideoStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {sceneEnhanceVideoStatus}
                 </span>
               ) : null}
               {sceneHasTextStatus ? (

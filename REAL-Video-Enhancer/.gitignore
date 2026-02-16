@@ -1,0 +1,25 @@
+# Keep the vendored enhancer clean
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual envs (never commit)
+venv/
+.env
+
+# Output/temp folders commonly produced by enhancer scripts
+outputs/
+output/
+results/
+result/
+tmp/
+temp/
+
+# Logs
+*.log
+ffmpeg_log.txt
+
+# OS
+.DS_Store
