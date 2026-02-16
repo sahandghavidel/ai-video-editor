@@ -432,6 +432,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [sceneEnhanceVideoStatus, setSceneEnhanceVideoStatus] = useState<
     string | null
   >(null);
+  const [isApplyingEnhancedSceneVideo, setIsApplyingEnhancedSceneVideo] =
+    useState(false);
+  const [applyEnhancedSceneVideoStatus, setApplyEnhancedSceneVideoStatus] =
+    useState<string | null>(null);
   const [isDetectingSceneImageText, setIsDetectingSceneImageText] =
     useState(false);
   const [sceneHasTextStatus, setSceneHasTextStatus] = useState<string | null>(
@@ -3054,6 +3058,104 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [sceneId, isApplying, isGeneratingSceneVideo, isEnhancingSceneVideo]);
 
+  const handleApplyEnhancedSceneVideo = useCallback(async () => {
+    if (!sceneId) return;
+    if (isApplying) return;
+    if (isApplyingEnhancedSceneVideo) return;
+
+    const undoKey = sceneId ? `scene-undo-video-url:${sceneId}` : null;
+    const urlBeforeApply = originalVideoUrl;
+
+    setIsApplyingEnhancedSceneVideo(true);
+    setApplyEnhancedSceneVideoStatus(null);
+
+    try {
+      const res = await fetch('/api/apply-enhanced-scene-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sceneId }),
+      });
+
+      // If we've already applied once, do nothing and show a friendly status.
+      if (res.status === 409) {
+        const data = (await res.json().catch(() => null)) as {
+          alreadyApplied?: unknown;
+          videoUrl?: unknown;
+          message?: unknown;
+        } | null;
+
+        const msg =
+          typeof data?.message === 'string' && data.message.trim()
+            ? data.message.trim()
+            : 'Already applied';
+
+        setApplyEnhancedSceneVideoStatus(msg);
+        window.setTimeout(() => setApplyEnhancedSceneVideoStatus(null), 3500);
+        return;
+      }
+
+      if (!res.ok) {
+        let message = `Apply video failed: ${res.status}`;
+        const t = await res.text().catch(() => '');
+        try {
+          const j = JSON.parse(t) as { error?: unknown };
+          if (typeof j?.error === 'string' && j.error.trim()) {
+            message = j.error;
+          } else if (t.trim()) {
+            message = `${message} ${t}`;
+          }
+        } catch {
+          if (t.trim()) message = `${message} ${t}`;
+        }
+        throw new Error(message);
+      }
+
+      const data = (await res.json().catch(() => null)) as {
+        videoUrl?: unknown;
+      } | null;
+
+      const newUrl =
+        typeof data?.videoUrl === 'string' ? data.videoUrl.trim() : '';
+      if (!newUrl) throw new Error('Apply video returned empty videoUrl');
+
+      // Save previous URL for undo (best-effort, client-side persistence).
+      if (urlBeforeApply && urlBeforeApply !== newUrl) {
+        setPreviousVideoUrl(urlBeforeApply);
+        if (undoKey && typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(undoKey, urlBeforeApply);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      setOriginalVideoUrl(newUrl);
+      onUpdateModalVideoUrl?.(newUrl);
+
+      // Trigger a refetch so anything derived from the scene can refresh.
+      setRefetchTrigger((prev) => prev + 1);
+
+      setApplyEnhancedSceneVideoStatus('Applied');
+      window.setTimeout(() => setApplyEnhancedSceneVideoStatus(null), 3500);
+    } catch (error) {
+      console.error('Failed to apply enhanced scene video:', error);
+      setApplyEnhancedSceneVideoStatus(
+        error instanceof Error ? error.message : 'Failed to apply video',
+      );
+    } finally {
+      setIsApplyingEnhancedSceneVideo(false);
+    }
+  }, [
+    sceneId,
+    isApplying,
+    isApplyingEnhancedSceneVideo,
+    originalVideoUrl,
+    onUpdateModalVideoUrl,
+  ]);
+
   const handleDetectSceneImageText = useCallback(async () => {
     if (!sceneId) return;
     if (isApplying) return;
@@ -4713,6 +4815,29 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             ) : null}
             <span>{isPreviewLoading ? 'Loading...' : 'Preview'}</span>
           </button>
+          <button
+            onClick={handleApplyEnhancedSceneVideo}
+            disabled={
+              isApplying ||
+              isApplyingEnhancedSceneVideo ||
+              isEnhancingSceneVideo ||
+              isGeneratingSceneVideo
+            }
+            className='flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            title='Overlay the enhanced scene video (field_7098) over the final video (field_6886), duration-match, and keep both audios'
+          >
+            {isApplyingEnhancedSceneVideo ? (
+              <Loader2 className='animate-spin h-4 w-4' />
+            ) : null}
+            <span>
+              {isApplyingEnhancedSceneVideo ? 'Applying…' : 'Apply Video'}
+            </span>
+          </button>
+          {applyEnhancedSceneVideoStatus ? (
+            <span className='self-center text-xs text-gray-600 max-w-[260px] truncate'>
+              {applyEnhancedSceneVideoStatus}
+            </span>
+          ) : null}
           <button
             onClick={handleReturnToPreviousUrl}
             disabled={!previousVideoUrl || isApplying}
