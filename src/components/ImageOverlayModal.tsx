@@ -436,6 +436,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     useState(false);
   const [applyEnhancedSceneVideoStatus, setApplyEnhancedSceneVideoStatus] =
     useState<string | null>(null);
+  const [isApplyingUpscaledSceneImage, setIsApplyingUpscaledSceneImage] =
+    useState(false);
+  const [applyUpscaledSceneImageStatus, setApplyUpscaledSceneImageStatus] =
+    useState<string | null>(null);
   const [isDetectingSceneImageText, setIsDetectingSceneImageText] =
     useState(false);
   const [sceneHasTextStatus, setSceneHasTextStatus] = useState<string | null>(
@@ -3192,6 +3196,131 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     onUpdateModalVideoUrl,
   ]);
 
+  const handleApplyUpscaledSceneImage = useCallback(async () => {
+    if (!sceneId) return;
+    if (isApplying) return;
+    if (isApplyingUpscaledSceneImage) return;
+
+    const undoKey = sceneId ? `scene-undo-video-url:${sceneId}` : null;
+    const urlBeforeApply = originalVideoUrl;
+
+    setIsApplyingUpscaledSceneImage(true);
+    setApplyUpscaledSceneImageStatus(null);
+
+    try {
+      // Quick client-side warning if there's no upscaled image.
+      try {
+        const sceneData = (await getSceneById(sceneId)) as {
+          field_7095?: unknown;
+          field_6886?: unknown;
+        } | null;
+        const upscaled =
+          typeof sceneData?.field_7095 === 'string'
+            ? sceneData.field_7095.trim()
+            : '';
+        if (!upscaled) {
+          setApplyUpscaledSceneImageStatus(
+            'No upscaled image for this scene (7095). Click Upscale first.',
+          );
+          window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
+          return;
+        }
+
+        const finalUrl =
+          typeof sceneData?.field_6886 === 'string'
+            ? sceneData.field_6886.trim()
+            : '';
+        if (finalUrl && finalUrl.includes('_applied_')) {
+          setApplyUpscaledSceneImageStatus('Already applied (image/video)');
+          window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
+          return;
+        }
+      } catch {
+        // best-effort only
+      }
+
+      const res = await fetch('/api/apply-upscaled-scene-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sceneId }),
+      });
+
+      if (res.status === 409) {
+        const data = (await res.json().catch(() => null)) as {
+          alreadyApplied?: unknown;
+          videoUrl?: unknown;
+          message?: unknown;
+        } | null;
+
+        const msg =
+          typeof data?.message === 'string' && data.message.trim()
+            ? data.message.trim()
+            : 'Already applied (image/video)';
+
+        setApplyUpscaledSceneImageStatus(msg);
+        window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
+        return;
+      }
+
+      if (!res.ok) {
+        let message = `Apply image failed: ${res.status}`;
+        const t = await res.text().catch(() => '');
+        try {
+          const j = JSON.parse(t) as { error?: unknown };
+          if (typeof j?.error === 'string' && j.error.trim()) {
+            message = j.error;
+          } else if (t.trim()) {
+            message = `${message} ${t}`;
+          }
+        } catch {
+          if (t.trim()) message = `${message} ${t}`;
+        }
+        throw new Error(message);
+      }
+
+      const data = (await res.json().catch(() => null)) as {
+        videoUrl?: unknown;
+      } | null;
+
+      const newUrl =
+        typeof data?.videoUrl === 'string' ? data.videoUrl.trim() : '';
+      if (!newUrl) throw new Error('Apply image returned empty videoUrl');
+
+      if (urlBeforeApply && urlBeforeApply !== newUrl) {
+        setPreviousVideoUrl(urlBeforeApply);
+        if (undoKey && typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(undoKey, urlBeforeApply);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      setOriginalVideoUrl(newUrl);
+      onUpdateModalVideoUrl?.(newUrl);
+      setRefetchTrigger((prev) => prev + 1);
+
+      setApplyUpscaledSceneImageStatus('Applied');
+      window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
+    } catch (error) {
+      console.error('Failed to apply upscaled scene image:', error);
+      setApplyUpscaledSceneImageStatus(
+        error instanceof Error ? error.message : 'Failed to apply image',
+      );
+    } finally {
+      setIsApplyingUpscaledSceneImage(false);
+    }
+  }, [
+    sceneId,
+    isApplying,
+    isApplyingUpscaledSceneImage,
+    originalVideoUrl,
+    onUpdateModalVideoUrl,
+  ]);
+
   const handleDetectSceneImageText = useCallback(async () => {
     if (!sceneId) return;
     if (isApplying) return;
@@ -4872,6 +5001,30 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           {applyEnhancedSceneVideoStatus ? (
             <span className='self-center text-xs text-gray-600 max-w-[260px] truncate'>
               {applyEnhancedSceneVideoStatus}
+            </span>
+          ) : null}
+          <button
+            onClick={handleApplyUpscaledSceneImage}
+            disabled={
+              isApplying ||
+              isApplyingUpscaledSceneImage ||
+              isApplyingEnhancedSceneVideo ||
+              isEnhancingSceneVideo ||
+              isGeneratingSceneVideo
+            }
+            className='flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            title='Apply Upscaled Image for Scene (7095) as a full-frame overlay onto the final video (field_6886). Skips if already applied.'
+          >
+            {isApplyingUpscaledSceneImage ? (
+              <Loader2 className='animate-spin h-4 w-4' />
+            ) : null}
+            <span>
+              {isApplyingUpscaledSceneImage ? 'Applying…' : 'Apply Image'}
+            </span>
+          </button>
+          {applyUpscaledSceneImageStatus ? (
+            <span className='self-center text-xs text-gray-600 max-w-[260px] truncate'>
+              {applyUpscaledSceneImageStatus}
             </span>
           ) : null}
           <button
