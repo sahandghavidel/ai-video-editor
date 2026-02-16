@@ -3004,6 +3004,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         body: JSON.stringify({ sceneId }),
       });
 
+      // If we've already enhanced once, do nothing and show a friendly status.
+      if (res.status === 409) {
+        const data = (await res.json().catch(() => null)) as {
+          alreadyEnhanced?: unknown;
+          videoUrl?: unknown;
+          message?: unknown;
+        } | null;
+
+        const msg =
+          typeof data?.message === 'string' && data.message.trim()
+            ? data.message.trim()
+            : 'Already enhanced';
+
+        setSceneEnhanceVideoStatus(msg);
+        window.setTimeout(() => setSceneEnhanceVideoStatus(null), 3500);
+        return;
+      }
+
       if (!res.ok) {
         let message = `Video enhance failed: ${res.status}`;
         const t = await res.text().catch(() => '');

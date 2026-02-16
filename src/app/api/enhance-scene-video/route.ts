@@ -26,6 +26,18 @@ export const dynamic = 'force-dynamic';
 const SCENES_TABLE_ID = 714;
 const VIDEO_FIELD_KEY = 'field_7098'; // Video for Scene (7098)
 
+function isAlreadyEnhancedVideoUrl(videoUrl: string): boolean {
+  try {
+    const pathname = new URL(videoUrl).pathname;
+    const filename = pathname.split('/').filter(Boolean).pop() ?? '';
+    if (!filename) return false;
+    return filename.toLowerCase().includes('_enhanced_');
+  } catch {
+    // If URL parsing fails, fall back to substring check.
+    return videoUrl.toLowerCase().includes('_enhanced_');
+  }
+}
+
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const email = process.env.BASEROW_EMAIL;
@@ -311,6 +323,19 @@ export async function POST(req: Request) {
       return Response.json(
         { error: `Scene is missing a valid video URL in ${VIDEO_FIELD_KEY}` },
         { status: 400 },
+      );
+    }
+
+    // Avoid enhancing multiple times on top of an already enhanced output.
+    if (isAlreadyEnhancedVideoUrl(videoUrl)) {
+      return Response.json(
+        {
+          alreadyEnhanced: true,
+          sceneId,
+          videoUrl,
+          message: 'Already enhanced for this scene',
+        },
+        { status: 409 },
       );
     }
 
