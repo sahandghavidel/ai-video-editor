@@ -135,6 +135,11 @@ export default function BatchOperations({
     number | null
   >(null);
 
+  const [upscalingAllSceneImages, setUpscalingAllSceneImages] = useState(false);
+  const [upscalingSceneImageId, setUpscalingSceneImageId] = useState<
+    number | null
+  >(null);
+
   const [promptingAllScenes, setPromptingAllScenes] = useState(false);
   const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
 
@@ -626,6 +631,35 @@ export default function BatchOperations({
     return '';
   };
 
+  const getExistingUpscaledSceneImageUrl = (scene: BaserowRow): string => {
+    const raw =
+      scene['field_7095'] ??
+      (scene as unknown as { field_7095?: unknown }).field_7095;
+
+    if (typeof raw === 'string') return raw.trim();
+    if (!raw) return '';
+
+    // If this ever becomes a Baserow "file" field, it may come back as an array of objects.
+    if (Array.isArray(raw) && raw.length > 0) {
+      const first = raw[0] as unknown;
+      if (typeof first === 'string') return first.trim();
+      if (first && typeof first === 'object') {
+        const obj = first as Record<string, unknown>;
+        const url = obj.url ?? obj.file ?? obj.link;
+        if (typeof url === 'string') return url.trim();
+      }
+      return '';
+    }
+
+    if (typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const url = obj.url ?? obj.file ?? obj.link;
+      if (typeof url === 'string') return url.trim();
+    }
+
+    return '';
+  };
+
   const sceneHasSubtitleInUrl = (scene: BaserowRow): boolean => {
     const finalVideoUrl = String(scene['field_6886'] ?? '').trim();
     return finalVideoUrl.toLowerCase().includes('subtitle');
@@ -688,6 +722,60 @@ export default function BatchOperations({
     } finally {
       setGeneratingAllSceneImages(false);
       setGeneratingImageSceneId(null);
+    }
+  };
+
+  const onUpscaleAllSceneImages = async () => {
+    if (upscalingAllSceneImages) return;
+
+    const scenesToUpscale = [...data]
+      .filter((scene) => {
+        // Only upscale scenes that already have a base image
+        if (!getExistingSceneImageUrl(scene)) return false;
+
+        // Skip if upscaled already exists
+        if (getExistingUpscaledSceneImageUrl(scene)) return false;
+
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToUpscale.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setUpscalingAllSceneImages(true);
+    setUpscalingSceneImageId(null);
+
+    try {
+      for (const scene of scenesToUpscale) {
+        setUpscalingSceneImageId(scene.id);
+
+        try {
+          const res = await fetch('/api/upscale-scene-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneId: scene.id, scale: 3 }),
+          });
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Upscale failed (${res.status}) ${t}`);
+          }
+        } catch (error) {
+          console.error(`Upscale failed for scene ${scene.id}:`, error);
+        }
+
+        // Gentle pacing (each upscale may take a while)
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setUpscalingAllSceneImages(false);
+      setUpscalingSceneImageId(null);
     }
   };
 
@@ -1536,6 +1624,45 @@ export default function BatchOperations({
                       ? `Scene #${generatingImageSceneId}`
                       : 'Processing...'
                     : 'Generate All'}
+                </span>
+              </button>
+            </div>
+
+            {/* Upscale Scene Images (3x) */}
+            <div className='bg-gradient-to-br from-fuchsia-50 to-fuchsia-100 rounded-lg p-4 border border-fuchsia-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-fuchsia-500 rounded-lg flex items-center gap-1'>
+                  <ImageIcon className='w-4 h-4 text-white' />
+                  <span className='text-white text-xs font-bold'>3x</span>
+                </div>
+                <h3 className='font-semibold text-fuchsia-900'>Upscale</h3>
+              </div>
+              <p className='text-sm text-fuchsia-800 mb-4 leading-relaxed'>
+                Upscale all scenes that already have “Image for Scene” (7094)
+                and do NOT yet have an “Upscaled Image” (7095). Skips scenes
+                with upscaled images.
+              </p>
+              <button
+                onClick={onUpscaleAllSceneImages}
+                disabled={upscalingAllSceneImages}
+                className='w-full h-12 bg-fuchsia-500 hover:bg-fuchsia-600 disabled:bg-fuchsia-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  upscalingAllSceneImages
+                    ? upscalingSceneImageId
+                      ? `Upscaling image for scene ${upscalingSceneImageId}`
+                      : 'Upscaling images for all scenes...'
+                    : 'Upscale images for all scenes (3x)'
+                }
+              >
+                {upscalingAllSceneImages && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {upscalingAllSceneImages
+                    ? upscalingSceneImageId
+                      ? `Scene #${upscalingSceneImageId}`
+                      : 'Processing...'
+                    : 'Upscale All'}
                 </span>
               </button>
             </div>
