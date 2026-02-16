@@ -426,6 +426,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [sceneUpscaleStatus, setSceneUpscaleStatus] = useState<string | null>(
     null,
   );
+  const [isGeneratingSceneVideo, setIsGeneratingSceneVideo] = useState(false);
+  const [sceneVideoStatus, setSceneVideoStatus] = useState<string | null>(null);
   const [isDetectingSceneImageText, setIsDetectingSceneImageText] =
     useState(false);
   const [sceneHasTextStatus, setSceneHasTextStatus] = useState<string | null>(
@@ -2906,6 +2908,76 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
   }, [sceneId, loadOverlayFromRemoteUrl]);
 
+  const handleGenerateSceneVideo = useCallback(async () => {
+    if (!sceneId) return;
+    if (isApplying) return;
+    if (isGeneratingSceneVideo) return;
+
+    setIsGeneratingSceneVideo(true);
+    setSceneVideoStatus(null);
+
+    try {
+      const res = await fetch('/api/generate-scene-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sceneId }),
+      });
+
+      if (!res.ok) {
+        let message = `Video generation failed: ${res.status}`;
+        const t = await res.text().catch(() => '');
+        try {
+          const j = JSON.parse(t) as { error?: unknown };
+          if (typeof j?.error === 'string' && j.error.trim()) {
+            message = j.error;
+          } else if (t.trim()) {
+            message = `${message} ${t}`;
+          }
+        } catch {
+          if (t.trim()) message = `${message} ${t}`;
+        }
+        throw new Error(message);
+      }
+
+      const data = (await res.json().catch(() => null)) as {
+        videoUrl?: unknown;
+        taskId?: unknown;
+      } | null;
+
+      const videoUrl =
+        typeof data?.videoUrl === 'string' ? data.videoUrl.trim() : '';
+      if (!videoUrl) {
+        throw new Error('Video generation returned empty videoUrl');
+      }
+
+      const taskId =
+        typeof data?.taskId === 'string' && data.taskId.trim()
+          ? data.taskId.trim()
+          : null;
+
+      setSceneVideoStatus(
+        taskId ? `Saved (task ${taskId.slice(0, 8)}…)` : 'Saved',
+      );
+      window.setTimeout(() => setSceneVideoStatus(null), 3500);
+
+      // Helpful in dev: quickly inspect output.
+      try {
+        console.log('[generate-scene-video] response', data);
+      } catch {
+        // ignore
+      }
+    } catch (error) {
+      console.error('Failed to generate/save scene video:', error);
+      setSceneVideoStatus(
+        error instanceof Error ? error.message : 'Failed to generate video',
+      );
+    } finally {
+      setIsGeneratingSceneVideo(false);
+    }
+  }, [sceneId, isApplying, isGeneratingSceneVideo]);
+
   const handleDetectSceneImageText = useCallback(async () => {
     if (!sceneId) return;
     if (isApplying) return;
@@ -3713,10 +3785,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               </button>
               <button
                 type='button'
+                onClick={handleGenerateSceneVideo}
+                disabled={
+                  isApplying ||
+                  isGeneratingSceneVideo ||
+                  isGeneratingSceneImage ||
+                  isUpscalingSceneImage
+                }
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Create a 6s 480p image-to-video clip from Image for Scene (7094) and save to Baserow (Video for Scene 7098)'
+              >
+                {isGeneratingSceneVideo ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    Video
+                  </span>
+                ) : (
+                  'Video'
+                )}
+              </button>
+              <button
+                type='button'
                 onClick={handleDetectSceneImageText}
                 disabled={
                   isApplying ||
                   isDetectingSceneImageText ||
+                  isGeneratingSceneVideo ||
                   isGeneratingSceneImage ||
                   isUpscalingSceneImage ||
                   (!overlayImage && !overlayImageUrl)
@@ -3746,6 +3840,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               {sceneUpscaleStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {sceneUpscaleStatus}
+                </span>
+              ) : null}
+              {sceneVideoStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {sceneVideoStatus}
                 </span>
               ) : null}
               {sceneHasTextStatus ? (
