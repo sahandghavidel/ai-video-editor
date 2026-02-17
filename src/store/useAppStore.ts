@@ -111,6 +111,7 @@ export interface SceneLoadingState {
   speedingUpVideo: number | null;
   generatingVideo: number | null;
   currentlyProcessingVideo: number | null;
+  currentlyProcessingScene: number | null;
   optimizingSilenceVideo: number | null;
   normalizingAudioVideo: number | null;
   normalizingAudio: number | null;
@@ -315,6 +316,7 @@ interface AppState {
   setCreatingTypingEffect: (sceneId: number | null) => void;
   setGeneratingVideo: (sceneId: number | null) => void;
   setCurrentlyProcessingVideo: (videoId: number | null) => void;
+  setCurrentlyProcessingScene: (sceneId: number | null) => void;
   setOptimizingSilenceVideo: (videoId: number | null) => void;
   setNormalizingAudioVideo: (videoId: number | null) => void;
   setNormalizingAudio: (sceneId: number | null) => void;
@@ -459,6 +461,7 @@ const defaultSceneLoading: SceneLoadingState = {
   speedingUpVideo: null,
   generatingVideo: null,
   currentlyProcessingVideo: null,
+  currentlyProcessingScene: null,
   optimizingSilenceVideo: null,
   normalizingAudioVideo: null,
   normalizingAudio: null,
@@ -976,6 +979,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       sceneLoading: {
         ...state.sceneLoading,
         currentlyProcessingVideo: videoId,
+      },
+    })),
+
+  setCurrentlyProcessingScene: (sceneId) =>
+    set((state) => ({
+      sceneLoading: {
+        ...state.sceneLoading,
+        currentlyProcessingScene: sceneId,
       },
     })),
 

@@ -169,9 +169,6 @@ export default function OriginalVideosList({
   const [currentProcessingVideoId, setCurrentProcessingVideoId] = useState<
     number | null
   >(null);
-  const [currentProcessingSceneId, setCurrentProcessingSceneId] = useState<
-    number | null
-  >(null);
   const [generatingAllTTSForAllVideos, setGeneratingAllTTSForAllVideos] =
     useState(false);
   const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
@@ -249,6 +246,7 @@ export default function OriginalVideosList({
     sceneLoading,
     setImprovingSentence,
     setCurrentlyProcessingVideo,
+    setCurrentlyProcessingScene,
     batchOperations,
     startBatchOperation,
     completeBatchOperation,
@@ -3053,6 +3051,16 @@ export default function OriginalVideosList({
     return tokens.join(' ');
   };
 
+  const getProcessingVsLabel = (): string => {
+    const v = sceneLoading.currentlyProcessingVideo;
+    const s = sceneLoading.currentlyProcessingScene;
+
+    if (v !== null && s !== null) return `V${v} · S${s}`;
+    if (s !== null) return `S${s}`;
+    if (v !== null) return `V${v}`;
+    return 'Processing...';
+  };
+
   const handleGenerateSubtitlesForProcessingVideos = async () => {
     const { scenesForProcessingVideos } = await fetchProcessingScenes();
 
@@ -3073,9 +3081,12 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToSubtitle) {
-      setCurrentProcessingSceneId(scene.id);
+      setCurrentlyProcessingScene(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+      }
 
       const finalVideoUrl = getExistingFinalVideoUrl(scene);
       const captionsUrl = String(scene['field_6910'] ?? '').trim();
@@ -3162,7 +3173,8 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
-    setCurrentProcessingSceneId(null);
+    setCurrentlyProcessingVideo(null);
+    setCurrentlyProcessingScene(null);
   };
 
   const getVideoDurationSeconds = async (videoUrl: string): Promise<number> => {
@@ -3221,9 +3233,12 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToImage) {
-      setCurrentProcessingSceneId(scene.id);
+      setCurrentlyProcessingScene(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+      }
 
       try {
         const res = await fetch('/api/generate-scene-image', {
@@ -3244,7 +3259,8 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
-    setCurrentProcessingSceneId(null);
+    setCurrentlyProcessingVideo(null);
+    setCurrentlyProcessingScene(null);
   };
 
   const handleUpscaleSceneImagesForProcessingVideos = async () => {
@@ -3259,9 +3275,12 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToUpscale) {
-      setCurrentProcessingSceneId(scene.id);
+      setCurrentlyProcessingScene(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+      }
 
       try {
         const res = await fetch('/api/upscale-scene-image', {
@@ -3281,7 +3300,8 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
-    setCurrentProcessingSceneId(null);
+    setCurrentlyProcessingVideo(null);
+    setCurrentlyProcessingScene(null);
   };
 
   const handleApplyUpscaledImagesForProcessingVideos = async () => {
@@ -3297,9 +3317,12 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToApply) {
-      setCurrentProcessingSceneId(scene.id);
+      setCurrentlyProcessingScene(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+      }
 
       try {
         const res = await fetch('/api/apply-upscaled-scene-image', {
@@ -3328,7 +3351,8 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
-    setCurrentProcessingSceneId(null);
+    setCurrentlyProcessingVideo(null);
+    setCurrentlyProcessingScene(null);
   };
 
   const handleGenerateSceneVideosForProcessingVideos = async () => {
@@ -3347,9 +3371,12 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToGenerate) {
-      setCurrentProcessingSceneId(scene.id);
+      setCurrentlyProcessingScene(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+      }
 
       // Duration-range check FIRST
       if (sceneVideoGenerationSettings.enableDurationRange) {
@@ -3442,7 +3469,8 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
-    setCurrentProcessingSceneId(null);
+    setCurrentlyProcessingVideo(null);
+    setCurrentlyProcessingScene(null);
   };
 
   const handleEnhanceSceneVideosForProcessingVideos = async () => {
@@ -3466,9 +3494,12 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToEnhance) {
-      setCurrentProcessingSceneId(scene.id);
+      setCurrentlyProcessingScene(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+      }
 
       try {
         const res = await fetch('/api/enhance-scene-video', {
@@ -3494,7 +3525,8 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
-    setCurrentProcessingSceneId(null);
+    setCurrentlyProcessingVideo(null);
+    setCurrentlyProcessingScene(null);
   };
 
   const handleApplyEnhancedVideosForProcessingVideos = async () => {
@@ -3522,9 +3554,12 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToApply) {
-      setCurrentProcessingSceneId(scene.id);
+      setCurrentlyProcessingScene(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+      }
 
       try {
         const res = await fetch('/api/apply-enhanced-scene-video', {
@@ -3553,7 +3588,8 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
-    setCurrentProcessingSceneId(null);
+    setCurrentlyProcessingVideo(null);
+    setCurrentlyProcessingScene(null);
   };
 
   // Optimize Silence for All Original Videos
@@ -6618,9 +6654,7 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {generatingSubtitlesForProcessingVideos
-                          ? currentProcessingSceneId !== null
-                            ? `S${currentProcessingSceneId}`
-                            : 'Processing...'
+                          ? getProcessingVsLabel()
                           : 'Subtitles'}
                       </span>
                     </button>
@@ -6675,9 +6709,7 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {generatingSceneImagesForProcessingVideos
-                          ? currentProcessingSceneId !== null
-                            ? `S${currentProcessingSceneId}`
-                            : 'Processing...'
+                          ? getProcessingVsLabel()
                           : 'Images'}
                       </span>
                     </button>
@@ -6732,9 +6764,7 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {upscalingSceneImagesForProcessingVideos
-                          ? currentProcessingSceneId !== null
-                            ? `S${currentProcessingSceneId}`
-                            : 'Processing...'
+                          ? getProcessingVsLabel()
                           : 'Upscale'}
                       </span>
                     </button>
@@ -6789,9 +6819,7 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {generatingSceneVideosForProcessingVideos
-                          ? currentProcessingSceneId !== null
-                            ? `S${currentProcessingSceneId}`
-                            : 'Processing...'
+                          ? getProcessingVsLabel()
                           : 'Scene Videos'}
                       </span>
                     </button>
@@ -6846,9 +6874,7 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {enhancingSceneVideosForProcessingVideos
-                          ? currentProcessingSceneId !== null
-                            ? `S${currentProcessingSceneId}`
-                            : 'Processing...'
+                          ? getProcessingVsLabel()
                           : 'Enhance Videos'}
                       </span>
                     </button>
@@ -6903,9 +6929,7 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {applyingEnhancedVideosForProcessingVideos
-                          ? currentProcessingSceneId !== null
-                            ? `S${currentProcessingSceneId}`
-                            : 'Processing...'
+                          ? getProcessingVsLabel()
                           : 'Apply Video'}
                       </span>
                     </button>
@@ -6960,9 +6984,7 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {applyingUpscaledImagesForProcessingVideos
-                          ? currentProcessingSceneId !== null
-                            ? `S${currentProcessingSceneId}`
-                            : 'Processing...'
+                          ? getProcessingVsLabel()
                           : 'Apply Image'}
                       </span>
                     </button>
