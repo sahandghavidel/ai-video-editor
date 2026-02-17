@@ -145,6 +145,11 @@ export default function BatchOperations({
   const [applyingUpscaledImageSceneId, setApplyingUpscaledImageSceneId] =
     useState<number | null>(null);
 
+  const [applyingAllEnhancedVideos, setApplyingAllEnhancedVideos] =
+    useState(false);
+  const [applyingEnhancedVideoSceneId, setApplyingEnhancedVideoSceneId] =
+    useState<number | null>(null);
+
   const [promptingAllScenes, setPromptingAllScenes] = useState(false);
   const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
 
@@ -675,6 +680,35 @@ export default function BatchOperations({
     return String(raw).trim();
   };
 
+  const getExistingEnhancedSceneVideoUrl = (scene: BaserowRow): string => {
+    const raw =
+      scene['field_7098'] ??
+      (scene as unknown as { field_7098?: unknown }).field_7098;
+
+    if (typeof raw === 'string') return raw.trim();
+    if (!raw) return '';
+
+    // If this ever becomes a Baserow "file" field, it may come back as an array of objects.
+    if (Array.isArray(raw) && raw.length > 0) {
+      const first = raw[0] as unknown;
+      if (typeof first === 'string') return first.trim();
+      if (first && typeof first === 'object') {
+        const obj = first as Record<string, unknown>;
+        const url = obj.url ?? obj.file ?? obj.link;
+        if (typeof url === 'string') return url.trim();
+      }
+      return '';
+    }
+
+    if (typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const url = obj.url ?? obj.file ?? obj.link;
+      if (typeof url === 'string') return url.trim();
+    }
+
+    return String(raw).trim();
+  };
+
   const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {
     const finalUrl = getExistingFinalVideoUrl(scene);
     if (!finalUrl) return false;
@@ -874,6 +908,85 @@ export default function BatchOperations({
     } finally {
       setApplyingAllUpscaledImages(false);
       setApplyingUpscaledImageSceneId(null);
+    }
+  };
+
+  const onApplyEnhancedVideosAll = async () => {
+    if (applyingAllEnhancedVideos) return;
+
+    const scenesToApply = [...data]
+      .filter((scene) => {
+        // Must have a final video URL to apply onto
+        const finalUrl = getExistingFinalVideoUrl(scene);
+        if (!finalUrl) return false;
+
+        // Must have an enhanced scene video URL (field_7098)
+        const enhancedUrl = getExistingEnhancedSceneVideoUrl(scene);
+        if (!enhancedUrl) return false;
+        if (
+          !(
+            enhancedUrl.startsWith('http://') ||
+            enhancedUrl.startsWith('https://')
+          )
+        ) {
+          return false;
+        }
+
+        // Match the API heuristic: we only apply videos that look enhanced.
+        if (!enhancedUrl.includes('_enhanced_')) return false;
+
+        // Skip if already applied (image or video)
+        if (sceneAlreadyAppliedOutput(scene)) return false;
+
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToApply.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setApplyingAllEnhancedVideos(true);
+    setApplyingEnhancedVideoSceneId(null);
+
+    try {
+      for (const scene of scenesToApply) {
+        setApplyingEnhancedVideoSceneId(scene.id);
+
+        try {
+          const res = await fetch('/api/apply-enhanced-scene-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneId: scene.id }),
+          });
+
+          // The API returns 409 when already applied; treat as a skip.
+          if (res.status === 409) {
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Apply video failed (${res.status}) ${t}`);
+          }
+        } catch (error) {
+          console.error(
+            `Apply enhanced video failed for scene ${scene.id}:`,
+            error,
+          );
+        }
+
+        // Gentle pacing (each apply may take a while)
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setApplyingAllEnhancedVideos(false);
+      setApplyingEnhancedVideoSceneId(null);
     }
   };
 
@@ -1798,6 +1911,46 @@ export default function BatchOperations({
                   {applyingAllUpscaledImages
                     ? applyingUpscaledImageSceneId
                       ? `Scene #${applyingUpscaledImageSceneId}`
+                      : 'Processing...'
+                    : 'Apply All'}
+                </span>
+              </button>
+            </div>
+
+            {/* Apply Enhanced Videos */}
+            <div className='bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-indigo-500 rounded-lg flex items-center gap-1'>
+                  <Film className='w-4 h-4 text-white' />
+                  <span className='text-white text-xs font-bold'>VID</span>
+                </div>
+                <h3 className='font-semibold text-indigo-900'>Apply Video</h3>
+              </div>
+              <p className='text-sm text-indigo-800 mb-4 leading-relaxed'>
+                Apply “Video for Scene” (7098) on top of the current final video
+                (6886) for all scenes where the scene video looks enhanced
+                (filename contains “_enhanced_”). Skips scenes that are already
+                applied.
+              </p>
+              <button
+                onClick={onApplyEnhancedVideosAll}
+                disabled={applyingAllEnhancedVideos}
+                className='w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  applyingAllEnhancedVideos
+                    ? applyingEnhancedVideoSceneId
+                      ? `Applying enhanced video for scene ${applyingEnhancedVideoSceneId}`
+                      : 'Applying enhanced videos for all scenes...'
+                    : 'Apply enhanced videos for all scenes'
+                }
+              >
+                {applyingAllEnhancedVideos && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {applyingAllEnhancedVideos
+                    ? applyingEnhancedVideoSceneId
+                      ? `Scene #${applyingEnhancedVideoSceneId}`
                       : 'Processing...'
                     : 'Apply All'}
                 </span>
