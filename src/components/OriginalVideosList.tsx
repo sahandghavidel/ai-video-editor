@@ -169,6 +169,9 @@ export default function OriginalVideosList({
   const [currentProcessingVideoId, setCurrentProcessingVideoId] = useState<
     number | null
   >(null);
+  const [currentProcessingSceneId, setCurrentProcessingSceneId] = useState<
+    number | null
+  >(null);
   const [generatingAllTTSForAllVideos, setGeneratingAllTTSForAllVideos] =
     useState(false);
   const [speedingUpAllVideos, setSpeedingUpAllVideos] = useState(false);
@@ -186,6 +189,34 @@ export default function OriginalVideosList({
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
   const [pipelineStep, setPipelineStep] = useState<string>('');
+  const [
+    generatingSubtitlesForProcessingVideos,
+    setGeneratingSubtitlesForProcessingVideos,
+  ] = useState(false);
+  const [
+    generatingSceneImagesForProcessingVideos,
+    setGeneratingSceneImagesForProcessingVideos,
+  ] = useState(false);
+  const [
+    upscalingSceneImagesForProcessingVideos,
+    setUpscalingSceneImagesForProcessingVideos,
+  ] = useState(false);
+  const [
+    generatingSceneVideosForProcessingVideos,
+    setGeneratingSceneVideosForProcessingVideos,
+  ] = useState(false);
+  const [
+    enhancingSceneVideosForProcessingVideos,
+    setEnhancingSceneVideosForProcessingVideos,
+  ] = useState(false);
+  const [
+    applyingEnhancedVideosForProcessingVideos,
+    setApplyingEnhancedVideosForProcessingVideos,
+  ] = useState(false);
+  const [
+    applyingUpscaledImagesForProcessingVideos,
+    setApplyingUpscaledImagesForProcessingVideos,
+  ] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false); // Collapsible state - collapsed by default
   const [isBatchOperationsExpanded, setIsBatchOperationsExpanded] =
     useState(false); // Batch operations collapsed by default
@@ -3042,6 +3073,7 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToSubtitle) {
+      setCurrentProcessingSceneId(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
       if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
 
@@ -3130,6 +3162,7 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
+    setCurrentProcessingSceneId(null);
   };
 
   const getVideoDurationSeconds = async (videoUrl: string): Promise<number> => {
@@ -3188,6 +3221,7 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToImage) {
+      setCurrentProcessingSceneId(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
       if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
 
@@ -3210,6 +3244,7 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
+    setCurrentProcessingSceneId(null);
   };
 
   const handleUpscaleSceneImagesForProcessingVideos = async () => {
@@ -3224,6 +3259,7 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToUpscale) {
+      setCurrentProcessingSceneId(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
       if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
 
@@ -3245,6 +3281,7 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
+    setCurrentProcessingSceneId(null);
   };
 
   const handleApplyUpscaledImagesForProcessingVideos = async () => {
@@ -3260,6 +3297,7 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToApply) {
+      setCurrentProcessingSceneId(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
       if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
 
@@ -3290,6 +3328,7 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
+    setCurrentProcessingSceneId(null);
   };
 
   const handleGenerateSceneVideosForProcessingVideos = async () => {
@@ -3308,6 +3347,7 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToGenerate) {
+      setCurrentProcessingSceneId(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
       if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
 
@@ -3402,6 +3442,7 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
+    setCurrentProcessingSceneId(null);
   };
 
   const handleEnhanceSceneVideosForProcessingVideos = async () => {
@@ -3425,6 +3466,7 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToEnhance) {
+      setCurrentProcessingSceneId(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
       if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
 
@@ -3452,6 +3494,7 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
+    setCurrentProcessingSceneId(null);
   };
 
   const handleApplyEnhancedVideosForProcessingVideos = async () => {
@@ -3479,6 +3522,7 @@ export default function OriginalVideosList({
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 
     for (const scene of scenesToApply) {
+      setCurrentProcessingSceneId(scene.id);
       const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
       if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
 
@@ -3509,6 +3553,7 @@ export default function OriginalVideosList({
     }
 
     setCurrentProcessingVideoId(null);
+    setCurrentProcessingSceneId(null);
   };
 
   // Optimize Silence for All Original Videos
@@ -5709,7 +5754,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations
                 </h3>
-                <span className='text-xs text-gray-500'>({13} actions)</span>
+                <span className='text-xs text-gray-500'>({29} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -6519,6 +6564,406 @@ export default function OriginalVideosList({
                             ? `V${currentProcessingVideoId}`
                             : 'Processing...'
                           : 'Prompt Scenes'}
+                      </span>
+                    </button>
+
+                    {/* Scene-level Operations (Processing only) */}
+                    {/* Subtitles (Scenes) */}
+                    <button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setGeneratingSubtitlesForProcessingVideos(true);
+                            setError(null);
+                            await handleGenerateSubtitlesForProcessingVideos();
+                            await handleRefresh();
+                            if (refreshScenesData) refreshScenesData();
+                            playSuccessSound();
+                          } catch (error) {
+                            console.error(
+                              'Batch subtitles (Processing scenes) failed:',
+                              error,
+                            );
+                            playErrorSound();
+                            setError(
+                              `Failed to generate subtitles for Processing scenes: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Unknown error'
+                              }`,
+                            );
+                          } finally {
+                            setGeneratingSubtitlesForProcessingVideos(false);
+                          }
+                        })()
+                      }
+                      disabled={
+                        generatingSubtitlesForProcessingVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title='Generate subtitles for final scene videos in Processing videos (skips already-subtitled scenes)'
+                    >
+                      <Subtitles
+                        className={`w-4 h-4 ${
+                          generatingSubtitlesForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingSubtitlesForProcessingVideos
+                          ? currentProcessingSceneId !== null
+                            ? `S${currentProcessingSceneId}`
+                            : 'Processing...'
+                          : 'Subtitles'}
+                      </span>
+                    </button>
+
+                    {/* Images (Scenes) */}
+                    <button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setGeneratingSceneImagesForProcessingVideos(true);
+                            setError(null);
+                            await handleGenerateSceneImagesForProcessingVideos();
+                            await handleRefresh();
+                            if (refreshScenesData) refreshScenesData();
+                            playSuccessSound();
+                          } catch (error) {
+                            console.error(
+                              'Batch scene images (Processing scenes) failed:',
+                              error,
+                            );
+                            playErrorSound();
+                            setError(
+                              `Failed to generate scene images for Processing scenes: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Unknown error'
+                              }`,
+                            );
+                          } finally {
+                            setGeneratingSceneImagesForProcessingVideos(false);
+                          }
+                        })()
+                      }
+                      disabled={
+                        generatingSceneImagesForProcessingVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title='Generate missing scene images for Processing scenes (skips scenes with subtitles in URL)'
+                    >
+                      <Grid3x3
+                        className={`w-4 h-4 ${
+                          generatingSceneImagesForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingSceneImagesForProcessingVideos
+                          ? currentProcessingSceneId !== null
+                            ? `S${currentProcessingSceneId}`
+                            : 'Processing...'
+                          : 'Images'}
+                      </span>
+                    </button>
+
+                    {/* Upscale (Images) */}
+                    <button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setUpscalingSceneImagesForProcessingVideos(true);
+                            setError(null);
+                            await handleUpscaleSceneImagesForProcessingVideos();
+                            await handleRefresh();
+                            if (refreshScenesData) refreshScenesData();
+                            playSuccessSound();
+                          } catch (error) {
+                            console.error(
+                              'Batch upscale images (Processing scenes) failed:',
+                              error,
+                            );
+                            playErrorSound();
+                            setError(
+                              `Failed to upscale images for Processing scenes: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Unknown error'
+                              }`,
+                            );
+                          } finally {
+                            setUpscalingSceneImagesForProcessingVideos(false);
+                          }
+                        })()
+                      }
+                      disabled={
+                        upscalingSceneImagesForProcessingVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title='Upscale scene images for Processing scenes (only when original image exists and upscaled is missing)'
+                    >
+                      <Zap
+                        className={`w-4 h-4 ${
+                          upscalingSceneImagesForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {upscalingSceneImagesForProcessingVideos
+                          ? currentProcessingSceneId !== null
+                            ? `S${currentProcessingSceneId}`
+                            : 'Processing...'
+                          : 'Upscale'}
+                      </span>
+                    </button>
+
+                    {/* Scene Videos */}
+                    <button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setGeneratingSceneVideosForProcessingVideos(true);
+                            setError(null);
+                            await handleGenerateSceneVideosForProcessingVideos();
+                            await handleRefresh();
+                            if (refreshScenesData) refreshScenesData();
+                            playSuccessSound();
+                          } catch (error) {
+                            console.error(
+                              'Batch scene videos (Processing scenes) failed:',
+                              error,
+                            );
+                            playErrorSound();
+                            setError(
+                              `Failed to generate scene videos for Processing scenes: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Unknown error'
+                              }`,
+                            );
+                          } finally {
+                            setGeneratingSceneVideosForProcessingVideos(false);
+                          }
+                        })()
+                      }
+                      disabled={
+                        generatingSceneVideosForProcessingVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title='Generate missing scene videos for Processing scenes (uses duration-range and text-detection settings)'
+                    >
+                      <Video
+                        className={`w-4 h-4 ${
+                          generatingSceneVideosForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingSceneVideosForProcessingVideos
+                          ? currentProcessingSceneId !== null
+                            ? `S${currentProcessingSceneId}`
+                            : 'Processing...'
+                          : 'Scene Videos'}
+                      </span>
+                    </button>
+
+                    {/* Enhance Videos */}
+                    <button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setEnhancingSceneVideosForProcessingVideos(true);
+                            setError(null);
+                            await handleEnhanceSceneVideosForProcessingVideos();
+                            await handleRefresh();
+                            if (refreshScenesData) refreshScenesData();
+                            playSuccessSound();
+                          } catch (error) {
+                            console.error(
+                              'Batch enhance videos (Processing scenes) failed:',
+                              error,
+                            );
+                            playErrorSound();
+                            setError(
+                              `Failed to enhance scene videos for Processing scenes: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Unknown error'
+                              }`,
+                            );
+                          } finally {
+                            setEnhancingSceneVideosForProcessingVideos(false);
+                          }
+                        })()
+                      }
+                      disabled={
+                        enhancingSceneVideosForProcessingVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title='Enhance (RVE) scene videos for Processing scenes (skips already enhanced URLs)'
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          enhancingSceneVideosForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {enhancingSceneVideosForProcessingVideos
+                          ? currentProcessingSceneId !== null
+                            ? `S${currentProcessingSceneId}`
+                            : 'Processing...'
+                          : 'Enhance Videos'}
+                      </span>
+                    </button>
+
+                    {/* Apply Video */}
+                    <button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setApplyingEnhancedVideosForProcessingVideos(true);
+                            setError(null);
+                            await handleApplyEnhancedVideosForProcessingVideos();
+                            await handleRefresh();
+                            if (refreshScenesData) refreshScenesData();
+                            playSuccessSound();
+                          } catch (error) {
+                            console.error(
+                              'Batch apply enhanced videos (Processing scenes) failed:',
+                              error,
+                            );
+                            playErrorSound();
+                            setError(
+                              `Failed to apply enhanced videos for Processing scenes: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Unknown error'
+                              }`,
+                            );
+                          } finally {
+                            setApplyingEnhancedVideosForProcessingVideos(false);
+                          }
+                        })()
+                      }
+                      disabled={
+                        applyingEnhancedVideosForProcessingVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title='Apply enhanced scene videos onto final scene videos for Processing scenes'
+                    >
+                      <CheckCircle
+                        className={`w-4 h-4 ${
+                          applyingEnhancedVideosForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {applyingEnhancedVideosForProcessingVideos
+                          ? currentProcessingSceneId !== null
+                            ? `S${currentProcessingSceneId}`
+                            : 'Processing...'
+                          : 'Apply Video'}
+                      </span>
+                    </button>
+
+                    {/* Apply Image */}
+                    <button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setApplyingUpscaledImagesForProcessingVideos(true);
+                            setError(null);
+                            await handleApplyUpscaledImagesForProcessingVideos();
+                            await handleRefresh();
+                            if (refreshScenesData) refreshScenesData();
+                            playSuccessSound();
+                          } catch (error) {
+                            console.error(
+                              'Batch apply upscaled images (Processing scenes) failed:',
+                              error,
+                            );
+                            playErrorSound();
+                            setError(
+                              `Failed to apply upscaled images for Processing scenes: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Unknown error'
+                              }`,
+                            );
+                          } finally {
+                            setApplyingUpscaledImagesForProcessingVideos(false);
+                          }
+                        })()
+                      }
+                      disabled={
+                        applyingUpscaledImagesForProcessingVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title='Apply upscaled scene images onto final scene videos for Processing scenes'
+                    >
+                      <Check
+                        className={`w-4 h-4 ${
+                          applyingUpscaledImagesForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {applyingUpscaledImagesForProcessingVideos
+                          ? currentProcessingSceneId !== null
+                            ? `S${currentProcessingSceneId}`
+                            : 'Processing...'
+                          : 'Apply Image'}
                       </span>
                     </button>
 
