@@ -163,6 +163,15 @@ export interface PipelineConfig {
   sync: boolean;
   transcribeScenesAfterSync: boolean;
   promptScenesAfterTranscribe: boolean;
+
+  // Scene-level post-processing (batch ops)
+  generateSubtitles: boolean;
+  generateSceneImages: boolean;
+  upscaleSceneImages: boolean;
+  applyUpscaledImages: boolean;
+  generateSceneVideos: boolean;
+  enhanceSceneVideos: boolean;
+  applyEnhancedVideos: boolean;
 }
 
 // Audio enhancement mode type
@@ -480,7 +489,9 @@ const defaultClipGeneration: ClipGenerationState = {
   generatingSingleClip: null,
 };
 
-// Default pipeline configuration (all steps enabled by default)
+// Default pipeline configuration.
+// Keep existing pipeline behavior by enabling the original steps by default.
+// New, heavier scene-level steps are opt-in.
 const defaultPipelineConfig: PipelineConfig = {
   ttsScript: true,
   ttsVideo: true,
@@ -497,6 +508,14 @@ const defaultPipelineConfig: PipelineConfig = {
   sync: true,
   transcribeScenesAfterSync: true,
   promptScenesAfterTranscribe: true,
+
+  generateSubtitles: false,
+  generateSceneImages: false,
+  upscaleSceneImages: false,
+  applyUpscaledImages: false,
+  generateSceneVideos: false,
+  enhanceSceneVideos: false,
+  applyEnhancedVideos: false,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({

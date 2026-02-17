@@ -69,6 +69,43 @@ export default function PipelineConfig() {
       label: 'Prompt Scenes',
       color: 'text-indigo-500',
     },
+
+    // Scene-level post-processing (batch ops)
+    {
+      key: 'generateSubtitles' as const,
+      label: 'Subtitles',
+      color: 'text-indigo-500',
+    },
+    {
+      key: 'generateSceneImages' as const,
+      label: 'Images',
+      color: 'text-purple-500',
+    },
+    {
+      key: 'upscaleSceneImages' as const,
+      label: 'Upscale',
+      color: 'text-emerald-500',
+    },
+    {
+      key: 'generateSceneVideos' as const,
+      label: 'Scene Videos',
+      color: 'text-blue-500',
+    },
+    {
+      key: 'enhanceSceneVideos' as const,
+      label: 'Enhance Videos',
+      color: 'text-pink-500',
+    },
+    {
+      key: 'applyEnhancedVideos' as const,
+      label: 'Apply Video',
+      color: 'text-yellow-500',
+    },
+    {
+      key: 'applyUpscaledImages' as const,
+      label: 'Apply Image',
+      color: 'text-cyan-500',
+    },
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);

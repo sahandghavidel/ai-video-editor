@@ -212,6 +212,7 @@ export default function OriginalVideosList({
     clearMergedVideo,
     transcriptionSettings,
     deletionSettings,
+    subtitleGenerationSettings,
     data: allScenesData,
     modelSelection,
     sceneLoading,
@@ -228,6 +229,7 @@ export default function OriginalVideosList({
     setConvertingToCFRVideo,
     setConvertingFinalToCFRVideo,
     videoSettings,
+    sceneVideoGenerationSettings,
     pipelineConfig,
     silenceSpeedRate,
     silenceMuted,
@@ -2829,6 +2831,686 @@ export default function OriginalVideosList({
     }
   };
 
+  // ------------------------------
+  // Scene-level batch ops (Processing-only) for pipeline integration
+  // ------------------------------
+
+  const extractLinkedVideoIdFromScene = (
+    videoIdField: unknown,
+  ): number | null => {
+    if (typeof videoIdField === 'number') return videoIdField;
+
+    if (typeof videoIdField === 'string') {
+      const parsed = parseInt(videoIdField, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+      const first = videoIdField[0];
+
+      if (typeof first === 'number') return first;
+      if (typeof first === 'string') {
+        const parsed = parseInt(first, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      if (typeof first === 'object' && first !== null) {
+        const rec = first as Record<string, unknown>;
+        const candidate = rec.id ?? rec.value;
+        const parsed = parseInt(String(candidate ?? ''), 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+    }
+
+    if (typeof videoIdField === 'object' && videoIdField !== null) {
+      const rec = videoIdField as Record<string, unknown>;
+      const candidate = rec.id ?? rec.value;
+      const parsed = parseInt(String(candidate ?? ''), 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  };
+
+  const fetchProcessingScenes = async (): Promise<{
+    processingVideoIds: Set<number>;
+    scenesForProcessingVideos: BaserowRow[];
+  }> => {
+    const freshVideosData = await getOriginalVideosData();
+    const freshScenesData = await getBaserowData();
+
+    const processingVideos = freshVideosData.filter((video) => {
+      const status = extractFieldValue(video.field_6864);
+      return status === 'Processing';
+    });
+
+    const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+
+    const scenesForProcessingVideos = (freshScenesData || []).filter(
+      (scene) => {
+        const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+        return Boolean(
+          videoId && !isNaN(videoId) && processingVideoIds.has(videoId),
+        );
+      },
+    );
+
+    return { processingVideoIds, scenesForProcessingVideos };
+  };
+
+  const extractUrlFromSceneField = (raw: unknown): string => {
+    if (typeof raw === 'string') return raw.trim();
+    if (!raw) return '';
+
+    if (Array.isArray(raw) && raw.length > 0) {
+      const first = raw[0] as unknown;
+      return extractUrlFromSceneField(first);
+    }
+
+    if (typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const url = obj.url ?? (obj.file as { url?: unknown } | undefined)?.url;
+      if (typeof url === 'string') return url.trim();
+    }
+
+    return String(raw).trim();
+  };
+
+  const getExistingSceneImageUrl = (scene: BaserowRow): string =>
+    extractUrlFromSceneField(scene['field_7094']);
+
+  const getExistingUpscaledSceneImageUrl = (scene: BaserowRow): string =>
+    extractUrlFromSceneField(scene['field_7095']);
+
+  const getExistingFinalVideoUrl = (scene: BaserowRow): string =>
+    extractUrlFromSceneField(scene['field_6886']);
+
+  const getExistingSceneVideoUrl = (scene: BaserowRow): string =>
+    extractUrlFromSceneField(scene['field_7098']);
+
+  const getSceneHasText = (scene: BaserowRow): boolean | null => {
+    const raw = scene['field_7097'];
+
+    const parseBoolish = (v: unknown): boolean | null => {
+      if (v === true) return true;
+      if (v === false) return false;
+      if (v === null || v === undefined || v === '') return null;
+
+      if (typeof v === 'number') {
+        if (!Number.isFinite(v)) return null;
+        if (v === 1) return true;
+        if (v === 0) return false;
+        return null;
+      }
+
+      if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        if (!s) return null;
+        if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+        if (s === 'false' || s === '0' || s === 'no' || s === 'off')
+          return false;
+        return null;
+      }
+
+      if (Array.isArray(v)) {
+        if (v.length === 0) return null;
+        const parsed = v.map(parseBoolish);
+        if (parsed.some((x) => x === true)) return true;
+        if (parsed.every((x) => x === false)) return false;
+        return null;
+      }
+
+      if (typeof v === 'object') {
+        const obj = v as Record<string, unknown>;
+        const candidate =
+          obj.value ?? obj.name ?? obj.text ?? obj.title ?? obj.label;
+        return parseBoolish(candidate);
+      }
+
+      return null;
+    };
+
+    return parseBoolish(raw);
+  };
+
+  const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {
+    const finalUrl = getExistingFinalVideoUrl(scene);
+    if (!finalUrl) return false;
+
+    try {
+      const pathname = new URL(finalUrl).pathname;
+      const filename = pathname.split('/').filter(Boolean).pop() ?? '';
+      if (!filename) return false;
+      const direct = new RegExp(`(^|_)scene_${scene.id}_applied_`, 'i');
+      return direct.test(filename);
+    } catch {
+      return false;
+    }
+  };
+
+  const sceneHasSubtitleInUrl = (scene: BaserowRow): boolean => {
+    const finalVideoUrl = getExistingFinalVideoUrl(scene);
+    return finalVideoUrl.toLowerCase().includes('subtitle');
+  };
+
+  const withCacheBust = (url: string) => {
+    const u = String(url || '').trim();
+    if (!u) return u;
+
+    const lower = u.toLowerCase();
+    const looksSigned =
+      lower.includes('x-amz-signature=') ||
+      lower.includes('x-amz-algorithm=') ||
+      lower.includes('x-amz-credential=') ||
+      lower.includes('signature=') ||
+      lower.includes('x-goog-signature=');
+    if (looksSigned) return u;
+
+    const sep = u.includes('?') ? '&' : '?';
+    return `${u}${sep}t=${Date.now()}`;
+  };
+
+  const buildTranscriptionTextForCharCount = (words: unknown[]): string => {
+    const tokens = words
+      .map((w) => {
+        if (!w || typeof w !== 'object') return '';
+        const maybeWord = (w as { word?: unknown }).word;
+        return typeof maybeWord === 'string' ? maybeWord.trim() : '';
+      })
+      .filter(Boolean);
+
+    return tokens.join(' ');
+  };
+
+  const handleGenerateSubtitlesForProcessingVideos = async () => {
+    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+    const scenesToSubtitle = [...scenesForProcessingVideos]
+      .filter((scene) => {
+        const finalVideoUrl = getExistingFinalVideoUrl(scene);
+        const captionsUrl = String(scene['field_6910'] ?? '').trim();
+        if (!finalVideoUrl || !captionsUrl) return false;
+
+        // Skip if already has subtitles by URL naming
+        if (sceneHasSubtitleInUrl(scene)) return false;
+
+        const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+        if (!videoId || isNaN(videoId)) return false;
+
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    for (const scene of scenesToSubtitle) {
+      const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+
+      const finalVideoUrl = getExistingFinalVideoUrl(scene);
+      const captionsUrl = String(scene['field_6910'] ?? '').trim();
+      const sentenceText = String(scene['field_6890'] ?? '').trim();
+      if (!finalVideoUrl || !captionsUrl || !videoId) continue;
+
+      let transcriptionWords: unknown = null;
+      try {
+        const capRes = await fetch(withCacheBust(captionsUrl), {
+          cache: 'no-store',
+        });
+        if (capRes.ok) {
+          transcriptionWords = await capRes.json();
+        }
+      } catch (error) {
+        console.error(`Failed to fetch captions for scene ${scene.id}:`, error);
+        transcriptionWords = null;
+      }
+
+      if (
+        !Array.isArray(transcriptionWords) ||
+        transcriptionWords.length === 0
+      ) {
+        console.warn(
+          `Skipping scene ${scene.id}: missing/empty transcription words`,
+        );
+        await new Promise((r) => setTimeout(r, 150));
+        continue;
+      }
+
+      if (subtitleGenerationSettings.enableCharLimit) {
+        const maxChars = Math.max(
+          1,
+          Math.floor(subtitleGenerationSettings.maxChars),
+        );
+        const textForCharCount =
+          sentenceText ||
+          buildTranscriptionTextForCharCount(transcriptionWords);
+        const charCount = textForCharCount.length;
+
+        // strictly "less than" to match existing batch behavior
+        if (charCount >= maxChars) {
+          console.log(
+            `Skipping scene ${scene.id}: scene text has ${charCount} chars (limit < ${maxChars})`,
+          );
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+      }
+
+      try {
+        const res = await fetch('/api/create-subtitle-highlight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            videoId,
+            sceneId: scene.id,
+            videoUrl: finalVideoUrl,
+            transcriptionWords,
+            displayText: sentenceText,
+            position: {
+              x: subtitleGenerationSettings.positionXPercent,
+              y: subtitleGenerationSettings.positionYPercent,
+            },
+            size: { height: subtitleGenerationSettings.sizeHeightPercent },
+            fontFamily: subtitleGenerationSettings.fontFamily,
+            uppercase: true,
+          }),
+        });
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Subtitle generation failed (${res.status}) ${t}`);
+        }
+      } catch (error) {
+        console.error(
+          `Subtitle generation failed for scene ${scene.id}:`,
+          error,
+        );
+      }
+
+      // gentle pacing
+      await new Promise((r) => setTimeout(r, 300));
+    }
+
+    setCurrentProcessingVideoId(null);
+  };
+
+  const getVideoDurationSeconds = async (videoUrl: string): Promise<number> => {
+    const res = await fetch('/api/get-video-duration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoUrl }),
+    });
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Duration probe failed (${res.status}) ${t}`);
+    }
+
+    const data = (await res.json().catch(() => null)) as {
+      duration?: unknown;
+    } | null;
+
+    const d =
+      typeof data?.duration === 'number'
+        ? data.duration
+        : Number.isFinite(Number(data?.duration))
+          ? Number(data?.duration)
+          : Number.NaN;
+    if (!Number.isFinite(d) || d <= 0) throw new Error('Invalid duration');
+    return d;
+  };
+
+  const detectHasTextForImageUrl = async (
+    imageUrl: string,
+  ): Promise<{ hasText: boolean }> => {
+    const res = await fetch('/api/detect-text-in-image?accurate=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Text detect failed (${res.status}) ${t}`);
+    }
+    const data = (await res.json().catch(() => null)) as { hasText?: unknown };
+    return { hasText: Boolean(data?.hasText) };
+  };
+
+  const handleGenerateSceneImagesForProcessingVideos = async () => {
+    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+    const scenesToImage = [...scenesForProcessingVideos]
+      .filter((scene) => {
+        if (getExistingSceneImageUrl(scene)) return false;
+        if (sceneHasSubtitleInUrl(scene)) return false;
+
+        const sentenceText = String(scene['field_6890'] ?? '').trim();
+        return Boolean(sentenceText);
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    for (const scene of scenesToImage) {
+      const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+
+      try {
+        const res = await fetch('/api/generate-scene-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId: scene.id }),
+        });
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Image generation failed (${res.status}) ${t}`);
+        }
+      } catch (error) {
+        console.error(`Image generation failed for scene ${scene.id}:`, error);
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    setCurrentProcessingVideoId(null);
+  };
+
+  const handleUpscaleSceneImagesForProcessingVideos = async () => {
+    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+    const scenesToUpscale = [...scenesForProcessingVideos]
+      .filter((scene) => {
+        if (!getExistingSceneImageUrl(scene)) return false;
+        if (getExistingUpscaledSceneImageUrl(scene)) return false;
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    for (const scene of scenesToUpscale) {
+      const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+
+      try {
+        const res = await fetch('/api/upscale-scene-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId: scene.id, scale: 3 }),
+        });
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Upscale failed (${res.status}) ${t}`);
+        }
+      } catch (error) {
+        console.error(`Upscale failed for scene ${scene.id}:`, error);
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    setCurrentProcessingVideoId(null);
+  };
+
+  const handleApplyUpscaledImagesForProcessingVideos = async () => {
+    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+    const scenesToApply = [...scenesForProcessingVideos]
+      .filter((scene) => {
+        if (!getExistingUpscaledSceneImageUrl(scene)) return false;
+        if (!getExistingFinalVideoUrl(scene)) return false;
+        if (sceneAlreadyAppliedOutput(scene)) return false;
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    for (const scene of scenesToApply) {
+      const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+
+      try {
+        const res = await fetch('/api/apply-upscaled-scene-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId: scene.id }),
+        });
+
+        if (res.status === 409) {
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Apply image failed (${res.status}) ${t}`);
+        }
+      } catch (error) {
+        console.error(
+          `Apply upscaled image failed for scene ${scene.id}:`,
+          error,
+        );
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    setCurrentProcessingVideoId(null);
+  };
+
+  const handleGenerateSceneVideosForProcessingVideos = async () => {
+    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+    const scenesToGenerate = [...scenesForProcessingVideos]
+      .filter((scene) => {
+        const imgUrl = getExistingSceneImageUrl(scene);
+        if (!imgUrl) return false;
+
+        const existing = getExistingSceneVideoUrl(scene);
+        if (existing) return false;
+
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    for (const scene of scenesToGenerate) {
+      const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+
+      // Duration-range check FIRST
+      if (sceneVideoGenerationSettings.enableDurationRange) {
+        const finalUrl = getExistingFinalVideoUrl(scene);
+        if (!finalUrl) {
+          await new Promise((r) => setTimeout(r, 50));
+          continue;
+        }
+
+        try {
+          const d = await getVideoDurationSeconds(finalUrl);
+          const min = sceneVideoGenerationSettings.minDurationSec;
+          const max = sceneVideoGenerationSettings.maxDurationSec;
+
+          if (typeof min === 'number' && Number.isFinite(min) && d < min) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+          if (typeof max === 'number' && Number.isFinite(max) && d > max) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+        } catch (error) {
+          console.error(`Duration check failed for scene ${scene.id}:`, error);
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+      }
+
+      // Only generate when image has NO text
+      if (sceneVideoGenerationSettings.onlyGenerateIfNoText) {
+        const storedHasText = getSceneHasText(scene);
+        if (storedHasText === true) {
+          await new Promise((r) => setTimeout(r, 50));
+          continue;
+        }
+
+        const imgUrl = getExistingSceneImageUrl(scene);
+        if (!imgUrl) {
+          await new Promise((r) => setTimeout(r, 50));
+          continue;
+        }
+
+        try {
+          const { hasText } = await detectHasTextForImageUrl(imgUrl);
+          if (hasText) {
+            try {
+              await fetch(`/api/baserow/scenes/${scene.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field_7097: 'true' }),
+              });
+            } catch {
+              // best-effort only
+            }
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+        } catch (error) {
+          console.error(`Text detection failed for scene ${scene.id}:`, error);
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+      }
+
+      try {
+        const res = await fetch('/api/generate-scene-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId: scene.id }),
+        });
+
+        if (res.status === 409) {
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Scene video generation failed (${res.status}) ${t}`);
+        }
+      } catch (error) {
+        console.error(
+          `Scene video generation failed for scene ${scene.id}:`,
+          error,
+        );
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    setCurrentProcessingVideoId(null);
+  };
+
+  const handleEnhanceSceneVideosForProcessingVideos = async () => {
+    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+    const scenesToEnhance = [...scenesForProcessingVideos]
+      .filter((scene) => {
+        const sceneVideoUrl = getExistingSceneVideoUrl(scene);
+        if (!sceneVideoUrl) return false;
+        if (
+          !(
+            sceneVideoUrl.startsWith('http://') ||
+            sceneVideoUrl.startsWith('https://')
+          )
+        ) {
+          return false;
+        }
+        if (sceneVideoUrl.includes('_enhanced_')) return false;
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    for (const scene of scenesToEnhance) {
+      const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+
+      try {
+        const res = await fetch('/api/enhance-scene-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId: scene.id }),
+        });
+
+        if (res.status === 409) {
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Enhance failed (${res.status}) ${t}`);
+        }
+      } catch (error) {
+        console.error(`Enhance failed for scene ${scene.id}:`, error);
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    setCurrentProcessingVideoId(null);
+  };
+
+  const handleApplyEnhancedVideosForProcessingVideos = async () => {
+    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+    const scenesToApply = [...scenesForProcessingVideos]
+      .filter((scene) => {
+        const finalUrl = getExistingFinalVideoUrl(scene);
+        if (!finalUrl) return false;
+
+        const enhancedUrl = getExistingSceneVideoUrl(scene);
+        if (!enhancedUrl) return false;
+        if (
+          !(
+            enhancedUrl.startsWith('http://') ||
+            enhancedUrl.startsWith('https://')
+          )
+        ) {
+          return false;
+        }
+        if (!enhancedUrl.includes('_enhanced_')) return false;
+        if (sceneAlreadyAppliedOutput(scene)) return false;
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    for (const scene of scenesToApply) {
+      const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) setCurrentProcessingVideoId(videoId);
+
+      try {
+        const res = await fetch('/api/apply-enhanced-scene-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId: scene.id }),
+        });
+
+        if (res.status === 409) {
+          await new Promise((r) => setTimeout(r, 150));
+          continue;
+        }
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`Apply video failed (${res.status}) ${t}`);
+        }
+      } catch (error) {
+        console.error(
+          `Apply enhanced video failed for scene ${scene.id}:`,
+          error,
+        );
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    setCurrentProcessingVideoId(null);
+  };
+
   // Optimize Silence for All Original Videos
   const handleOptimizeSilenceAll = async (playSound = true) => {
     try {
@@ -3863,7 +4545,9 @@ export default function OriginalVideosList({
     }
   };
 
-  // Run Full Pipeline: TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
+  // Run Full Pipeline:
+  // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
+  // (+ optional, scene-level post-processing steps at the end)
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -4419,6 +5103,262 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: Prompt Scenes (disabled in config)');
+      }
+
+      // Scene-level post-processing (Processing only)
+      // Required order:
+      // Subtitles -> Images -> Upscale -> Scene Videos -> Enhance Videos -> Apply Video -> Apply Image
+
+      if (pipelineConfig.generateSubtitles) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating subtitles for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating subtitles for Processing videos`,
+        );
+        try {
+          await handleGenerateSubtitlesForProcessingVideos();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Subtitle generation finished`,
+          );
+
+          console.log('Refreshing data after subtitle generation...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Subtitle generation error`,
+            error,
+          );
+          throw new Error(
+            `Subtitle generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Subtitles (disabled)');
+      }
+
+      if (pipelineConfig.generateSceneImages) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating scene images for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating scene images for Processing videos`,
+        );
+        try {
+          await handleGenerateSceneImagesForProcessingVideos();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Scene image generation finished`,
+          );
+
+          console.log('Refreshing data after scene image generation...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Scene image generation error`,
+            error,
+          );
+          throw new Error(
+            `Scene image generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Images (disabled)');
+      }
+
+      if (pipelineConfig.upscaleSceneImages) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Upscaling scene images for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Upscaling scene images for Processing videos`,
+        );
+        try {
+          await handleUpscaleSceneImagesForProcessingVideos();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Scene image upscaling finished`,
+          );
+
+          console.log('Refreshing data after scene image upscaling...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Scene image upscaling error`,
+            error,
+          );
+          throw new Error(
+            `Scene image upscaling failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Upscale Scene Images (disabled)');
+      }
+
+      if (pipelineConfig.generateSceneVideos) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating scene videos for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating scene videos for Processing videos`,
+        );
+        try {
+          await handleGenerateSceneVideosForProcessingVideos();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Scene video generation finished`,
+          );
+
+          console.log('Refreshing data after scene video generation...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Scene video generation error`,
+            error,
+          );
+          throw new Error(
+            `Scene video generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Generate Scene Videos (disabled)');
+      }
+
+      if (pipelineConfig.enhanceSceneVideos) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Enhancing scene videos (RVE) for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Enhancing scene videos (RVE) for Processing videos`,
+        );
+        try {
+          await handleEnhanceSceneVideosForProcessingVideos();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Scene video enhancement finished`,
+          );
+
+          console.log('Refreshing data after scene video enhancement...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Scene video enhancement error`,
+            error,
+          );
+          throw new Error(
+            `Scene video enhancement failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Enhance Scene Videos (disabled)');
+      }
+
+      if (pipelineConfig.applyEnhancedVideos) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Applying enhanced videos to Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Applying enhanced videos to Processing videos`,
+        );
+        try {
+          await handleApplyEnhancedVideosForProcessingVideos();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Apply enhanced videos finished`,
+          );
+
+          console.log('Refreshing data after applying enhanced videos...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Apply enhanced videos error`,
+            error,
+          );
+          throw new Error(
+            `Apply enhanced videos failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Apply Enhanced Videos (disabled)');
+      }
+
+      // Apply Image MUST be last
+      if (pipelineConfig.applyUpscaledImages) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Applying upscaled images to Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Applying upscaled images to Processing videos`,
+        );
+        try {
+          await handleApplyUpscaledImagesForProcessingVideos();
+          console.log(
+            `✓ Step ${stepNumber} Complete: Apply upscaled images finished`,
+          );
+
+          console.log('Refreshing data after applying upscaled images...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Apply upscaled images error`,
+            error,
+          );
+          throw new Error(
+            `Apply upscaled images failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Apply Upscaled Images (disabled)');
       }
 
       console.log('========================================');
