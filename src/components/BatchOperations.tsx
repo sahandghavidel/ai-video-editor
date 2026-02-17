@@ -142,6 +142,11 @@ export default function BatchOperations({
     number | null
   >(null);
 
+  const [enhancingAllSceneVideos, setEnhancingAllSceneVideos] = useState(false);
+  const [enhancingSceneVideoId, setEnhancingSceneVideoId] = useState<
+    number | null
+  >(null);
+
   const [upscalingAllSceneImages, setUpscalingAllSceneImages] = useState(false);
   const [upscalingSceneImageId, setUpscalingSceneImageId] = useState<
     number | null
@@ -1025,6 +1030,75 @@ export default function BatchOperations({
     } finally {
       setGeneratingAllSceneVideos(false);
       setGeneratingSceneVideoId(null);
+    }
+  };
+
+  const onEnhanceAllSceneVideos = async () => {
+    if (enhancingAllSceneVideos) return;
+
+    const scenesToEnhance = [...data]
+      .filter((scene) => {
+        // Match the modal button's intent: enhance the saved scene video (7098).
+        const sceneVideoUrl = getExistingSceneVideoUrl(scene);
+        if (!sceneVideoUrl) return false;
+        if (
+          !(
+            sceneVideoUrl.startsWith('http://') ||
+            sceneVideoUrl.startsWith('https://')
+          )
+        ) {
+          return false;
+        }
+
+        // Skip if it already looks enhanced (modal would just get a 409 anyway).
+        if (sceneVideoUrl.includes('_enhanced_')) return false;
+
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToEnhance.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setEnhancingAllSceneVideos(true);
+    setEnhancingSceneVideoId(null);
+
+    try {
+      for (const scene of scenesToEnhance) {
+        setEnhancingSceneVideoId(scene.id);
+
+        try {
+          const res = await fetch('/api/enhance-scene-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneId: scene.id }),
+          });
+
+          // Mirror modal behavior: already-enhanced is a friendly no-op.
+          if (res.status === 409) {
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Enhance failed (${res.status}) ${t}`);
+          }
+        } catch (error) {
+          console.error(`Enhance failed for scene ${scene.id}:`, error);
+        }
+
+        // Gentle pacing (each enhance may take minutes)
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setEnhancingAllSceneVideos(false);
+      setEnhancingSceneVideoId(null);
     }
   };
 
@@ -2113,6 +2187,48 @@ export default function BatchOperations({
                       ? `Scene #${generatingSceneVideoId}`
                       : 'Processing...'
                     : 'Generate All'}
+                </span>
+              </button>
+            </div>
+
+            {/* Enhance / Upscale Scene Videos (REAL-Video-Enhancer) */}
+            <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-violet-500 rounded-lg flex items-center gap-1'>
+                  <Wand2 className='w-4 h-4 text-white' />
+                  <span className='text-white text-xs font-bold'>RVE</span>
+                </div>
+                <h3 className='font-semibold text-violet-900'>
+                  Enhance Videos
+                </h3>
+              </div>
+              <p className='text-sm text-violet-800 mb-4 leading-relaxed'>
+                Enhance “Video for Scene” (7098) for all scenes that have a
+                scene video and do not yet look enhanced. Uses the same
+                endpoint/skip behavior as the modal “Enhance” button (409 =
+                already enhanced).
+              </p>
+              <button
+                onClick={onEnhanceAllSceneVideos}
+                disabled={enhancingAllSceneVideos}
+                className='w-full h-12 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  enhancingAllSceneVideos
+                    ? enhancingSceneVideoId
+                      ? `Enhancing scene video for scene ${enhancingSceneVideoId}`
+                      : 'Enhancing scene videos for all scenes...'
+                    : 'Enhance scene videos for all eligible scenes'
+                }
+              >
+                {enhancingAllSceneVideos && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {enhancingAllSceneVideos
+                    ? enhancingSceneVideoId
+                      ? `Scene #${enhancingSceneVideoId}`
+                      : 'Processing...'
+                    : 'Enhance All'}
                 </span>
               </button>
             </div>
