@@ -108,14 +108,24 @@ function parseDurationSeconds(probe: FFprobeOutput): number {
     return Number.NaN;
   };
 
-  const streamDuration = probe.streams?.find(
-    (s) => s.codec_type === 'video',
-  )?.duration;
-  const d1 = parse(streamDuration);
-  const d2 = parse(probe.format?.duration);
-  const d = Number.isFinite(d1) ? d1 : d2;
-  if (!Number.isFinite(d) || d <= 0)
+  // ffprobe can report slightly different durations at stream vs container level.
+  // Stream durations are often rounded *down* (causing "slightly shorter" outputs
+  // when we trim/mux using that value). Prefer the maximum of all reasonable
+  // candidates to avoid accidental truncation.
+  const candidates: number[] = [];
+
+  const dFormat = parse(probe.format?.duration);
+  if (Number.isFinite(dFormat) && dFormat > 0) candidates.push(dFormat);
+
+  for (const s of probe.streams ?? []) {
+    const ds = parse(s.duration);
+    if (Number.isFinite(ds) && ds > 0) candidates.push(ds);
+  }
+
+  const d = candidates.length ? Math.max(...candidates) : Number.NaN;
+  if (!Number.isFinite(d) || d <= 0) {
     throw new Error('Unable to determine video duration');
+  }
   return d;
 }
 
@@ -408,9 +418,18 @@ export async function POST(req: Request) {
 
     const aTempo = buildAtempoChain(speed);
 
-    const baseVideo = `[0:v]trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[basev]`;
+    const baseVideo = `[0:v]setpts=PTS-STARTPTS[basev]`;
     const enhVideo = `[1:v]scale=${outW}:${outH}:force_original_aspect_ratio=decrease,pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/${speed.toFixed(8)},trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[enhv]`;
-    const overlayV = `[basev][enhv]overlay=0:0:shortest=1:repeatlast=1[vout]`;
+    // Important: do NOT set shortest=1 here.
+    // If the enhanced stream ends a few ms early (due to timebase/rounding),
+    // shortest=1 would prematurely terminate the whole output.
+    // We want the base (final) video duration to drive the output length.
+    const overlayV = `[basev][enhv]overlay=0:0:repeatlast=1[vout]`;
+
+    // Safety net: some filter chains can end a few frames early due to timebase rounding.
+    // Pad slightly by cloning the last frame, then trim to the exact target duration.
+    const padSec = 0.25;
+    const finalV = `[vout]tpad=stop_mode=clone:stop_duration=${padSec},trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[vfinal]`;
 
     // Audio: resample to 48k stereo for predictable mix.
     const outSr = 48000;
@@ -425,14 +444,18 @@ export async function POST(req: Request) {
       : `anullsrc=r=${outSr}:cl=${outChLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[a1]`;
 
     const mixA = `[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98[aout]`;
+    // Pad audio a bit then trim, mirroring the video safety net.
+    const finalA = `[aout]apad=pad_dur=${padSec},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[afinal]`;
 
     const filterComplex = [
       baseVideo,
       enhVideo,
       overlayV,
+      finalV,
       baseA,
       enhA,
       mixA,
+      finalA,
     ].join(';');
 
     const ffmpegArgs = [
@@ -446,9 +469,9 @@ export async function POST(req: Request) {
       '-filter_complex',
       filterComplex,
       '-map',
-      '[vout]',
+      '[vfinal]',
       '-map',
-      '[aout]',
+      '[afinal]',
       // Ensure exact duration.
       '-t',
       finalDuration.toFixed(6),
