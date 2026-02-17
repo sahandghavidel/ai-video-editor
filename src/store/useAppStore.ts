@@ -47,6 +47,24 @@ export interface SubtitleGenerationSettings {
   fontFamily: string;
 }
 
+// Scene video generation batch settings (image-to-video)
+export interface SceneVideoGenerationSettings {
+  // Dynamic condition #1
+  onlyGenerateIfNoText: boolean;
+
+  // Dynamic condition #2
+  enableDurationRange: boolean;
+  minDurationSec: number | null;
+  maxDurationSec: number | null;
+}
+
+export type SceneVideoGenerationSettingsUpdates = Partial<
+  Omit<SceneVideoGenerationSettings, 'minDurationSec' | 'maxDurationSec'>
+> & {
+  minDurationSec?: number | string | null;
+  maxDurationSec?: number | string | null;
+};
+
 // Batch operations state interface
 export interface BatchOperationsState {
   improvingAll: boolean;
@@ -185,6 +203,9 @@ interface AppState {
   // Subtitle Generation Settings
   subtitleGenerationSettings: SubtitleGenerationSettings;
 
+  // Scene Video Generation (image-to-video) settings
+  sceneVideoGenerationSettings: SceneVideoGenerationSettings;
+
   // Batch Operations State
   batchOperations: BatchOperationsState;
 
@@ -250,6 +271,12 @@ interface AppState {
     updates: Partial<SubtitleGenerationSettings>,
   ) => void;
   resetSubtitleGenerationSettings: () => void;
+
+  // Scene Video Generation Settings Actions
+  updateSceneVideoGenerationSettings: (
+    updates: SceneVideoGenerationSettingsUpdates,
+  ) => void;
+  resetSceneVideoGenerationSettings: () => void;
 
   // Batch Operations Actions
   startBatchOperation: (operation: keyof BatchOperationsState) => void;
@@ -376,6 +403,13 @@ const defaultSubtitleGenerationSettings: SubtitleGenerationSettings = {
   fontFamily: 'Lilita One',
 };
 
+const defaultSceneVideoGenerationSettings: SceneVideoGenerationSettings = {
+  onlyGenerateIfNoText: false,
+  enableDurationRange: false,
+  minDurationSec: 3,
+  maxDurationSec: 7,
+};
+
 // Default batch operations settings
 const defaultBatchOperations: BatchOperationsState = {
   improvingAll: false,
@@ -485,6 +519,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Subtitle Generation Settings
   subtitleGenerationSettings: defaultSubtitleGenerationSettings,
+
+  // Scene Video Generation Settings
+  sceneVideoGenerationSettings: defaultSceneVideoGenerationSettings,
 
   // Batch Operations State
   batchOperations: defaultBatchOperations,
@@ -699,6 +736,74 @@ export const useAppStore = create<AppState>((set, get) => ({
         JSON.stringify(defaultSubtitleGenerationSettings),
       );
       return { subtitleGenerationSettings: defaultSubtitleGenerationSettings };
+    }),
+
+  // Scene Video Generation Settings Actions
+  updateSceneVideoGenerationSettings: (updates) =>
+    set((state) => {
+      const toNumberOrNull = (v: unknown): number | null => {
+        if (v === null || v === undefined) return null;
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        if (typeof v === 'string') {
+          const s = v.trim();
+          if (!s) return null;
+          const n = Number(s);
+          return Number.isFinite(n) ? n : null;
+        }
+        return null;
+      };
+
+      const minRaw =
+        'minDurationSec' in updates
+          ? toNumberOrNull(
+              (updates as { minDurationSec?: unknown }).minDurationSec,
+            )
+          : undefined;
+      const maxRaw =
+        'maxDurationSec' in updates
+          ? toNumberOrNull(
+              (updates as { maxDurationSec?: unknown }).maxDurationSec,
+            )
+          : undefined;
+
+      const clampNonNeg = (n: number) => Math.max(0, n);
+
+      // Avoid spreading raw string min/max into the typed settings object.
+      const {
+        minDurationSec: _min,
+        maxDurationSec: _max,
+        ...rest
+      } = updates as SceneVideoGenerationSettingsUpdates &
+        Record<string, unknown>;
+
+      const next: SceneVideoGenerationSettings = {
+        ...state.sceneVideoGenerationSettings,
+        ...(rest as Partial<SceneVideoGenerationSettings>),
+        ...(minRaw !== undefined
+          ? { minDurationSec: minRaw === null ? null : clampNonNeg(minRaw) }
+          : null),
+        ...(maxRaw !== undefined
+          ? { maxDurationSec: maxRaw === null ? null : clampNonNeg(maxRaw) }
+          : null),
+      };
+
+      localStorage.setItem(
+        'sceneVideoGenerationSettings',
+        JSON.stringify(next),
+      );
+
+      return { sceneVideoGenerationSettings: next };
+    }),
+
+  resetSceneVideoGenerationSettings: () =>
+    set(() => {
+      localStorage.setItem(
+        'sceneVideoGenerationSettings',
+        JSON.stringify(defaultSceneVideoGenerationSettings),
+      );
+      return {
+        sceneVideoGenerationSettings: defaultSceneVideoGenerationSettings,
+      };
     }),
 
   // Batch Operations Actions
@@ -1118,6 +1223,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       transcriptionSettings: state.transcriptionSettings,
       deletionSettings: state.deletionSettings,
       subtitleGenerationSettings: state.subtitleGenerationSettings,
+      sceneVideoGenerationSettings: state.sceneVideoGenerationSettings,
       modelSelection: {
         selectedModel: state.modelSelection.selectedModel,
         modelSearch: state.modelSelection.modelSearch,
@@ -1156,6 +1262,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           subtitleGenerationSettings: {
             ...defaultSubtitleGenerationSettings,
             ...settings.subtitleGenerationSettings,
+          },
+          sceneVideoGenerationSettings: {
+            ...defaultSceneVideoGenerationSettings,
+            ...settings.sceneVideoGenerationSettings,
           },
           modelSelection: {
             ...state.modelSelection,
@@ -1307,6 +1417,43 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      // Load sceneVideoGenerationSettings from localStorage
+      const savedSceneVideoGenerationSettings = localStorage.getItem(
+        'sceneVideoGenerationSettings',
+      );
+      if (savedSceneVideoGenerationSettings) {
+        try {
+          const settings = JSON.parse(savedSceneVideoGenerationSettings);
+          const min =
+            typeof settings?.minDurationSec === 'number' &&
+            Number.isFinite(settings.minDurationSec)
+              ? Math.max(0, settings.minDurationSec)
+              : settings?.minDurationSec === null
+                ? null
+                : defaultSceneVideoGenerationSettings.minDurationSec;
+          const max =
+            typeof settings?.maxDurationSec === 'number' &&
+            Number.isFinite(settings.maxDurationSec)
+              ? Math.max(0, settings.maxDurationSec)
+              : settings?.maxDurationSec === null
+                ? null
+                : defaultSceneVideoGenerationSettings.maxDurationSec;
+
+          set({
+            sceneVideoGenerationSettings: {
+              ...defaultSceneVideoGenerationSettings,
+              ...settings,
+              enableDurationRange: settings?.enableDurationRange === true,
+              onlyGenerateIfNoText: settings?.onlyGenerateIfNoText === true,
+              minDurationSec: min,
+              maxDurationSec: max,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to parse sceneVideoGenerationSettings:', e);
+        }
+      }
+
       // Load ttsSettings from localStorage
       const savedTTSSettings = localStorage.getItem('ttsSettings');
       if (savedTTSSettings) {
@@ -1366,11 +1513,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.removeItem('video-editor-settings');
       localStorage.removeItem('pipelineConfig');
       localStorage.removeItem('subtitleGenerationSettings');
+      localStorage.removeItem('sceneVideoGenerationSettings');
       set({
         ttsSettings: defaultTTSSettings,
         videoSettings: defaultVideoSettings,
         transcriptionSettings: defaultTranscriptionSettings,
         subtitleGenerationSettings: defaultSubtitleGenerationSettings,
+        sceneVideoGenerationSettings: defaultSceneVideoGenerationSettings,
         modelSelection: {
           ...get().modelSelection,
           selectedModel: defaultModelSelection.selectedModel,

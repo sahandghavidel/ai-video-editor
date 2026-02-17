@@ -776,26 +776,92 @@ async function detectTextHeuristic(
 
 export async function POST(req: NextRequest) {
   try {
-    const form = await req.formData();
-    const file = form.get('image');
-
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json(
-        { error: 'Missing image file (multipart field: image)' },
-        { status: 400 },
-      );
-    }
+    const contentType = String(req.headers.get('content-type') ?? '')
+      .trim()
+      .toLowerCase();
 
     // Safety: avoid huge payloads.
     const maxBytes = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxBytes) {
+
+    let bytes: Buffer | null = null;
+
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData();
+      const file = form.get('image');
+
+      if (!file || !(file instanceof File)) {
+        return NextResponse.json(
+          { error: 'Missing image file (multipart field: image)' },
+          { status: 400 },
+        );
+      }
+
+      if (file.size > maxBytes) {
+        return NextResponse.json(
+          { error: `Image too large (max ${maxBytes} bytes)` },
+          { status: 413 },
+        );
+      }
+
+      bytes = Buffer.from(await file.arrayBuffer());
+    } else if (contentType.includes('application/json')) {
+      const body = (await req.json().catch(() => null)) as {
+        imageUrl?: unknown;
+      } | null;
+
+      const imageUrl =
+        typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
+
+      if (!imageUrl) {
+        return NextResponse.json(
+          { error: 'imageUrl is required (JSON body)' },
+          { status: 400 },
+        );
+      }
+
+      if (
+        !(imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))
+      ) {
+        return NextResponse.json(
+          { error: 'imageUrl must be an http(s) URL' },
+          { status: 400 },
+        );
+      }
+
+      const res = await fetch(imageUrl);
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        return NextResponse.json(
+          { error: `Failed to fetch image (${res.status}) ${t}` },
+          { status: 400 },
+        );
+      }
+
+      const ab = await res.arrayBuffer();
+      if (ab.byteLength > maxBytes) {
+        return NextResponse.json(
+          { error: `Image too large (max ${maxBytes} bytes)` },
+          { status: 413 },
+        );
+      }
+
+      bytes = Buffer.from(ab);
+    } else {
       return NextResponse.json(
-        { error: `Image too large (max ${maxBytes} bytes)` },
-        { status: 413 },
+        {
+          error:
+            'Unsupported Content-Type. Use multipart/form-data with field "image" or JSON { imageUrl }.',
+        },
+        { status: 415 },
       );
     }
 
-    const bytes = Buffer.from(await file.arrayBuffer());
+    if (!bytes) {
+      return NextResponse.json(
+        { error: 'Missing image bytes' },
+        { status: 400 },
+      );
+    }
 
     const wantsAccurate =
       isTruthyQueryParam(req, 'accurate') ||

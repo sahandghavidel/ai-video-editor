@@ -81,6 +81,7 @@ export default function BatchOperations({
     videoSettings,
     transcriptionSettings,
     subtitleGenerationSettings,
+    sceneVideoGenerationSettings,
     updateVideoSettings,
     startBatchOperation,
     completeBatchOperation,
@@ -132,6 +133,12 @@ export default function BatchOperations({
   const [generatingAllSceneImages, setGeneratingAllSceneImages] =
     useState(false);
   const [generatingImageSceneId, setGeneratingImageSceneId] = useState<
+    number | null
+  >(null);
+
+  const [generatingAllSceneVideos, setGeneratingAllSceneVideos] =
+    useState(false);
+  const [generatingSceneVideoId, setGeneratingSceneVideoId] = useState<
     number | null
   >(null);
 
@@ -680,7 +687,7 @@ export default function BatchOperations({
     return String(raw).trim();
   };
 
-  const getExistingEnhancedSceneVideoUrl = (scene: BaserowRow): string => {
+  const getExistingSceneVideoUrl = (scene: BaserowRow): string => {
     const raw =
       scene['field_7098'] ??
       (scene as unknown as { field_7098?: unknown }).field_7098;
@@ -707,6 +714,55 @@ export default function BatchOperations({
     }
 
     return String(raw).trim();
+  };
+
+  const getSceneHasText = (scene: BaserowRow): boolean | null => {
+    const raw =
+      scene['field_7097'] ??
+      (scene as unknown as { field_7097?: unknown }).field_7097;
+
+    const parseBoolish = (v: unknown): boolean | null => {
+      if (v === true) return true;
+      if (v === false) return false;
+      if (v === null || v === undefined || v === '') return null;
+
+      if (typeof v === 'number') {
+        if (!Number.isFinite(v)) return null;
+        if (v === 1) return true;
+        if (v === 0) return false;
+        return null;
+      }
+
+      if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        if (!s) return null;
+        if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+        if (s === 'false' || s === '0' || s === 'no' || s === 'off')
+          return false;
+        // Unknown string shape (e.g., option id) -> don't trust it.
+        return null;
+      }
+
+      if (Array.isArray(v)) {
+        if (v.length === 0) return null;
+        const parsed = v.map(parseBoolish);
+        if (parsed.some((x) => x === true)) return true;
+        if (parsed.every((x) => x === false)) return false;
+        return null;
+      }
+
+      if (typeof v === 'object') {
+        const obj = v as Record<string, unknown>;
+        const candidate =
+          obj.value ?? obj.name ?? obj.text ?? obj.title ?? obj.label;
+        return parseBoolish(candidate);
+      }
+
+      return null;
+    };
+
+    // Be conservative: only return true if we're confident it's really "true".
+    return parseBoolish(raw);
   };
 
   const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {
@@ -787,6 +843,188 @@ export default function BatchOperations({
     } finally {
       setGeneratingAllSceneImages(false);
       setGeneratingImageSceneId(null);
+    }
+  };
+
+  const getVideoDurationSeconds = async (videoUrl: string): Promise<number> => {
+    const res = await fetch('/api/get-video-duration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoUrl }),
+    });
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Duration probe failed (${res.status}) ${t}`);
+    }
+
+    const data = (await res.json().catch(() => null)) as {
+      duration?: unknown;
+    } | null;
+
+    const d =
+      typeof data?.duration === 'number'
+        ? data.duration
+        : Number.isFinite(Number(data?.duration))
+          ? Number(data?.duration)
+          : Number.NaN;
+    if (!Number.isFinite(d) || d <= 0) throw new Error('Invalid duration');
+    return d;
+  };
+
+  const detectNoTextForImageUrl = async (
+    imageUrl: string,
+  ): Promise<{ hasText: boolean }> => {
+    const res = await fetch('/api/detect-text-in-image?accurate=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Text detect failed (${res.status}) ${t}`);
+    }
+    const data = (await res.json().catch(() => null)) as { hasText?: unknown };
+    return { hasText: Boolean(data?.hasText) };
+  };
+
+  const onGenerateAllSceneVideos = async () => {
+    if (generatingAllSceneVideos) return;
+
+    const scenesToGenerate = [...data]
+      .filter((scene) => {
+        // Permanent: must have a base image.
+        const imgUrl = getExistingSceneImageUrl(scene);
+        if (!imgUrl) return false;
+
+        // Permanent: skip if scene video already exists.
+        const existing = getExistingSceneVideoUrl(scene);
+        if (existing) return false;
+
+        return true;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToGenerate.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setGeneratingAllSceneVideos(true);
+    setGeneratingSceneVideoId(null);
+
+    try {
+      for (const scene of scenesToGenerate) {
+        setGeneratingSceneVideoId(scene.id);
+
+        // Dynamic condition #2 (order requirement): duration check FIRST.
+        if (sceneVideoGenerationSettings.enableDurationRange) {
+          const finalUrl = getExistingFinalVideoUrl(scene);
+          if (!finalUrl) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+
+          try {
+            const d = await getVideoDurationSeconds(finalUrl);
+            const min = sceneVideoGenerationSettings.minDurationSec;
+            const max = sceneVideoGenerationSettings.maxDurationSec;
+
+            if (typeof min === 'number' && Number.isFinite(min) && d < min) {
+              await new Promise((r) => setTimeout(r, 50));
+              continue;
+            }
+            if (typeof max === 'number' && Number.isFinite(max) && d > max) {
+              await new Promise((r) => setTimeout(r, 50));
+              continue;
+            }
+          } catch (error) {
+            console.error(
+              `Duration check failed for scene ${scene.id}:`,
+              error,
+            );
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
+        }
+
+        // Dynamic condition #1: only generate when image has NO text.
+        if (sceneVideoGenerationSettings.onlyGenerateIfNoText) {
+          // Fast skip if already known true.
+          const storedHasText = getSceneHasText(scene);
+          if (storedHasText === true) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+
+          const imgUrl = getExistingSceneImageUrl(scene);
+          if (!imgUrl) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+
+          try {
+            const { hasText } = await detectNoTextForImageUrl(imgUrl);
+            if (hasText) {
+              // Persist hasText=true for future runs.
+              try {
+                await fetch(`/api/baserow/scenes/${scene.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ field_7097: 'true' }),
+                });
+              } catch {
+                // ignore best-effort persistence
+              }
+              await new Promise((r) => setTimeout(r, 50));
+              continue;
+            }
+          } catch (error) {
+            console.error(
+              `Text detection failed for scene ${scene.id}:`,
+              error,
+            );
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
+        }
+
+        // Generate scene video (field_7098)
+        try {
+          const res = await fetch('/api/generate-scene-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneId: scene.id }),
+          });
+
+          // Treat server skip as a skip (idempotency).
+          if (res.status === 409) {
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(
+              `Scene video generation failed (${res.status}) ${t}`,
+            );
+          }
+        } catch (error) {
+          console.error(
+            `Scene video generation failed for scene ${scene.id}:`,
+            error,
+          );
+        }
+
+        // Gentle pacing (each request may take a while)
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setGeneratingAllSceneVideos(false);
+      setGeneratingSceneVideoId(null);
     }
   };
 
@@ -921,7 +1159,7 @@ export default function BatchOperations({
         if (!finalUrl) return false;
 
         // Must have an enhanced scene video URL (field_7098)
-        const enhancedUrl = getExistingEnhancedSceneVideoUrl(scene);
+        const enhancedUrl = getExistingSceneVideoUrl(scene);
         if (!enhancedUrl) return false;
         if (
           !(
@@ -1833,6 +2071,46 @@ export default function BatchOperations({
                   {generatingAllSceneImages
                     ? generatingImageSceneId
                       ? `Scene #${generatingImageSceneId}`
+                      : 'Processing...'
+                    : 'Generate All'}
+                </span>
+              </button>
+            </div>
+
+            {/* Generate Scene Videos (Image→Video) */}
+            <div className='bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg p-4 border border-sky-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-sky-500 rounded-lg flex items-center gap-1'>
+                  <Film className='w-4 h-4 text-white' />
+                  <span className='text-white text-xs font-bold'>I2V</span>
+                </div>
+                <h3 className='font-semibold text-sky-900'>Scene Videos</h3>
+              </div>
+              <p className='text-sm text-sky-800 mb-4 leading-relaxed'>
+                Generate and save “Video for Scene” (7098) from “Image for
+                Scene” (7094). Always skips scenes with missing images or an
+                existing scene video. Dynamic filters come from Global Settings
+                (duration range → text check).
+              </p>
+              <button
+                onClick={onGenerateAllSceneVideos}
+                disabled={generatingAllSceneVideos}
+                className='w-full h-12 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  generatingAllSceneVideos
+                    ? generatingSceneVideoId
+                      ? `Generating scene video for scene ${generatingSceneVideoId}`
+                      : 'Generating scene videos for all scenes...'
+                    : 'Generate scene videos for all eligible scenes'
+                }
+              >
+                {generatingAllSceneVideos && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {generatingAllSceneVideos
+                    ? generatingSceneVideoId
+                      ? `Scene #${generatingSceneVideoId}`
                       : 'Processing...'
                     : 'Generate All'}
                 </span>
