@@ -162,6 +162,23 @@ function getSceneText(scene: BaserowRow): string {
   return '';
 }
 
+function extractUrlFromBaserowField(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim();
+  if (!raw) return '';
+
+  if (Array.isArray(raw) && raw.length > 0) {
+    return extractUrlFromBaserowField(raw[0]);
+  }
+
+  if (typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const url = obj.url ?? (obj.file as { url?: unknown } | undefined)?.url;
+    if (typeof url === 'string') return url.trim();
+  }
+
+  return String(raw).trim();
+}
+
 function extractLinkedVideoId(field: unknown): number | null {
   const tryExtractId = (obj: unknown): number | null => {
     if (!obj || typeof obj !== 'object') return null;
@@ -487,10 +504,7 @@ export async function POST(req: Request) {
     );
 
     const imageUrlRaw = scene[IMAGE_FIELD_KEY];
-    const imageUrl =
-      typeof imageUrlRaw === 'string'
-        ? imageUrlRaw.trim()
-        : String(imageUrlRaw ?? '').trim();
+    const imageUrl = extractUrlFromBaserowField(imageUrlRaw);
 
     if (
       !imageUrl ||
@@ -514,10 +528,7 @@ export async function POST(req: Request) {
 
     // If we already created a video for THIS exact image (by signature), do not regenerate.
     const existingVideoUrlRaw = scene[VIDEO_FIELD_KEY];
-    const existingVideoUrl =
-      typeof existingVideoUrlRaw === 'string'
-        ? existingVideoUrlRaw.trim()
-        : String(existingVideoUrlRaw ?? '').trim();
+    const existingVideoUrl = extractUrlFromBaserowField(existingVideoUrlRaw);
 
     if (
       existingVideoUrl &&
@@ -569,12 +580,15 @@ export async function POST(req: Request) {
       lastRaw = info.rawResultJson;
 
       if (info.state === 'fail') {
+        const msg = info.failMsg ?? 'Video generation failed';
+        const retryable = /please try again later|internal error/i.test(msg);
         return Response.json(
           {
-            error: info.failMsg ?? 'Video generation failed',
+            error: msg,
             taskId,
             state: info.state,
             rawResultJson: info.rawResultJson,
+            retryable,
           },
           { status: 502 },
         );

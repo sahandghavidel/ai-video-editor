@@ -42,6 +42,11 @@ import PipelineConfig from './PipelineConfig';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { sendTelegramNotification } from '@/utils/telegram';
 import {
+  formatSceneHasTextField,
+  isHasTextRecordFreshForImage,
+  parseSceneHasTextField,
+} from '@/utils/sceneHasText';
+import {
   handleImproveAllSentencesForAllVideos,
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
   handleSpeedUpAllVideosForAllScenes,
@@ -2957,50 +2962,8 @@ export default function OriginalVideosList({
   const getExistingSceneVideoUrl = (scene: BaserowRow): string =>
     extractUrlFromSceneField(scene['field_7098']);
 
-  const getSceneHasText = (scene: BaserowRow): boolean | null => {
-    const raw = scene['field_7097'];
-
-    const parseBoolish = (v: unknown): boolean | null => {
-      if (v === true) return true;
-      if (v === false) return false;
-      if (v === null || v === undefined || v === '') return null;
-
-      if (typeof v === 'number') {
-        if (!Number.isFinite(v)) return null;
-        if (v === 1) return true;
-        if (v === 0) return false;
-        return null;
-      }
-
-      if (typeof v === 'string') {
-        const s = v.trim().toLowerCase();
-        if (!s) return null;
-        if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
-        if (s === 'false' || s === '0' || s === 'no' || s === 'off')
-          return false;
-        return null;
-      }
-
-      if (Array.isArray(v)) {
-        if (v.length === 0) return null;
-        const parsed = v.map(parseBoolish);
-        if (parsed.some((x) => x === true)) return true;
-        if (parsed.every((x) => x === false)) return false;
-        return null;
-      }
-
-      if (typeof v === 'object') {
-        const obj = v as Record<string, unknown>;
-        const candidate =
-          obj.value ?? obj.name ?? obj.text ?? obj.title ?? obj.label;
-        return parseBoolish(candidate);
-      }
-
-      return null;
-    };
-
-    return parseBoolish(raw);
-  };
+  const getSceneHasTextParsed = (scene: BaserowRow) =>
+    parseSceneHasTextField(scene['field_7099'] ?? scene['field_7097']);
 
   const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {
     const finalUrl = getExistingFinalVideoUrl(scene);
@@ -3408,30 +3371,47 @@ export default function OriginalVideosList({
 
       // Only generate when image has NO text
       if (sceneVideoGenerationSettings.onlyGenerateIfNoText) {
-        const storedHasText = getSceneHasText(scene);
-        if (storedHasText === true) {
-          await new Promise((r) => setTimeout(r, 50));
-          continue;
-        }
-
         const imgUrl = getExistingSceneImageUrl(scene);
         if (!imgUrl) {
           await new Promise((r) => setTimeout(r, 50));
           continue;
         }
 
+        const parsed = getSceneHasTextParsed(scene);
+        const isFresh = isHasTextRecordFreshForImage({
+          parsed,
+          imageUrl: imgUrl,
+        });
+        if (isFresh && parsed.hasText === true) {
+          await new Promise((r) => setTimeout(r, 50));
+          continue;
+        }
+
         try {
-          const { hasText } = await detectHasTextForImageUrl(imgUrl);
-          if (hasText) {
+          let hasText: boolean;
+          if (isFresh && parsed.hasText === false) {
+            hasText = false;
+          } else {
+            const detected = await detectHasTextForImageUrl(imgUrl);
+            hasText = Boolean(detected.hasText);
+
             try {
               await fetch(`/api/baserow/scenes/${scene.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ field_7097: 'true' }),
+                body: JSON.stringify({
+                  field_7099: formatSceneHasTextField({
+                    hasText,
+                    imageUrl: imgUrl,
+                  }),
+                }),
               });
             } catch {
               // best-effort only
             }
+          }
+
+          if (hasText) {
             await new Promise((r) => setTimeout(r, 50));
             continue;
           }

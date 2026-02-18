@@ -144,8 +144,11 @@ export default function SceneVideoGenerationSettings() {
             />
           </label>
           <p className='text-xs text-gray-500'>
-            When enabled, the batch will re-run text detection for the scene
-            image and skip if any readable text is found.
+            When enabled, the batch will run text detection for the scene image
+            and skip if any readable text is found. Results are cached in
+            hasText (7099) as <code>true|&lt;imageUrl&gt;</code> or
+            <code>false|&lt;imageUrl&gt;</code> so they automatically become
+            invalid if the image URL changes.
           </p>
         </div>
       </div>

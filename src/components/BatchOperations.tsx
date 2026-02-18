@@ -13,6 +13,11 @@ import {
 } from '@/utils/batchOperations';
 import { playSuccessSound } from '@/utils/soundManager';
 import {
+  formatSceneHasTextField,
+  isHasTextRecordFreshForImage,
+  parseSceneHasTextField,
+} from '@/utils/sceneHasText';
+import {
   Loader2,
   Sparkles,
   Mic,
@@ -624,150 +629,61 @@ export default function BatchOperations({
     return tokens.join(' ');
   };
 
-  const getExistingSceneImageUrl = (scene: BaserowRow): string => {
-    const raw =
-      scene['field_7094'] ??
-      (scene as unknown as { field_7094?: unknown }).field_7094;
-
+  const extractUrlFromSceneField = (raw: unknown): string => {
     if (typeof raw === 'string') return raw.trim();
     if (!raw) return '';
 
-    // If this ever becomes a Baserow "file" field, it may come back as an array of objects.
     if (Array.isArray(raw) && raw.length > 0) {
       const first = raw[0] as unknown;
-      if (typeof first === 'string') return first.trim();
-      if (first && typeof first === 'object') {
-        const obj = first as Record<string, unknown>;
-        const url = obj.url ?? obj.file ?? obj.link;
-        if (typeof url === 'string') return url.trim();
-      }
-      return '';
+      return extractUrlFromSceneField(first);
     }
 
     if (typeof raw === 'object') {
       const obj = raw as Record<string, unknown>;
-      const url = obj.url ?? obj.file ?? obj.link;
+      const url = obj.url ?? (obj.file as { url?: unknown } | undefined)?.url;
       if (typeof url === 'string') return url.trim();
     }
 
-    return '';
+    return String(raw).trim();
+  };
+
+  const getExistingSceneImageUrl = (scene: BaserowRow): string => {
+    return extractUrlFromSceneField(
+      scene['field_7094'] ??
+        (scene as unknown as { field_7094?: unknown }).field_7094,
+    );
   };
 
   const getExistingUpscaledSceneImageUrl = (scene: BaserowRow): string => {
-    const raw =
+    return extractUrlFromSceneField(
       scene['field_7095'] ??
-      (scene as unknown as { field_7095?: unknown }).field_7095;
-
-    if (typeof raw === 'string') return raw.trim();
-    if (!raw) return '';
-
-    // If this ever becomes a Baserow "file" field, it may come back as an array of objects.
-    if (Array.isArray(raw) && raw.length > 0) {
-      const first = raw[0] as unknown;
-      if (typeof first === 'string') return first.trim();
-      if (first && typeof first === 'object') {
-        const obj = first as Record<string, unknown>;
-        const url = obj.url ?? obj.file ?? obj.link;
-        if (typeof url === 'string') return url.trim();
-      }
-      return '';
-    }
-
-    if (typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      const url = obj.url ?? obj.file ?? obj.link;
-      if (typeof url === 'string') return url.trim();
-    }
-
-    return '';
+        (scene as unknown as { field_7095?: unknown }).field_7095,
+    );
   };
 
   const getExistingFinalVideoUrl = (scene: BaserowRow): string => {
-    const raw =
+    return extractUrlFromSceneField(
       scene['field_6886'] ??
-      (scene as unknown as { field_6886?: unknown }).field_6886;
-
-    if (typeof raw === 'string') return raw.trim();
-    if (!raw) return '';
-    return String(raw).trim();
+        (scene as unknown as { field_6886?: unknown }).field_6886,
+    );
   };
 
   const getExistingSceneVideoUrl = (scene: BaserowRow): string => {
-    const raw =
+    return extractUrlFromSceneField(
       scene['field_7098'] ??
-      (scene as unknown as { field_7098?: unknown }).field_7098;
-
-    if (typeof raw === 'string') return raw.trim();
-    if (!raw) return '';
-
-    // If this ever becomes a Baserow "file" field, it may come back as an array of objects.
-    if (Array.isArray(raw) && raw.length > 0) {
-      const first = raw[0] as unknown;
-      if (typeof first === 'string') return first.trim();
-      if (first && typeof first === 'object') {
-        const obj = first as Record<string, unknown>;
-        const url = obj.url ?? obj.file ?? obj.link;
-        if (typeof url === 'string') return url.trim();
-      }
-      return '';
-    }
-
-    if (typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      const url = obj.url ?? obj.file ?? obj.link;
-      if (typeof url === 'string') return url.trim();
-    }
-
-    return String(raw).trim();
+        (scene as unknown as { field_7098?: unknown }).field_7098,
+    );
   };
 
-  const getSceneHasText = (scene: BaserowRow): boolean | null => {
+  const getSceneHasTextParsed = (scene: BaserowRow) => {
+    // New field: hasText (7099) is a single-line text value like: "true|<imageUrl>".
+    // Legacy field: hasText (7097) was a single-select and may still exist on older rows.
     const raw =
+      scene['field_7099'] ??
+      (scene as unknown as { field_7099?: unknown }).field_7099 ??
       scene['field_7097'] ??
       (scene as unknown as { field_7097?: unknown }).field_7097;
-
-    const parseBoolish = (v: unknown): boolean | null => {
-      if (v === true) return true;
-      if (v === false) return false;
-      if (v === null || v === undefined || v === '') return null;
-
-      if (typeof v === 'number') {
-        if (!Number.isFinite(v)) return null;
-        if (v === 1) return true;
-        if (v === 0) return false;
-        return null;
-      }
-
-      if (typeof v === 'string') {
-        const s = v.trim().toLowerCase();
-        if (!s) return null;
-        if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
-        if (s === 'false' || s === '0' || s === 'no' || s === 'off')
-          return false;
-        // Unknown string shape (e.g., option id) -> don't trust it.
-        return null;
-      }
-
-      if (Array.isArray(v)) {
-        if (v.length === 0) return null;
-        const parsed = v.map(parseBoolish);
-        if (parsed.some((x) => x === true)) return true;
-        if (parsed.every((x) => x === false)) return false;
-        return null;
-      }
-
-      if (typeof v === 'object') {
-        const obj = v as Record<string, unknown>;
-        const candidate =
-          obj.value ?? obj.name ?? obj.text ?? obj.title ?? obj.label;
-        return parseBoolish(candidate);
-      }
-
-      return null;
-    };
-
-    // Be conservative: only return true if we're confident it's really "true".
-    return parseBoolish(raw);
+    return parseSceneHasTextField(raw);
   };
 
   const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {
@@ -955,32 +871,51 @@ export default function BatchOperations({
 
         // Dynamic condition #1: only generate when image has NO text.
         if (sceneVideoGenerationSettings.onlyGenerateIfNoText) {
-          // Fast skip if already known true.
-          const storedHasText = getSceneHasText(scene);
-          if (storedHasText === true) {
-            await new Promise((r) => setTimeout(r, 50));
-            continue;
-          }
-
           const imgUrl = getExistingSceneImageUrl(scene);
           if (!imgUrl) {
             await new Promise((r) => setTimeout(r, 50));
             continue;
           }
 
+          // New method: only trust a stored hasText value if it's for THIS exact image URL.
+          // This automatically invalidates the stored value whenever the image changes.
+          const parsed = getSceneHasTextParsed(scene);
+          const isFresh = isHasTextRecordFreshForImage({
+            parsed,
+            imageUrl: imgUrl,
+          });
+          if (isFresh && parsed.hasText === true) {
+            await new Promise((r) => setTimeout(r, 50));
+            continue;
+          }
+
           try {
-            const { hasText } = await detectNoTextForImageUrl(imgUrl);
-            if (hasText) {
-              // Persist hasText=true for future runs.
+            // If we have a fresh, explicit false for this image, skip re-checking.
+            let hasText: boolean;
+            if (isFresh && parsed.hasText === false) {
+              hasText = false;
+            } else {
+              const detected = await detectNoTextForImageUrl(imgUrl);
+              hasText = Boolean(detected.hasText);
+
+              // Best-effort persistence for both true/false, encoded with the source image URL.
               try {
                 await fetch(`/api/baserow/scenes/${scene.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ field_7097: 'true' }),
+                  body: JSON.stringify({
+                    field_7099: formatSceneHasTextField({
+                      hasText,
+                      imageUrl: imgUrl,
+                    }),
+                  }),
                 });
               } catch {
                 // ignore best-effort persistence
               }
+            }
+
+            if (hasText) {
               await new Promise((r) => setTimeout(r, 50));
               continue;
             }
@@ -996,23 +931,53 @@ export default function BatchOperations({
 
         // Generate scene video (field_7098)
         try {
-          const res = await fetch('/api/generate-scene-video', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sceneId: scene.id }),
-          });
+          const maxAttempts = 3;
+          for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            const res = await fetch('/api/generate-scene-video', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sceneId: scene.id }),
+            });
 
-          // Treat server skip as a skip (idempotency).
-          if (res.status === 409) {
-            await new Promise((r) => setTimeout(r, 150));
-            continue;
-          }
+            // Treat server skip as a skip (idempotency).
+            if (res.status === 409) {
+              await new Promise((r) => setTimeout(r, 150));
+              break;
+            }
 
-          if (!res.ok) {
+            if (res.ok) break;
+
             const t = await res.text().catch(() => '');
-            throw new Error(
-              `Scene video generation failed (${res.status}) ${t}`,
+            let retryable = false;
+            let taskId: string | null = null;
+            try {
+              const j = JSON.parse(t) as {
+                retryable?: unknown;
+                taskId?: unknown;
+              };
+              retryable = Boolean(j?.retryable);
+              taskId =
+                typeof j?.taskId === 'string' && j.taskId.trim()
+                  ? j.taskId.trim()
+                  : null;
+            } catch {
+              // ignore
+            }
+
+            const isServerish = res.status >= 500;
+            const canRetry =
+              attempt < maxAttempts && (retryable || isServerish);
+            if (!canRetry) {
+              throw new Error(
+                `Scene video generation failed (${res.status})${taskId ? ` taskId=${taskId}` : ''} ${t}`,
+              );
+            }
+
+            const delayMs = 750 * attempt;
+            console.warn(
+              `Scene video generation transient failure for scene ${scene.id} (attempt ${attempt}/${maxAttempts}, status ${res.status})${taskId ? ` taskId=${taskId}` : ''}. Retrying in ${delayMs}ms...`,
             );
+            await new Promise((r) => setTimeout(r, delayMs));
           }
         } catch (error) {
           console.error(

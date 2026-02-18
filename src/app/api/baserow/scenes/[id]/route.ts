@@ -18,6 +18,10 @@ type BaserowField = {
 const SCENES_TABLE_ID = '714';
 const FLAGGED_FIELD_ID = 7096;
 const FLAGGED_FIELD_KEY = 'field_7096';
+// Legacy: hasText (7097) was a single-select field (true/false). We keep
+// normalization for backwards compatibility if any older clients still send it.
+// New: hasText (7099) is a single-line text field (e.g. "true|<imageUrl>") and
+// needs no special normalization here.
 const HAS_TEXT_FIELD_ID = 7097;
 const HAS_TEXT_FIELD_KEY = 'field_7097';
 
