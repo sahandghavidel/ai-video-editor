@@ -12,18 +12,42 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { transcriptionText, model = 'openai/gpt-4o-mini' } =
-      await request.json();
+    const {
+      transcriptionText,
+      model = 'openai/gpt-4o-mini',
+      count = 1,
+    } = await request.json();
+
+    const requestedCount = Math.min(
+      5,
+      Math.max(1, Number.isFinite(Number(count)) ? Number(count) : 1),
+    );
 
     if (!transcriptionText) {
       return NextResponse.json(
         { error: 'Transcription text is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Create a focused prompt for YouTube title generation
-    const prompt = `Generate an engaging YouTube video title for this transcription. The title should be:
+    const prompt =
+      requestedCount > 1
+        ? `Generate exactly ${requestedCount} HIGH-QUALITY, DISTINCT YouTube video titles for this transcription.
+
+Each title should be:
+
+• Catchy and attention-grabbing
+• Under 100 characters
+• Relevant to the main topic
+• Include keywords for SEO
+• Natural and conversational
+• Click-worthy without being misleading
+
+Transcription: ${transcriptionText}
+
+Return only the ${requestedCount} titles, one per line, with no extra text.`
+        : `Generate an engaging YouTube video title for this transcription. The title should be:
 
 • Catchy and attention-grabbing
 • Under 100 characters
@@ -46,24 +70,57 @@ Return only the title, nothing else.`;
       temperature: 0.7,
     });
 
-    const generatedTitle = completion.choices[0]?.message?.content?.trim();
+    const rawResponse = completion.choices[0]?.message?.content?.trim();
+
+    if (!rawResponse) {
+      return NextResponse.json(
+        { error: 'Failed to generate title' },
+        { status: 500 },
+      );
+    }
+
+    const normalizedCandidates = rawResponse
+      .split('\n')
+      .map((line) => line.trim())
+      .map((line) =>
+        line
+          .replace(/^[-*•\s]+/, '')
+          .replace(/^\d+[\).:\-\s]+/, '')
+          .trim(),
+      )
+      .filter(Boolean);
+
+    const uniqueCandidates = [...new Set(normalizedCandidates)].slice(
+      0,
+      requestedCount,
+    );
+
+    const fallbackTitle = rawResponse
+      .replace(/^[-*•\s]+/, '')
+      .replace(/^\d+[\).:\-\s]+/, '')
+      .trim();
+
+    const finalTitles =
+      uniqueCandidates.length > 0 ? uniqueCandidates : [fallbackTitle];
+    const generatedTitle = finalTitles[0];
 
     if (!generatedTitle) {
       return NextResponse.json(
         { error: 'Failed to generate title' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     return NextResponse.json({
       title: generatedTitle,
+      titles: finalTitles,
       success: true,
     });
   } catch (error) {
     console.error('Title generation error:', error);
     return NextResponse.json(
       { error: 'Failed to generate title' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

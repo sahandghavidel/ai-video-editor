@@ -174,6 +174,11 @@ export default function OriginalVideosList({
   const [generatingKeywordVideoId, setGeneratingKeywordVideoId] = useState<
     number | null
   >(null);
+  const [generatingYouTubeTitlesAll, setGeneratingYouTubeTitlesAll] =
+    useState(false);
+  const [generatingTitleVideoId, setGeneratingTitleVideoId] = useState<
+    number | null
+  >(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2139,6 +2144,135 @@ export default function OriginalVideosList({
     } finally {
       setGeneratingKeywordVideoId(null);
       setGeneratingYouTubeKeywordsAll(false);
+    }
+  };
+
+  // Generate YouTube title options for all Processing videos using Script (6854)
+  // and save into YouTube Title (6870)
+  const handleGenerateYouTubeTitlesAll = async (playSound = true) => {
+    if (generatingYouTubeTitlesAll) return;
+
+    try {
+      setGeneratingYouTubeTitlesAll(true);
+      setGeneratingTitleVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+
+      const videosToTitle = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        const existingTitle =
+          typeof video.field_6870 === 'string'
+            ? video.field_6870.trim()
+            : extractFieldValue(video.field_6870).trim();
+
+        return status === 'Processing' && script.length > 0 && !existingTitle;
+      });
+
+      if (videosToTitle.length === 0) {
+        console.log(
+          'No Processing videos found that need YouTube title generation',
+        );
+        return;
+      }
+
+      console.log(
+        `Generating YouTube titles for ${videosToTitle.length} videos...`,
+      );
+
+      for (const video of videosToTitle) {
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        if (!script) continue;
+
+        setGeneratingTitleVideoId(video.id);
+
+        try {
+          const response = await fetch('/api/generate-title', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              transcriptionText: script,
+              model: modelSelection.selectedModel,
+              count: 3,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(
+              `Title generation failed (${response.status}): ${errorText}`,
+            );
+          }
+
+          const result = (await response.json()) as {
+            title?: unknown;
+            titles?: unknown;
+          };
+
+          const titleOptions = Array.isArray(result.titles)
+            ? result.titles.filter(
+                (t): t is string =>
+                  typeof t === 'string' && t.trim().length > 0,
+              )
+            : [];
+
+          const fallbackTitle =
+            typeof result.title === 'string' ? result.title.trim() : '';
+
+          const candidates =
+            titleOptions.length > 0
+              ? titleOptions.slice(0, 3)
+              : fallbackTitle
+                ? [fallbackTitle]
+                : [];
+
+          if (candidates.length === 0) {
+            throw new Error('No titles returned from API');
+          }
+
+          const formattedTitleChoices = candidates
+            .map((title, index) => `${index + 1}) ${title.trim()}`)
+            .join('\n');
+
+          await updateOriginalVideoRow(video.id, {
+            field_6870: formattedTitleChoices, // YouTube Title (3 options)
+          });
+
+          console.log(`Saved YouTube title options for video #${video.id}`);
+        } catch (error) {
+          console.error(
+            `Failed to generate title options for video #${video.id}:`,
+            error,
+          );
+          // Continue with next video
+        }
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error generating YouTube titles in batch:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to generate YouTube titles: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setGeneratingTitleVideoId(null);
+      setGeneratingYouTubeTitlesAll(false);
     }
   };
 
@@ -6328,7 +6462,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({33} actions)</span>
+                <span className='text-xs text-gray-500'>({34} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -6688,6 +6822,36 @@ export default function OriginalVideosList({
                             ? `#${generatingKeywordVideoId}...`
                             : 'Processing...'
                           : 'Keywords All'}
+                      </span>
+                    </button>
+
+                    {/* Generate YouTube Titles All Button */}
+                    <button
+                      onClick={() => handleGenerateYouTubeTitlesAll()}
+                      disabled={
+                        generatingYouTubeTitlesAll ||
+                        generatingTitleVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        generatingYouTubeTitlesAll
+                          ? 'Generating 3 YouTube title options from Script...'
+                          : 'Generate 3 YouTube title options from Script (6854) and save to YouTube Title (6870)'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          generatingYouTubeTitlesAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingYouTubeTitlesAll
+                          ? generatingTitleVideoId !== null
+                            ? `#${generatingTitleVideoId}...`
+                            : 'Processing...'
+                          : 'Titles All'}
                       </span>
                     </button>
 
