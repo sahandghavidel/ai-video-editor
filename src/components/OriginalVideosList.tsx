@@ -166,6 +166,10 @@ export default function OriginalVideosList({
   const [optimizingSilence, setOptimizingSilence] = useState<number | null>(
     null,
   );
+  const [
+    mergingScenesForProcessingVideos,
+    setMergingScenesForProcessingVideos,
+  ] = useState(false);
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [timestampData, setTimestampData] = useState<string>('');
@@ -4201,6 +4205,130 @@ export default function OriginalVideosList({
     }
   };
 
+  // Merge scene-level final videos into one final video per Processing video
+  const handleMergeScenesForProcessingVideos = async (playSound = true) => {
+    if (mergingScenesForProcessingVideos) return;
+
+    try {
+      setError(null);
+      setMergingScenesForProcessingVideos(true);
+
+      const freshVideosData = await getOriginalVideosData();
+      const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+      const processingVideos = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      if (processingVideos.length === 0) {
+        console.log('No Processing videos found for scene merging');
+        return;
+      }
+
+      const scenesByVideoId = new Map<number, BaserowRow[]>();
+      for (const scene of scenesForProcessingVideos) {
+        const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+        if (!videoId || isNaN(videoId)) continue;
+
+        const current = scenesByVideoId.get(videoId) || [];
+        current.push(scene);
+        scenesByVideoId.set(videoId, current);
+      }
+
+      for (const video of processingVideos) {
+        setCurrentProcessingVideoId(video.id);
+        setCurrentlyProcessingVideo(video.id);
+
+        const scenesForVideo = scenesByVideoId.get(video.id) || [];
+
+        const orderedSceneVideoUrls = scenesForVideo
+          .filter((scene) => Boolean(getExistingFinalVideoUrl(scene)))
+          .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+          .map((scene) => getExistingFinalVideoUrl(scene))
+          .filter((url) => url.trim().length > 0);
+
+        if (orderedSceneVideoUrls.length === 0) {
+          console.log(`Video #${video.id}: no scene final videos to merge`);
+          continue;
+        }
+
+        const oldMergedUrl = extractUrl(video.field_6858);
+
+        try {
+          const mergeResponse = await fetch('/api/concatenate-videos', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              video_urls: orderedSceneVideoUrls.map((videoUrl) => ({
+                video_url: videoUrl,
+              })),
+              id: `${video.id}`,
+              fast_mode: true,
+              old_merged_url: oldMergedUrl,
+            }),
+          });
+
+          if (!mergeResponse.ok) {
+            const errorText = await mergeResponse.text().catch(() => '');
+            throw new Error(
+              `Merge failed for video ${video.id}: ${mergeResponse.status} ${errorText}`,
+            );
+          }
+
+          const result = await mergeResponse.json();
+          const mergedVideoUrl =
+            result?.videoUrl || result?.url || result?.video_url;
+
+          if (!mergedVideoUrl || typeof mergedVideoUrl !== 'string') {
+            throw new Error(`Merge API returned no URL for video ${video.id}`);
+          }
+
+          await updateOriginalVideoRow(video.id, {
+            field_6858: mergedVideoUrl,
+          });
+
+          console.log(`Video #${video.id}: merged scene videos successfully`);
+        } catch (error) {
+          console.error(
+            `Failed to merge scenes for Processing video ${video.id}:`,
+            error,
+          );
+          // Continue processing remaining videos
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+
+      await handleRefresh();
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error merging scenes for Processing videos:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to merge scenes for Processing videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setMergingScenesForProcessingVideos(false);
+      setCurrentProcessingVideoId(null);
+      setCurrentlyProcessingVideo(null);
+    }
+  };
+
   // Merge All Final Videos
   const handleMergeAllFinalVideos = async () => {
     try {
@@ -5770,7 +5898,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({29} actions)</span>
+                <span className='text-xs text-gray-500'>({30} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -6426,6 +6554,42 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {mergingFinalVideos ? 'Merging...' : 'Merge Final'}
+                      </span>
+                    </button>
+
+                    {/* Merge Scenes for Processing Videos Button */}
+                    <button
+                      onClick={() => handleMergeScenesForProcessingVideos()}
+                      disabled={
+                        mergingScenesForProcessingVideos ||
+                        mergingFinalVideos ||
+                        uploading ||
+                        reordering ||
+                        transcribing !== null ||
+                        transcribingAll ||
+                        generatingScenes !== null ||
+                        generatingScenesAll
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        mergingScenesForProcessingVideos
+                          ? 'Merging scenes per Processing video...'
+                          : 'Merge scenes of a single video for all videos with Processing status'
+                      }
+                    >
+                      <Film
+                        className={`w-4 h-4 ${
+                          mergingScenesForProcessingVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {mergingScenesForProcessingVideos
+                          ? currentProcessingVideoId !== null
+                            ? `V${currentProcessingVideoId}`
+                            : 'Merging...'
+                          : 'Merge Scenes'}
                       </span>
                     </button>
 
