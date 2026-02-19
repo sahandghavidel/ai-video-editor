@@ -17,18 +17,25 @@ export async function POST(request: NextRequest) {
     if (!script.trim()) {
       return NextResponse.json(
         { error: 'Script is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Build a unique title for the new video row.
     const existingVideos = await getOriginalVideosData();
 
+    // Determine next order value (same behavior as upload-video route)
+    const maxOrder = existingVideos.reduce((max, video) => {
+      const order = Number(video.field_6902) || 0;
+      return Math.max(max, order);
+    }, 0);
+    const nextOrder = maxOrder + 1;
+
     const baseName = `Script ${new Date().toISOString().slice(0, 10)}`;
 
     const generateUniqueTitle = (
       base: string,
-      videos: BaserowRow[]
+      videos: BaserowRow[],
     ): string => {
       const existingTitles = videos
         .map((video) => {
@@ -50,6 +57,7 @@ export async function POST(request: NextRequest) {
 
     const newRowData: Record<string, unknown> = {
       field_6864: 'Processing', // Status
+      field_6902: nextOrder, // Order - automatically set to next number
       field_6852: uniqueTitle, // Title
       field_6854: script, // Script
     };
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest) {
     console.error('Error creating video from script:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Request failed' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
