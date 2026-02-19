@@ -159,6 +159,10 @@ export default function OriginalVideosList({
   const [deleting, setDeleting] = useState<number | null>(null);
   const [transcribing, setTranscribing] = useState<number | null>(null);
   const [transcribingAll, setTranscribingAll] = useState(false);
+  const [transcribingFinalAll, setTranscribingFinalAll] = useState(false);
+  const [transcribingFinalVideoId, setTranscribingFinalVideoId] = useState<
+    number | null
+  >(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -1779,6 +1783,133 @@ export default function OriginalVideosList({
       await updateOriginalVideoRow(videoId, {
         field_6861: captionsUrl, // Captions URL field
       });
+    }
+  };
+
+  // Transcribe all FINAL merged videos that don't have final captions yet
+  const handleTranscribeAllFinalVideos = async (playSound = true) => {
+    try {
+      setTranscribingFinalAll(true);
+      setError(null);
+
+      // Fetch fresh original videos data directly from API
+      const freshVideosData = await getOriginalVideosData();
+
+      // Filter videos that have final merged video URL but no final captions URL AND status is "Processing"
+      const videosToTranscribe = freshVideosData.filter((video) => {
+        const finalVideoUrl = extractUrl(video.field_6858);
+        const finalCaptionsUrl = extractUrl(video.field_6872);
+        const status = extractFieldValue(video.field_6864);
+        return finalVideoUrl && !finalCaptionsUrl && status === 'Processing';
+      });
+
+      if (videosToTranscribe.length === 0) {
+        console.log('No final videos found that need transcription');
+        return;
+      }
+
+      console.log(
+        `Starting FINAL video transcription for ${videosToTranscribe.length} videos...`,
+      );
+
+      for (const video of videosToTranscribe) {
+        const finalVideoUrl = extractUrl(video.field_6858);
+        if (!finalVideoUrl) continue;
+
+        setTranscribingFinalVideoId(video.id);
+        console.log(`Transcribing final video for video #${video.id}...`);
+
+        try {
+          // Step 1: Transcribe the final video
+          const transcribeResponse = await fetch('/api/transcribe-video', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              media_url: finalVideoUrl,
+              model: transcriptionSettings.selectedModel,
+            }),
+          });
+
+          if (!transcribeResponse.ok) {
+            throw new Error('Failed to transcribe final video');
+          }
+
+          const transcriptionData = await transcribeResponse.json();
+
+          // Step 2: Build word timestamps array
+          const wordTimestamps = [];
+          const segments = transcriptionData.response?.segments;
+
+          if (segments && segments.length > 0) {
+            for (const segment of segments) {
+              if (segment.words) {
+                for (const wordObj of segment.words) {
+                  wordTimestamps.push({
+                    word: wordObj.word.trim(),
+                    start: wordObj.start,
+                    end: wordObj.end,
+                  });
+                }
+              }
+            }
+          }
+
+          // Step 3: Upload captions file
+          const captionsData = JSON.stringify(wordTimestamps);
+          const timestamp = Date.now();
+          const filename = `video_${video.id}_final_captions_${timestamp}.json`;
+
+          const formData = new FormData();
+          const blob = new Blob([captionsData], { type: 'application/json' });
+          formData.append('file', blob, filename);
+
+          const uploadResponse = await fetch('/api/upload-captions', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error('Failed to upload final captions');
+          }
+
+          const uploadResult = await uploadResponse.json();
+
+          // Step 4: Save final captions URL to field_6872
+          const captionsUrl = uploadResult.url || uploadResult.file_url;
+          if (captionsUrl) {
+            await updateOriginalVideoRow(video.id, {
+              field_6872: captionsUrl, // Final Video Captions URL
+            });
+          }
+
+          console.log(`Successfully transcribed final video for #${video.id}`);
+        } catch (error) {
+          console.error(
+            `Failed to transcribe final video for #${video.id}:`,
+            error,
+          );
+          // Continue with next video
+        }
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error in batch FINAL video transcription:', error);
+      playErrorSound();
+      setError(
+        `Failed to transcribe all final videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setTranscribingFinalVideoId(null);
+      setTranscribingFinalAll(false);
     }
   };
 
@@ -5899,7 +6030,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({30} actions)</span>
+                <span className='text-xs text-gray-500'>({31} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -6142,6 +6273,8 @@ export default function OriginalVideosList({
                       disabled={
                         transcribing !== null ||
                         transcribingAll ||
+                        transcribingFinalAll ||
+                        transcribingFinalVideoId !== null ||
                         uploading ||
                         reordering
                       }
@@ -6163,6 +6296,38 @@ export default function OriginalVideosList({
                             ? `#${transcribing}...`
                             : 'Processing...'
                           : 'Transcribe All'}
+                      </span>
+                    </button>
+
+                    {/* Transcribe All FINAL Videos Button */}
+                    <button
+                      onClick={() => handleTranscribeAllFinalVideos()}
+                      disabled={
+                        transcribing !== null ||
+                        transcribingAll ||
+                        transcribingFinalAll ||
+                        transcribingFinalVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        transcribingFinalAll
+                          ? 'Final video transcription in progress...'
+                          : 'Transcribe all final merged videos without final captions'
+                      }
+                    >
+                      <Subtitles
+                        className={`w-4 h-4 ${
+                          transcribingFinalAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {transcribingFinalAll
+                          ? transcribingFinalVideoId !== null
+                            ? `#${transcribingFinalVideoId}...`
+                            : 'Processing...'
+                          : 'Transcribe Final All'}
                       </span>
                     </button>
 
