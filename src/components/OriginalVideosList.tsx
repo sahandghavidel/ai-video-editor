@@ -2082,6 +2082,8 @@ export default function OriginalVideosList({
         `Generating YouTube keywords for ${videosToTag.length} videos...`,
       );
 
+      let authFailureMessage: string | null = null;
+
       for (const video of videosToTag) {
         const script =
           typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
@@ -2103,6 +2105,16 @@ export default function OriginalVideosList({
 
           if (!response.ok) {
             const errorText = await response.text().catch(() => '');
+
+            if (response.status === 401) {
+              authFailureMessage =
+                'OpenRouter authentication failed (401 User not found). Check OPENROUTER_API_KEY in .env.local, then restart the app.';
+              console.warn(
+                `Stopping keywords batch at video #${video.id}: ${authFailureMessage}`,
+              );
+              break;
+            }
+
             throw new Error(
               `Keywords generation failed (${response.status}): ${errorText}`,
             );
@@ -2128,6 +2140,15 @@ export default function OriginalVideosList({
           );
           // Continue with next video
         }
+      }
+
+      if (authFailureMessage) {
+        setError(authFailureMessage);
+        if (playSound) {
+          playErrorSound();
+        }
+        await handleRefresh();
+        return;
       }
 
       await handleRefresh();
@@ -5352,7 +5373,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline:
   // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
-  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All
+  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -6232,6 +6253,142 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: Transcribe Final All (disabled)');
+      }
+
+      // YouTube metadata tail steps (Processing videos only)
+      // Required order: Description -> Keywords -> Titles -> Timestamps
+      if (pipelineConfig.generateYouTubeDescriptions) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating YouTube descriptions for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating YouTube descriptions for Processing videos`,
+        );
+        try {
+          await handleGenerateYouTubeDescriptionsAll(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: YouTube descriptions generation finished`,
+          );
+
+          console.log(
+            'Refreshing data after YouTube descriptions generation...',
+          );
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: YouTube descriptions generation error`,
+            error,
+          );
+          throw new Error(
+            `YouTube descriptions generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: YouTube Description (disabled)');
+      }
+
+      if (pipelineConfig.generateYouTubeKeywords) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating YouTube keywords for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating YouTube keywords for Processing videos`,
+        );
+        try {
+          await handleGenerateYouTubeKeywordsAll(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: YouTube keywords generation finished`,
+          );
+
+          console.log('Refreshing data after YouTube keywords generation...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: YouTube keywords generation error`,
+            error,
+          );
+          throw new Error(
+            `YouTube keywords generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: YouTube Keywords (disabled)');
+      }
+
+      if (pipelineConfig.generateYouTubeTitles) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating YouTube titles for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating YouTube titles for Processing videos`,
+        );
+        try {
+          await handleGenerateYouTubeTitlesAll(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: YouTube titles generation finished`,
+          );
+
+          console.log('Refreshing data after YouTube titles generation...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: YouTube titles generation error`,
+            error,
+          );
+          throw new Error(
+            `YouTube titles generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: YouTube Titles (disabled)');
+      }
+
+      if (pipelineConfig.generateYouTubeTimestamps) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating YouTube timestamps for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating YouTube timestamps for Processing videos`,
+        );
+        try {
+          await handleGenerateYouTubeTimestampsAll(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: YouTube timestamps generation finished`,
+          );
+
+          console.log('Refreshing data after YouTube timestamps generation...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: YouTube timestamps generation error`,
+            error,
+          );
+          throw new Error(
+            `YouTube timestamps generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: YouTube Timestamps (disabled)');
       }
 
       console.log('========================================');

@@ -175,6 +175,10 @@ export interface PipelineConfig {
   applyEnhancedVideos: boolean;
   mergeScenes: boolean;
   transcribeFinalAll: boolean;
+  generateYouTubeDescriptions: boolean;
+  generateYouTubeKeywords: boolean;
+  generateYouTubeTitles: boolean;
+  generateYouTubeTimestamps: boolean;
 }
 
 // Audio enhancement mode type
@@ -523,6 +527,10 @@ const defaultPipelineConfig: PipelineConfig = {
   applyEnhancedVideos: false,
   mergeScenes: false,
   transcribeFinalAll: false,
+  generateYouTubeDescriptions: false,
+  generateYouTubeKeywords: false,
+  generateYouTubeTitles: false,
+  generateYouTubeTimestamps: false,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({

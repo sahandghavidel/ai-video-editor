@@ -116,6 +116,26 @@ export default function PipelineConfig() {
       label: 'Transcribe Final All',
       color: 'text-purple-500',
     },
+    {
+      key: 'generateYouTubeDescriptions' as const,
+      label: 'Description',
+      color: 'text-indigo-500',
+    },
+    {
+      key: 'generateYouTubeKeywords' as const,
+      label: 'Keywords',
+      color: 'text-indigo-500',
+    },
+    {
+      key: 'generateYouTubeTitles' as const,
+      label: 'Titles',
+      color: 'text-indigo-500',
+    },
+    {
+      key: 'generateYouTubeTimestamps' as const,
+      label: 'Timestamps',
+      color: 'text-indigo-500',
+    },
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);
