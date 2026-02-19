@@ -5768,7 +5768,7 @@ export default function OriginalVideosList({
               <div className='flex items-center gap-2'>
                 <Zap className='w-4 h-4 text-orange-600' />
                 <h3 className='text-sm font-semibold text-gray-900'>
-                  Batch Operations
+                  Batch Operations For all Videos with Processing Scenes
                 </h3>
                 <span className='text-xs text-gray-500'>({29} actions)</span>
               </div>

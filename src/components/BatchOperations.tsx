@@ -1490,7 +1490,7 @@ export default function BatchOperations({
           <Sparkles className='w-6 h-6 text-purple-600' />
           <div className='text-left'>
             <h2 className='text-2xl font-bold text-gray-900'>
-              Batch Operations
+              Batch Operations For Scenes of A Single Video
             </h2>
             <p className='text-gray-600 flex items-center gap-2 text-sm'>
               <span className='inline-flex items-center justify-center w-5 h-5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full'>
@@ -2423,7 +2423,9 @@ export default function BatchOperations({
                 <div className='p-2 bg-orange-500 rounded-lg'>
                   <Film className='w-4 h-4 text-white' />
                 </div>
-                <h3 className='font-semibold text-orange-900'>Merge Videos</h3>
+                <h3 className='font-semibold text-orange-900'>
+                  Merge Scenes of a Single Video
+                </h3>
               </div>
               <p className='text-sm text-orange-700 mb-4 leading-relaxed'>
                 Combine all processed videos into one final video file
@@ -2440,7 +2442,7 @@ export default function BatchOperations({
                 <span className='font-medium'>
                   {batchOperations.concatenatingVideos
                     ? 'Merging...'
-                    : 'Merge All'}
+                    : 'Merge All Scenes'}
                 </span>
               </button>
             </div>
