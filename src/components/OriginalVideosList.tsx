@@ -169,6 +169,11 @@ export default function OriginalVideosList({
   ] = useState(false);
   const [generatingDescriptionVideoId, setGeneratingDescriptionVideoId] =
     useState<number | null>(null);
+  const [generatingYouTubeKeywordsAll, setGeneratingYouTubeKeywordsAll] =
+    useState(false);
+  const [generatingKeywordVideoId, setGeneratingKeywordVideoId] = useState<
+    number | null
+  >(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2026,6 +2031,114 @@ export default function OriginalVideosList({
     } finally {
       setGeneratingDescriptionVideoId(null);
       setGeneratingYouTubeDescriptionsAll(false);
+    }
+  };
+
+  // Generate YouTube keywords for all Processing videos using Script (6854)
+  // and save into YouTube Keywords (6871)
+  const handleGenerateYouTubeKeywordsAll = async (playSound = true) => {
+    if (generatingYouTubeKeywordsAll) return;
+
+    try {
+      setGeneratingYouTubeKeywordsAll(true);
+      setGeneratingKeywordVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+
+      const videosToTag = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        const existingKeywords =
+          typeof video.field_6871 === 'string'
+            ? video.field_6871.trim()
+            : extractFieldValue(video.field_6871).trim();
+
+        return (
+          status === 'Processing' && script.length > 0 && !existingKeywords
+        );
+      });
+
+      if (videosToTag.length === 0) {
+        console.log(
+          'No Processing videos found that need YouTube keyword generation',
+        );
+        return;
+      }
+
+      console.log(
+        `Generating YouTube keywords for ${videosToTag.length} videos...`,
+      );
+
+      for (const video of videosToTag) {
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        if (!script) continue;
+
+        setGeneratingKeywordVideoId(video.id);
+
+        try {
+          const response = await fetch('/api/generate-tags', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              transcriptionText: script,
+              model: modelSelection.selectedModel,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(
+              `Keywords generation failed (${response.status}): ${errorText}`,
+            );
+          }
+
+          const result = await response.json();
+          const generatedKeywords =
+            typeof result?.tags === 'string' ? result.tags.trim() : '';
+
+          if (!generatedKeywords) {
+            throw new Error('No keywords returned from API');
+          }
+
+          await updateOriginalVideoRow(video.id, {
+            field_6871: generatedKeywords, // YouTube Keywords
+          });
+
+          console.log(`Saved YouTube keywords for video #${video.id}`);
+        } catch (error) {
+          console.error(
+            `Failed to generate keywords for video #${video.id}:`,
+            error,
+          );
+          // Continue with next video
+        }
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error generating YouTube keywords in batch:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to generate YouTube keywords: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setGeneratingKeywordVideoId(null);
+      setGeneratingYouTubeKeywordsAll(false);
     }
   };
 
@@ -6215,7 +6328,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({32} actions)</span>
+                <span className='text-xs text-gray-500'>({33} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -6545,6 +6658,36 @@ export default function OriginalVideosList({
                             ? `#${generatingDescriptionVideoId}...`
                             : 'Processing...'
                           : 'Desc All'}
+                      </span>
+                    </button>
+
+                    {/* Generate YouTube Keywords All Button */}
+                    <button
+                      onClick={() => handleGenerateYouTubeKeywordsAll()}
+                      disabled={
+                        generatingYouTubeKeywordsAll ||
+                        generatingKeywordVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        generatingYouTubeKeywordsAll
+                          ? 'Generating YouTube keywords from Script...'
+                          : 'Generate YouTube keywords from Script (6854) and save to YouTube Keywords (6871)'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          generatingYouTubeKeywordsAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingYouTubeKeywordsAll
+                          ? generatingKeywordVideoId !== null
+                            ? `#${generatingKeywordVideoId}...`
+                            : 'Processing...'
+                          : 'Keywords All'}
                       </span>
                     </button>
 
