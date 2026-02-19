@@ -8272,7 +8272,7 @@ export default function OriginalVideosList({
               <div className='flex items-center gap-2'>
                 <Video className='w-5 h-5 text-green-600' />
                 <h3 className='text-lg font-semibold text-gray-900'>
-                  Final Video
+                  Final Video Details of multiple videos
                 </h3>
               </div>
               <div className='flex items-center gap-2'>
