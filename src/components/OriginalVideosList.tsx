@@ -179,6 +179,12 @@ export default function OriginalVideosList({
   const [generatingTitleVideoId, setGeneratingTitleVideoId] = useState<
     number | null
   >(null);
+  const [generatingYouTubeTimestampsAll, setGeneratingYouTubeTimestampsAll] =
+    useState(false);
+  const [
+    generatingYouTubeTimestampVideoId,
+    setGeneratingYouTubeTimestampVideoId,
+  ] = useState<number | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2273,6 +2279,120 @@ export default function OriginalVideosList({
     } finally {
       setGeneratingTitleVideoId(null);
       setGeneratingYouTubeTitlesAll(false);
+    }
+  };
+
+  // Generate YouTube timestamps for all Processing videos using Final Video Captions URL (6872)
+  // and save into YouTube Timestamp (6873)
+  const handleGenerateYouTubeTimestampsAll = async (playSound = true) => {
+    if (generatingYouTubeTimestampsAll) return;
+
+    try {
+      setGeneratingYouTubeTimestampsAll(true);
+      setGeneratingYouTubeTimestampVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+
+      const videosToTimestamp = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        const finalCaptionsUrl = extractUrl(video.field_6872);
+        const existingTimestamps =
+          typeof video.field_6873 === 'string'
+            ? video.field_6873.trim()
+            : extractFieldValue(video.field_6873).trim();
+
+        return (
+          status === 'Processing' &&
+          !!finalCaptionsUrl &&
+          finalCaptionsUrl.trim().length > 0 &&
+          !existingTimestamps
+        );
+      });
+
+      if (videosToTimestamp.length === 0) {
+        console.log(
+          'No Processing videos found that need YouTube timestamps generation',
+        );
+        return;
+      }
+
+      console.log(
+        `Generating YouTube timestamps for ${videosToTimestamp.length} videos...`,
+      );
+
+      for (const video of videosToTimestamp) {
+        const finalCaptionsUrl = extractUrl(video.field_6872);
+        if (!finalCaptionsUrl) continue;
+
+        setGeneratingYouTubeTimestampVideoId(video.id);
+
+        try {
+          const response = await fetch('/api/generate-youtube-timestamps', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              captionsUrl: finalCaptionsUrl,
+              model: modelSelection.selectedModel,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(
+              `Timestamp generation failed (${response.status}): ${errorText}`,
+            );
+          }
+
+          const result = (await response.json()) as {
+            timestamps?: unknown;
+          };
+
+          const generatedTimestamps =
+            typeof result.timestamps === 'string'
+              ? result.timestamps.trim()
+              : '';
+
+          if (!generatedTimestamps) {
+            throw new Error('No timestamps returned from API');
+          }
+
+          await updateOriginalVideoRow(video.id, {
+            field_6873: generatedTimestamps, // YouTube Timestamp
+          });
+
+          console.log(`Saved YouTube timestamps for video #${video.id}`);
+        } catch (error) {
+          console.error(
+            `Failed to generate timestamps for video #${video.id}:`,
+            error,
+          );
+          // Continue with next video
+        }
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error generating YouTube timestamps in batch:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to generate YouTube timestamps: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setGeneratingYouTubeTimestampVideoId(null);
+      setGeneratingYouTubeTimestampsAll(false);
     }
   };
 
@@ -6462,7 +6582,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({34} actions)</span>
+                <span className='text-xs text-gray-500'>({35} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -6852,6 +6972,36 @@ export default function OriginalVideosList({
                             ? `#${generatingTitleVideoId}...`
                             : 'Processing...'
                           : 'Titles All'}
+                      </span>
+                    </button>
+
+                    {/* Generate YouTube Timestamps All Button */}
+                    <button
+                      onClick={() => handleGenerateYouTubeTimestampsAll()}
+                      disabled={
+                        generatingYouTubeTimestampsAll ||
+                        generatingYouTubeTimestampVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        generatingYouTubeTimestampsAll
+                          ? 'Generating YouTube timestamps from Final Video Captions URL...'
+                          : 'Generate YouTube timestamps from Final Video Captions URL (6872) and save to YouTube Timestamp (6873)'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          generatingYouTubeTimestampsAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingYouTubeTimestampsAll
+                          ? generatingYouTubeTimestampVideoId !== null
+                            ? `#${generatingYouTubeTimestampVideoId}...`
+                            : 'Processing...'
+                          : 'Timestamps All'}
                       </span>
                     </button>
 
