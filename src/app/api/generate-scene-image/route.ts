@@ -496,16 +496,23 @@ export async function POST(req: Request) {
 
     const prompt = `You are a professional image creator for video clips. Your task is to analyze the script I provide and convert each scene into a single, clear visual that communicates the idea being spoken.
 
-  GLOBAL CHARACTER RULES (must be in every prompt):
-  Character: "image 1" (use the provided reference image to keep the character consistent, if available).
-  Art Style: thick black vector outlines, flat 2D art, high contrast.
-
   For each scene:
   Create a strong visual metaphor that explains the concept. Do not just show the character talking; show the character interacting with relevant objects, symbols, UI elements, diagrams, or metaphorical props (e.g., charts, clocks, ladders, puzzles, obstacles, tools). Keep the composition simple, large and readable.
 
+  Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high YouTube CTR. Keep the character large and clearly visible.
+
+  Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person.
+
   Create an image for the current scene:
 
-  current scene: ${sceneId} ${currentText} Full script: ${fullScript}`;
+  current scene: ${sceneId} ${currentText} 
+  
+  
+  Full script: ${fullScript}
+  
+  Create an image for the current scene:
+
+  current scene: ${sceneId} ${currentText}`;
 
     console.log('generate-scene-image: sending prompt to Nano Banana Edit');
     console.log(prompt);

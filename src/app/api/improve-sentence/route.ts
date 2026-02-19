@@ -143,11 +143,7 @@ Request ID: ${Date.now()}-${Math.random().toString(36).substr(2, 9)}
 
 You are an expert script writer improving a single sentence from a video tutorial script.${
       hasContext
-        ? ` Here is the full script context for reference:
-
-FULL SCRIPT:
-${scriptContext}
-
+        ? ` 
 CURRENT SENTENCE TO IMPROVE (Scene #${sceneId}): ${currentSentence}
 
 Please improve this sentence by following these guidelines:
