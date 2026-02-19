@@ -106,6 +106,16 @@ export default function PipelineConfig() {
       label: 'Apply Image',
       color: 'text-cyan-500',
     },
+    {
+      key: 'mergeScenes' as const,
+      label: 'Merge Scenes',
+      color: 'text-orange-500',
+    },
+    {
+      key: 'transcribeFinalAll' as const,
+      label: 'Transcribe Final All',
+      color: 'text-purple-500',
+    },
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);

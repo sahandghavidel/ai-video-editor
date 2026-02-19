@@ -173,6 +173,8 @@ export interface PipelineConfig {
   generateSceneVideos: boolean;
   enhanceSceneVideos: boolean;
   applyEnhancedVideos: boolean;
+  mergeScenes: boolean;
+  transcribeFinalAll: boolean;
 }
 
 // Audio enhancement mode type
@@ -519,6 +521,8 @@ const defaultPipelineConfig: PipelineConfig = {
   generateSceneVideos: false,
   enhanceSceneVideos: false,
   applyEnhancedVideos: false,
+  mergeScenes: false,
+  transcribeFinalAll: false,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({

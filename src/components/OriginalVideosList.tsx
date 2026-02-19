@@ -4869,6 +4869,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline:
   // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
+  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -5648,7 +5649,7 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Apply Enhanced Videos (disabled)');
       }
 
-      // Apply Image MUST be last
+      // Apply Image
       if (pipelineConfig.applyUpscaledImages) {
         stepNumber++;
         setPipelineStep(
@@ -5680,6 +5681,74 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: Apply Upscaled Images (disabled)');
+      }
+
+      // Merge Scenes MUST run after Apply Video + Apply Image
+      if (pipelineConfig.mergeScenes) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Merging scenes for Processing videos...`,
+        );
+        console.log(`Step ${stepNumber}: Merging scenes for Processing videos`);
+        try {
+          await handleMergeScenesForProcessingVideos(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Merge scenes for Processing videos finished`,
+          );
+
+          console.log('Refreshing data after merging scenes...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Merge scenes error`,
+            error,
+          );
+          throw new Error(
+            `Merge scenes failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Merge Scenes (disabled)');
+      }
+
+      // Transcribe Final All MUST run after Merge Scenes
+      if (pipelineConfig.transcribeFinalAll) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Transcribing all final merged videos...`,
+        );
+        console.log(`Step ${stepNumber}: Transcribing all final merged videos`);
+        try {
+          await handleTranscribeAllFinalVideos(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Final merged videos transcription finished`,
+          );
+
+          console.log('Refreshing data after final video transcription...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Transcribe Final All error`,
+            error,
+          );
+          throw new Error(
+            `Transcribe final all failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Transcribe Final All (disabled)');
       }
 
       console.log('========================================');
