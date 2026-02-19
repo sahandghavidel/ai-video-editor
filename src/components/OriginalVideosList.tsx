@@ -163,6 +163,12 @@ export default function OriginalVideosList({
   const [transcribingFinalVideoId, setTranscribingFinalVideoId] = useState<
     number | null
   >(null);
+  const [
+    generatingYouTubeDescriptionsAll,
+    setGeneratingYouTubeDescriptionsAll,
+  ] = useState(false);
+  const [generatingDescriptionVideoId, setGeneratingDescriptionVideoId] =
+    useState<number | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -1910,6 +1916,116 @@ export default function OriginalVideosList({
     } finally {
       setTranscribingFinalVideoId(null);
       setTranscribingFinalAll(false);
+    }
+  };
+
+  // Generate YouTube descriptions for all Processing videos using Script (6854)
+  // and save into YouTube Description (6869)
+  const handleGenerateYouTubeDescriptionsAll = async (playSound = true) => {
+    if (generatingYouTubeDescriptionsAll) return;
+
+    try {
+      setGeneratingYouTubeDescriptionsAll(true);
+      setGeneratingDescriptionVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+
+      const videosToDescribe = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        const existingDescription =
+          typeof video.field_6869 === 'string'
+            ? video.field_6869.trim()
+            : extractFieldValue(video.field_6869).trim();
+
+        return (
+          status === 'Processing' && script.length > 0 && !existingDescription
+        );
+      });
+
+      if (videosToDescribe.length === 0) {
+        console.log(
+          'No Processing videos found that need YouTube description generation',
+        );
+        return;
+      }
+
+      console.log(
+        `Generating YouTube descriptions for ${videosToDescribe.length} videos...`,
+      );
+
+      for (const video of videosToDescribe) {
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        if (!script) continue;
+
+        setGeneratingDescriptionVideoId(video.id);
+
+        try {
+          const response = await fetch('/api/generate-description', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              transcriptionText: script,
+              model: modelSelection.selectedModel,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(
+              `Description generation failed (${response.status}): ${errorText}`,
+            );
+          }
+
+          const result = await response.json();
+          const generatedDescription =
+            typeof result?.description === 'string'
+              ? result.description.trim()
+              : '';
+
+          if (!generatedDescription) {
+            throw new Error('No description returned from API');
+          }
+
+          await updateOriginalVideoRow(video.id, {
+            field_6869: generatedDescription, // YouTube Description
+          });
+
+          console.log(`Saved YouTube description for video #${video.id}`);
+        } catch (error) {
+          console.error(
+            `Failed to generate description for video #${video.id}:`,
+            error,
+          );
+          // Continue with next video
+        }
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error generating YouTube descriptions in batch:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to generate YouTube descriptions: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setGeneratingDescriptionVideoId(null);
+      setGeneratingYouTubeDescriptionsAll(false);
     }
   };
 
@@ -6099,7 +6215,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({31} actions)</span>
+                <span className='text-xs text-gray-500'>({32} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -6397,6 +6513,38 @@ export default function OriginalVideosList({
                             ? `#${transcribingFinalVideoId}...`
                             : 'Processing...'
                           : 'Transcribe Final All'}
+                      </span>
+                    </button>
+
+                    {/* Generate YouTube Description All Button */}
+                    <button
+                      onClick={() => handleGenerateYouTubeDescriptionsAll()}
+                      disabled={
+                        generatingYouTubeDescriptionsAll ||
+                        generatingDescriptionVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        generatingYouTubeDescriptionsAll
+                          ? 'Generating YouTube descriptions from Script...'
+                          : 'Generate YouTube descriptions from Script (6854) and save to YouTube Description (6869)'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          generatingYouTubeDescriptionsAll
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingYouTubeDescriptionsAll
+                          ? generatingDescriptionVideoId !== null
+                            ? `#${generatingDescriptionVideoId}...`
+                            : 'Processing...'
+                          : 'Desc All'}
                       </span>
                     </button>
 
