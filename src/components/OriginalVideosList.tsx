@@ -4218,7 +4218,8 @@ export default function OriginalVideosList({
 
       const processingVideos = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
+        const existingMergedUrl = extractUrl(video.field_6858);
+        return status === 'Processing' && !existingMergedUrl;
       });
 
       if (processingVideos.length === 0) {
