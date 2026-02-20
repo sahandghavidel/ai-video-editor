@@ -185,6 +185,10 @@ export default function OriginalVideosList({
     generatingYouTubeTimestampVideoId,
     setGeneratingYouTubeTimestampVideoId,
   ] = useState<number | null>(null);
+  const [generatingThumbnailsAll, setGeneratingThumbnailsAll] = useState(false);
+  const [generatingThumbnailVideoId, setGeneratingThumbnailVideoId] = useState<
+    number | null
+  >(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2433,6 +2437,112 @@ export default function OriginalVideosList({
     } finally {
       setGeneratingYouTubeTimestampVideoId(null);
       setGeneratingYouTubeTimestampsAll(false);
+    }
+  };
+
+  // Generate 3 thumbnail variants for all Processing videos using Script (6854)
+  // and save into fields 7100 / 7101 / 7102
+  const handleGenerateThumbnailsAll = async (playSound = true) => {
+    if (generatingThumbnailsAll) return;
+
+    try {
+      setGeneratingThumbnailsAll(true);
+      setGeneratingThumbnailVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+
+      const videosToProcess = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+
+        if (status !== 'Processing' || script.length === 0) {
+          return false;
+        }
+
+        const thumb1 = extractUrl(video.field_7100);
+        const thumb2 = extractUrl(video.field_7101);
+        const thumb3 = extractUrl(video.field_7102);
+
+        // Only include videos with at least one missing thumbnail.
+        return !(thumb1 && thumb2 && thumb3);
+      });
+
+      if (videosToProcess.length === 0) {
+        console.log(
+          'No Processing videos found that need thumbnail generation',
+        );
+        return;
+      }
+
+      console.log(
+        `Generating thumbnails for ${videosToProcess.length} videos...`,
+      );
+
+      for (const video of videosToProcess) {
+        setGeneratingThumbnailVideoId(video.id);
+
+        const variantsToGenerate: Array<1 | 2 | 3> = [];
+        if (!extractUrl(video.field_7100)) variantsToGenerate.push(1);
+        if (!extractUrl(video.field_7101)) variantsToGenerate.push(2);
+        if (!extractUrl(video.field_7102)) variantsToGenerate.push(3);
+
+        for (const variant of variantsToGenerate) {
+          try {
+            const response = await fetch('/api/generate-thumbnail-image', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                videoId: video.id,
+                variant,
+              }),
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text().catch(() => '');
+              throw new Error(
+                `Thumbnail ${variant} generation failed (${response.status}): ${errorText}`,
+              );
+            }
+
+            console.log(
+              `Saved thumbnail ${variant} for video #${video.id} (${variantsToGenerate.length} missing variant(s))`,
+            );
+          } catch (error) {
+            console.error(
+              `Failed to generate thumbnail ${variant} for video #${video.id}:`,
+              error,
+            );
+            // Continue with next thumbnail/video
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error generating thumbnails in batch:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to generate thumbnails: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setGeneratingThumbnailVideoId(null);
+      setGeneratingThumbnailsAll(false);
     }
   };
 
@@ -6758,7 +6868,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({35} actions)</span>
+                <span className='text-xs text-gray-500'>({36} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -7178,6 +7288,36 @@ export default function OriginalVideosList({
                             ? `#${generatingYouTubeTimestampVideoId}...`
                             : 'Processing...'
                           : 'Timestamps All'}
+                      </span>
+                    </button>
+
+                    {/* Generate Thumbnails All Button */}
+                    <button
+                      onClick={() => handleGenerateThumbnailsAll()}
+                      disabled={
+                        generatingThumbnailsAll ||
+                        generatingThumbnailVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        generatingThumbnailsAll
+                          ? 'Generating 3 thumbnail variants from script with Nano Banana Edit...'
+                          : 'Generate missing thumbnails for Processing videos with Script (6854): field_7100 (2 words), field_7101 (3 words), field_7102 (5 words)'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          generatingThumbnailsAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingThumbnailsAll
+                          ? generatingThumbnailVideoId !== null
+                            ? `#${generatingThumbnailVideoId}...`
+                            : 'Processing...'
+                          : 'Thumbs All'}
                       </span>
                     </button>
 
