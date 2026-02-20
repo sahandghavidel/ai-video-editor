@@ -5814,7 +5814,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline:
   // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
-  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps
+  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -6697,7 +6697,7 @@ export default function OriginalVideosList({
       }
 
       // YouTube metadata tail steps (Processing videos only)
-      // Required order: Description -> Keywords -> Titles -> Timestamps
+      // Required order: Description -> Keywords -> Titles -> Timestamps -> Thumbnails
       if (pipelineConfig.generateYouTubeDescriptions) {
         stepNumber++;
         setPipelineStep(
@@ -6830,6 +6830,41 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: YouTube Timestamps (disabled)');
+      }
+
+      // Thumbnail tail step (Processing videos only)
+      // Generates up to 3 variants and saves them to fields 7100/7101/7102
+      if (pipelineConfig.generateThumbnails) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating thumbnails for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating thumbnails for Processing videos`,
+        );
+        try {
+          await handleGenerateThumbnailsAll(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Thumbnail generation finished`,
+          );
+
+          console.log('Refreshing data after thumbnail generation...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Thumbnail generation error`,
+            error,
+          );
+          throw new Error(
+            `Thumbnail generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Thumbnails (disabled)');
       }
 
       console.log('========================================');

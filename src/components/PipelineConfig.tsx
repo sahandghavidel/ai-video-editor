@@ -136,6 +136,11 @@ export default function PipelineConfig() {
       label: 'Timestamps',
       color: 'text-indigo-500',
     },
+    {
+      key: 'generateThumbnails' as const,
+      label: 'Thumbnails',
+      color: 'text-indigo-500',
+    },
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);

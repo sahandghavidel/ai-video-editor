@@ -179,6 +179,7 @@ export interface PipelineConfig {
   generateYouTubeKeywords: boolean;
   generateYouTubeTitles: boolean;
   generateYouTubeTimestamps: boolean;
+  generateThumbnails: boolean;
 }
 
 // Audio enhancement mode type
@@ -531,6 +532,7 @@ const defaultPipelineConfig: PipelineConfig = {
   generateYouTubeKeywords: false,
   generateYouTubeTitles: false,
   generateYouTubeTimestamps: false,
+  generateThumbnails: false,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
