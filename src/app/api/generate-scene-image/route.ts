@@ -499,9 +499,9 @@ export async function POST(req: Request) {
   For each scene:
   Create a strong visual metaphor that explains the concept. Do not just show the character talking; show the character interacting with relevant objects, symbols, UI elements, diagrams, or metaphorical props (e.g., charts, clocks, ladders, puzzles, obstacles, tools). Keep the composition simple, large and readable.
 
-  Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high YouTube CTR. Keep the character large and clearly visible.
+  Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high retention. Keep the character large and clearly visible. 
 
-  Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person.
+  Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the scene.
 
   Create an image for the current scene:
 
