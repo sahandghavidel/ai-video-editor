@@ -14,6 +14,7 @@ import {
   Video,
   RefreshCw,
   ExternalLink,
+  Download,
   CheckCircle,
   Clock,
   AlertCircle,
@@ -193,6 +194,8 @@ export default function OriginalVideosList({
     useState<number | null>(null);
   const [regeneratingThumbnailVariant, setRegeneratingThumbnailVariant] =
     useState<1 | 2 | 3 | null>(null);
+  const [downloadingAssetsZipVideoId, setDownloadingAssetsZipVideoId] =
+    useState<number | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2594,6 +2597,70 @@ export default function OriginalVideosList({
     } finally {
       setRegeneratingThumbnailVideoId(null);
       setRegeneratingThumbnailVariant(null);
+    }
+  };
+
+  const handleDownloadAssetsZip = async (videoId: number) => {
+    try {
+      setDownloadingAssetsZipVideoId(videoId);
+      setError(null);
+
+      const response = await fetch('/api/download-video-assets-zip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ videoId }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(
+          `Failed to create assets ZIP (${response.status}): ${errorText}`,
+        );
+      }
+
+      const blob = await response.blob();
+
+      const disposition =
+        response.headers.get('content-disposition') ||
+        response.headers.get('Content-Disposition') ||
+        '';
+
+      const filenameMatch = disposition.match(
+        /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+      );
+
+      const zipFileName = decodeURIComponent(
+        (filenameMatch?.[1] ||
+          filenameMatch?.[2] ||
+          `video_${videoId}.zip`) as string,
+      );
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = zipFileName;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(blobUrl);
+
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        `Failed to download assets ZIP for video #${videoId}:`,
+        error,
+      );
+      playErrorSound();
+      setError(
+        `Failed to download ZIP: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setDownloadingAssetsZipVideoId(null);
     }
   };
 
@@ -9372,6 +9439,33 @@ export default function OriginalVideosList({
                               </div>
                             );
                           })}
+                        </div>
+                        <div className='mt-3'>
+                          <button
+                            onClick={() =>
+                              handleDownloadAssetsZip(selectedVideo.id)
+                            }
+                            disabled={
+                              downloadingAssetsZipVideoId !== null ||
+                              regeneratingThumbnailVideoId !== null ||
+                              generatingThumbnailsAll
+                            }
+                            className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
+                            title='Download ZIP with all thumbnails and final video. The ZIP and final video filenames use one of the generated titles.'
+                          >
+                            {downloadingAssetsZipVideoId ===
+                            selectedVideo.id ? (
+                              <>
+                                <Loader2 className='w-4 h-4 animate-spin' />
+                                Preparing ZIP...
+                              </>
+                            ) : (
+                              <>
+                                <Download className='w-4 h-4' />
+                                Download Thumbnails + Final Video ZIP
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
 
