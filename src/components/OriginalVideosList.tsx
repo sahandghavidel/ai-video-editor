@@ -200,6 +200,9 @@ export default function OriginalVideosList({
     useState<1 | 2 | 3 | null>(null);
   const [downloadingAssetsZipVideoId, setDownloadingAssetsZipVideoId] =
     useState<number | null>(null);
+  const [copyingMetadataVideoId, setCopyingMetadataVideoId] = useState<
+    number | null
+  >(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2729,6 +2732,51 @@ export default function OriginalVideosList({
       );
     } finally {
       setDownloadingAssetsZipVideoId(null);
+    }
+  };
+
+  const handleCopyVideoMetadata = async (video: BaserowRow) => {
+    try {
+      setCopyingMetadataVideoId(video.id);
+      setError(null);
+
+      const titles = (extractFieldValue(video.field_6870) || '')
+        .split('\n')
+        .map((line) =>
+          line
+            .replace(/^\s*\d+[\).:-]?\s*/, '')
+            .replace(/^\s*[-*•]\s*/, '')
+            .trim(),
+        )
+        .filter(Boolean)
+        .join('\n');
+
+      const description = (extractFieldValue(video.field_6869) || '').trim();
+      const timestamps = (extractFieldValue(video.field_6873) || '').trim();
+      const keywords = (extractFieldValue(video.field_6871) || '').trim();
+      const timestampsSection = timestamps ? `Timestamps:\n${timestamps}` : '';
+
+      const metadataText = [titles, description, timestampsSection, keywords]
+        .map((section) => section.trim())
+        .filter(Boolean)
+        .join('\n\n');
+
+      if (!metadataText) {
+        throw new Error('No metadata available to copy');
+      }
+
+      await navigator.clipboard.writeText(metadataText);
+      playSuccessSound();
+    } catch (error) {
+      console.error(`Failed to copy metadata for video #${video.id}:`, error);
+      playErrorSound();
+      setError(
+        `Failed to copy metadata: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      window.setTimeout(() => setCopyingMetadataVideoId(null), 1200);
     }
   };
 
@@ -9547,7 +9595,7 @@ export default function OriginalVideosList({
                             );
                           })}
                         </div>
-                        <div className='mt-3'>
+                        <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2'>
                           <button
                             onClick={() =>
                               handleDownloadAssetsZip(selectedVideo.id)
@@ -9570,6 +9618,27 @@ export default function OriginalVideosList({
                               <>
                                 <Download className='w-4 h-4' />
                                 Download Thumbnails + Final Video ZIP
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              handleCopyVideoMetadata(selectedVideo)
+                            }
+                            disabled={copyingMetadataVideoId !== null}
+                            className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white transition-colors disabled:cursor-not-allowed'
+                            title='Copy titles, description, timestamps, and keywords to clipboard with blank lines between each section'
+                          >
+                            {copyingMetadataVideoId === selectedVideo.id ? (
+                              <>
+                                <Check className='w-4 h-4' />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <FileText className='w-4 h-4' />
+                                Copy Metadata
                               </>
                             )}
                           </button>
