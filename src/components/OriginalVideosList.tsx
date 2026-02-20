@@ -194,6 +194,10 @@ export default function OriginalVideosList({
     useState<number | null>(null);
   const [regeneratingThumbnailVariant, setRegeneratingThumbnailVariant] =
     useState<1 | 2 | 3 | null>(null);
+  const [downloadingThumbnailVideoId, setDownloadingThumbnailVideoId] =
+    useState<number | null>(null);
+  const [downloadingThumbnailVariant, setDownloadingThumbnailVariant] =
+    useState<1 | 2 | 3 | null>(null);
   const [downloadingAssetsZipVideoId, setDownloadingAssetsZipVideoId] =
     useState<number | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
@@ -2597,6 +2601,70 @@ export default function OriginalVideosList({
     } finally {
       setRegeneratingThumbnailVideoId(null);
       setRegeneratingThumbnailVariant(null);
+    }
+  };
+
+  const handleDownloadSingleThumbnail = async (
+    videoId: number,
+    variant: 1 | 2 | 3,
+    thumbnailUrl: string,
+  ) => {
+    try {
+      if (!thumbnailUrl) {
+        throw new Error('Thumbnail URL is missing');
+      }
+
+      setDownloadingThumbnailVideoId(videoId);
+      setDownloadingThumbnailVariant(variant);
+      setError(null);
+
+      const response = await fetch(thumbnailUrl, { cache: 'no-store' });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(
+          `Failed to download thumbnail (${response.status}): ${errorText}`,
+        );
+      }
+
+      const blob = await response.blob();
+
+      let extension = 'png';
+      try {
+        const pathname = new URL(thumbnailUrl).pathname;
+        const lastSegment = pathname.split('/').pop() || '';
+        const dotIndex = lastSegment.lastIndexOf('.');
+        if (dotIndex > -1 && dotIndex < lastSegment.length - 1) {
+          extension = lastSegment.slice(dotIndex + 1).toLowerCase();
+        }
+      } catch {
+        // Ignore URL parsing errors and use default extension.
+      }
+
+      const fileName = `thumbnail_${videoId}_${variant}.${extension}`;
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = fileName;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error(
+        `Failed to download thumbnail ${variant} for video #${videoId}:`,
+        error,
+      );
+      playErrorSound();
+      setError(
+        `Failed to download thumbnail ${variant}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setDownloadingThumbnailVideoId(null);
+      setDownloadingThumbnailVariant(null);
     }
   };
 
@@ -9385,6 +9453,10 @@ export default function OriginalVideosList({
                               regeneratingThumbnailVideoId ===
                                 selectedVideo.id &&
                               regeneratingThumbnailVariant === thumb.variant;
+                            const isDownloadingSingle =
+                              downloadingThumbnailVideoId ===
+                                selectedVideo.id &&
+                              downloadingThumbnailVariant === thumb.variant;
 
                             return (
                               <div
@@ -9412,29 +9484,64 @@ export default function OriginalVideosList({
                                     Thumb {thumb.variant} · Max {thumb.maxWords}{' '}
                                     words
                                   </div>
-                                  <button
-                                    onClick={() =>
-                                      handleRegenerateThumbnail(
-                                        selectedVideo.id,
-                                        thumb.variant,
-                                      )
-                                    }
-                                    disabled={
-                                      regeneratingThumbnailVideoId !== null ||
-                                      generatingThumbnailsAll
-                                    }
-                                    className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white transition-colors disabled:cursor-not-allowed'
-                                    title={`Regenerate thumbnail ${thumb.variant} with MAX ${thumb.maxWords} words prompt`}
-                                  >
-                                    {isRegenerating ? (
-                                      <>
-                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
-                                        Regenerating...
-                                      </>
-                                    ) : (
-                                      'Regenerate'
-                                    )}
-                                  </button>
+                                  <div className='grid grid-cols-2 gap-2'>
+                                    <button
+                                      onClick={() =>
+                                        handleRegenerateThumbnail(
+                                          selectedVideo.id,
+                                          thumb.variant,
+                                        )
+                                      }
+                                      disabled={
+                                        regeneratingThumbnailVideoId !== null ||
+                                        generatingThumbnailsAll ||
+                                        downloadingThumbnailVideoId !== null
+                                      }
+                                      className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white transition-colors disabled:cursor-not-allowed'
+                                      title={`Regenerate thumbnail ${thumb.variant} with MAX ${thumb.maxWords} words prompt`}
+                                    >
+                                      {isRegenerating ? (
+                                        <>
+                                          <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                          Regenerating...
+                                        </>
+                                      ) : (
+                                        'Regenerate'
+                                      )}
+                                    </button>
+
+                                    <button
+                                      onClick={() =>
+                                        thumbUrl &&
+                                        handleDownloadSingleThumbnail(
+                                          selectedVideo.id,
+                                          thumb.variant,
+                                          thumbUrl,
+                                        )
+                                      }
+                                      disabled={
+                                        !thumbUrl ||
+                                        isRegenerating ||
+                                        regeneratingThumbnailVideoId !== null ||
+                                        downloadingThumbnailVideoId !== null ||
+                                        generatingThumbnailsAll
+                                      }
+                                      className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
+                                      title='Download this thumbnail only'
+                                    >
+                                      {isDownloadingSingle ? (
+                                        <>
+                                          <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                          Downloading...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Download className='w-3.5 h-3.5' />
+                                          Download
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             );
