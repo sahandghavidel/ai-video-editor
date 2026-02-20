@@ -203,6 +203,9 @@ export default function OriginalVideosList({
   const [copyingMetadataVideoId, setCopyingMetadataVideoId] = useState<
     number | null
   >(null);
+  const [copyingSentencesVideoId, setCopyingSentencesVideoId] = useState<
+    number | null
+  >(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2777,6 +2780,81 @@ export default function OriginalVideosList({
       );
     } finally {
       window.setTimeout(() => setCopyingMetadataVideoId(null), 1200);
+    }
+  };
+
+  const handleCopyVideoSentences = async (video: BaserowRow) => {
+    try {
+      setCopyingSentencesVideoId(video.id);
+      setError(null);
+
+      const scenes = await getBaserowData();
+
+      const extractLinkedVideoId = (videoIdField: unknown): number | null => {
+        if (typeof videoIdField === 'number') {
+          return videoIdField;
+        }
+
+        if (typeof videoIdField === 'string') {
+          const parsed = parseInt(videoIdField, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+          const first = videoIdField[0] as unknown;
+
+          if (typeof first === 'number') {
+            return first;
+          }
+
+          if (typeof first === 'string') {
+            const parsed = parseInt(first, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+
+          if (typeof first === 'object' && first !== null) {
+            const rec = first as Record<string, unknown>;
+            const candidate = rec.id ?? rec.value;
+            const parsed = parseInt(String(candidate ?? ''), 10);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+        }
+
+        if (typeof videoIdField === 'object' && videoIdField !== null) {
+          const rec = videoIdField as Record<string, unknown>;
+          const candidate = rec.id ?? rec.value;
+          const parsed = parseInt(String(candidate ?? ''), 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        return null;
+      };
+
+      const sentenceText = (scenes || [])
+        .filter(
+          (scene) => extractLinkedVideoId(scene['field_6889']) === video.id,
+        )
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+        .map((scene) => String(scene['field_6890'] ?? '').trim())
+        .filter((sentence) => sentence.length > 0)
+        .join('\n');
+
+      if (!sentenceText) {
+        throw new Error('No sentences found in field_6890 for this video');
+      }
+
+      await navigator.clipboard.writeText(sentenceText);
+      playSuccessSound();
+    } catch (error) {
+      console.error(`Failed to copy sentences for video #${video.id}:`, error);
+      playErrorSound();
+      setError(
+        `Failed to copy sentences: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      window.setTimeout(() => setCopyingSentencesVideoId(null), 1200);
     }
   };
 
@@ -9595,7 +9673,7 @@ export default function OriginalVideosList({
                             );
                           })}
                         </div>
-                        <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                        <div className='mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2'>
                           <button
                             onClick={() =>
                               handleDownloadAssetsZip(selectedVideo.id)
@@ -9639,6 +9717,27 @@ export default function OriginalVideosList({
                               <>
                                 <FileText className='w-4 h-4' />
                                 Copy Metadata
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              handleCopyVideoSentences(selectedVideo)
+                            }
+                            disabled={copyingSentencesVideoId !== null}
+                            className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white transition-colors disabled:cursor-not-allowed'
+                            title='Copy all Sentence (6890) lines for this video to clipboard, one sentence per line'
+                          >
+                            {copyingSentencesVideoId === selectedVideo.id ? (
+                              <>
+                                <Check className='w-4 h-4' />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <FileText className='w-4 h-4' />
+                                Copy Sentences
                               </>
                             )}
                           </button>
