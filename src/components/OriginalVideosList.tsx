@@ -270,7 +270,7 @@ export default function OriginalVideosList({
   const [isFinalVideoExpanded, setIsFinalVideoExpanded] = useState(false); // Final video section collapsed by default
   const [selectedVideoDetailsExpanded, setSelectedVideoDetailsExpanded] =
     useState({
-      youtube: true,
+      youtube: false,
       assets: false,
     });
 
