@@ -21,6 +21,8 @@ interface WordObject {
 }
 
 const FinalVideoTable: React.FC = () => {
+  const [isFinalMergedSectionExpanded, setIsFinalMergedSectionExpanded] =
+    useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [generatingTitle, setGeneratingTitle] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
@@ -35,7 +37,7 @@ const FinalVideoTable: React.FC = () => {
   // Helper function to check if captions are available
   const hasCaptions = () => {
     const currentData = JSON.parse(
-      localStorage.getItem('final-video-data') || '{}'
+      localStorage.getItem('final-video-data') || '{}',
     );
     return !!currentData?.captionsUrl;
   };
@@ -51,11 +53,11 @@ const FinalVideoTable: React.FC = () => {
           const parsed = JSON.parse(finalVideoData);
           console.log(
             'Loaded description from localStorage:',
-            parsed.description
+            parsed.description,
           );
           console.log(
             'Description with line breaks visible:',
-            JSON.stringify(parsed.description)
+            JSON.stringify(parsed.description),
           );
           console.log('Description length:', parsed.description?.length);
 
@@ -134,7 +136,7 @@ const FinalVideoTable: React.FC = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener(
         'localStorageUpdate',
-        handleCustomStorageChange
+        handleCustomStorageChange,
       );
     };
   }, []);
@@ -175,7 +177,7 @@ const FinalVideoTable: React.FC = () => {
         console.log(
           'Data reset successfully, kept finalVideoUrl and timestamp:',
           parsed.finalVideoUrl,
-          parsed.timestamp
+          parsed.timestamp,
         );
       }
     } catch (error) {
@@ -288,7 +290,7 @@ const FinalVideoTable: React.FC = () => {
   const handleGenerateTitle = async (playSound = true) => {
     // Check localStorage directly for captionsUrl since state might not be updated yet
     const currentData = JSON.parse(
-      localStorage.getItem('final-video-data') || '{}'
+      localStorage.getItem('final-video-data') || '{}',
     );
     if (!currentData?.captionsUrl) {
       console.log('❌ No captions URL found for title generation');
@@ -315,7 +317,7 @@ const FinalVideoTable: React.FC = () => {
 
       console.log(
         'Generating title for transcription:',
-        transcriptionText.substring(0, 100) + '...'
+        transcriptionText.substring(0, 100) + '...',
       );
 
       // Call the new title generation API
@@ -384,7 +386,7 @@ const FinalVideoTable: React.FC = () => {
   const handleGenerateDescription = async (playSound = true) => {
     // Check localStorage directly for captionsUrl since state might not be updated yet
     const currentData = JSON.parse(
-      localStorage.getItem('final-video-data') || '{}'
+      localStorage.getItem('final-video-data') || '{}',
     );
     if (!currentData?.captionsUrl) {
       console.log('❌ No captions URL found for description generation');
@@ -411,7 +413,7 @@ const FinalVideoTable: React.FC = () => {
 
       console.log(
         'Generating description for transcription:',
-        transcriptionText.substring(0, 100) + '...'
+        transcriptionText.substring(0, 100) + '...',
       );
 
       // Call the new description generation API
@@ -509,7 +511,7 @@ const FinalVideoTable: React.FC = () => {
       setVideoData(updatedData);
       console.log(
         'Local state updated with description:',
-        updatedData.description
+        updatedData.description,
       );
 
       if (playSound) {
@@ -525,7 +527,7 @@ const FinalVideoTable: React.FC = () => {
   const handleGenerateTags = async (playSound = true) => {
     // Check localStorage directly for captionsUrl since state might not be updated yet
     const currentData = JSON.parse(
-      localStorage.getItem('final-video-data') || '{}'
+      localStorage.getItem('final-video-data') || '{}',
     );
     if (!currentData?.captionsUrl) {
       console.log('❌ No captions URL found for tags generation');
@@ -552,7 +554,7 @@ const FinalVideoTable: React.FC = () => {
 
       console.log(
         'Generating tags for transcription:',
-        transcriptionText.substring(0, 100) + '...'
+        transcriptionText.substring(0, 100) + '...',
       );
 
       // Call the new tags generation API
@@ -634,7 +636,7 @@ const FinalVideoTable: React.FC = () => {
 
       // Check if transcription was successful
       const currentData = JSON.parse(
-        localStorage.getItem('final-video-data') || '{}'
+        localStorage.getItem('final-video-data') || '{}',
       );
       console.log('📋 Current data after transcription:', {
         hasCaptionsUrl: !!currentData.captionsUrl,
@@ -673,7 +675,7 @@ const FinalVideoTable: React.FC = () => {
       console.log('✅ All tasks completed successfully!');
       playSuccessSound(); // Play success sound only when everything is completed
       await sendTelegramNotification(
-        '🎉 All tasks completed! Your video is fully processed with transcription, title, description, and tags.'
+        '🎉 All tasks completed! Your video is fully processed with transcription, title, description, and tags.',
       );
     } catch (error) {
       console.error('Error in do everything process:', error);
@@ -688,292 +690,331 @@ const FinalVideoTable: React.FC = () => {
 
   return (
     <div className='mt-6 bg-white border border-gray-200 rounded-lg shadow-sm'>
-      <div className='px-6 py-4 border-b border-gray-200'>
+      <button
+        onClick={() =>
+          setIsFinalMergedSectionExpanded(!isFinalMergedSectionExpanded)
+        }
+        className='w-full px-6 py-4 border-b border-gray-200 flex items-center justify-between hover:bg-gray-50 transition-colors'
+      >
         <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
           <Video className='w-5 h-5 text-blue-500' />
           Final Merged Video Details of multiple videos
         </h3>
-      </div>
-      <div className='overflow-x-auto'>
-        <table className='w-full'>
-          <thead className='bg-gray-50'>
-            <tr>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
-                Title
-              </th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
-                Caption
-              </th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className='bg-white divide-y divide-gray-200'>
-            <tr className='hover:bg-gray-50'>
-              <td className='px-6 py-4 whitespace-nowrap'>
-                <div className='text-sm font-medium text-gray-900'>
-                  {parsedData.title || 'Final Merged Video'}
-                </div>
-                <div className='text-sm text-gray-500'>
-                  {parsedData.mergedAt &&
-                  typeof parsedData.mergedAt === 'string'
-                    ? new Date(parsedData.mergedAt).toLocaleDateString()
-                    : 'Unknown date'}
-                </div>
-              </td>
-              <td className='px-6 py-4 whitespace-nowrap'>
-                <div className='text-sm text-gray-500'>
-                  {parsedData.captionsUrl ? (
+        <div className='flex items-center gap-2'>
+          <span className='text-xs text-gray-400'>
+            {isFinalMergedSectionExpanded ? 'Collapse' : 'Expand'}
+          </span>
+          <svg
+            className={`w-4 h-4 text-gray-400 transition-transform ${
+              isFinalMergedSectionExpanded ? 'rotate-180' : ''
+            }`}
+            fill='none'
+            stroke='currentColor'
+            viewBox='0 0 24 24'
+          >
+            <path
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              strokeWidth={2}
+              d='M19 9l-7 7-7-7'
+            />
+          </svg>
+        </div>
+      </button>
+
+      {isFinalMergedSectionExpanded && (
+        <>
+          <div className='overflow-x-auto'>
+            <table className='w-full'>
+              <thead className='bg-gray-50'>
+                <tr>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
+                    Title
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
+                    Caption
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className='bg-white divide-y divide-gray-200'>
+                <tr className='hover:bg-gray-50'>
+                  <td className='px-6 py-4 whitespace-nowrap'>
+                    <div className='text-sm font-medium text-gray-900'>
+                      {parsedData.title || 'Final Merged Video'}
+                    </div>
+                    <div className='text-sm text-gray-500'>
+                      {parsedData.mergedAt &&
+                      typeof parsedData.mergedAt === 'string'
+                        ? new Date(parsedData.mergedAt).toLocaleDateString()
+                        : 'Unknown date'}
+                    </div>
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap'>
+                    <div className='text-sm text-gray-500'>
+                      {parsedData.captionsUrl ? (
+                        <div className='flex items-center gap-2'>
+                          <span className='text-green-600 font-medium'>
+                            Transcribed
+                          </span>
+                          <button
+                            onClick={() =>
+                              window.open(parsedData.captionsUrl, '_blank')
+                            }
+                            className='inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors'
+                            title='Download captions file'
+                          >
+                            <Check className='w-3 h-3' />
+                            Captions
+                          </button>
+                        </div>
+                      ) : parsedData.caption === 'Transcription completed' ? (
+                        <span className='text-green-600 font-medium'>
+                          Transcribed
+                        </span>
+                      ) : parsedData.videoCount ? (
+                        `${parsedData.videoCount} videos merged`
+                      ) : (
+                        'No caption available'
+                      )}
+                    </div>
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap'>
                     <div className='flex items-center gap-2'>
-                      <span className='text-green-600 font-medium'>
-                        Transcribed
-                      </span>
+                      <button
+                        onClick={handleDoEverything}
+                        disabled={
+                          doingEverything ||
+                          transcribing ||
+                          generatingTitle ||
+                          generatingDescription ||
+                          generatingTags
+                        }
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-blue-300 disabled:to-purple-400 text-white rounded-md transition-all disabled:cursor-not-allowed font-medium'
+                        title='Automatically transcribe, generate title, description, and tags with 1-minute gaps between each step'
+                      >
+                        <Sparkles
+                          className={`w-3 h-3 ${
+                            doingEverything ? 'animate-pulse' : ''
+                          }`}
+                        />
+                        {doingEverything ? 'Processing...' : 'Do Everything'}
+                      </button>
                       <button
                         onClick={() =>
-                          window.open(parsedData.captionsUrl, '_blank')
+                          window.open(parsedData.finalVideoUrl, '_blank')
                         }
-                        className='inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors'
-                        title='Download captions file'
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors'
+                        title='Open video in new tab'
+                      >
+                        <ExternalLink className='w-3 h-3' />
+                        View
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (parsedData.finalVideoUrl) {
+                            navigator.clipboard.writeText(
+                              parsedData.finalVideoUrl,
+                            );
+                          }
+                          // Could add a toast notification here
+                        }}
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors'
+                        title='Copy video URL'
                       >
                         <Check className='w-3 h-3' />
-                        Captions
+                        Copy
+                      </button>
+                      <button
+                        onClick={() => handleTranscribeVideo()}
+                        disabled={transcribing}
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                        title='Transcribe video'
+                      >
+                        <Mic
+                          className={`w-3 h-3 ${
+                            transcribing ? 'animate-pulse' : ''
+                          }`}
+                        />
+                        {transcribing ? 'Transcribing...' : 'Transcribe'}
+                      </button>
+                      <button
+                        onClick={() => handleGenerateTitle()}
+                        disabled={generatingTitle || !hasCaptions()}
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                        title={
+                          hasCaptions()
+                            ? 'Generate YouTube title from transcription'
+                            : 'Transcription required for title generation'
+                        }
+                      >
+                        <Sparkles
+                          className={`w-3 h-3 ${
+                            generatingTitle ? 'animate-pulse' : ''
+                          }`}
+                        />
+                        {generatingTitle ? 'Generating...' : 'Generate Title'}
+                      </button>
+                      <button
+                        onClick={() => handleGenerateDescription()}
+                        disabled={generatingDescription || !hasCaptions()}
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                        title={
+                          hasCaptions()
+                            ? 'Generate YouTube description from transcription'
+                            : 'Transcription required for description generation'
+                        }
+                      >
+                        <Sparkles
+                          className={`w-3 h-3 ${
+                            generatingDescription ? 'animate-pulse' : ''
+                          }`}
+                        />
+                        {generatingDescription
+                          ? 'Generating...'
+                          : 'Generate Description'}
+                      </button>
+                      <button
+                        onClick={() => handleGenerateTags()}
+                        disabled={generatingTags || !hasCaptions()}
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
+                        title={
+                          hasCaptions()
+                            ? 'Generate YouTube tags from transcription'
+                            : 'Transcription required for tags generation'
+                        }
+                      >
+                        <Sparkles
+                          className={`w-3 h-3 ${
+                            generatingTags ? 'animate-pulse' : ''
+                          }`}
+                        />
+                        {generatingTags ? 'Generating...' : 'Generate Tags'}
+                      </button>
+                      <button
+                        onClick={handleResetData}
+                        className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors'
+                        title='Reset all data except final video URL and timestamps'
+                      >
+                        Reset Data
                       </button>
                     </div>
-                  ) : parsedData.caption === 'Transcription completed' ? (
-                    <span className='text-green-600 font-medium'>
-                      Transcribed
-                    </span>
-                  ) : parsedData.videoCount ? (
-                    `${parsedData.videoCount} videos merged`
-                  ) : (
-                    'No caption available'
-                  )}
-                </div>
-              </td>
-              <td className='px-6 py-4 whitespace-nowrap'>
-                <div className='flex items-center gap-2'>
-                  <button
-                    onClick={handleDoEverything}
-                    disabled={
-                      doingEverything ||
-                      transcribing ||
-                      generatingTitle ||
-                      generatingDescription ||
-                      generatingTags
-                    }
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-blue-300 disabled:to-purple-400 text-white rounded-md transition-all disabled:cursor-not-allowed font-medium'
-                    title='Automatically transcribe, generate title, description, and tags with 1-minute gaps between each step'
-                  >
-                    <Sparkles
-                      className={`w-3 h-3 ${
-                        doingEverything ? 'animate-pulse' : ''
-                      }`}
-                    />
-                    {doingEverything ? 'Processing...' : 'Do Everything'}
-                  </button>
-                  <button
-                    onClick={() =>
-                      window.open(parsedData.finalVideoUrl, '_blank')
-                    }
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors'
-                    title='Open video in new tab'
-                  >
-                    <ExternalLink className='w-3 h-3' />
-                    View
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (parsedData.finalVideoUrl) {
-                        navigator.clipboard.writeText(parsedData.finalVideoUrl);
-                      }
-                      // Could add a toast notification here
-                    }}
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors'
-                    title='Copy video URL'
-                  >
-                    <Check className='w-3 h-3' />
-                    Copy
-                  </button>
-                  <button
-                    onClick={() => handleTranscribeVideo()}
-                    disabled={transcribing}
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
-                    title='Transcribe video'
-                  >
-                    <Mic
-                      className={`w-3 h-3 ${
-                        transcribing ? 'animate-pulse' : ''
-                      }`}
-                    />
-                    {transcribing ? 'Transcribing...' : 'Transcribe'}
-                  </button>
-                  <button
-                    onClick={() => handleGenerateTitle()}
-                    disabled={generatingTitle || !hasCaptions()}
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
-                    title={
-                      hasCaptions()
-                        ? 'Generate YouTube title from transcription'
-                        : 'Transcription required for title generation'
-                    }
-                  >
-                    <Sparkles
-                      className={`w-3 h-3 ${
-                        generatingTitle ? 'animate-pulse' : ''
-                      }`}
-                    />
-                    {generatingTitle ? 'Generating...' : 'Generate Title'}
-                  </button>
-                  <button
-                    onClick={() => handleGenerateDescription()}
-                    disabled={generatingDescription || !hasCaptions()}
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
-                    title={
-                      hasCaptions()
-                        ? 'Generate YouTube description from transcription'
-                        : 'Transcription required for description generation'
-                    }
-                  >
-                    <Sparkles
-                      className={`w-3 h-3 ${
-                        generatingDescription ? 'animate-pulse' : ''
-                      }`}
-                    />
-                    {generatingDescription
-                      ? 'Generating...'
-                      : 'Generate Description'}
-                  </button>
-                  <button
-                    onClick={() => handleGenerateTags()}
-                    disabled={generatingTags || !hasCaptions()}
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white rounded-md transition-colors disabled:cursor-not-allowed'
-                    title={
-                      hasCaptions()
-                        ? 'Generate YouTube tags from transcription'
-                        : 'Transcription required for tags generation'
-                    }
-                  >
-                    <Sparkles
-                      className={`w-3 h-3 ${
-                        generatingTags ? 'animate-pulse' : ''
-                      }`}
-                    />
-                    {generatingTags ? 'Generating...' : 'Generate Tags'}
-                  </button>
-                  <button
-                    onClick={handleResetData}
-                    className='inline-flex items-center gap-1 px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors'
-                    title='Reset all data except final video URL and timestamps'
-                  >
-                    Reset Data
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Video Description and Timestamps Section */}
-      {timestampData && (
-        <div className='mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4'>
-          <div className='flex items-center justify-between mb-3'>
-            <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
-              <Clock className='w-5 h-5 text-teal-500' />
-              Video Title, Description & Timestamps
-            </h3>
-            <button
-              onClick={() => {
-                const finalVideoData = localStorage.getItem('final-video-data');
-                let description = '';
-                const title = parsedData.title || 'Final Merged Video';
-                let tags = '';
-                if (finalVideoData) {
-                  try {
-                    const parsed = JSON.parse(finalVideoData);
-                    description = parsed.description || '';
-                    tags = parsed.tags || '';
-                  } catch (error) {
-                    console.warn('Failed to parse final video data:', error);
-                  }
-                }
-                const fullContent = `${title}\n\n${description}\n\ntimestamp:\n${timestampData}\n\n${tags}`;
-                navigator.clipboard.writeText(fullContent);
-                // Could add a toast notification here
-              }}
-              className='px-3 py-1 text-sm bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors'
-              title='Copy title, description, timestamps and tags to clipboard'
-            >
-              Copy All
-            </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div className='bg-white border border-gray-200 rounded-md p-3'>
-            <div className='space-y-4'>
-              {/* Description Section */}
-              <div>
-                <h4 className='text-sm font-medium text-gray-900 mb-2'>
-                  Description
-                </h4>
-                <div className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
-                  {(() => {
+
+          {/* Video Description and Timestamps Section */}
+          {timestampData && (
+            <div className='mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4'>
+              <div className='flex items-center justify-between mb-3'>
+                <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
+                  <Clock className='w-5 h-5 text-teal-500' />
+                  Video Title, Description & Timestamps
+                </h3>
+                <button
+                  onClick={() => {
                     const finalVideoData =
                       localStorage.getItem('final-video-data');
+                    let description = '';
+                    const title = parsedData.title || 'Final Merged Video';
+                    let tags = '';
                     if (finalVideoData) {
                       try {
                         const parsed = JSON.parse(finalVideoData);
-                        return (
-                          parsed.description || 'No description generated yet'
-                        );
+                        description = parsed.description || '';
+                        tags = parsed.tags || '';
                       } catch (error) {
                         console.warn(
                           'Failed to parse final video data:',
-                          error
+                          error,
                         );
+                      }
+                    }
+                    const fullContent = `${title}\n\n${description}\n\ntimestamp:\n${timestampData}\n\n${tags}`;
+                    navigator.clipboard.writeText(fullContent);
+                    // Could add a toast notification here
+                  }}
+                  className='px-3 py-1 text-sm bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors'
+                  title='Copy title, description, timestamps and tags to clipboard'
+                >
+                  Copy All
+                </button>
+              </div>
+              <div className='bg-white border border-gray-200 rounded-md p-3'>
+                <div className='space-y-4'>
+                  {/* Description Section */}
+                  <div>
+                    <h4 className='text-sm font-medium text-gray-900 mb-2'>
+                      Description
+                    </h4>
+                    <div className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                      {(() => {
+                        const finalVideoData =
+                          localStorage.getItem('final-video-data');
+                        if (finalVideoData) {
+                          try {
+                            const parsed = JSON.parse(finalVideoData);
+                            return (
+                              parsed.description ||
+                              'No description generated yet'
+                            );
+                          } catch (error) {
+                            console.warn(
+                              'Failed to parse final video data:',
+                              error,
+                            );
+                            return 'No description generated yet';
+                          }
+                        }
                         return 'No description generated yet';
-                      }
-                    }
-                    return 'No description generated yet';
-                  })()}
-                </div>
-              </div>
+                      })()}
+                    </div>
+                  </div>
 
-              {/* Timestamp Section */}
-              <div>
-                <h4 className='text-sm font-medium text-gray-900 mb-2'>
-                  Timestamps
-                </h4>
-                <pre className='text-sm text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-md'>
-                  {timestampData}
-                </pre>
-              </div>
+                  {/* Timestamp Section */}
+                  <div>
+                    <h4 className='text-sm font-medium text-gray-900 mb-2'>
+                      Timestamps
+                    </h4>
+                    <pre className='text-sm text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-md'>
+                      {timestampData}
+                    </pre>
+                  </div>
 
-              {/* Tags Section */}
-              <div>
-                <h4 className='text-sm font-medium text-gray-900 mb-2'>Tags</h4>
-                <div className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
-                  {(() => {
-                    const finalVideoData =
-                      localStorage.getItem('final-video-data');
-                    if (finalVideoData) {
-                      try {
-                        const parsed = JSON.parse(finalVideoData);
-                        return parsed.tags || 'No tags generated yet';
-                      } catch (error) {
-                        console.warn(
-                          'Failed to parse final video data:',
-                          error
-                        );
+                  {/* Tags Section */}
+                  <div>
+                    <h4 className='text-sm font-medium text-gray-900 mb-2'>
+                      Tags
+                    </h4>
+                    <div className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                      {(() => {
+                        const finalVideoData =
+                          localStorage.getItem('final-video-data');
+                        if (finalVideoData) {
+                          try {
+                            const parsed = JSON.parse(finalVideoData);
+                            return parsed.tags || 'No tags generated yet';
+                          } catch (error) {
+                            console.warn(
+                              'Failed to parse final video data:',
+                              error,
+                            );
+                            return 'No tags generated yet';
+                          }
+                        }
                         return 'No tags generated yet';
-                      }
-                    }
-                    return 'No tags generated yet';
-                  })()}
+                      })()}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );
