@@ -253,6 +253,12 @@ export default function OriginalVideosList({
   const [isBatchOperationsExpanded, setIsBatchOperationsExpanded] =
     useState(false); // Batch operations collapsed by default
   const [isFinalVideoExpanded, setIsFinalVideoExpanded] = useState(false); // Final video section collapsed by default
+  const [selectedVideoDetailsExpanded, setSelectedVideoDetailsExpanded] =
+    useState({
+      overview: true,
+      youtube: true,
+      assets: false,
+    });
 
   // Get clip generation state from global store
   const {
@@ -1034,6 +1040,20 @@ export default function OriginalVideosList({
       default:
         return 'bg-gray-100 text-gray-600';
     }
+  };
+
+  const selectedVideo = selectedOriginalVideo.id
+    ? originalVideos.find((video) => video.id === selectedOriginalVideo.id) ||
+      null
+    : null;
+
+  const toggleSelectedVideoDetailsSection = (
+    section: keyof typeof selectedVideoDetailsExpanded,
+  ) => {
+    setSelectedVideoDetailsExpanded((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
   };
 
   // Drag and drop handlers for reordering
@@ -2263,7 +2283,7 @@ export default function OriginalVideosList({
           }
 
           const formattedTitleChoices = candidates
-            .map((title, index) => `${index + 1}) ${title.trim()}`)
+            .map((title) => title.trim())
             .join('\n');
 
           await updateOriginalVideoRow(video.id, {
@@ -9062,6 +9082,246 @@ export default function OriginalVideosList({
             {/* Collapsible Final Video Content */}
             {isFinalVideoExpanded && (
               <div>
+                <div className='px-4 py-4 border-b border-gray-200 bg-gray-50'>
+                  <div className='mb-3'>
+                    <h4 className='text-sm font-semibold text-gray-900'>
+                      Selected Video Details
+                    </h4>
+                    <p className='text-xs text-gray-500 mt-1'>
+                      Review and copy metadata for the currently selected video.
+                    </p>
+                  </div>
+
+                  {!selectedVideo ? (
+                    <div className='rounded-md border border-dashed border-gray-300 bg-white p-3 text-sm text-gray-600'>
+                      Select a video row above to see its title, description,
+                      keywords, timestamps, and related assets here.
+                    </div>
+                  ) : (
+                    <div className='space-y-3'>
+                      {/* Overview */}
+                      <div className='rounded-md border border-gray-200 bg-white overflow-hidden'>
+                        <button
+                          onClick={() =>
+                            toggleSelectedVideoDetailsSection('overview')
+                          }
+                          className='w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors'
+                        >
+                          <span className='text-sm font-medium text-gray-900'>
+                            Overview
+                          </span>
+                          <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform ${
+                              selectedVideoDetailsExpanded.overview
+                                ? 'rotate-180'
+                                : ''
+                            }`}
+                            fill='none'
+                            stroke='currentColor'
+                            viewBox='0 0 24 24'
+                          >
+                            <path
+                              strokeLinecap='round'
+                              strokeLinejoin='round'
+                              strokeWidth={2}
+                              d='M19 9l-7 7-7-7'
+                            />
+                          </svg>
+                        </button>
+                        {selectedVideoDetailsExpanded.overview && (
+                          <div className='px-3 pb-3 border-t border-gray-100 space-y-2 text-sm'>
+                            <div>
+                              <span className='text-gray-500'>Video ID:</span>{' '}
+                              <span className='text-gray-900 font-medium'>
+                                #{selectedVideo.id}
+                              </span>
+                            </div>
+                            <div>
+                              <span className='text-gray-500'>Status:</span>{' '}
+                              <span className='text-gray-900'>
+                                {extractFieldValue(selectedVideo.field_6864) ||
+                                  'N/A'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className='text-gray-500'>Title:</span>{' '}
+                              <span className='text-gray-900 whitespace-pre-wrap'>
+                                {extractFieldValue(selectedVideo.field_6852) ||
+                                  'N/A'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* YouTube Metadata */}
+                      <div className='rounded-md border border-gray-200 bg-white overflow-hidden'>
+                        <button
+                          onClick={() =>
+                            toggleSelectedVideoDetailsSection('youtube')
+                          }
+                          className='w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors'
+                        >
+                          <span className='text-sm font-medium text-gray-900'>
+                            YouTube Metadata
+                          </span>
+                          <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform ${
+                              selectedVideoDetailsExpanded.youtube
+                                ? 'rotate-180'
+                                : ''
+                            }`}
+                            fill='none'
+                            stroke='currentColor'
+                            viewBox='0 0 24 24'
+                          >
+                            <path
+                              strokeLinecap='round'
+                              strokeLinejoin='round'
+                              strokeWidth={2}
+                              d='M19 9l-7 7-7-7'
+                            />
+                          </svg>
+                        </button>
+                        {selectedVideoDetailsExpanded.youtube && (
+                          <div className='px-3 pb-3 border-t border-gray-100 space-y-3 text-sm'>
+                            <div>
+                              <div className='text-gray-500 mb-1'>Title</div>
+                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
+                                {(
+                                  extractFieldValue(selectedVideo.field_6870) ||
+                                  ''
+                                )
+                                  .split('\n')
+                                  .map((line) =>
+                                    line
+                                      .replace(/^\s*\d+\)\s*/, '')
+                                      .replace(/^\s*[-*•]\s*/, '')
+                                      .trim(),
+                                  )
+                                  .filter(Boolean)
+                                  .join('\n') || 'N/A'}
+                              </div>
+                            </div>
+                            <div>
+                              <div className='text-gray-500 mb-1'>
+                                {/* add line breaks */}
+                                ----
+                              </div>
+                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
+                                {extractFieldValue(selectedVideo.field_6869) ||
+                                  'N/A'}
+                              </div>
+                            </div>
+                            <div>
+                              <div className='text-gray-500 mb-1'>
+                                Timestamps
+                              </div>
+                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2 font-mono'>
+                                {extractFieldValue(selectedVideo.field_6873) ||
+                                  'N/A'}
+                              </div>
+                            </div>
+                            <div>
+                              <div className='text-gray-500 mb-1'>Keywords</div>
+                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
+                                {extractFieldValue(selectedVideo.field_6871) ||
+                                  'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Assets & Sources */}
+                      <div className='rounded-md border border-gray-200 bg-white overflow-hidden'>
+                        <button
+                          onClick={() =>
+                            toggleSelectedVideoDetailsSection('assets')
+                          }
+                          className='w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors'
+                        >
+                          <span className='text-sm font-medium text-gray-900'>
+                            Assets & Sources
+                          </span>
+                          <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform ${
+                              selectedVideoDetailsExpanded.assets
+                                ? 'rotate-180'
+                                : ''
+                            }`}
+                            fill='none'
+                            stroke='currentColor'
+                            viewBox='0 0 24 24'
+                          >
+                            <path
+                              strokeLinecap='round'
+                              strokeLinejoin='round'
+                              strokeWidth={2}
+                              d='M19 9l-7 7-7-7'
+                            />
+                          </svg>
+                        </button>
+                        {selectedVideoDetailsExpanded.assets && (
+                          <div className='px-3 pb-3 border-t border-gray-100 space-y-2 text-sm'>
+                            <div>
+                              <span className='text-gray-500'>Script:</span>
+                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2 mt-1'>
+                                {extractFieldValue(selectedVideo.field_6854) ||
+                                  'N/A'}
+                              </div>
+                            </div>
+                            <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
+                              <a
+                                href={
+                                  extractUrl(selectedVideo.field_6881) || '#'
+                                }
+                                target='_blank'
+                                rel='noopener noreferrer'
+                                className={`rounded px-2 py-1 text-center border text-xs ${
+                                  extractUrl(selectedVideo.field_6881)
+                                    ? 'text-blue-700 border-blue-200 bg-blue-50 hover:bg-blue-100'
+                                    : 'text-gray-400 border-gray-200 bg-gray-50 pointer-events-none'
+                                }`}
+                              >
+                                Video URL
+                              </a>
+                              <a
+                                href={
+                                  extractUrl(selectedVideo.field_6858) || '#'
+                                }
+                                target='_blank'
+                                rel='noopener noreferrer'
+                                className={`rounded px-2 py-1 text-center border text-xs ${
+                                  extractUrl(selectedVideo.field_6858)
+                                    ? 'text-green-700 border-green-200 bg-green-50 hover:bg-green-100'
+                                    : 'text-gray-400 border-gray-200 bg-gray-50 pointer-events-none'
+                                }`}
+                              >
+                                Final Video
+                              </a>
+                              <a
+                                href={
+                                  extractUrl(selectedVideo.field_6872) || '#'
+                                }
+                                target='_blank'
+                                rel='noopener noreferrer'
+                                className={`rounded px-2 py-1 text-center border text-xs ${
+                                  extractUrl(selectedVideo.field_6872)
+                                    ? 'text-purple-700 border-purple-200 bg-purple-50 hover:bg-purple-100'
+                                    : 'text-gray-400 border-gray-200 bg-gray-50 pointer-events-none'
+                                }`}
+                              >
+                                Final Captions
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <FinalVideoTable />
               </div>
             )}
