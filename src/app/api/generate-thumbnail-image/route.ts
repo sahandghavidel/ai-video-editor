@@ -380,12 +380,18 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as {
       videoId?: unknown;
       variant?: unknown;
+      forceRegenerate?: unknown;
     } | null;
 
     const videoId =
       typeof body?.videoId === 'number' ? body.videoId : Number(body?.videoId);
     const variant =
       typeof body?.variant === 'number' ? body.variant : Number(body?.variant);
+    const forceRegenerate =
+      body?.forceRegenerate === true ||
+      body?.forceRegenerate === 'true' ||
+      body?.forceRegenerate === 1 ||
+      body?.forceRegenerate === '1';
 
     if (!Number.isFinite(videoId) || videoId <= 0) {
       return Response.json({ error: 'videoId is required' }, { status: 400 });
@@ -421,7 +427,7 @@ export async function POST(req: Request) {
 
     const existingValue = video[cfg.fieldKey as keyof BaserowRow];
     const existingThumbnailUrl = extractUrlFromField(existingValue);
-    if (existingThumbnailUrl) {
+    if (existingThumbnailUrl && !forceRegenerate) {
       return Response.json({
         skipped: true,
         imageUrl: existingThumbnailUrl,

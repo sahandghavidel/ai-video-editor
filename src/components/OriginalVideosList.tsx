@@ -189,6 +189,10 @@ export default function OriginalVideosList({
   const [generatingThumbnailVideoId, setGeneratingThumbnailVideoId] = useState<
     number | null
   >(null);
+  const [regeneratingThumbnailVideoId, setRegeneratingThumbnailVideoId] =
+    useState<number | null>(null);
+  const [regeneratingThumbnailVariant, setRegeneratingThumbnailVariant] =
+    useState<1 | 2 | 3 | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -2543,6 +2547,53 @@ export default function OriginalVideosList({
     } finally {
       setGeneratingThumbnailVideoId(null);
       setGeneratingThumbnailsAll(false);
+    }
+  };
+
+  const handleRegenerateThumbnail = async (
+    videoId: number,
+    variant: 1 | 2 | 3,
+  ) => {
+    try {
+      setRegeneratingThumbnailVideoId(videoId);
+      setRegeneratingThumbnailVariant(variant);
+      setError(null);
+
+      const response = await fetch('/api/generate-thumbnail-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId,
+          variant,
+          forceRegenerate: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(
+          `Thumbnail ${variant} regenerate failed (${response.status}): ${errorText}`,
+        );
+      }
+
+      await handleRefresh();
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        `Failed to regenerate thumbnail ${variant} for video #${videoId}:`,
+        error,
+      );
+      playErrorSound();
+      setError(
+        `Failed to regenerate thumbnail ${variant}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setRegeneratingThumbnailVideoId(null);
+      setRegeneratingThumbnailVariant(null);
     }
   };
 
@@ -9238,6 +9289,92 @@ export default function OriginalVideosList({
                     </div>
                   ) : (
                     <div className='space-y-3'>
+                      <div className='rounded-md border border-gray-200 bg-white p-3'>
+                        <div className='text-sm font-medium text-gray-900 mb-2'>
+                          Thumbnails
+                        </div>
+                        <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+                          {(
+                            [
+                              {
+                                variant: 1 as const,
+                                field: selectedVideo.field_7100,
+                                maxWords: 2,
+                              },
+                              {
+                                variant: 2 as const,
+                                field: selectedVideo.field_7101,
+                                maxWords: 3,
+                              },
+                              {
+                                variant: 3 as const,
+                                field: selectedVideo.field_7102,
+                                maxWords: 5,
+                              },
+                            ] as const
+                          ).map((thumb) => {
+                            const thumbUrl = extractUrl(thumb.field);
+                            const isRegenerating =
+                              regeneratingThumbnailVideoId ===
+                                selectedVideo.id &&
+                              regeneratingThumbnailVariant === thumb.variant;
+
+                            return (
+                              <div
+                                key={thumb.variant}
+                                className='rounded-md border border-gray-200 overflow-hidden bg-gray-50'
+                              >
+                                <div className='aspect-video bg-gray-100 flex items-center justify-center'>
+                                  {thumbUrl ? (
+                                    <div
+                                      className='w-full h-full bg-cover bg-center'
+                                      style={{
+                                        backgroundImage: `url(${thumbUrl})`,
+                                      }}
+                                      role='img'
+                                      aria-label={`Thumbnail ${thumb.variant}`}
+                                    />
+                                  ) : (
+                                    <span className='text-xs text-gray-500'>
+                                      Thumbnail {thumb.variant} not generated
+                                    </span>
+                                  )}
+                                </div>
+                                <div className='p-2 border-t border-gray-200 space-y-2'>
+                                  <div className='text-xs text-gray-600'>
+                                    Thumb {thumb.variant} · Max {thumb.maxWords}{' '}
+                                    words
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      handleRegenerateThumbnail(
+                                        selectedVideo.id,
+                                        thumb.variant,
+                                      )
+                                    }
+                                    disabled={
+                                      regeneratingThumbnailVideoId !== null ||
+                                      generatingThumbnailsAll
+                                    }
+                                    className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white transition-colors disabled:cursor-not-allowed'
+                                    title={`Regenerate thumbnail ${thumb.variant} with MAX ${thumb.maxWords} words prompt`}
+                                  >
+                                    {isRegenerating ? (
+                                      <>
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                        Regenerating...
+                                      </>
+                                    ) : (
+                                      'Regenerate'
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       {/* YouTube Metadata */}
                       <div className='rounded-md border border-gray-200 bg-white overflow-hidden'>
                         <button
