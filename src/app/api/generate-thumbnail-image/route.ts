@@ -165,15 +165,15 @@ type ThumbnailVariantConfig = {
 
 function getThumbnailVariantConfig(variant: number): ThumbnailVariantConfig {
   if (variant === 1) {
-    return { variant: 1, fieldKey: 'field_7100', maxWords: 2 };
+    return { variant: 1, fieldKey: 'field_7100', maxWords: 4 };
   }
 
   if (variant === 2) {
-    return { variant: 2, fieldKey: 'field_7101', maxWords: 3 };
+    return { variant: 2, fieldKey: 'field_7101', maxWords: 5 };
   }
 
   if (variant === 3) {
-    return { variant: 3, fieldKey: 'field_7102', maxWords: 5 };
+    return { variant: 3, fieldKey: 'field_7102', maxWords: 6 };
   }
 
   throw new Error('Invalid thumbnail variant. Expected 1, 2, or 3.');
@@ -187,13 +187,15 @@ function buildThumbnailPrompt(
 
   return `Create a cinematic, high-contrast YouTube thumbnail in 16:9 ratio.
 
-Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person.
+Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the video.
 
 do it for this YouTube script:
 
 "${clippedScript}"
 
-Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high YouTube CTR. Keep the character large and clearly visible. use bold and big texts if needed and AVOID using too many texts. USE MAX ${cfg.maxWords} words`;
+Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high YouTube CTR. Add short headline text on thumbnail with MAX ${cfg.maxWords} words.
+
+Headline should be punchy and emotionally strong. Keep text very large and clearly readable on mobile.No watermark, no logos, no tiny text.`;
 }
 
 type KieCreateTaskResponse = {
