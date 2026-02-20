@@ -255,7 +255,6 @@ export default function OriginalVideosList({
   const [isFinalVideoExpanded, setIsFinalVideoExpanded] = useState(false); // Final video section collapsed by default
   const [selectedVideoDetailsExpanded, setSelectedVideoDetailsExpanded] =
     useState({
-      overview: true,
       youtube: true,
       assets: false,
     });
@@ -9099,61 +9098,6 @@ export default function OriginalVideosList({
                     </div>
                   ) : (
                     <div className='space-y-3'>
-                      {/* Overview */}
-                      <div className='rounded-md border border-gray-200 bg-white overflow-hidden'>
-                        <button
-                          onClick={() =>
-                            toggleSelectedVideoDetailsSection('overview')
-                          }
-                          className='w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors'
-                        >
-                          <span className='text-sm font-medium text-gray-900'>
-                            Overview
-                          </span>
-                          <svg
-                            className={`w-4 h-4 text-gray-400 transition-transform ${
-                              selectedVideoDetailsExpanded.overview
-                                ? 'rotate-180'
-                                : ''
-                            }`}
-                            fill='none'
-                            stroke='currentColor'
-                            viewBox='0 0 24 24'
-                          >
-                            <path
-                              strokeLinecap='round'
-                              strokeLinejoin='round'
-                              strokeWidth={2}
-                              d='M19 9l-7 7-7-7'
-                            />
-                          </svg>
-                        </button>
-                        {selectedVideoDetailsExpanded.overview && (
-                          <div className='px-3 pb-3 border-t border-gray-100 space-y-2 text-sm'>
-                            <div>
-                              <span className='text-gray-500'>Video ID:</span>{' '}
-                              <span className='text-gray-900 font-medium'>
-                                #{selectedVideo.id}
-                              </span>
-                            </div>
-                            <div>
-                              <span className='text-gray-500'>Status:</span>{' '}
-                              <span className='text-gray-900'>
-                                {extractFieldValue(selectedVideo.field_6864) ||
-                                  'N/A'}
-                              </span>
-                            </div>
-                            <div>
-                              <span className='text-gray-500'>Title:</span>{' '}
-                              <span className='text-gray-900 whitespace-pre-wrap'>
-                                {extractFieldValue(selectedVideo.field_6852) ||
-                                  'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
                       {/* YouTube Metadata */}
                       <div className='rounded-md border border-gray-200 bg-white overflow-hidden'>
                         <button
