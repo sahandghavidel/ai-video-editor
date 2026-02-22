@@ -4045,6 +4045,43 @@ export default function OriginalVideosList({
   const getSceneHasTextParsed = (scene: BaserowRow) =>
     parseSceneHasTextField(scene['field_7099'] ?? scene['field_7097']);
 
+  const isSceneFlagged = (scene: unknown): boolean => {
+    if (!scene || typeof scene !== 'object') return false;
+    const rec = scene as Record<string, unknown>;
+    const raw =
+      (scene as { field_7096?: unknown }).field_7096 ?? rec['field_7096'];
+    if (raw === true) return true;
+    if (!raw) return false;
+
+    if (Array.isArray(raw)) {
+      return raw.some((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const obj = item as Record<string, unknown>;
+        const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+        if (value === true) return true;
+        if (typeof value === 'string') {
+          return value.trim().toLowerCase() === 'true';
+        }
+        return false;
+      });
+    }
+
+    if (typeof raw === 'string') {
+      return raw.trim().toLowerCase() === 'true';
+    }
+
+    if (typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
+      if (value === true) return true;
+      if (typeof value === 'string') {
+        return value.trim().toLowerCase() === 'true';
+      }
+    }
+
+    return false;
+  };
+
   const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {
     const finalUrl = getExistingFinalVideoUrl(scene);
     if (!finalUrl) return false;
@@ -4109,6 +4146,13 @@ export default function OriginalVideosList({
 
     const scenesToSubtitle = [...scenesForProcessingVideos]
       .filter((scene) => {
+        if (
+          transcriptionSettings.skipFlaggedScenesInSubtitleBatch &&
+          isSceneFlagged(scene)
+        ) {
+          return false;
+        }
+
         const finalVideoUrl = getExistingFinalVideoUrl(scene);
         const captionsUrl = String(scene['field_6910'] ?? '').trim();
         if (!finalVideoUrl || !captionsUrl) return false;
