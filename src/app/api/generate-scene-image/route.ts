@@ -13,6 +13,8 @@ const IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
 // Nano Banana Edit model identifier (must match KIE API exactly)
 const KIE_MODEL = 'google/nano-banana-edit';
+const CONTEXT_SCENES_BEFORE = 50;
+const CONTEXT_SCENES_AFTER = 50;
 const KIE_POLL_INTERVAL_MS = 3000;
 // Allow more time for KIE Nano Banana jobs to complete (10 minutes).
 const KIE_MAX_WAIT_MS = 600000;
@@ -214,6 +216,23 @@ function formatScriptLine(scene: BaserowRow): string {
   return `${scene.id} ${text}`.trim();
 }
 
+function getSceneOrderValue(scene: BaserowRow): number {
+  const raw = scene.order;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return scene.id;
+}
+
+function sortScenesByTimeline(a: BaserowRow, b: BaserowRow): number {
+  const orderA = getSceneOrderValue(a);
+  const orderB = getSceneOrderValue(b);
+  if (orderA !== orderB) return orderA - orderB;
+  return (a.id ?? 0) - (b.id ?? 0);
+}
+
 function getKieApiKey(): string {
   const key = process.env.KIE_API_KEY;
   if (!key) {
@@ -314,7 +333,7 @@ function extractResultUrl(resultJson: unknown): string | null {
 
     try {
       parsed = JSON.parse(parsed) as unknown;
-    } catch (error) {
+    } catch {
       return null;
     }
     depth += 1;
@@ -465,19 +484,36 @@ export async function POST(req: Request) {
     // Fetch scenes for same video (best effort).
     let videoScenes: BaserowRow[] = [];
     if (videoId) {
-      const page = await baserowGetJson<{ results: BaserowRow[] }>(
-        `/database/rows/table/${SCENES_TABLE_ID}/`,
-        {
+      let pageNumber = 1;
+      let hasMore = true;
+      const allScenes: BaserowRow[] = [];
+
+      while (hasMore) {
+        const page = await baserowGetJson<{
+          results?: BaserowRow[];
+          next?: string | null;
+        }>(`/database/rows/table/${SCENES_TABLE_ID}/`, {
           [`filter__field_6889__equal`]: String(videoId),
           size: '200',
-        },
-      );
-      videoScenes = Array.isArray(page?.results) ? page.results : [];
+          page: String(pageNumber),
+        });
+
+        const results = Array.isArray(page?.results) ? page.results : [];
+        allScenes.push(...results);
+        hasMore = Boolean(page?.next);
+        pageNumber += 1;
+      }
+
+      videoScenes = allScenes;
+    }
+
+    if (!videoScenes.some((scene) => scene.id === currentScene.id)) {
+      videoScenes.push(currentScene);
     }
 
     const orderedScenes = (videoScenes.length ? videoScenes : [currentScene])
       .slice()
-      .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+      .sort(sortScenesByTimeline);
 
     const currentText = getSceneText(currentScene).trim();
     if (!currentText) {
@@ -489,10 +525,26 @@ export async function POST(req: Request) {
       );
     }
 
-    const contextScenes = orderedScenes.filter((scene) =>
+    const currentSceneIndex = orderedScenes.findIndex(
+      (scene) => scene.id === sceneId,
+    );
+
+    const contextWindowScenes =
+      currentSceneIndex >= 0
+        ? orderedScenes.slice(
+            Math.max(0, currentSceneIndex - CONTEXT_SCENES_BEFORE),
+            Math.min(
+              orderedScenes.length,
+              currentSceneIndex + CONTEXT_SCENES_AFTER + 1,
+            ),
+          )
+        : orderedScenes;
+
+    const contextScenes = contextWindowScenes.filter((scene) =>
       Boolean(getSceneText(scene).trim()),
     );
-    const fullScript = contextScenes.map(formatScriptLine).join(' ');
+
+    const contextScript = contextScenes.map(formatScriptLine).join(' ');
 
     const prompt = `You are a professional image creator for video clips. Your task is to analyze the script I provide and convert each scene into a single, clear visual that communicates the idea being spoken.
 
@@ -508,7 +560,7 @@ export async function POST(req: Request) {
   current scene: ${sceneId} ${currentText} 
   
   
-  Full script: ${fullScript}
+  Context window (${CONTEXT_SCENES_BEFORE} before / ${CONTEXT_SCENES_AFTER} after): ${contextScript}
   
   Create an image for the current scene:
 
@@ -547,12 +599,10 @@ export async function POST(req: Request) {
 
     let imageUrl = '';
     let lastState: string | null = null;
-    let lastFailMsg: string | null = null;
     const pollStart = Date.now();
     while (Date.now() - pollStart < KIE_MAX_WAIT_MS) {
       const pollResult = await fetchNanoBananaResult(taskId);
       lastState = pollResult.state;
-      lastFailMsg = pollResult.failMsg;
 
       if (pollResult.state === 'fail') {
         throw new Error(
