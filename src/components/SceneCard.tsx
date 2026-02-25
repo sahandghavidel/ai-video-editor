@@ -232,7 +232,6 @@ export default function SceneCard({
 
   // Global settings from store
   const {
-    ttsSettings,
     videoSettings,
     transcriptionSettings,
     updateTTSSettings,
@@ -265,7 +264,6 @@ export default function SceneCard({
     clipGeneration,
     setGeneratingSingleClip,
     setCreatingTypingEffect,
-    selectedOriginalVideo,
   } = useAppStore();
 
   // Click outside handler for time adjustment and settings dropdowns
@@ -1965,15 +1963,17 @@ export default function SceneCard({
         const sceneVoiceOverride = extractTtsVoiceReference(
           typedSceneData?.['field_6860'],
         );
+        const liveStoreState = useAppStore.getState();
         const selectedVideoVoiceOverride = extractTtsVoiceReference(
-          selectedOriginalVideo.ttsVoiceReference,
+          liveStoreState.selectedOriginalVideo.ttsVoiceReference,
         );
         const voiceOverride = sceneVoiceOverride ?? selectedVideoVoiceOverride;
 
+        const currentTtsSettings = liveStoreState.ttsSettings;
         const effectiveTtsSettings =
           typeof opts?.seedOverride === 'number'
-            ? { ...ttsSettings, seed: opts.seedOverride }
-            : ttsSettings;
+            ? { ...currentTtsSettings, seed: opts.seedOverride }
+            : currentTtsSettings;
 
         const ttsPayloadSettings = voiceOverride
           ? {
@@ -2055,12 +2055,7 @@ export default function SceneCard({
         setProducingTTS(null);
       }
     },
-    [
-      selectedOriginalVideo.ttsVoiceReference,
-      setProducingTTS,
-      ttsSettings,
-      videoSettings.autoGenerateVideo,
-    ],
+    [setProducingTTS, videoSettings.autoGenerateVideo],
   );
 
   const handleVideoGenerate = useCallback(
