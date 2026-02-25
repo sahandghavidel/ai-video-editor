@@ -8,6 +8,7 @@ import {
 type Body = {
   title?: unknown;
   script?: unknown;
+  expectedDuration?: unknown;
   ttsVoiceReference?: unknown;
 };
 
@@ -16,6 +17,10 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as Body | null;
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
     const script = typeof body?.script === 'string' ? body.script.trim() : '';
+    const expectedDurationRaw = Number(body?.expectedDuration);
+    const expectedDuration = Number.isFinite(expectedDurationRaw)
+      ? Math.max(1, Math.round(expectedDurationRaw))
+      : 15;
     const ttsVoiceReference =
       typeof body?.ttsVoiceReference === 'string'
         ? body.ttsVoiceReference.trim()
@@ -59,6 +64,7 @@ export async function POST(request: NextRequest) {
       field_6864: 'Processing', // Status
       field_6902: nextOrder, // Order - automatically set to next number
       field_6852: finalTitle, // Title (custom or auto)
+      field_7103: expectedDuration, // Expected duration
       ...(script ? { field_6854: script } : {}), // Optional Script
       ...(ttsVoiceReference ? { field_6860: ttsVoiceReference } : {}), // Optional TTS Voice override
     };

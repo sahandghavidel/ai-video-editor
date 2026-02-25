@@ -137,6 +137,8 @@ export default function OriginalVideosList({
   const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
   const [scriptUploadTitle, setScriptUploadTitle] = useState('');
   const [scriptUploadText, setScriptUploadText] = useState('');
+  const [scriptUploadExpectedDuration, setScriptUploadExpectedDuration] =
+    useState(15);
   const [scriptUploadTtsVoice, setScriptUploadTtsVoice] = useState('');
   const [scriptUploadTtsVoiceOptions, setScriptUploadTtsVoiceOptions] =
     useState<string[]>([]);
@@ -832,6 +834,7 @@ export default function OriginalVideosList({
   const openScriptUploadModal = () => {
     setScriptUploadTitle('');
     setScriptUploadText('');
+    setScriptUploadExpectedDuration(15);
     setScriptUploadTtsVoice('');
     setIsScriptUploadModalOpen(true);
   };
@@ -841,6 +844,7 @@ export default function OriginalVideosList({
     setIsScriptUploadModalOpen(false);
     setScriptUploadTitle('');
     setScriptUploadText('');
+    setScriptUploadExpectedDuration(15);
     setScriptUploadTtsVoice('');
   };
 
@@ -857,6 +861,7 @@ export default function OriginalVideosList({
         body: JSON.stringify({
           title: scriptUploadTitle,
           script: scriptUploadText,
+          expectedDuration: scriptUploadExpectedDuration,
           ttsVoiceReference: scriptUploadTtsVoice || undefined,
         }),
       });
@@ -876,6 +881,7 @@ export default function OriginalVideosList({
       setIsScriptUploadModalOpen(false);
       setScriptUploadTitle('');
       setScriptUploadText('');
+      setScriptUploadExpectedDuration(15);
       setScriptUploadTtsVoice('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Create failed');
@@ -7624,6 +7630,35 @@ export default function OriginalVideosList({
                                 Options come from Baserow field TTS Voice
                                 (6860).
                               </p>
+                            </div>
+
+                            <div className='mb-3'>
+                              <label
+                                htmlFor='upload-script-expected-duration'
+                                className='block text-xs font-medium text-gray-700 mb-1'
+                              >
+                                Expected duration (7103)
+                              </label>
+                              <input
+                                id='upload-script-expected-duration'
+                                type='number'
+                                min={1}
+                                step={1}
+                                value={scriptUploadExpectedDuration}
+                                onChange={(e) => {
+                                  const next = Number.parseInt(
+                                    e.target.value,
+                                    10,
+                                  );
+                                  setScriptUploadExpectedDuration(
+                                    Number.isFinite(next)
+                                      ? Math.max(1, next)
+                                      : 15,
+                                  );
+                                }}
+                                disabled={creatingVideoFromScript}
+                                className='w-full rounded-md border border-gray-300 p-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:text-gray-500'
+                              />
                             </div>
 
                             <textarea
