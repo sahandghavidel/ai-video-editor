@@ -136,6 +136,11 @@ export default function OriginalVideosList({
 
   const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
   const [scriptUploadText, setScriptUploadText] = useState('');
+  const [scriptUploadTtsVoice, setScriptUploadTtsVoice] = useState('');
+  const [scriptUploadTtsVoiceOptions, setScriptUploadTtsVoiceOptions] =
+    useState<string[]>([]);
+  const [loadingScriptUploadTtsVoices, setLoadingScriptUploadTtsVoices] =
+    useState(false);
   const [creatingVideoFromScript, setCreatingVideoFromScript] = useState(false);
   const [generatingTtsFromScripts, setGeneratingTtsFromScripts] =
     useState(false);
@@ -333,6 +338,47 @@ export default function OriginalVideosList({
     // Load settings from localStorage on mount
     loadSettingsFromLocalStorage();
   }, [loadSettingsFromLocalStorage]);
+
+  useEffect(() => {
+    if (!isScriptUploadModalOpen) return;
+
+    let cancelled = false;
+
+    (async () => {
+      setLoadingScriptUploadTtsVoices(true);
+      try {
+        const res = await fetch('/api/tts-voice-options');
+        const data = (await res.json()) as {
+          voices?: unknown[];
+        };
+
+        if (cancelled) return;
+
+        const options = Array.isArray(data.voices)
+          ? data.voices
+              .map((v) => (typeof v === 'string' ? v.trim() : ''))
+              .filter((name) => name.length > 0)
+          : [];
+
+        setScriptUploadTtsVoiceOptions(options);
+        setScriptUploadTtsVoice((prev) => {
+          if (prev && options.includes(prev)) return prev;
+          return options[0] ?? '';
+        });
+      } catch {
+        if (cancelled) return;
+        setScriptUploadTtsVoiceOptions([]);
+        setScriptUploadTtsVoice('');
+      } finally {
+        if (cancelled) return;
+        setLoadingScriptUploadTtsVoices(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isScriptUploadModalOpen]);
 
   // Refresh the original videos list when a merged video is saved
   useEffect(() => {
@@ -783,6 +829,7 @@ export default function OriginalVideosList({
   };
 
   const openScriptUploadModal = () => {
+    setScriptUploadTtsVoice('');
     setIsScriptUploadModalOpen(true);
   };
 
@@ -790,6 +837,7 @@ export default function OriginalVideosList({
     if (creatingVideoFromScript) return;
     setIsScriptUploadModalOpen(false);
     setScriptUploadText('');
+    setScriptUploadTtsVoice('');
   };
 
   const handleCreateVideoFromScript = async () => {
@@ -803,7 +851,10 @@ export default function OriginalVideosList({
       const res = await fetch('/api/create-video-from-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: scriptUploadText }),
+        body: JSON.stringify({
+          script: scriptUploadText,
+          ttsVoiceReference: scriptUploadTtsVoice || undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -820,6 +871,7 @@ export default function OriginalVideosList({
       await fetchOriginalVideos(true);
       setIsScriptUploadModalOpen(false);
       setScriptUploadText('');
+      setScriptUploadTtsVoice('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Create failed');
     } finally {
@@ -7516,6 +7568,39 @@ export default function OriginalVideosList({
                           </div>
 
                           <div className='p-4'>
+                            <div className='mb-3'>
+                              <label
+                                htmlFor='upload-script-tts-voice'
+                                className='block text-xs font-medium text-gray-700 mb-1'
+                              >
+                                TTS Voice
+                              </label>
+                              <select
+                                id='upload-script-tts-voice'
+                                value={scriptUploadTtsVoice}
+                                onChange={(e) =>
+                                  setScriptUploadTtsVoice(e.target.value)
+                                }
+                                disabled={
+                                  creatingVideoFromScript ||
+                                  loadingScriptUploadTtsVoices
+                                }
+                                className='w-full rounded-md border border-gray-300 p-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:text-gray-500'
+                              >
+                                {scriptUploadTtsVoiceOptions.map(
+                                  (voiceName) => (
+                                    <option key={voiceName} value={voiceName}>
+                                      {voiceName}
+                                    </option>
+                                  ),
+                                )}
+                              </select>
+                              <p className='mt-1 text-xs text-gray-500'>
+                                Options come from Baserow field TTS Voice
+                                (6860).
+                              </p>
+                            </div>
+
                             <textarea
                               value={scriptUploadText}
                               onChange={(e) =>

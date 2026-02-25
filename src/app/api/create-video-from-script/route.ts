@@ -7,12 +7,17 @@ import {
 
 type Body = {
   script?: unknown;
+  ttsVoiceReference?: unknown;
 };
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as Body | null;
     const script = typeof body?.script === 'string' ? body.script : '';
+    const ttsVoiceReference =
+      typeof body?.ttsVoiceReference === 'string'
+        ? body.ttsVoiceReference.trim()
+        : '';
 
     if (!script.trim()) {
       return NextResponse.json(
@@ -60,6 +65,7 @@ export async function POST(request: NextRequest) {
       field_6902: nextOrder, // Order - automatically set to next number
       field_6852: uniqueTitle, // Title
       field_6854: script, // Script
+      ...(ttsVoiceReference ? { field_6860: ttsVoiceReference } : {}), // Optional TTS Voice override
     };
 
     const newRow = await createOriginalVideoRow(newRowData);

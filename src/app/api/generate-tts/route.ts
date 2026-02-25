@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { Agent } from 'undici';
+import { normalizeTtsVoiceReference } from '@/utils/ttsVoiceReference';
 
 // TTS Server management - optimized for fast API-only server
 let ttsServerProcess: ReturnType<typeof spawn> | null = null;
@@ -807,17 +808,15 @@ export async function POST(request: NextRequest) {
       reference_audio_filename: 'calmS5wave.wav',
     };
 
-    const explicitReferenceAudioFilename =
-      typeof referenceAudioFilename === 'string' &&
-      referenceAudioFilename.trim().length > 0
-        ? referenceAudioFilename.trim()
-        : null;
+    const explicitReferenceAudioFilename = normalizeTtsVoiceReference(
+      typeof referenceAudioFilename === 'string'
+        ? referenceAudioFilename
+        : null,
+    );
 
     const settingsReferenceAudioFilename =
-      typeof settings.reference_audio_filename === 'string' &&
-      settings.reference_audio_filename.trim().length > 0
-        ? settings.reference_audio_filename.trim()
-        : 'calmS5wave.wav';
+      normalizeTtsVoiceReference(settings.reference_audio_filename) ??
+      'calmS5wave.wav';
 
     const resolvedReferenceAudioFilename =
       explicitReferenceAudioFilename ?? settingsReferenceAudioFilename;
