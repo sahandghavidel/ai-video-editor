@@ -134,6 +134,7 @@ export interface SelectedOriginalVideoState {
   videoUrl: string | null;
   status: string | null;
   sceneIds: number[];
+  ttsVoiceReference: string | null;
 }
 
 // Clip generation state interface
@@ -341,6 +342,7 @@ interface AppState {
     videoUrl?: string | null,
     status?: string | null,
     sceneIds?: number[],
+    ttsVoiceReference?: string | null,
   ) => void;
   clearSelectedOriginalVideo: () => void;
 
@@ -491,6 +493,7 @@ const defaultSelectedOriginalVideo: SelectedOriginalVideoState = {
   videoUrl: null,
   status: null,
   sceneIds: [],
+  ttsVoiceReference: null,
 };
 
 const defaultClipGeneration: ClipGenerationState = {
@@ -1134,13 +1137,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Selected Original Video Actions
-  setSelectedOriginalVideo: (id, videoUrl, status, sceneIds) =>
+  setSelectedOriginalVideo: (
+    id,
+    videoUrl,
+    status,
+    sceneIds,
+    ttsVoiceReference,
+  ) =>
     set({
       selectedOriginalVideo: {
         id,
         videoUrl: videoUrl || null,
         status: status || null,
         sceneIds: sceneIds || [],
+        ttsVoiceReference: ttsVoiceReference || null,
       },
     }),
 

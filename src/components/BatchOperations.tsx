@@ -55,7 +55,11 @@ interface BatchOperationsProps {
     skipRefresh?: boolean,
     enforceLongerSentences?: boolean,
   ) => Promise<void>;
-  handleTTSProduce: (sceneId: number, text: string) => Promise<void>;
+  handleTTSProduce: (
+    sceneId: number,
+    text: string,
+    sceneData?: BaserowRow,
+  ) => Promise<void>;
   handleVideoGenerate: (
     sceneId: number,
     videoUrl: string,
@@ -525,8 +529,18 @@ export default function BatchOperations({
   };
 
   const onGenerateAllTTS = () => {
+    const voiceOverride =
+      typeof selectedOriginalVideo.ttsVoiceReference === 'string' &&
+      selectedOriginalVideo.ttsVoiceReference.trim().length > 0
+        ? selectedOriginalVideo.ttsVoiceReference.trim()
+        : null;
+
+    const dataForTts = voiceOverride
+      ? data.map((scene) => ({ ...scene, field_6860: voiceOverride }))
+      : data;
+
     handleGenerateAllTTS(
-      data,
+      dataForTts,
       handleTTSProduce,
       startBatchOperation,
       completeBatchOperation,
@@ -559,6 +573,12 @@ export default function BatchOperations({
     // This batch action must only run for the currently selected original video.
     if (!selectedOriginalVideo.id) return;
 
+    const voiceOverride =
+      typeof selectedOriginalVideo.ttsVoiceReference === 'string' &&
+      selectedOriginalVideo.ttsVoiceReference.trim().length > 0
+        ? selectedOriginalVideo.ttsVoiceReference.trim()
+        : null;
+
     startBatchOperation('transcribingAllFinalScenes');
     try {
       // Run sequentially, ordered, to avoid concurrency issues and ensure robust per-scene comparison.
@@ -580,7 +600,14 @@ export default function BatchOperations({
       for (const scene of scenesToFix) {
         setTranscribingScene(scene.id);
         try {
-          await handleAutoFixMismatch(scene.id, scene);
+          const sceneWithVoiceOverride = voiceOverride
+            ? ({
+                ...scene,
+                field_6860: voiceOverride,
+              } as BaserowRow)
+            : scene;
+
+          await handleAutoFixMismatch(scene.id, sceneWithVoiceOverride);
         } catch (error) {
           console.error(`Fix TTS failed for scene ${scene.id}:`, error);
         } finally {

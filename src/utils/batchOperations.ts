@@ -14,17 +14,17 @@ export const handleImproveAllSentences = async (
     model?: string,
     sceneData?: BaserowRow,
     skipRefresh?: boolean,
-    enforceLongerSentences?: boolean
+    enforceLongerSentences?: boolean,
   ) => Promise<void>,
   selectedModel: string | null,
   startBatchOperation: (operation: 'improvingAll') => void,
   completeBatchOperation: (operation: 'improvingAll') => void,
-  setImprovingSentence: (sceneId: number | null) => void
+  setImprovingSentence: (sceneId: number | null) => void,
 ) => {
   startBatchOperation('improvingAll');
   for (const scene of data) {
     const currentSentence = String(
-      scene['field_6890'] || scene.field_6890 || ''
+      scene['field_6890'] || scene.field_6890 || '',
     );
     const originalSentence = String(scene['field_6901'] || '');
     // Only improve if the sentence is the same as the original
@@ -33,7 +33,7 @@ export const handleImproveAllSentences = async (
         scene.id,
         currentSentence,
         selectedModel || undefined,
-        scene
+        scene,
       );
       await wait(10000); // 10 seconds delay
     }
@@ -47,15 +47,19 @@ export const handleImproveAllSentences = async (
 // Batch operation: Generate TTS for all scenes that have text but no TTS audio
 export const handleGenerateAllTTS = async (
   data: BaserowRow[],
-  handleTTSProduce: (sceneId: number, text: string) => Promise<void>,
+  handleTTSProduce: (
+    sceneId: number,
+    text: string,
+    sceneData?: BaserowRow,
+  ) => Promise<void>,
   startBatchOperation: (operation: 'generatingAllTTS') => void,
   completeBatchOperation: (operation: 'generatingAllTTS') => void,
-  setProducingTTS: (sceneId: number | null) => void
+  setProducingTTS: (sceneId: number | null) => void,
 ) => {
   startBatchOperation('generatingAllTTS');
   for (const scene of data) {
     const currentSentence = String(
-      scene['field_6890'] || scene.field_6890 || ''
+      scene['field_6890'] || scene.field_6890 || '',
     );
     const hasAudio = scene['field_6891'] && String(scene['field_6891']).trim();
 
@@ -63,7 +67,7 @@ export const handleGenerateAllTTS = async (
     if (currentSentence.trim() && !hasAudio) {
       setProducingTTS(scene.id);
       try {
-        await handleTTSProduce(scene.id, currentSentence);
+        await handleTTSProduce(scene.id, currentSentence, scene);
         await wait(3000); // 3 seconds delay between generations
       } finally {
         setProducingTTS(null);
@@ -82,13 +86,13 @@ export const handleGenerateAllVideos = async (
     sceneId: number,
     videoUrl: string,
     audioUrl: string,
-    sceneData?: BaserowRow
+    sceneData?: BaserowRow,
   ) => Promise<void>,
   startBatchOperation: (operation: 'generatingAllVideos') => void,
   completeBatchOperation: (operation: 'generatingAllVideos') => void,
   setGeneratingVideo: (sceneId: number | null) => void,
   onRefresh?: () => void,
-  playSound = true
+  playSound = true,
 ) => {
   startBatchOperation('generatingAllVideos');
 
@@ -107,7 +111,7 @@ export const handleGenerateAllVideos = async (
 
     if (scenesToGenerate.length === 0) {
       console.log(
-        'No scenes found with both video and TTS audio to generate videos'
+        'No scenes found with both video and TTS audio to generate videos',
       );
       return;
     }
@@ -119,7 +123,7 @@ export const handleGenerateAllVideos = async (
           scene.id,
           scene['field_6888'] as string,
           scene['field_6891'] as string,
-          scene
+          scene,
         );
         await wait(2000); // 2 seconds delay between generations
       } catch (error) {
@@ -154,7 +158,7 @@ export const handleConcatenateAllVideos = async (
   startBatchOperation: (operation: 'concatenatingVideos') => void,
   completeBatchOperation: (operation: 'concatenatingVideos') => void,
   setMergedVideo: (url: string, fileName?: string) => void,
-  videoId: number | null = null
+  videoId: number | null = null,
 ) => {
   startBatchOperation('concatenatingVideos');
   try {
@@ -249,7 +253,7 @@ export const handleSpeedUpAllVideos = async (
   onRefresh: (() => void) | undefined,
   startBatchOperation: (operation: 'speedingUpAllVideos') => void,
   completeBatchOperation: (operation: 'speedingUpAllVideos') => void,
-  setSpeedingUpVideo: (sceneId: number | null) => void
+  setSpeedingUpVideo: (sceneId: number | null) => void,
 ) => {
   startBatchOperation('speedingUpAllVideos');
   try {
@@ -294,7 +298,7 @@ export const handleSpeedUpAllVideos = async (
       all: 'videos',
     };
     console.log(
-      `Processing ${scenesToSpeedUp.length} ${filterDescriptions[speedUpMode]} for ${selectedSpeed}x speed-up...`
+      `Processing ${scenesToSpeedUp.length} ${filterDescriptions[speedUpMode]} for ${selectedSpeed}x speed-up...`,
     );
 
     // Process each video sequentially to avoid overwhelming the server
@@ -334,7 +338,7 @@ export const handleSpeedUpAllVideos = async (
         const result = await response.json();
         console.log(
           `Speed-up completed for scene ${scene.id}:`,
-          result.videoUrl
+          result.videoUrl,
         );
 
         // Small delay between requests to be nice to the server
@@ -371,12 +375,12 @@ export const handleTranscribeAllFinalScenes = async (
     sceneData?: BaserowRow,
     videoType?: 'original' | 'final',
     skipRefresh?: boolean,
-    skipSound?: boolean
+    skipSound?: boolean,
   ) => Promise<void>,
   startBatchOperation: (operation: 'transcribingAllFinalScenes') => void,
   completeBatchOperation: (operation: 'transcribingAllFinalScenes') => void,
   setTranscribingScene: (sceneId: number | null) => void,
-  onRefresh?: () => void
+  onRefresh?: () => void,
 ) => {
   startBatchOperation('transcribingAllFinalScenes');
   try {
@@ -422,7 +426,7 @@ export const handleTranscribeAllFinalScenes = async (
 // Utility function for cycling through speed options
 export const cycleSpeed = (
   currentSpeed: number,
-  updateVideoSettings: (updates: { selectedSpeed: number }) => void
+  updateVideoSettings: (updates: { selectedSpeed: number }) => void,
 ) => {
   const speedOptions = [1, 1.125, 1.5, 2, 4, 8];
   const currentIndex = speedOptions.indexOf(currentSpeed);
@@ -438,13 +442,13 @@ export const handleImproveAllSentencesForAllVideos = async (
     sentence: string,
     model?: string,
     sceneData?: BaserowRow,
-    skipRefresh?: boolean
+    skipRefresh?: boolean,
   ) => Promise<void>,
   selectedModel: string | null,
   setImprovingAllVideos: (isImproving: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
   setImprovingSentence: (sceneId: number | null) => void,
-  playSound = true
+  playSound = true,
 ) => {
   setImprovingAllVideos(true);
 
@@ -490,7 +494,7 @@ export const handleImproveAllSentencesForAllVideos = async (
 
     console.log(
       `Grouped into ${scenesByVideo.size} videos:`,
-      Array.from(scenesByVideo.keys())
+      Array.from(scenesByVideo.keys()),
     );
 
     if (scenesByVideo.size === 0) {
@@ -505,12 +509,12 @@ export const handleImproveAllSentencesForAllVideos = async (
     for (const [videoId, scenes] of scenesByVideo.entries()) {
       setCurrentlyProcessingVideo(videoId);
       console.log(
-        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`
+        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`,
       );
 
       for (const scene of scenes) {
         const currentSentence = String(
-          scene['field_6890'] || scene.field_6890 || ''
+          scene['field_6890'] || scene.field_6890 || '',
         );
         const originalSentence = String(scene['field_6901'] || '');
 
@@ -529,14 +533,14 @@ export const handleImproveAllSentencesForAllVideos = async (
             currentSentence,
             selectedModel || undefined,
             scene,
-            true // Skip refresh during batch operation
+            true, // Skip refresh during batch operation
           );
           totalImproved++;
           console.log(`  ✓ Successfully improved scene ${scene.id}`);
           await wait(10000); // 10 seconds delay
         } else {
           console.log(
-            `  ✗ Skipping scene ${scene.id} (already improved or empty)`
+            `  ✗ Skipping scene ${scene.id} (already improved or empty)`,
           );
         }
         totalProcessed++;
@@ -569,12 +573,13 @@ export const handleGenerateAllTTSForAllVideos = async (
   handleTTSProduce: (
     sceneId: number,
     text: string,
-    sceneData?: BaserowRow
+    sceneData?: BaserowRow,
   ) => Promise<void>,
   setGeneratingAllVideos: (isGenerating: boolean) => void,
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
   setProducingTTS: (sceneId: number | null) => void,
-  playSound = true
+  playSound = true,
+  ttsVoiceByVideoId?: Map<number, string>,
 ) => {
   setGeneratingAllVideos(true);
 
@@ -619,7 +624,7 @@ export const handleGenerateAllTTSForAllVideos = async (
 
     console.log(
       `Grouped into ${scenesByVideo.size} videos:`,
-      Array.from(scenesByVideo.keys())
+      Array.from(scenesByVideo.keys()),
     );
 
     if (scenesByVideo.size === 0) {
@@ -633,13 +638,14 @@ export const handleGenerateAllTTSForAllVideos = async (
     // Process each video's scenes
     for (const [videoId, scenes] of scenesByVideo.entries()) {
       setCurrentlyProcessingVideo(videoId);
+      const voiceReferenceOverride = ttsVoiceByVideoId?.get(videoId) ?? null;
       console.log(
-        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`
+        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`,
       );
 
       for (const scene of scenes) {
         const currentSentence = String(
-          scene['field_6890'] || scene.field_6890 || ''
+          scene['field_6890'] || scene.field_6890 || '',
         );
         const hasAudio =
           scene['field_6891'] && String(scene['field_6891']).trim();
@@ -654,14 +660,25 @@ export const handleGenerateAllTTSForAllVideos = async (
           console.log(`  ✓ Will generate TTS for scene ${scene.id}`);
           setProducingTTS(scene.id);
           try {
-            await handleTTSProduce(scene.id, currentSentence, scene);
+            const sceneWithVoiceOverride = voiceReferenceOverride
+              ? ({
+                  ...scene,
+                  field_6860: voiceReferenceOverride,
+                } as BaserowRow)
+              : scene;
+
+            await handleTTSProduce(
+              scene.id,
+              currentSentence,
+              sceneWithVoiceOverride,
+            );
             totalGenerated++;
             console.log(`  ✓ Successfully generated TTS for scene ${scene.id}`);
             await wait(3000); // 3 seconds delay between generations
           } catch (error) {
             console.error(
               `  ✗ Failed to generate TTS for scene ${scene.id}:`,
-              error
+              error,
             );
             // Continue with next scene even if one fails
           } finally {
@@ -669,7 +686,7 @@ export const handleGenerateAllTTSForAllVideos = async (
           }
         } else {
           console.log(
-            `  ✗ Skipping scene ${scene.id} (already has audio or no text)`
+            `  ✗ Skipping scene ${scene.id} (already has audio or no text)`,
           );
         }
         totalProcessed++;
@@ -708,7 +725,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
   setCurrentlyProcessingVideo: (videoId: number | null) => void,
   setSpeedingUpVideo: (sceneId: number | null) => void,
   onRefresh?: () => void,
-  playSound = true
+  playSound = true,
 ) => {
   setSpeedingUpAllVideos(true);
 
@@ -748,7 +765,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
 
     console.log(
       `Grouped into ${scenesByVideo.size} videos:`,
-      Array.from(scenesByVideo.keys())
+      Array.from(scenesByVideo.keys()),
     );
 
     if (scenesByVideo.size === 0) {
@@ -763,7 +780,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
     for (const [videoId, scenes] of scenesByVideo.entries()) {
       setCurrentlyProcessingVideo(videoId);
       console.log(
-        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`
+        `\n--- Processing video #${videoId} with ${scenes.length} scenes ---`,
       );
 
       for (const scene of scenes) {
@@ -789,7 +806,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
             shouldProcess = !sentence.trim();
             if (!shouldProcess) {
               console.log(
-                `  ✗ Skipping scene ${scene.id} (has text, mode: emptyOnly)`
+                `  ✗ Skipping scene ${scene.id} (has text, mode: emptyOnly)`,
               );
             }
             break;
@@ -798,7 +815,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
             shouldProcess = sentence.trim() !== '';
             if (!shouldProcess) {
               console.log(
-                `  ✗ Skipping scene ${scene.id} (no text, mode: withTextOnly)`
+                `  ✗ Skipping scene ${scene.id} (no text, mode: withTextOnly)`,
               );
             }
             break;
@@ -846,7 +863,7 @@ export const handleSpeedUpAllVideosForAllScenes = async (
           } catch (error) {
             console.error(
               `  ✗ Failed to speed up video for scene ${scene.id}:`,
-              error
+              error,
             );
             // Continue with next scene even if one fails
           } finally {
@@ -885,7 +902,7 @@ export const handleOptimizeSilenceForAllVideos = async (
   originalVideos: BaserowRow[],
   setOptimizingSilenceVideo: (videoId: number | null) => void,
   setOptimizingAllSilence: (isOptimizing: boolean) => void,
-  onRefresh?: () => void
+  onRefresh?: () => void,
 ) => {
   setOptimizingAllSilence(true);
 
@@ -916,7 +933,7 @@ export const handleOptimizeSilenceForAllVideos = async (
 
       if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
         console.error(
-          `Skipping video ${videoId}: Invalid or missing video URL`
+          `Skipping video ${videoId}: Invalid or missing video URL`,
         );
         totalProcessed++;
         continue;
@@ -964,7 +981,7 @@ export const handleOptimizeSilenceForAllVideos = async (
       } catch (error) {
         console.error(
           `✗ Failed to optimize silence for video ${videoId}:`,
-          error
+          error,
         );
         // Continue with next video
       } finally {

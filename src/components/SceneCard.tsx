@@ -10,6 +10,7 @@ import {
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
+import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import {
   Loader2,
   Sparkles,
@@ -264,6 +265,7 @@ export default function SceneCard({
     clipGeneration,
     setGeneratingSingleClip,
     setCreatingTypingEffect,
+    selectedOriginalVideo,
   } = useAppStore();
 
   // Click outside handler for time adjustment and settings dropdowns
@@ -1960,6 +1962,26 @@ export default function SceneCard({
           }
         }
 
+        const sceneVoiceOverride = extractTtsVoiceReference(
+          typedSceneData?.['field_6860'],
+        );
+        const selectedVideoVoiceOverride = extractTtsVoiceReference(
+          selectedOriginalVideo.ttsVoiceReference,
+        );
+        const voiceOverride = sceneVoiceOverride ?? selectedVideoVoiceOverride;
+
+        const effectiveTtsSettings =
+          typeof opts?.seedOverride === 'number'
+            ? { ...ttsSettings, seed: opts.seedOverride }
+            : ttsSettings;
+
+        const ttsPayloadSettings = voiceOverride
+          ? {
+              ...effectiveTtsSettings,
+              reference_audio_filename: voiceOverride,
+            }
+          : effectiveTtsSettings;
+
         // Call our TTS API route that handles generation and MinIO upload
         const response = await fetch('/api/generate-tts', {
           method: 'POST',
@@ -1970,10 +1992,8 @@ export default function SceneCard({
             text,
             sceneId,
             videoId: videoId || undefined,
-            ttsSettings:
-              typeof opts?.seedOverride === 'number'
-                ? { ...ttsSettings, seed: opts.seedOverride }
-                : ttsSettings,
+            referenceAudioFilename: voiceOverride || undefined,
+            ttsSettings: ttsPayloadSettings,
           }),
         });
 
@@ -2035,7 +2055,12 @@ export default function SceneCard({
         setProducingTTS(null);
       }
     },
-    [setProducingTTS, ttsSettings, videoSettings.autoGenerateVideo],
+    [
+      selectedOriginalVideo.ttsVoiceReference,
+      setProducingTTS,
+      ttsSettings,
+      videoSettings.autoGenerateVideo,
+    ],
   );
 
   const handleVideoGenerate = useCallback(

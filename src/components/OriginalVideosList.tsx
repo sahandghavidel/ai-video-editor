@@ -54,6 +54,7 @@ import {
   handleGenerateAllVideos,
   handleOptimizeSilenceForAllVideos,
 } from '@/utils/batchOperations';
+import { getVideoTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { deleteFromMinio } from '@/utils/minio-client';
 
 type BaserowField =
@@ -319,6 +320,7 @@ export default function OriginalVideosList({
     setConvertingToCFRVideo,
     setConvertingFinalToCFRVideo,
     videoSettings,
+    ttsSettings,
     sceneVideoGenerationSettings,
     pipelineConfig,
     silenceSpeedRate,
@@ -855,10 +857,22 @@ export default function OriginalVideosList({
         setGeneratingScriptTtsForVideo(video.id);
 
         try {
+          const voiceOverride = getVideoTtsVoiceReference(video);
+
           const ttsRes = await fetch('/api/generate-tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: script, videoId: video.id }),
+            body: JSON.stringify({
+              text: script,
+              videoId: video.id,
+              referenceAudioFilename: voiceOverride || undefined,
+              ttsSettings: voiceOverride
+                ? {
+                    ...ttsSettings,
+                    reference_audio_filename: voiceOverride,
+                  }
+                : ttsSettings,
+            }),
           });
 
           if (!ttsRes.ok) {
@@ -933,10 +947,22 @@ export default function OriginalVideosList({
     setError(null);
 
     try {
+      const voiceOverride = getVideoTtsVoiceReference(video);
+
       const ttsRes = await fetch('/api/generate-tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: script, videoId: video.id }),
+        body: JSON.stringify({
+          text: script,
+          videoId: video.id,
+          referenceAudioFilename: voiceOverride || undefined,
+          ttsSettings: voiceOverride
+            ? {
+                ...ttsSettings,
+                reference_audio_filename: voiceOverride,
+              }
+            : ttsSettings,
+        }),
       });
 
       if (!ttsRes.ok) {
@@ -976,6 +1002,7 @@ export default function OriginalVideosList({
   const handleRowClick = (video: BaserowRow) => {
     const videoUrl = extractUrl(video.field_6881);
     const status = extractFieldValue(video.field_6864);
+    const ttsVoiceReference = getVideoTtsVoiceReference(video);
     const sceneData = extractScenes(video.field_6866);
 
     // Convert scene IDs to numbers if they exist
@@ -986,7 +1013,13 @@ export default function OriginalVideosList({
       })
       .filter((id) => id > 0);
 
-    setSelectedOriginalVideo(video.id, videoUrl, status, sceneIds);
+    setSelectedOriginalVideo(
+      video.id,
+      videoUrl,
+      status,
+      sceneIds,
+      ttsVoiceReference,
+    );
 
     // Save to localStorage
     saveSettingsToLocalStorage();
@@ -1029,6 +1062,41 @@ export default function OriginalVideosList({
   useEffect(() => {
     fetchOriginalVideos();
   }, []);
+
+  // Keep selected video's voice override in sync after refresh/reload.
+  // This avoids cases where selectedOriginalVideo is restored from older
+  // localStorage shape (without ttsVoiceReference) and single/fix TTS falls
+  // back to global settings.
+  useEffect(() => {
+    if (!selectedOriginalVideo.id || originalVideos.length === 0) return;
+
+    const selected = originalVideos.find(
+      (video) => video.id === selectedOriginalVideo.id,
+    );
+    if (!selected) return;
+
+    const latestVoiceRef = getVideoTtsVoiceReference(selected);
+    const currentVoiceRef = selectedOriginalVideo.ttsVoiceReference ?? null;
+
+    if (latestVoiceRef === currentVoiceRef) return;
+
+    const videoUrl = extractUrl(selected.field_6881);
+    const status = extractFieldValue(selected.field_6864);
+
+    setSelectedOriginalVideo(
+      selected.id,
+      videoUrl,
+      status,
+      selectedOriginalVideo.sceneIds,
+      latestVoiceRef,
+    );
+  }, [
+    originalVideos,
+    selectedOriginalVideo.id,
+    selectedOriginalVideo.sceneIds,
+    selectedOriginalVideo.ttsVoiceReference,
+    setSelectedOriginalVideo,
+  ]);
 
   const handleRefresh = async () => {
     await fetchOriginalVideos(true);
@@ -3248,6 +3316,14 @@ export default function OriginalVideosList({
         `Starting TTS generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
       );
 
+      const ttsVoiceByVideoId = new Map<number, string>();
+      for (const video of videosToProcess) {
+        const voiceRef = getVideoTtsVoiceReference(video);
+        if (voiceRef) {
+          ttsVoiceByVideoId.set(video.id, voiceRef);
+        }
+      }
+
       await generateAllTTSForAllVideosUtil(
         scenesToProcess,
         sceneHandlers.handleTTSProduce,
@@ -3255,6 +3331,7 @@ export default function OriginalVideosList({
         setCurrentProcessingVideoId,
         setProducingTTS,
         playSound,
+        ttsVoiceByVideoId,
       );
 
       console.log('Batch TTS generation completed for all videos');

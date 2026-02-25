@@ -655,7 +655,20 @@ function coerceSeed(value: unknown, fallback: number): number {
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, sceneId, videoId, ttsSettings } = await request.json();
+    const { text, sceneId, videoId, ttsSettings, referenceAudioFilename } =
+      (await request.json()) as {
+        text?: unknown;
+        sceneId?: unknown;
+        videoId?: unknown;
+        ttsSettings?: {
+          temperature?: number;
+          exaggeration?: number;
+          cfg_weight?: number;
+          seed?: number;
+          reference_audio_filename?: string;
+        };
+        referenceAudioFilename?: unknown;
+      };
 
     const hasText = typeof text === 'string' && text.trim().length > 0;
     const hasSceneId =
@@ -794,6 +807,21 @@ export async function POST(request: NextRequest) {
       reference_audio_filename: 'calmS5wave.wav',
     };
 
+    const explicitReferenceAudioFilename =
+      typeof referenceAudioFilename === 'string' &&
+      referenceAudioFilename.trim().length > 0
+        ? referenceAudioFilename.trim()
+        : null;
+
+    const settingsReferenceAudioFilename =
+      typeof settings.reference_audio_filename === 'string' &&
+      settings.reference_audio_filename.trim().length > 0
+        ? settings.reference_audio_filename.trim()
+        : 'calmS5wave.wav';
+
+    const resolvedReferenceAudioFilename =
+      explicitReferenceAudioFilename ?? settingsReferenceAudioFilename;
+
     const safeSeed = coerceSeed(settings.seed, 1212);
 
     // Step 1: Generate TTS (server should be fully ready now)
@@ -809,7 +837,7 @@ export async function POST(request: NextRequest) {
       split_text: true,
       chunk_size: 50,
       output_format: 'wav',
-      reference_audio_filename: settings.reference_audio_filename,
+      reference_audio_filename: resolvedReferenceAudioFilename,
     };
 
     const ttsController = new AbortController();
