@@ -135,6 +135,7 @@ export default function OriginalVideosList({
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
+  const [scriptUploadTitle, setScriptUploadTitle] = useState('');
   const [scriptUploadText, setScriptUploadText] = useState('');
   const [scriptUploadTtsVoice, setScriptUploadTtsVoice] = useState('');
   const [scriptUploadTtsVoiceOptions, setScriptUploadTtsVoiceOptions] =
@@ -829,6 +830,8 @@ export default function OriginalVideosList({
   };
 
   const openScriptUploadModal = () => {
+    setScriptUploadTitle('');
+    setScriptUploadText('');
     setScriptUploadTtsVoice('');
     setIsScriptUploadModalOpen(true);
   };
@@ -836,13 +839,13 @@ export default function OriginalVideosList({
   const closeScriptUploadModal = () => {
     if (creatingVideoFromScript) return;
     setIsScriptUploadModalOpen(false);
+    setScriptUploadTitle('');
     setScriptUploadText('');
     setScriptUploadTtsVoice('');
   };
 
   const handleCreateVideoFromScript = async () => {
     if (creatingVideoFromScript) return;
-    if (!scriptUploadText.trim()) return;
 
     setCreatingVideoFromScript(true);
     setError(null);
@@ -852,6 +855,7 @@ export default function OriginalVideosList({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          title: scriptUploadTitle,
           script: scriptUploadText,
           ttsVoiceReference: scriptUploadTtsVoice || undefined,
         }),
@@ -870,6 +874,7 @@ export default function OriginalVideosList({
 
       await fetchOriginalVideos(true);
       setIsScriptUploadModalOpen(false);
+      setScriptUploadTitle('');
       setScriptUploadText('');
       setScriptUploadTtsVoice('');
     } catch (err) {
@@ -7570,6 +7575,26 @@ export default function OriginalVideosList({
                           <div className='p-4'>
                             <div className='mb-3'>
                               <label
+                                htmlFor='upload-script-title'
+                                className='block text-xs font-medium text-gray-700 mb-1'
+                              >
+                                Title (6852)
+                              </label>
+                              <input
+                                id='upload-script-title'
+                                type='text'
+                                value={scriptUploadTitle}
+                                onChange={(e) =>
+                                  setScriptUploadTitle(e.target.value)
+                                }
+                                placeholder='Optional title...'
+                                disabled={creatingVideoFromScript}
+                                className='w-full rounded-md border border-gray-300 p-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:text-gray-500'
+                              />
+                            </div>
+
+                            <div className='mb-3'>
+                              <label
                                 htmlFor='upload-script-tts-voice'
                                 className='block text-xs font-medium text-gray-700 mb-1'
                               >
@@ -7621,10 +7646,7 @@ export default function OriginalVideosList({
                             </button>
                             <button
                               onClick={handleCreateVideoFromScript}
-                              disabled={
-                                creatingVideoFromScript ||
-                                scriptUploadText.trim().length === 0
-                              }
+                              disabled={creatingVideoFromScript}
                               className='px-3 py-2 text-sm font-medium rounded-md bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white'
                             >
                               {creatingVideoFromScript

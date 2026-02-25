@@ -6,6 +6,7 @@ import {
 } from '@/lib/baserow-actions';
 
 type Body = {
+  title?: unknown;
   script?: unknown;
   ttsVoiceReference?: unknown;
 };
@@ -13,18 +14,12 @@ type Body = {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as Body | null;
-    const script = typeof body?.script === 'string' ? body.script : '';
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const script = typeof body?.script === 'string' ? body.script.trim() : '';
     const ttsVoiceReference =
       typeof body?.ttsVoiceReference === 'string'
         ? body.ttsVoiceReference.trim()
         : '';
-
-    if (!script.trim()) {
-      return NextResponse.json(
-        { error: 'Script is required' },
-        { status: 400 },
-      );
-    }
 
     // Build a unique title for the new video row.
     const existingVideos = await getOriginalVideosData();
@@ -58,13 +53,13 @@ export async function POST(request: NextRequest) {
       return candidate;
     };
 
-    const uniqueTitle = generateUniqueTitle(baseName, existingVideos);
+    const finalTitle = title || generateUniqueTitle(baseName, existingVideos);
 
     const newRowData: Record<string, unknown> = {
       field_6864: 'Processing', // Status
       field_6902: nextOrder, // Order - automatically set to next number
-      field_6852: uniqueTitle, // Title
-      field_6854: script, // Script
+      field_6852: finalTitle, // Title (custom or auto)
+      ...(script ? { field_6854: script } : {}), // Optional Script
       ...(ttsVoiceReference ? { field_6860: ttsVoiceReference } : {}), // Optional TTS Voice override
     };
 
@@ -73,7 +68,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       rowId: newRow.id,
-      title: uniqueTitle,
+      title: finalTitle,
     });
   } catch (error) {
     console.error('Error creating video from script:', error);
