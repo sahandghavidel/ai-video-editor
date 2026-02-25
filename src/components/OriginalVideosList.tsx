@@ -189,6 +189,12 @@ export default function OriginalVideosList({
   const [generatingTitleVideoId, setGeneratingTitleVideoId] = useState<
     number | null
   >(null);
+  const [generatingScriptsFromTitlesAll, setGeneratingScriptsFromTitlesAll] =
+    useState(false);
+  const [
+    generatingScriptFromTitleVideoId,
+    setGeneratingScriptFromTitleVideoId,
+  ] = useState<number | null>(null);
   const [generatingYouTubeTimestampsAll, setGeneratingYouTubeTimestampsAll] =
     useState(false);
   const [
@@ -2585,6 +2591,129 @@ export default function OriginalVideosList({
     } finally {
       setGeneratingYouTubeTimestampVideoId(null);
       setGeneratingYouTubeTimestampsAll(false);
+    }
+  };
+
+  // Generate Script (6854) from Title (6852) for videos where script is empty
+  // and title does NOT include the word "script".
+  const handleGenerateScriptsFromTitlesAll = async (playSound = true) => {
+    if (generatingScriptsFromTitlesAll) return;
+
+    try {
+      if (!modelSelection.selectedModel) {
+        throw new Error('Please select a model in global settings first');
+      }
+
+      setGeneratingScriptsFromTitlesAll(true);
+      setGeneratingScriptFromTitleVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+
+      const videosToProcess = freshVideosData.filter((video) => {
+        const script =
+          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        const title =
+          typeof video.field_6852 === 'string'
+            ? video.field_6852.trim()
+            : extractFieldValue(video.field_6852).trim();
+
+        if (!title) return false;
+        if (script.length > 0) return false;
+        if (/\bscript\b/i.test(title)) return false;
+
+        return true;
+      });
+
+      if (videosToProcess.length === 0) {
+        console.log('No videos matched Script-from-Title criteria');
+        return;
+      }
+
+      console.log(
+        `Generating scripts from titles for ${videosToProcess.length} videos...`,
+      );
+
+      for (const video of videosToProcess) {
+        setGeneratingScriptFromTitleVideoId(video.id);
+
+        const title =
+          typeof video.field_6852 === 'string'
+            ? video.field_6852.trim()
+            : extractFieldValue(video.field_6852).trim();
+
+        const expectedDurationRaw = Number(video.field_7103);
+        const expectedDuration = Number.isFinite(expectedDurationRaw)
+          ? Math.max(1, Math.round(expectedDurationRaw))
+          : 15;
+
+        try {
+          const response = await fetch('/api/generate-script-from-title', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title,
+              expectedDuration,
+              model: modelSelection.selectedModel,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(
+              `Script generation failed (${response.status}): ${errorText}`,
+            );
+          }
+
+          const result = (await response.json().catch(() => null)) as {
+            script?: unknown;
+          } | null;
+
+          const generatedScript =
+            typeof result?.script === 'string' ? result.script.trim() : '';
+
+          if (!generatedScript) {
+            throw new Error('No script returned from API');
+          }
+
+          await updateOriginalVideoRow(video.id, {
+            field_6854: generatedScript,
+          });
+
+          console.log(`Saved generated script for video #${video.id}`);
+        } catch (error) {
+          console.error(
+            `Failed to generate script from title for video #${video.id}:`,
+            error,
+          );
+          // Continue with next video
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        playSuccessSound();
+      }
+    } catch (error) {
+      console.error('Error generating scripts from titles in batch:', error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to generate scripts from titles: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setGeneratingScriptFromTitleVideoId(null);
+      setGeneratingScriptsFromTitlesAll(false);
     }
   };
 
@@ -7399,7 +7528,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({36} actions)</span>
+                <span className='text-xs text-gray-500'>({37} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -7808,6 +7937,36 @@ export default function OriginalVideosList({
                             ? `#${generatingDescriptionVideoId}...`
                             : 'Processing...'
                           : 'Desc All'}
+                      </span>
+                    </button>
+
+                    {/* Generate Script from Title Button */}
+                    <button
+                      onClick={() => handleGenerateScriptsFromTitlesAll()}
+                      disabled={
+                        generatingScriptsFromTitlesAll ||
+                        generatingScriptFromTitleVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        generatingScriptsFromTitlesAll
+                          ? 'Generating scripts from titles...'
+                          : 'Generate Script (6854) from Title (6852), using Expected duration (7103). Only runs when Script is empty and Title does not contain "script".'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          generatingScriptsFromTitlesAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {generatingScriptsFromTitlesAll
+                          ? generatingScriptFromTitleVideoId !== null
+                            ? `#${generatingScriptFromTitleVideoId}...`
+                            : 'Processing...'
+                          : 'Script From Title'}
                       </span>
                     </button>
 
