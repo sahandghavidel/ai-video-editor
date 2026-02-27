@@ -3960,6 +3960,14 @@ export default function OriginalVideosList({
         return status === 'Processing';
       });
 
+      const ttsVoiceByVideoId = new Map<number, string>();
+      for (const video of processingVideos) {
+        const voiceRef = getVideoTtsVoiceReference(video);
+        if (voiceRef) {
+          ttsVoiceByVideoId.set(video.id, voiceRef);
+        }
+      }
+
       const processingVideoIds = new Set(processingVideos.map((v) => v.id));
 
       // Filter scenes for Processing videos
@@ -4001,7 +4009,15 @@ export default function OriginalVideosList({
         }
 
         try {
-          await sceneHandlers.handleAutoFixMismatch(scene.id, scene);
+          const sceneWithVoiceOverride =
+            videoId && !isNaN(videoId) && ttsVoiceByVideoId.get(videoId)
+              ? { ...scene, field_6860: ttsVoiceByVideoId.get(videoId) }
+              : scene;
+
+          await sceneHandlers.handleAutoFixMismatch(
+            scene.id,
+            sceneWithVoiceOverride,
+          );
         } catch (error) {
           // Continue with other scenes; don't fail the whole batch.
           console.error(`Fix TTS failed for scene ${scene.id}:`, error);
