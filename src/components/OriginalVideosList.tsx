@@ -2939,6 +2939,19 @@ export default function OriginalVideosList({
       setDownloadingAssetsZipVideoId(videoId);
       setError(null);
 
+      const sanitizeDownloadFileName = (
+        rawName: string,
+        fallbackName: string,
+      ): string => {
+        const normalized = (rawName || '')
+          .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/\.+$/g, '');
+
+        return normalized || fallbackName;
+      };
+
       const response = await fetch('/api/download-video-assets-zip', {
         method: 'POST',
         headers: {
@@ -2965,10 +2978,20 @@ export default function OriginalVideosList({
         /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
       );
 
-      const zipFileName = decodeURIComponent(
-        (filenameMatch?.[1] ||
-          filenameMatch?.[2] ||
-          `video_${videoId}.zip`) as string,
+      const rawZipName = (filenameMatch?.[1] ||
+        filenameMatch?.[2] ||
+        `video_${videoId}.zip`) as string | undefined;
+
+      let decodedZipName = rawZipName || `video_${videoId}.zip`;
+      try {
+        decodedZipName = decodeURIComponent(decodedZipName);
+      } catch {
+        // If it's not actually URI-encoded, keep the raw value.
+      }
+
+      const zipFileName = sanitizeDownloadFileName(
+        decodedZipName,
+        `video_${videoId}.zip`,
       );
 
       const blobUrl = window.URL.createObjectURL(blob);

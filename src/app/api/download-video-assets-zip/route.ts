@@ -110,6 +110,17 @@ function sanitizeFileBaseName(name: string): string {
   return cleaned || 'video_assets';
 }
 
+function toContentDispositionFilename(name: string): string {
+  // Keep header-safe ASCII fallback while still sending UTF-8 filename*.
+  const ascii = name
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/["\\]/g, '')
+    .replace(/[;]+/g, '')
+    .trim();
+
+  return ascii || 'video_assets.zip';
+}
+
 function getExtensionFromUrlOrType(url: string, contentType: string): string {
   const lowerType = contentType.toLowerCase();
   if (lowerType.includes('video/mp4')) return '.mp4';
@@ -217,11 +228,14 @@ export async function POST(req: Request) {
     // User requirement: zip filename must be one of the video titles.
     const zipName = `${title}.zip`;
 
+    const fallbackDispositionName = toContentDispositionFilename(zipName);
+    const encodedZipName = encodeURIComponent(zipName);
+
     return new Response(zipBlob, {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${zipName}"`,
+        'Content-Disposition': `attachment; filename="${fallbackDispositionName}"; filename*=UTF-8''${encodedZipName}`,
         'Cache-Control': 'no-store',
       },
     });
