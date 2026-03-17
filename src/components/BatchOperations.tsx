@@ -37,6 +37,7 @@ import {
   Save,
   Upload,
   Trash2,
+  GitMerge,
 } from 'lucide-react';
 
 interface BatchOperationsProps {
@@ -173,6 +174,11 @@ export default function BatchOperations({
 
   const [promptingAllScenes, setPromptingAllScenes] = useState(false);
   const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
+
+  const [combiningNoSubtitlePairs, setCombiningNoSubtitlePairs] =
+    useState(false);
+  const [combiningNoSubtitleSceneId, setCombiningNoSubtitleSceneId] =
+    useState<number | null>(null);
 
   const playBatchDoneSound = () => {
     playSuccessSound();
@@ -367,6 +373,117 @@ export default function BatchOperations({
     } finally {
       setDeletingEmptyScenes(false);
       setDeletingEmptySceneId(null);
+    }
+  };
+
+
+  const handleCombineNoSubtitlePairs = async () => {
+    if (combiningNoSubtitlePairs) return;
+
+    // Sort scenes by start time (field_6896) to process them in order
+    const sorted = [...data].sort(
+      (a, b) => (Number(a.field_6896) || 0) - (Number(b.field_6896) || 0),
+    );
+
+    // A scene is eligible if it has a sentence and its final video URL does
+    // NOT contain "subtitle" (empty final video URL is also fine)
+    const isEligible = (scene: (typeof data)[0]) => {
+      const sentence = String(scene['field_6890'] ?? '').trim();
+      if (!sentence) return false;
+      const finalVideo = String(scene['field_6886'] ?? '').toLowerCase();
+      return !finalVideo.includes('subtitle');
+    };
+
+    // Greedy left-to-right: find non-overlapping consecutive eligible pairs
+    const pairs: (typeof data)[0][][] = [];
+    let i = 0;
+    while (i < sorted.length - 1) {
+      if (isEligible(sorted[i]) && isEligible(sorted[i + 1])) {
+        pairs.push([sorted[i], sorted[i + 1]]);
+        i += 2; // skip both — each scene used at most once
+      } else {
+        i += 1;
+      }
+    }
+
+    if (pairs.length === 0) {
+      return;
+    }
+
+    setCombiningNoSubtitlePairs(true);
+    setCombiningNoSubtitleSceneId(null);
+
+    try {
+      for (const [currentScene, nextScene] of pairs) {
+        setCombiningNoSubtitleSceneId(currentScene.id);
+
+        const currSentence = String(currentScene.field_6890 || '').trim();
+        const nextSentence = String(
+          nextScene.field_6890 || nextScene.field_6901 || '',
+        ).trim();
+        const sep = currSentence && nextSentence ? ' ' : '';
+        const newSentence = (currSentence + sep + nextSentence).trim();
+
+        const currOriginal = String(
+          currentScene.field_6901 || currentScene.field_6890 || '',
+        ).trim();
+        const nextOriginal = String(
+          nextScene.field_6901 || nextScene.field_6890 || '',
+        ).trim();
+        const newOriginal = (currOriginal + sep + nextOriginal).trim();
+
+        const newEndTime = Number(nextScene.field_6897) || 0;
+        const currentStart = Number(currentScene.field_6896) || 0;
+        const newDuration = Math.max(
+          0,
+          Number((newEndTime - currentStart).toFixed(2)),
+        );
+
+        // PATCH current scene with merged data
+        const patchRes = await fetch(
+          `/api/baserow/scenes/${currentScene.id}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              field_6890: newSentence,
+              field_6901: newOriginal,
+              field_6897: newEndTime,
+              field_6884: newDuration,
+            }),
+          },
+        );
+
+        if (!patchRes.ok) {
+          const t = await patchRes.text().catch(() => '');
+          throw new Error(
+            `Failed to update scene ${currentScene.id}: ${patchRes.status} ${t}`,
+          );
+        }
+
+        // DELETE next scene
+        const deleteRes = await fetch(
+          `/api/baserow/scenes/${nextScene.id}`,
+          { method: 'DELETE' },
+        );
+
+        if (!deleteRes.ok) {
+          const t = await deleteRes.text().catch(() => '');
+          throw new Error(
+            `Failed to delete scene ${nextScene.id}: ${deleteRes.status} ${t}`,
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      playBatchDoneSound();
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to combine no-subtitle pairs:', error);
+    } finally {
+      setCombiningNoSubtitlePairs(false);
+      setCombiningNoSubtitleSceneId(null);
     }
   };
 
@@ -2440,6 +2557,42 @@ export default function BatchOperations({
                       ? `Deleting #${deletingEmptySceneId}`
                       : 'Deleting...'
                     : 'Delete Empty'}
+                </span>
+              </button>
+            </div>
+
+
+            {/* Combine No-Subtitle Pairs */}
+            <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200'>
+              <div className='flex items-center gap-2 mb-3'>
+                <div className='p-2 bg-violet-500 rounded-lg'>
+                  <GitMerge className='w-4 h-4 text-white' />
+                </div>
+                <h3 className='font-semibold text-violet-900'>
+                  Combine No-Subtitle Pairs
+                </h3>
+              </div>
+              <p className='text-sm text-violet-800 mb-4 leading-relaxed'>
+                Find consecutive scene pairs where both have a sentence and
+                neither final video URL contains &quot;subtitle&quot;. Merges
+                each pair (text, timings) and deletes the second scene.
+                Greedy left-to-right — each scene used at most once.
+              </p>
+              <button
+                onClick={handleCombineNoSubtitlePairs}
+                disabled={combiningNoSubtitlePairs}
+                className='w-full h-12 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title='Combine consecutive no-subtitle scene pairs'
+              >
+                {combiningNoSubtitlePairs && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {combiningNoSubtitlePairs
+                    ? combiningNoSubtitleSceneId !== null
+                      ? `Scene #${combiningNoSubtitleSceneId}`
+                      : 'Processing...'
+                    : 'Combine Pairs'}
                 </span>
               </button>
             </div>
