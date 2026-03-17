@@ -42,6 +42,11 @@ export default function PipelineConfig() {
       color: 'text-purple-500',
     },
     {
+      key: 'combineLongTextPairs' as const,
+      label: 'Combine Pairs',
+      color: 'text-violet-500',
+    },
+    {
       key: 'deleteEmpty' as const,
       label: 'Delete Empty',
       color: 'text-red-500',

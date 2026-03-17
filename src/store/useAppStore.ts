@@ -162,6 +162,7 @@ export interface PipelineConfig {
   optimizeSilence: boolean;
   transcribe: boolean;
   generateScenes: boolean;
+  combineLongTextPairs: boolean;
   deleteEmpty: boolean;
   generateClips: boolean;
   speedUp: boolean;
@@ -531,6 +532,7 @@ const defaultPipelineConfig: PipelineConfig = {
   optimizeSilence: true,
   transcribe: true,
   generateScenes: true,
+  combineLongTextPairs: false,
   deleteEmpty: true,
   generateClips: true,
   speedUp: true,

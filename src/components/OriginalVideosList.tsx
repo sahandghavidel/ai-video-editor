@@ -4576,7 +4576,9 @@ export default function OriginalVideosList({
     setCurrentlyProcessingScene(null);
   };
 
-  const handleCombineLongTextPairsForProcessingVideos = async () => {
+  const handleCombineLongTextPairsForProcessingVideos = async (
+    playSound = true,
+  ) => {
     if (combiningLongTextPairsAllVideos) return;
 
     if (!subtitleGenerationSettings.enableCharLimit) {
@@ -4699,13 +4701,17 @@ export default function OriginalVideosList({
 
       await handleRefresh();
       if (refreshScenesData) refreshScenesData();
-      playSuccessSound();
+      if (playSound) {
+        playSuccessSound();
+      }
     } catch (error) {
       console.error(
         'Combine long-text pairs for Processing videos failed:',
         error,
       );
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
       setError(
         `Failed to combine long-text pairs for Processing videos: ${
           error instanceof Error ? error.message : 'Unknown error'
@@ -6311,7 +6317,7 @@ export default function OriginalVideosList({
   };
 
   // Run Full Pipeline:
-  // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
+  // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
   // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails
   const handleRunFullPipeline = async () => {
@@ -6588,6 +6594,46 @@ export default function OriginalVideosList({
         }
       } else {
         console.log('⊘ Skipping Step: Generate Scenes (disabled in config)');
+      }
+
+      // Step: Combine Long-Text Pairs (Processing only, after Generate Scenes)
+      if (pipelineConfig.combineLongTextPairs) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Combining long-text scene pairs for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Combining long-text scene pairs for Processing videos`,
+        );
+        try {
+          await handleCombineLongTextPairsForProcessingVideos(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Long-text pair combining finished`,
+          );
+
+          console.log('Refreshing data after combining scene pairs...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Combine long-text pairs error`,
+            error,
+          );
+          throw new Error(
+            `Combine long-text pairs failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Combine Pairs (disabled in config)');
       }
 
       // Step: Delete Empty (Processing only)
