@@ -177,8 +177,9 @@ export default function BatchOperations({
 
   const [combiningNoSubtitlePairs, setCombiningNoSubtitlePairs] =
     useState(false);
-  const [combiningNoSubtitleSceneId, setCombiningNoSubtitleSceneId] =
-    useState<number | null>(null);
+  const [combiningNoSubtitleSceneId, setCombiningNoSubtitleSceneId] = useState<
+    number | null
+  >(null);
 
   const playBatchDoneSound = () => {
     playSuccessSound();
@@ -376,7 +377,6 @@ export default function BatchOperations({
     }
   };
 
-
   const handleCombineNoSubtitlePairs = async () => {
     if (combiningNoSubtitlePairs) return;
 
@@ -440,19 +440,16 @@ export default function BatchOperations({
         );
 
         // PATCH current scene with merged data
-        const patchRes = await fetch(
-          `/api/baserow/scenes/${currentScene.id}`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              field_6890: newSentence,
-              field_6901: newOriginal,
-              field_6897: newEndTime,
-              field_6884: newDuration,
-            }),
-          },
-        );
+        const patchRes = await fetch(`/api/baserow/scenes/${currentScene.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            field_6890: newSentence,
+            field_6901: newOriginal,
+            field_6897: newEndTime,
+            field_6884: newDuration,
+          }),
+        });
 
         if (!patchRes.ok) {
           const t = await patchRes.text().catch(() => '');
@@ -462,10 +459,9 @@ export default function BatchOperations({
         }
 
         // DELETE next scene
-        const deleteRes = await fetch(
-          `/api/baserow/scenes/${nextScene.id}`,
-          { method: 'DELETE' },
-        );
+        const deleteRes = await fetch(`/api/baserow/scenes/${nextScene.id}`, {
+          method: 'DELETE',
+        });
 
         if (!deleteRes.ok) {
           const t = await deleteRes.text().catch(() => '');
@@ -2561,7 +2557,6 @@ export default function BatchOperations({
               </button>
             </div>
 
-
             {/* Combine No-Subtitle Pairs */}
             <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200'>
               <div className='flex items-center gap-2 mb-3'>
@@ -2575,8 +2570,8 @@ export default function BatchOperations({
               <p className='text-sm text-violet-800 mb-4 leading-relaxed'>
                 Find consecutive scene pairs where both have a sentence and
                 neither final video URL contains &quot;subtitle&quot;. Merges
-                each pair (text, timings) and deletes the second scene.
-                Greedy left-to-right — each scene used at most once.
+                each pair (text, timings) and deletes the second scene. Greedy
+                left-to-right — each scene used at most once.
               </p>
               <button
                 onClick={handleCombineNoSubtitlePairs}
