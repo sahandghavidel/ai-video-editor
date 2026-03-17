@@ -35,6 +35,7 @@ import {
   Workflow,
   Film,
   FastForward,
+  GitMerge,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
@@ -257,6 +258,8 @@ export default function OriginalVideosList({
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
   const [pipelineStep, setPipelineStep] = useState<string>('');
+  const [combiningLongTextPairsAllVideos, setCombiningLongTextPairsAllVideos] =
+    useState(false);
   const [
     generatingSubtitlesForProcessingVideos,
     setGeneratingSubtitlesForProcessingVideos,
@@ -317,6 +320,7 @@ export default function OriginalVideosList({
     transcriptionSettings,
     deletionSettings,
     subtitleGenerationSettings,
+    combineScenesSettings,
     data: allScenesData,
     modelSelection,
     sceneLoading,
@@ -4572,6 +4576,149 @@ export default function OriginalVideosList({
     setCurrentlyProcessingScene(null);
   };
 
+  const handleCombineLongTextPairsForProcessingVideos = async () => {
+    if (combiningLongTextPairsAllVideos) return;
+
+    if (!subtitleGenerationSettings.enableCharLimit) {
+      console.log(
+        'Combine Long-Text Pairs skipped: subtitle character limit is disabled',
+      );
+      return;
+    }
+
+    const maxChars = Math.max(
+      1,
+      Math.floor(subtitleGenerationSettings.maxChars),
+    );
+    const skipFirstScenes = Math.max(
+      0,
+      Math.floor(combineScenesSettings.skipFirstScenes),
+    );
+
+    setCombiningLongTextPairsAllVideos(true);
+    setError(null);
+
+    try {
+      const { scenesForProcessingVideos } = await fetchProcessingScenes();
+
+      const scenesByVideoId = new Map<number, BaserowRow[]>();
+      for (const scene of scenesForProcessingVideos) {
+        const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+        if (!videoId || isNaN(videoId)) continue;
+        const current = scenesByVideoId.get(videoId) || [];
+        current.push(scene);
+        scenesByVideoId.set(videoId, current);
+      }
+
+      for (const [videoId, scenes] of scenesByVideoId.entries()) {
+        setCurrentProcessingVideoId(videoId);
+        setCurrentlyProcessingVideo(videoId);
+
+        const ordered = [...scenes].sort(
+          (a, b) => (Number(a.field_6896) || 0) - (Number(b.field_6896) || 0),
+        );
+        const sorted = ordered.slice(skipFirstScenes);
+
+        const isEligible = (scene: BaserowRow) => {
+          const sentence = String(scene['field_6890'] ?? '').trim();
+          if (!sentence) return false;
+          return sentence.length >= maxChars;
+        };
+
+        const pairs: BaserowRow[][] = [];
+        let i = 0;
+        while (i < sorted.length - 1) {
+          if (isEligible(sorted[i]) && isEligible(sorted[i + 1])) {
+            pairs.push([sorted[i], sorted[i + 1]]);
+            i += 2; // each scene can only be used once
+          } else {
+            i += 1;
+          }
+        }
+
+        for (const [currentScene, nextScene] of pairs) {
+          setCurrentlyProcessingScene(currentScene.id);
+
+          const currSentence = String(currentScene.field_6890 || '').trim();
+          const nextSentence = String(
+            nextScene.field_6890 || nextScene.field_6901 || '',
+          ).trim();
+          const sep = currSentence && nextSentence ? ' ' : '';
+          const newSentence = (currSentence + sep + nextSentence).trim();
+
+          const currOriginal = String(
+            currentScene.field_6901 || currentScene.field_6890 || '',
+          ).trim();
+          const nextOriginal = String(
+            nextScene.field_6901 || nextScene.field_6890 || '',
+          ).trim();
+          const newOriginal = (currOriginal + sep + nextOriginal).trim();
+
+          const newEndTime = Number(nextScene.field_6897) || 0;
+          const currentStart = Number(currentScene.field_6896) || 0;
+          const newDuration = Math.max(
+            0,
+            Number((newEndTime - currentStart).toFixed(2)),
+          );
+
+          const patchRes = await fetch(
+            `/api/baserow/scenes/${currentScene.id}`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                field_6890: newSentence,
+                field_6901: newOriginal,
+                field_6897: newEndTime,
+                field_6884: newDuration,
+              }),
+            },
+          );
+
+          if (!patchRes.ok) {
+            const t = await patchRes.text().catch(() => '');
+            throw new Error(
+              `Failed to update scene ${currentScene.id}: ${patchRes.status} ${t}`,
+            );
+          }
+
+          const deleteRes = await fetch(`/api/baserow/scenes/${nextScene.id}`, {
+            method: 'DELETE',
+          });
+
+          if (!deleteRes.ok) {
+            const t = await deleteRes.text().catch(() => '');
+            throw new Error(
+              `Failed to delete scene ${nextScene.id}: ${deleteRes.status} ${t}`,
+            );
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+      }
+
+      await handleRefresh();
+      if (refreshScenesData) refreshScenesData();
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        'Combine long-text pairs for Processing videos failed:',
+        error,
+      );
+      playErrorSound();
+      setError(
+        `Failed to combine long-text pairs for Processing videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setCombiningLongTextPairsAllVideos(false);
+      setCurrentProcessingVideoId(null);
+      setCurrentlyProcessingVideo(null);
+      setCurrentlyProcessingScene(null);
+    }
+  };
+
   const getVideoDurationSeconds = async (videoUrl: string): Promise<number> => {
     const res = await fetch('/api/get-video-duration', {
       method: 'POST',
@@ -7567,7 +7714,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({37} actions)</span>
+                <span className='text-xs text-gray-500'>({38} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -8708,6 +8855,49 @@ export default function OriginalVideosList({
                             ? `V${currentProcessingVideoId}`
                             : 'Processing...'
                           : 'Prompt Scenes'}
+                      </span>
+                    </button>
+
+                    {/* Combine Long-Text Pairs (Processing) Button */}
+                    <button
+                      onClick={() =>
+                        void handleCombineLongTextPairsForProcessingVideos()
+                      }
+                      disabled={
+                        combiningLongTextPairsAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        transcribingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos ||
+                        uploading ||
+                        reordering ||
+                        runningFullPipeline ||
+                        mergingFinalVideos ||
+                        batchOperations.convertingAllFinalToCFR ||
+                        sceneLoading.convertingFinalToCFRVideo !== null
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        combiningLongTextPairsAllVideos
+                          ? 'Combining long-text scene pairs for Processing videos...'
+                          : subtitleGenerationSettings.enableCharLimit
+                            ? `Combine consecutive long-text pairs for Processing videos (scene text length >= ${Math.max(
+                                1,
+                                Math.floor(subtitleGenerationSettings.maxChars),
+                              )}), skipping first ${Math.max(0, Math.floor(combineScenesSettings.skipFirstScenes))} scene(s) per video`
+                            : 'Enable subtitle character limit in Global Settings first'
+                      }
+                    >
+                      <GitMerge
+                        className={`w-4 h-4 ${
+                          combiningLongTextPairsAllVideos ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {combiningLongTextPairsAllVideos
+                          ? currentProcessingVideoId !== null
+                            ? `V${currentProcessingVideoId}`
+                            : getProcessingVsLabel()
+                          : 'Combine Pairs'}
                       </span>
                     </button>
 
