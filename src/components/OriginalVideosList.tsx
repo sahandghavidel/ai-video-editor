@@ -4577,6 +4577,7 @@ export default function OriginalVideosList({
   };
 
   const handleCombineLongTextPairsForProcessingVideos = async (
+    skipFirstScenes: number,
     playSound = true,
   ) => {
     if (combiningLongTextPairsAllVideos) return;
@@ -4592,10 +4593,7 @@ export default function OriginalVideosList({
       1,
       Math.floor(subtitleGenerationSettings.maxChars),
     );
-    const skipFirstScenes = Math.max(
-      0,
-      Math.floor(combineScenesSettings.skipFirstScenes),
-    );
+    const skip = Math.max(0, Math.floor(skipFirstScenes));
 
     setCombiningLongTextPairsAllVideos(true);
     setError(null);
@@ -4619,7 +4617,7 @@ export default function OriginalVideosList({
         const ordered = [...scenes].sort(
           (a, b) => (Number(a.field_6896) || 0) - (Number(b.field_6896) || 0),
         );
-        const sorted = ordered.slice(skipFirstScenes);
+        const sorted = ordered.slice(skip);
 
         const isEligible = (scene: BaserowRow) => {
           const sentence = String(scene['field_6890'] ?? '').trim();
@@ -6596,19 +6594,24 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Generate Scenes (disabled in config)');
       }
 
-      // Step: Combine Long-Text Pairs (Processing only, after Generate Scenes)
-      if (pipelineConfig.combineLongTextPairs) {
+      // Steps: Combine Pairs A → B → C → D (Processing only, after Generate Scenes)
+      for (const pass of [
+        { label: 'A', skip: pipelineConfig.combinePairsSkipA },
+        { label: 'B', skip: pipelineConfig.combinePairsSkipB },
+        { label: 'C', skip: pipelineConfig.combinePairsSkipC },
+        { label: 'D', skip: pipelineConfig.combinePairsSkipD },
+      ]) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Combining long-text scene pairs for Processing videos...`,
+          `Step ${stepNumber}: Combining long-text pairs (Pass ${pass.label}, skip ${pass.skip}) for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Combining long-text scene pairs for Processing videos`,
+          `Step ${stepNumber}: Combining long-text pairs (Pass ${pass.label}, skip ${pass.skip})`,
         );
         try {
-          await handleCombineLongTextPairsForProcessingVideos(false);
+          await handleCombineLongTextPairsForProcessingVideos(pass.skip, false);
           console.log(
-            `✓ Step ${stepNumber} Complete: Long-text pair combining finished`,
+            `✓ Step ${stepNumber} Complete: Combine Pairs ${pass.label} finished`,
           );
 
           console.log('Refreshing data after combining scene pairs...');
@@ -6623,17 +6626,15 @@ export default function OriginalVideosList({
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
-            `✗ Step ${stepNumber} Failed: Combine long-text pairs error`,
+            `✗ Step ${stepNumber} Failed: Combine Pairs ${pass.label} error`,
             error,
           );
           throw new Error(
-            `Combine long-text pairs failed: ${
+            `Combine Pairs ${pass.label} failed: ${
               error instanceof Error ? error.message : 'Unknown error'
             }`,
           );
         }
-      } else {
-        console.log('⊘ Skipping Step: Combine Pairs (disabled in config)');
       }
 
       // Step: Delete Empty (Processing only)
@@ -8907,7 +8908,9 @@ export default function OriginalVideosList({
                     {/* Combine Long-Text Pairs (Processing) Button */}
                     <button
                       onClick={() =>
-                        void handleCombineLongTextPairsForProcessingVideos()
+                        void handleCombineLongTextPairsForProcessingVideos(
+                          combineScenesSettings.skipFirstScenes,
+                        )
                       }
                       disabled={
                         combiningLongTextPairsAllVideos ||

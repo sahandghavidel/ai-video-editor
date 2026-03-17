@@ -5,8 +5,12 @@ import { CheckCircle2, Circle, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 
 export default function PipelineConfig() {
-  const { pipelineConfig, togglePipelineStep, resetPipelineConfig } =
-    useAppStore();
+  const {
+    pipelineConfig,
+    togglePipelineStep,
+    resetPipelineConfig,
+    updatePipelineConfig,
+  } = useAppStore();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const steps = [
@@ -40,11 +44,6 @@ export default function PipelineConfig() {
       key: 'generateScenes' as const,
       label: 'Generate Scenes',
       color: 'text-purple-500',
-    },
-    {
-      key: 'combineLongTextPairs' as const,
-      label: 'Combine Pairs',
-      color: 'text-violet-500',
     },
     {
       key: 'deleteEmpty' as const,
@@ -208,7 +207,8 @@ export default function PipelineConfig() {
 
           {/* Pipeline Steps Grid */}
           <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3'>
-            {steps.map((step) => {
+            {/* Steps 1–7: ttsScript → generateScenes */}
+            {steps.slice(0, 7).map((step, index) => {
               const isEnabled = pipelineConfig[step.key];
               return (
                 <button
@@ -255,7 +255,100 @@ export default function PipelineConfig() {
                     }
                   `}
                   >
-                    {steps.indexOf(step) + 1}
+                    {index + 1}
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* Steps 8–11: Combine Pairs A/B/C/D — always active, each with its own skip value */}
+            {(['A', 'B', 'C', 'D'] as const).map((letter, i) => {
+              const key = `combinePairsSkip${letter}` as
+                | 'combinePairsSkipA'
+                | 'combinePairsSkipB'
+                | 'combinePairsSkipC'
+                | 'combinePairsSkipD';
+              const val = pipelineConfig[key];
+              return (
+                <div
+                  key={key}
+                  className='relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 border-violet-500 bg-violet-50 shadow-sm'
+                >
+                  <span className='text-xs font-semibold text-violet-600 uppercase tracking-wide'>
+                    Skip
+                  </span>
+                  <input
+                    type='number'
+                    min={1}
+                    value={val}
+                    onChange={(e) => {
+                      const raw = parseInt(e.target.value, 10);
+                      if (!isNaN(raw) && raw >= 1) {
+                        updatePipelineConfig({ [key]: raw });
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className='w-full text-center text-sm font-medium border border-violet-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-500'
+                  />
+                  <span className='text-sm font-medium text-gray-900 text-center'>
+                    Combine {letter}
+                  </span>
+                  <span className='absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-violet-600 text-white'>
+                    {8 + i}
+                  </span>
+                </div>
+              );
+            })}
+
+            {/* Steps 12+: deleteEmpty onwards */}
+            {steps.slice(7).map((step, index) => {
+              const isEnabled = pipelineConfig[step.key];
+              return (
+                <button
+                  key={step.key}
+                  onClick={() => togglePipelineStep(step.key)}
+                  className={`
+                    relative flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                    ${
+                      isEnabled
+                        ? 'border-purple-500 bg-purple-50 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }
+                  `}
+                >
+                  {/* Checkbox Icon */}
+                  <div className='relative'>
+                    {isEnabled ? (
+                      <CheckCircle2
+                        className={`w-6 h-6 ${step.color}`}
+                        strokeWidth={2.5}
+                      />
+                    ) : (
+                      <Circle className='w-6 h-6 text-gray-300' />
+                    )}
+                  </div>
+
+                  {/* Step Label */}
+                  <span
+                    className={`text-sm font-medium text-center ${
+                      isEnabled ? 'text-gray-900' : 'text-gray-500'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+
+                  {/* Step Number Badge */}
+                  <span
+                    className={`
+                    absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                    ${
+                      isEnabled
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-500'
+                    }
+                  `}
+                  >
+                    {12 + index}
                   </span>
                 </button>
               );
@@ -268,24 +361,57 @@ export default function PipelineConfig() {
               Enabled Pipeline Flow:
             </h3>
             <div className='flex flex-wrap items-center gap-2'>
-              {activeSteps.length > 0 ? (
-                activeSteps.map((step, index) => (
-                  <div key={step.key} className='flex items-center gap-2'>
+              {(() => {
+                const beforeCombineKeys = [
+                  'ttsScript',
+                  'ttsVideo',
+                  'normalizeAudio',
+                  'convertToCFR',
+                  'optimizeSilence',
+                  'transcribe',
+                  'generateScenes',
+                ];
+                const combineItems = (['A', 'B', 'C', 'D'] as const).map(
+                  (letter) => ({
+                    key: `combinePairsFlow${letter}`,
+                    label: `Combine ${letter}`,
+                    isCombine: true,
+                  }),
+                );
+                const flowItems = [
+                  ...activeSteps
+                    .filter((s) => beforeCombineKeys.includes(s.key))
+                    .map((s) => ({
+                      key: s.key,
+                      label: s.label,
+                      isCombine: false,
+                    })),
+                  ...combineItems,
+                  ...activeSteps
+                    .filter((s) => !beforeCombineKeys.includes(s.key))
+                    .map((s) => ({
+                      key: s.key,
+                      label: s.label,
+                      isCombine: false,
+                    })),
+                ];
+                return flowItems.map((item, index) => (
+                  <div key={item.key} className='flex items-center gap-2'>
                     <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700`}
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        item.isCombine
+                          ? 'bg-violet-100 text-violet-700'
+                          : 'bg-purple-100 text-purple-700'
+                      }`}
                     >
-                      {step.label}
+                      {item.label}
                     </span>
-                    {index < activeSteps.length - 1 && (
+                    {index < flowItems.length - 1 && (
                       <span className='text-gray-400'>→</span>
                     )}
                   </div>
-                ))
-              ) : (
-                <span className='text-sm text-gray-500 italic'>
-                  No steps selected. The pipeline will do nothing.
-                </span>
-              )}
+                ));
+              })()}
             </div>
           </div>
 

@@ -162,7 +162,10 @@ export interface PipelineConfig {
   optimizeSilence: boolean;
   transcribe: boolean;
   generateScenes: boolean;
-  combineLongTextPairs: boolean;
+  combinePairsSkipA: number;
+  combinePairsSkipB: number;
+  combinePairsSkipC: number;
+  combinePairsSkipD: number;
   deleteEmpty: boolean;
   generateClips: boolean;
   speedUp: boolean;
@@ -188,6 +191,11 @@ export interface PipelineConfig {
   generateYouTubeTimestamps: boolean;
   generateThumbnails: boolean;
 }
+
+// Helper type: only the boolean-valued keys of PipelineConfig (for togglePipelineStep)
+export type BooleanPipelineStepKey = {
+  [K in keyof PipelineConfig]: PipelineConfig[K] extends boolean ? K : never;
+}[keyof PipelineConfig];
 
 // Audio enhancement mode type
 export type AudioEnhancementMode =
@@ -375,7 +383,7 @@ interface AppState {
 
   // Pipeline Configuration Actions
   updatePipelineConfig: (updates: Partial<PipelineConfig>) => void;
-  togglePipelineStep: (step: keyof PipelineConfig) => void;
+  togglePipelineStep: (step: BooleanPipelineStepKey) => void;
   resetPipelineConfig: () => void;
 
   // Silence Speed Rate Actions
@@ -532,7 +540,10 @@ const defaultPipelineConfig: PipelineConfig = {
   optimizeSilence: true,
   transcribe: true,
   generateScenes: true,
-  combineLongTextPairs: false,
+  combinePairsSkipA: 30,
+  combinePairsSkipB: 60,
+  combinePairsSkipC: 90,
+  combinePairsSkipD: 120,
   deleteEmpty: true,
   generateClips: true,
   speedUp: true,
