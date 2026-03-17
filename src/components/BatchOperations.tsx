@@ -380,18 +380,31 @@ export default function BatchOperations({
   const handleCombineNoSubtitlePairs = async () => {
     if (combiningNoSubtitlePairs) return;
 
+    // Reuse the subtitle-setting threshold logic used by batch subtitle generation.
+    // Subtitles are generated only when charCount < maxChars (strictly less).
+    // So scenes with charCount >= maxChars are the ones expected to have no subtitles.
+    if (!subtitleGenerationSettings.enableCharLimit) {
+      return;
+    }
+
+    const maxChars = Math.max(
+      1,
+      Math.floor(subtitleGenerationSettings.maxChars),
+    );
+
     // Sort scenes by start time (field_6896) to process them in order
     const sorted = [...data].sort(
       (a, b) => (Number(a.field_6896) || 0) - (Number(b.field_6896) || 0),
     );
 
-    // A scene is eligible if it has a sentence and its final video URL does
-    // NOT contain "subtitle" (empty final video URL is also fine)
+    // Eligible scene criteria for this operation:
+    // 1) Non-empty sentence (field_6890)
+    // 2) Sentence char count is >= subtitle maxChars, matching subtitle skip rule
     const isEligible = (scene: (typeof data)[0]) => {
       const sentence = String(scene['field_6890'] ?? '').trim();
       if (!sentence) return false;
-      const finalVideo = String(scene['field_6886'] ?? '').toLowerCase();
-      return !finalVideo.includes('subtitle');
+      const charCount = sentence.length;
+      return charCount >= maxChars;
     };
 
     // Greedy left-to-right: find non-overlapping consecutive eligible pairs
@@ -2557,27 +2570,28 @@ export default function BatchOperations({
               </button>
             </div>
 
-            {/* Combine No-Subtitle Pairs */}
+            {/* Combine Pairs (Subtitle Settings Based) */}
             <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200'>
               <div className='flex items-center gap-2 mb-3'>
                 <div className='p-2 bg-violet-500 rounded-lg'>
                   <GitMerge className='w-4 h-4 text-white' />
                 </div>
                 <h3 className='font-semibold text-violet-900'>
-                  Combine No-Subtitle Pairs
+                  Combine Long-Text Pairs
                 </h3>
               </div>
               <p className='text-sm text-violet-800 mb-4 leading-relaxed'>
-                Find consecutive scene pairs where both have a sentence and
-                neither final video URL contains &quot;subtitle&quot;. Merges
-                each pair (text, timings) and deletes the second scene. Greedy
-                left-to-right — each scene used at most once.
+                Find consecutive scene pairs where both have a non-empty
+                sentence and char count is at least the subtitle Max chars
+                limit. This uses the same subtitle setting rule (charCount &gt;=
+                maxChars means subtitle is skipped). Greedy left-to-right — each
+                scene used at most once.
               </p>
               <button
                 onClick={handleCombineNoSubtitlePairs}
                 disabled={combiningNoSubtitlePairs}
                 className='w-full h-12 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title='Combine consecutive no-subtitle scene pairs'
+                title='Combine consecutive pairs based on subtitle character-limit settings'
               >
                 {combiningNoSubtitlePairs && (
                   <Loader2 className='w-4 h-4 animate-spin' />
