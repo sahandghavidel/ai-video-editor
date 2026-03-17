@@ -6596,11 +6596,34 @@ export default function OriginalVideosList({
 
       // Steps: Combine Pairs A → B → C → D (Processing only, after Generate Scenes)
       for (const pass of [
-        { label: 'A', skip: pipelineConfig.combinePairsSkipA },
-        { label: 'B', skip: pipelineConfig.combinePairsSkipB },
-        { label: 'C', skip: pipelineConfig.combinePairsSkipC },
-        { label: 'D', skip: pipelineConfig.combinePairsSkipD },
+        {
+          label: 'A',
+          enabled: pipelineConfig.combinePairsEnabledA,
+          skip: pipelineConfig.combinePairsSkipA,
+        },
+        {
+          label: 'B',
+          enabled: pipelineConfig.combinePairsEnabledB,
+          skip: pipelineConfig.combinePairsSkipB,
+        },
+        {
+          label: 'C',
+          enabled: pipelineConfig.combinePairsEnabledC,
+          skip: pipelineConfig.combinePairsSkipC,
+        },
+        {
+          label: 'D',
+          enabled: pipelineConfig.combinePairsEnabledD,
+          skip: pipelineConfig.combinePairsSkipD,
+        },
       ]) {
+        if (!pass.enabled) {
+          console.log(
+            `⊘ Skipping Step: Combine Pairs ${pass.label} (disabled in config)`,
+          );
+          continue;
+        }
+
         stepNumber++;
         setPipelineStep(
           `Step ${stepNumber}: Combining long-text pairs (Pass ${pass.label}, skip ${pass.skip}) for Processing videos...`,

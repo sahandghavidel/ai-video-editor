@@ -148,7 +148,32 @@ export default function PipelineConfig() {
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);
-  const allSelected = steps.every((step) => pipelineConfig[step.key]);
+  const combinePasses = [
+    {
+      letter: 'A' as const,
+      enabledKey: 'combinePairsEnabledA' as const,
+      skipKey: 'combinePairsSkipA' as const,
+    },
+    {
+      letter: 'B' as const,
+      enabledKey: 'combinePairsEnabledB' as const,
+      skipKey: 'combinePairsSkipB' as const,
+    },
+    {
+      letter: 'C' as const,
+      enabledKey: 'combinePairsEnabledC' as const,
+      skipKey: 'combinePairsSkipC' as const,
+    },
+    {
+      letter: 'D' as const,
+      enabledKey: 'combinePairsEnabledD' as const,
+      skipKey: 'combinePairsSkipD' as const,
+    },
+  ];
+  const enabledCombinePassCount = combinePasses.filter(
+    (pass) => pipelineConfig[pass.enabledKey],
+  ).length;
+  const enabledStepsCount = activeSteps.length + enabledCombinePassCount;
 
   return (
     <div className='bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden'>
@@ -164,7 +189,8 @@ export default function PipelineConfig() {
               Pipeline Configuration
             </h2>
             <p className='text-sm text-gray-500'>
-              {activeSteps.length} of {steps.length} steps enabled
+              {enabledStepsCount} of {steps.length + combinePasses.length} steps
+              enabled
             </p>
           </div>
         </div>
@@ -261,19 +287,33 @@ export default function PipelineConfig() {
               );
             })}
 
-            {/* Steps 8–11: Combine Pairs A/B/C/D — always active, each with its own skip value */}
-            {(['A', 'B', 'C', 'D'] as const).map((letter, i) => {
-              const key = `combinePairsSkip${letter}` as
-                | 'combinePairsSkipA'
-                | 'combinePairsSkipB'
-                | 'combinePairsSkipC'
-                | 'combinePairsSkipD';
-              const val = pipelineConfig[key];
+            {/* Steps 8–11: Combine Pairs A/B/C/D with toggle + skip value */}
+            {combinePasses.map((pass, i) => {
+              const isEnabled = pipelineConfig[pass.enabledKey];
+              const val = pipelineConfig[pass.skipKey];
               return (
                 <div
-                  key={key}
-                  className='relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 border-violet-500 bg-violet-50 shadow-sm'
+                  key={pass.enabledKey}
+                  className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                    isEnabled
+                      ? 'border-violet-500 bg-violet-50 shadow-sm'
+                      : 'border-gray-200 bg-white'
+                  }`}
                 >
+                  <button
+                    type='button'
+                    onClick={() => togglePipelineStep(pass.enabledKey)}
+                    className='flex items-center justify-center'
+                  >
+                    {isEnabled ? (
+                      <CheckCircle2
+                        className='w-6 h-6 text-violet-500'
+                        strokeWidth={2.5}
+                      />
+                    ) : (
+                      <Circle className='w-6 h-6 text-gray-300' />
+                    )}
+                  </button>
                   <span className='text-xs font-semibold text-violet-600 uppercase tracking-wide'>
                     Skip
                   </span>
@@ -284,16 +324,23 @@ export default function PipelineConfig() {
                     onChange={(e) => {
                       const raw = parseInt(e.target.value, 10);
                       if (!isNaN(raw) && raw >= 1) {
-                        updatePipelineConfig({ [key]: raw });
+                        updatePipelineConfig({ [pass.skipKey]: raw });
                       }
                     }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled={!isEnabled}
                     className='w-full text-center text-sm font-medium border border-violet-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-500'
                   />
                   <span className='text-sm font-medium text-gray-900 text-center'>
-                    Combine {letter}
+                    Combine {pass.letter}
                   </span>
-                  <span className='absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-violet-600 text-white'>
+                  <span
+                    className={`absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      isEnabled
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-gray-200 text-gray-500'
+                    }`}
+                  >
                     {8 + i}
                   </span>
                 </div>
@@ -371,13 +418,13 @@ export default function PipelineConfig() {
                   'transcribe',
                   'generateScenes',
                 ];
-                const combineItems = (['A', 'B', 'C', 'D'] as const).map(
-                  (letter) => ({
-                    key: `combinePairsFlow${letter}`,
-                    label: `Combine ${letter}`,
+                const combineItems = combinePasses
+                  .filter((pass) => pipelineConfig[pass.enabledKey])
+                  .map((pass) => ({
+                    key: `combinePairsFlow${pass.letter}`,
+                    label: `Combine ${pass.letter}`,
                     isCombine: true,
-                  }),
-                );
+                  }));
                 const flowItems = [
                   ...activeSteps
                     .filter((s) => beforeCombineKeys.includes(s.key))
@@ -395,6 +442,13 @@ export default function PipelineConfig() {
                       isCombine: false,
                     })),
                 ];
+                if (flowItems.length === 0) {
+                  return (
+                    <span className='text-sm text-gray-500 italic'>
+                      No steps selected. The pipeline will do nothing.
+                    </span>
+                  );
+                }
                 return flowItems.map((item, index) => (
                   <div key={item.key} className='flex items-center gap-2'>
                     <span
@@ -416,7 +470,7 @@ export default function PipelineConfig() {
           </div>
 
           {/* Warning if no steps selected */}
-          {activeSteps.length === 0 && (
+          {enabledStepsCount === 0 && (
             <div className='mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg'>
               <p className='text-sm text-yellow-800'>
                 ⚠️ Warning: No steps are selected. The Full Pipeline button will

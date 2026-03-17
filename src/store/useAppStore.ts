@@ -162,6 +162,10 @@ export interface PipelineConfig {
   optimizeSilence: boolean;
   transcribe: boolean;
   generateScenes: boolean;
+  combinePairsEnabledA: boolean;
+  combinePairsEnabledB: boolean;
+  combinePairsEnabledC: boolean;
+  combinePairsEnabledD: boolean;
   combinePairsSkipA: number;
   combinePairsSkipB: number;
   combinePairsSkipC: number;
@@ -540,6 +544,10 @@ const defaultPipelineConfig: PipelineConfig = {
   optimizeSilence: true,
   transcribe: true,
   generateScenes: true,
+  combinePairsEnabledA: true,
+  combinePairsEnabledB: true,
+  combinePairsEnabledC: true,
+  combinePairsEnabledD: true,
   combinePairsSkipA: 30,
   combinePairsSkipB: 60,
   combinePairsSkipC: 90,
