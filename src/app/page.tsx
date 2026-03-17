@@ -13,6 +13,7 @@ import AudioEnhancementSettings from '@/components/AudioEnhancementSettings';
 import AdvancedAudioSettings from '@/components/AdvancedAudioSettings';
 import DeletionSettings from '@/components/DeletionSettings';
 import SubtitleGenerationSettings from '@/components/SubtitleGenerationSettings';
+import CombineScenesSettings from '@/components/CombineScenesSettings';
 import SceneVideoGenerationSettings from '@/components/SceneVideoGenerationSettings';
 import OriginalVideosList from '@/components/OriginalVideosList';
 import { useEffect, useState, useCallback } from 'react';
@@ -323,6 +324,7 @@ export default function Home() {
                       <ModelSelection />
                       <TranscriptionModelSelection />
                       <SubtitleGenerationSettings />
+                      <CombineScenesSettings />
                       <TTSSettings />
                       <SceneVideoGenerationSettings />
                       <VideoSpeedSettings />

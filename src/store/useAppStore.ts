@@ -47,6 +47,11 @@ export interface SubtitleGenerationSettings {
   fontFamily: string;
 }
 
+// Combine scenes batch settings
+export interface CombineScenesSettings {
+  skipFirstScenes: number;
+}
+
 // Scene video generation batch settings (image-to-video)
 export interface SceneVideoGenerationSettings {
   // Dynamic condition #1
@@ -221,6 +226,9 @@ interface AppState {
   // Subtitle Generation Settings
   subtitleGenerationSettings: SubtitleGenerationSettings;
 
+  // Combine Scenes Settings
+  combineScenesSettings: CombineScenesSettings;
+
   // Scene Video Generation (image-to-video) settings
   sceneVideoGenerationSettings: SceneVideoGenerationSettings;
 
@@ -289,6 +297,12 @@ interface AppState {
     updates: Partial<SubtitleGenerationSettings>,
   ) => void;
   resetSubtitleGenerationSettings: () => void;
+
+  // Combine Scenes Settings Actions
+  updateCombineScenesSettings: (
+    updates: Partial<CombineScenesSettings>,
+  ) => void;
+  resetCombineScenesSettings: () => void;
 
   // Scene Video Generation Settings Actions
   updateSceneVideoGenerationSettings: (
@@ -421,6 +435,10 @@ const defaultSubtitleGenerationSettings: SubtitleGenerationSettings = {
   positionYPercent: 50,
   sizeHeightPercent: 100,
   fontFamily: 'Lilita One',
+};
+
+const defaultCombineScenesSettings: CombineScenesSettings = {
+  skipFirstScenes: 50,
 };
 
 const defaultSceneVideoGenerationSettings: SceneVideoGenerationSettings = {
@@ -558,6 +576,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Subtitle Generation Settings
   subtitleGenerationSettings: defaultSubtitleGenerationSettings,
+
+  // Combine Scenes Settings
+  combineScenesSettings: defaultCombineScenesSettings,
 
   // Scene Video Generation Settings
   sceneVideoGenerationSettings: defaultSceneVideoGenerationSettings,
@@ -775,6 +796,35 @@ export const useAppStore = create<AppState>((set, get) => ({
         JSON.stringify(defaultSubtitleGenerationSettings),
       );
       return { subtitleGenerationSettings: defaultSubtitleGenerationSettings };
+    }),
+
+  // Combine Scenes Settings Actions
+  updateCombineScenesSettings: (updates) =>
+    set((state) => {
+      const skipFirstScenesRaw =
+        typeof updates.skipFirstScenes === 'number'
+          ? updates.skipFirstScenes
+          : undefined;
+
+      const next: CombineScenesSettings = {
+        ...state.combineScenesSettings,
+        ...updates,
+        ...(typeof skipFirstScenesRaw === 'number'
+          ? { skipFirstScenes: Math.max(0, Math.floor(skipFirstScenesRaw)) }
+          : null),
+      };
+
+      localStorage.setItem('combineScenesSettings', JSON.stringify(next));
+      return { combineScenesSettings: next };
+    }),
+
+  resetCombineScenesSettings: () =>
+    set(() => {
+      localStorage.setItem(
+        'combineScenesSettings',
+        JSON.stringify(defaultCombineScenesSettings),
+      );
+      return { combineScenesSettings: defaultCombineScenesSettings };
     }),
 
   // Scene Video Generation Settings Actions
@@ -1277,6 +1327,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       transcriptionSettings: state.transcriptionSettings,
       deletionSettings: state.deletionSettings,
       subtitleGenerationSettings: state.subtitleGenerationSettings,
+      combineScenesSettings: state.combineScenesSettings,
       sceneVideoGenerationSettings: state.sceneVideoGenerationSettings,
       modelSelection: {
         selectedModel: state.modelSelection.selectedModel,
@@ -1316,6 +1367,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           subtitleGenerationSettings: {
             ...defaultSubtitleGenerationSettings,
             ...settings.subtitleGenerationSettings,
+          },
+          combineScenesSettings: {
+            ...defaultCombineScenesSettings,
+            ...settings.combineScenesSettings,
           },
           sceneVideoGenerationSettings: {
             ...defaultSceneVideoGenerationSettings,
@@ -1471,6 +1526,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      // Load combineScenesSettings from localStorage
+      const savedCombineScenesSettings = localStorage.getItem(
+        'combineScenesSettings',
+      );
+      if (savedCombineScenesSettings) {
+        try {
+          const settings = JSON.parse(savedCombineScenesSettings);
+          const skipFirstScenes =
+            typeof settings?.skipFirstScenes === 'number'
+              ? Math.max(0, Math.floor(settings.skipFirstScenes))
+              : defaultCombineScenesSettings.skipFirstScenes;
+
+          set({
+            combineScenesSettings: {
+              ...defaultCombineScenesSettings,
+              ...settings,
+              skipFirstScenes,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to parse combineScenesSettings:', e);
+        }
+      }
+
       // Load sceneVideoGenerationSettings from localStorage
       const savedSceneVideoGenerationSettings = localStorage.getItem(
         'sceneVideoGenerationSettings',
@@ -1567,12 +1646,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.removeItem('video-editor-settings');
       localStorage.removeItem('pipelineConfig');
       localStorage.removeItem('subtitleGenerationSettings');
+      localStorage.removeItem('combineScenesSettings');
       localStorage.removeItem('sceneVideoGenerationSettings');
       set({
         ttsSettings: defaultTTSSettings,
         videoSettings: defaultVideoSettings,
         transcriptionSettings: defaultTranscriptionSettings,
         subtitleGenerationSettings: defaultSubtitleGenerationSettings,
+        combineScenesSettings: defaultCombineScenesSettings,
         sceneVideoGenerationSettings: defaultSceneVideoGenerationSettings,
         modelSelection: {
           ...get().modelSelection,

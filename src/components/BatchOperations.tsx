@@ -91,6 +91,7 @@ export default function BatchOperations({
     videoSettings,
     transcriptionSettings,
     subtitleGenerationSettings,
+    combineScenesSettings,
     sceneVideoGenerationSettings,
     updateVideoSettings,
     startBatchOperation,
@@ -391,11 +392,16 @@ export default function BatchOperations({
       1,
       Math.floor(subtitleGenerationSettings.maxChars),
     );
+    const skipFirstScenes = Math.max(
+      0,
+      Math.floor(combineScenesSettings.skipFirstScenes),
+    );
 
     // Sort scenes by start time (field_6896) to process them in order
-    const sorted = [...data].sort(
+    const ordered = [...data].sort(
       (a, b) => (Number(a.field_6896) || 0) - (Number(b.field_6896) || 0),
     );
+    const sorted = ordered.slice(skipFirstScenes);
 
     // Eligible scene criteria for this operation:
     // 1) Non-empty sentence (field_6890)
@@ -2586,6 +2592,16 @@ export default function BatchOperations({
                 limit. This uses the same subtitle setting rule (charCount &gt;=
                 maxChars means subtitle is skipped). Greedy left-to-right — each
                 scene used at most once.
+              </p>
+              <p className='text-xs text-violet-700 mb-3'>
+                Skipping first{' '}
+                <span className='font-semibold'>
+                  {Math.max(
+                    0,
+                    Math.floor(combineScenesSettings.skipFirstScenes),
+                  )}
+                </span>{' '}
+                ordered scene(s) from Global Settings.
               </p>
               <button
                 onClick={handleCombineNoSubtitlePairs}
