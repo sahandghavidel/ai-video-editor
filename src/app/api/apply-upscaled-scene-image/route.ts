@@ -86,12 +86,25 @@ function parseDurationSeconds(probe: FFprobeOutput): number {
     return Number.NaN;
   };
 
-  const streamDuration = probe.streams?.find(
-    (s) => s.codec_type === 'video',
-  )?.duration;
-  const d1 = parse(streamDuration);
-  const d2 = parse(probe.format?.duration);
-  const d = Number.isFinite(d1) ? d1 : d2;
+  // Prefer audio stream duration first — it is the most accurate measure for
+  // how much audio the output contains and avoids cutting it short.
+  // Fall back to the container/format duration (authoritative overall duration),
+  // and only use the video stream duration as a last resort because decoders
+  // often report a slightly rounded-down value (one or more frames short).
+  const audioDuration = parse(
+    probe.streams?.find((s) => s.codec_type === 'audio')?.duration,
+  );
+  const formatDuration = parse(probe.format?.duration);
+  const videoDuration = parse(
+    probe.streams?.find((s) => s.codec_type === 'video')?.duration,
+  );
+
+  const d = Number.isFinite(audioDuration)
+    ? audioDuration
+    : Number.isFinite(formatDuration)
+      ? formatDuration
+      : videoDuration;
+
   if (!Number.isFinite(d) || d <= 0)
     throw new Error('Unable to determine video duration');
   return d;
