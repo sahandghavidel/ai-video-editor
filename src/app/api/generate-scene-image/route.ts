@@ -15,6 +15,14 @@ const KIE_API_BASE = 'https://api.kie.ai/api/v1';
 const KIE_MODEL = 'google/nano-banana-edit';
 const CONTEXT_SCENES_BEFORE = 50;
 const CONTEXT_SCENES_AFTER = 50;
+const RETRY_CONTEXT_SCENES_BEFORE = Math.max(
+  1,
+  Math.floor(CONTEXT_SCENES_BEFORE / 2),
+);
+const RETRY_CONTEXT_SCENES_AFTER = Math.max(
+  1,
+  Math.floor(CONTEXT_SCENES_AFTER / 2),
+);
 const KIE_POLL_INTERVAL_MS = 3000;
 // Allow more time for KIE Nano Banana jobs to complete (10 minutes).
 const KIE_MAX_WAIT_MS = 600000;
@@ -231,6 +239,42 @@ function sortScenesByTimeline(a: BaserowRow, b: BaserowRow): number {
   const orderB = getSceneOrderValue(b);
   if (orderA !== orderB) return orderA - orderB;
   return (a.id ?? 0) - (b.id ?? 0);
+}
+
+function isPromptTooLongError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /prompt\s*exceeds\s*maximum\s*length/i.test(message);
+}
+
+function buildSceneImagePrompt(params: {
+  sceneId: number;
+  currentText: string;
+  contextScript: string;
+  contextBefore: number;
+  contextAfter: number;
+}): string {
+  const { sceneId, currentText, contextScript, contextBefore, contextAfter } =
+    params;
+
+  return `You are a professional image creator for video clips. Your task is to analyze the script I provide and convert each scene into a single, clear visual that communicates the idea being spoken.
+
+  For each scene:
+  Create a strong visual metaphor that explains the concept. Do not just show the character talking; show the character interacting with relevant objects, symbols, UI elements, diagrams, or metaphorical props (e.g., charts, clocks, ladders, puzzles, obstacles, tools). Keep the composition simple, large and readable.
+
+  Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high retention. Keep the character large and clearly visible.
+
+  Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the scene.
+
+  Create an image for the current scene:
+
+  current scene: ${sceneId} ${currentText}
+
+
+  Context window (${contextBefore} before / ${contextAfter} after): ${contextScript}
+
+  Create an image for the current scene:
+
+  current scene: ${sceneId} ${currentText}`;
 }
 
 function getKieApiKey(): string {
@@ -529,45 +573,45 @@ export async function POST(req: Request) {
       (scene) => scene.id === sceneId,
     );
 
-    const contextWindowScenes =
-      currentSceneIndex >= 0
-        ? orderedScenes.slice(
-            Math.max(0, currentSceneIndex - CONTEXT_SCENES_BEFORE),
-            Math.min(
-              orderedScenes.length,
-              currentSceneIndex + CONTEXT_SCENES_AFTER + 1,
-            ),
-          )
-        : orderedScenes;
+    const buildContextScript = (before: number, after: number): string => {
+      const contextWindowScenes =
+        currentSceneIndex >= 0
+          ? orderedScenes.slice(
+              Math.max(0, currentSceneIndex - before),
+              Math.min(orderedScenes.length, currentSceneIndex + after + 1),
+            )
+          : orderedScenes;
 
-    const contextScenes = contextWindowScenes.filter((scene) =>
-      Boolean(getSceneText(scene).trim()),
+      const contextScenes = contextWindowScenes.filter((scene) =>
+        Boolean(getSceneText(scene).trim()),
+      );
+
+      return contextScenes.map(formatScriptLine).join(' ');
+    };
+
+    const fullContextScript = buildContextScript(
+      CONTEXT_SCENES_BEFORE,
+      CONTEXT_SCENES_AFTER,
+    );
+    const trimmedContextScript = buildContextScript(
+      RETRY_CONTEXT_SCENES_BEFORE,
+      RETRY_CONTEXT_SCENES_AFTER,
     );
 
-    const contextScript = contextScenes.map(formatScriptLine).join(' ');
-
-    const prompt = `You are a professional image creator for video clips. Your task is to analyze the script I provide and convert each scene into a single, clear visual that communicates the idea being spoken.
-
-  For each scene:
-  Create a strong visual metaphor that explains the concept. Do not just show the character talking; show the character interacting with relevant objects, symbols, UI elements, diagrams, or metaphorical props (e.g., charts, clocks, ladders, puzzles, obstacles, tools). Keep the composition simple, large and readable.
-
-  Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high retention. Keep the character large and clearly visible. 
-
-  Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the scene.
-
-  Create an image for the current scene:
-
-  current scene: ${sceneId} ${currentText} 
-  
-  
-  Context window (${CONTEXT_SCENES_BEFORE} before / ${CONTEXT_SCENES_AFTER} after): ${contextScript}
-  
-  Create an image for the current scene:
-
-  current scene: ${sceneId} ${currentText}`;
-
-    console.log('generate-scene-image: sending prompt to Nano Banana Edit');
-    console.log(prompt);
+    const fullPrompt = buildSceneImagePrompt({
+      sceneId,
+      currentText,
+      contextScript: fullContextScript,
+      contextBefore: CONTEXT_SCENES_BEFORE,
+      contextAfter: CONTEXT_SCENES_AFTER,
+    });
+    const trimmedPrompt = buildSceneImagePrompt({
+      sceneId,
+      currentText,
+      contextScript: trimmedContextScript,
+      contextBefore: RETRY_CONTEXT_SCENES_BEFORE,
+      contextAfter: RETRY_CONTEXT_SCENES_AFTER,
+    });
 
     const characterImageUrls = parseKieCharacterImageUrls(
       process.env.KIE_CHARACTER_IMAGE_URL,
@@ -595,7 +639,28 @@ export async function POST(req: Request) {
       );
     }
 
-    const taskId = await createNanoBananaTask(prompt, imageUrls);
+    let taskId = '';
+    try {
+      console.log(
+        'generate-scene-image: sending prompt to Nano Banana Edit (attempt 1, full context)',
+      );
+      console.log(fullPrompt);
+      taskId = await createNanoBananaTask(fullPrompt, imageUrls);
+    } catch (error) {
+      if (!isPromptTooLongError(error)) {
+        throw error;
+      }
+
+      console.warn(
+        `generate-scene-image: first createTask failed due to prompt length. Retrying once with trimmed context (${RETRY_CONTEXT_SCENES_BEFORE} before / ${RETRY_CONTEXT_SCENES_AFTER} after).`,
+      );
+      console.log(
+        'generate-scene-image: sending prompt to Nano Banana Edit (attempt 2, trimmed context)',
+      );
+      console.log(trimmedPrompt);
+
+      taskId = await createNanoBananaTask(trimmedPrompt, imageUrls);
+    }
 
     let imageUrl = '';
     let lastState: string | null = null;
