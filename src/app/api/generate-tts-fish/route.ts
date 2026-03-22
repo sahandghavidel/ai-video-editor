@@ -8,6 +8,14 @@ const FISH_HEADERS_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 const FISH_BODY_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 const FISH_ABORT_TIMEOUT_MS = 65 * 60 * 1000; // 65 minutes safety cap
 
+const FISH_DEFAULT_MAX_NEW_TOKENS = 1024;
+const FISH_MAX_NEW_TOKENS_CAP = 8192;
+const FISH_LONG_TEXT_THRESHOLD_CHARS = 900;
+const FISH_DEFAULT_CHUNK_LENGTH = 300;
+const FISH_LONG_TEXT_MIN_CHUNK_LENGTH = 500;
+const FISH_CONNECT_RETRIES = 6;
+const FISH_CONNECT_RETRY_DELAY_MS = 1500;
+
 const fishFetchDispatcher = new Agent({
   headersTimeout: FISH_HEADERS_TIMEOUT_MS,
   bodyTimeout: FISH_BODY_TIMEOUT_MS,
@@ -63,6 +71,65 @@ function normalizeBaseUrl(raw: string | undefined): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
+function extractUpstreamErrorCode(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (!cause || typeof cause !== 'object') return null;
+  if (!('code' in cause)) return null;
+  const code = (cause as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchFishWithRetry(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= FISH_CONNECT_RETRIES + 1; attempt += 1) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      const code = extractUpstreamErrorCode(error);
+      const retryable =
+        code === 'ECONNREFUSED' ||
+        code === 'UND_ERR_CONNECT_TIMEOUT' ||
+        code === 'ENOTFOUND' ||
+        code === 'EAI_AGAIN';
+
+      if (!retryable || attempt > FISH_CONNECT_RETRIES) {
+        throw error;
+      }
+
+      await sleep(FISH_CONNECT_RETRY_DELAY_MS);
+    }
+  }
+
+  throw lastError;
+}
+
+function estimateRecommendedMaxNewTokens(text: string): number {
+  const normalizedText = text.trim();
+  if (!normalizedText) return FISH_DEFAULT_MAX_NEW_TOKENS;
+
+  const words = normalizedText.split(/\s+/).filter(Boolean).length;
+  const chars = normalizedText.length;
+
+  // Heuristic sized for long narrative TTS scripts.
+  const byWordCount = Math.ceil(words * 2.6);
+  const byCharCount = Math.ceil(chars * 0.9);
+
+  return Math.max(
+    FISH_DEFAULT_MAX_NEW_TOKENS,
+    Math.min(FISH_MAX_NEW_TOKENS_CAP, Math.max(byWordCount, byCharCount)),
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as RequestBody;
@@ -94,17 +161,36 @@ export async function POST(request: NextRequest) {
     const format: FishFormat = fish.format || 'wav';
     const latency: FishLatency = fish.latency || 'normal';
 
+    const requestedMaxNewTokens = toPositiveInt(
+      fish.max_new_tokens,
+      FISH_DEFAULT_MAX_NEW_TOKENS,
+    );
+    const recommendedMaxNewTokens = estimateRecommendedMaxNewTokens(text);
+    const maxNewTokens = Math.max(
+      requestedMaxNewTokens,
+      recommendedMaxNewTokens,
+    );
+
+    const requestedChunkLength = Math.max(
+      100,
+      Math.min(
+        1000,
+        toPositiveInt(fish.chunk_length, FISH_DEFAULT_CHUNK_LENGTH),
+      ),
+    );
+    const chunkLength =
+      text.length >= FISH_LONG_TEXT_THRESHOLD_CHARS
+        ? Math.max(requestedChunkLength, FISH_LONG_TEXT_MIN_CHUNK_LENGTH)
+        : requestedChunkLength;
+
     const fishPayload = {
       text,
       references: [],
       reference_id: referenceId,
       format,
       latency,
-      max_new_tokens: toPositiveInt(fish.max_new_tokens, 1024),
-      chunk_length: Math.max(
-        100,
-        Math.min(1000, toPositiveInt(fish.chunk_length, 300)),
-      ),
+      max_new_tokens: maxNewTokens,
+      chunk_length: chunkLength,
       top_p: Math.max(0.1, Math.min(1.0, toFiniteNumber(fish.top_p, 0.8))),
       repetition_penalty: Math.max(
         0.9,
@@ -139,16 +225,43 @@ export async function POST(request: NextRequest) {
       }
     }, FISH_ABORT_TIMEOUT_MS);
 
-    const fishResponse = await fetch(`${fishBaseUrl}/v1/tts`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(fishPayload),
-      signal: fishController.signal,
-      // undici-specific option for Node fetch
-      dispatcher: fishFetchDispatcher,
-    } as unknown as RequestInit);
+    let fishResponse: Response;
+    try {
+      fishResponse = await fetchFishWithRetry(`${fishBaseUrl}/v1/tts`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(fishPayload),
+        signal: fishController.signal,
+        // undici-specific option for Node fetch
+        dispatcher: fishFetchDispatcher,
+      } as unknown as RequestInit);
+    } catch (upstreamError) {
+      const code = extractUpstreamErrorCode(upstreamError);
 
-    clearTimeout(fishAbortTimer);
+      const isTimeout =
+        code === 'UND_ERR_HEADERS_TIMEOUT' ||
+        code === 'UND_ERR_BODY_TIMEOUT' ||
+        code === 'ABORT_ERR';
+
+      const message = isTimeout
+        ? `Fish TTS timed out${code ? ` (${code})` : ''}`
+        : `Fish TTS is unreachable${code ? ` (${code})` : ''}`;
+
+      const hint = isTimeout
+        ? `Fish server did not answer in time. Check GPU/MPS load and model responsiveness at ${fishBaseUrl}/v1/health.`
+        : `Cannot connect to Fish server at ${fishBaseUrl}. Start the Fish server and verify ${fishBaseUrl}/v1/health returns ok.`;
+
+      return NextResponse.json(
+        {
+          error: message,
+          fishBaseUrl,
+          hint,
+        },
+        { status: isTimeout ? 504 : 503 },
+      );
+    } finally {
+      clearTimeout(fishAbortTimer);
+    }
 
     if (!fishResponse.ok) {
       const msg = await fishResponse.text().catch(() => '');
@@ -206,6 +319,10 @@ export async function POST(request: NextRequest) {
       bucket,
       sceneId: hasSceneId ? body.sceneId : null,
       videoId: hasVideoId ? body.videoId : null,
+      generationParams: {
+        max_new_tokens: maxNewTokens,
+        chunk_length: chunkLength,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
