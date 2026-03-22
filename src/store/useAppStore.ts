@@ -2,12 +2,30 @@ import { create } from 'zustand';
 import { BaserowRow } from '@/lib/baserow-actions';
 
 // TTS Settings interface
+export type TTSProvider = 'chatterbox' | 'fish-s2-pro';
+
+export interface FishTTSSettings {
+  apiBaseUrl: string;
+  apiKey: string;
+  referenceId: string;
+  format: 'wav' | 'mp3' | 'opus' | 'pcm';
+  latency: 'normal' | 'balanced';
+  chunk_length: number;
+  max_new_tokens: number;
+  top_p: number;
+  repetition_penalty: number;
+  temperature: number;
+  use_memory_cache: 'on' | 'off';
+}
+
 export interface TTSSettings {
+  provider: TTSProvider;
   temperature: number;
   exaggeration: number;
   cfg_weight: number;
   seed: number;
   reference_audio_filename: string;
+  fish: FishTTSSettings;
 }
 
 // Speed up filtering modes
@@ -412,11 +430,29 @@ interface AppState {
 
 // Default TTS settings
 const defaultTTSSettings: TTSSettings = {
+  provider: 'chatterbox',
   temperature: 0.8,
   exaggeration: 0.6,
   cfg_weight: 0.5,
   seed: 1212,
   reference_audio_filename: 'calmS5wave.wav',
+  fish: {
+    apiBaseUrl:
+      typeof process !== 'undefined' &&
+      process.env.NEXT_PUBLIC_FISH_TTS_BASE_URL
+        ? process.env.NEXT_PUBLIC_FISH_TTS_BASE_URL
+        : 'http://127.0.0.1:8080',
+    apiKey: '',
+    referenceId: '',
+    format: 'wav',
+    latency: 'normal',
+    chunk_length: 300,
+    max_new_tokens: 1024,
+    top_p: 0.8,
+    repetition_penalty: 1.1,
+    temperature: 0.8,
+    use_memory_cache: 'off',
+  },
 };
 
 // Default video settings

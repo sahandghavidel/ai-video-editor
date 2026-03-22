@@ -9,11 +9,28 @@ interface TTSSettingsProps {
 
 // Default TTS settings
 const defaultTTSSettings = {
+  provider: 'chatterbox' as const,
   temperature: 0.8,
   exaggeration: 0.6,
   cfg_weight: 0.5,
   seed: 1212,
   reference_audio_filename: 'calmS5wave.wav',
+  fish: {
+    apiBaseUrl:
+      typeof window !== 'undefined'
+        ? 'http://127.0.0.1:8080'
+        : process.env.NEXT_PUBLIC_FISH_TTS_BASE_URL || 'http://127.0.0.1:8080',
+    apiKey: '',
+    referenceId: '',
+    format: 'wav' as const,
+    latency: 'normal' as const,
+    chunk_length: 300,
+    max_new_tokens: 1024,
+    top_p: 0.8,
+    repetition_penalty: 1.1,
+    temperature: 0.8,
+    use_memory_cache: 'off' as const,
+  },
 };
 
 export default function TTSSettings({ className = '' }: TTSSettingsProps) {
@@ -49,115 +66,240 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
 
       {/* Settings - Vertical Stack */}
       <div className='flex flex-col space-y-3'>
-        {/* Temperature */}
-        <div className='space-y-2'>
-          <div className='flex items-center justify-between'>
-            <label className='text-xs font-medium text-gray-700'>
-              Temperature
-            </label>
-            <span className='text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded min-w-[2.5rem] text-center'>
-              {ttsSettings.temperature.toFixed(1)}
-            </span>
-          </div>
-          <input
-            type='range'
-            min='0'
-            max='1'
-            step='0.1'
-            value={ttsSettings.temperature}
-            onChange={(e) =>
-              updateTTSSettings({ temperature: parseFloat(e.target.value) })
-            }
-            className='w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider'
-          />
-          <div className='flex justify-between text-xs text-gray-500'>
-            <span>0.0</span>
-            <span>1.0</span>
-          </div>
-        </div>
-
-        {/* Exaggeration */}
-        <div className='space-y-2'>
-          <div className='flex items-center justify-between'>
-            <label className='text-xs font-medium text-gray-700'>
-              Exaggeration
-            </label>
-            <span className='text-xs font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded min-w-[2.5rem] text-center'>
-              {ttsSettings.exaggeration.toFixed(1)}
-            </span>
-          </div>
-          <input
-            type='range'
-            min='0'
-            max='1'
-            step='0.1'
-            value={ttsSettings.exaggeration}
-            onChange={(e) =>
-              updateTTSSettings({ exaggeration: parseFloat(e.target.value) })
-            }
-            className='w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider'
-          />
-          <div className='flex justify-between text-xs text-gray-500'>
-            <span>0.0</span>
-            <span>1.0</span>
-          </div>
-        </div>
-
-        {/* CFG Weight */}
-        <div className='space-y-2'>
-          <div className='flex items-center justify-between'>
-            <label className='text-xs font-medium text-gray-700'>
-              CFG Weight
-            </label>
-            <span className='text-xs font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded min-w-[2.5rem] text-center'>
-              {ttsSettings.cfg_weight.toFixed(1)}
-            </span>
-          </div>
-          <input
-            type='range'
-            min='0'
-            max='1'
-            step='0.1'
-            value={ttsSettings.cfg_weight}
-            onChange={(e) =>
-              updateTTSSettings({ cfg_weight: parseFloat(e.target.value) })
-            }
-            className='w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider'
-          />
-          <div className='flex justify-between text-xs text-gray-500'>
-            <span>0.0</span>
-            <span>1.0</span>
-          </div>
-        </div>
-
-        {/* Seed */}
         <div className='flex gap-1 items-center justify-between'>
-          <label className='text-xs font-medium text-gray-700'>Seed</label>
-          <input
-            type='number'
-            value={ttsSettings.seed}
+          <label className='text-xs font-medium text-gray-700'>Provider</label>
+          <select
+            value={ttsSettings.provider}
             onChange={(e) =>
-              updateTTSSettings({ seed: parseInt(e.target.value) || 1212 })
+              updateTTSSettings({
+                provider: e.target.value as 'chatterbox' | 'fish-s2-pro',
+              })
             }
             className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
-            min='0'
-            placeholder='1212'
-          />
+          >
+            <option value='chatterbox'>Current TTS (Chatterbox)</option>
+            <option value='fish-s2-pro'>Fish Audio S2 Pro</option>
+          </select>
         </div>
 
-        {/* Reference Audio Filename */}
-        <div className='flex gap-1 items-center justify-between'>
-          <label className='text-xs font-medium text-gray-700'>Reference</label>
-          <input
-            type='text'
-            value={ttsSettings.reference_audio_filename}
-            onChange={(e) =>
-              updateTTSSettings({ reference_audio_filename: e.target.value })
-            }
-            className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
-            placeholder='calmS5wave.wav'
-          />
-        </div>
+        {ttsSettings.provider === 'fish-s2-pro' && (
+          <>
+            <div className='rounded-md border border-cyan-200 bg-cyan-50 p-2 text-[11px] text-cyan-800'>
+              Fish S2 Pro uses its own API settings below. Your existing TTS
+              model settings remain unchanged.
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Fish URL
+              </label>
+              <input
+                type='text'
+                value={ttsSettings.fish.apiBaseUrl}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    fish: {
+                      ...ttsSettings.fish,
+                      apiBaseUrl: e.target.value,
+                    },
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='http://127.0.0.1:8080'
+              />
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Reference ID
+              </label>
+              <input
+                type='text'
+                value={ttsSettings.fish.referenceId}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    fish: {
+                      ...ttsSettings.fish,
+                      referenceId: e.target.value,
+                    },
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='optional: saved voice ID'
+              />
+            </div>
+
+            <div className='grid grid-cols-2 gap-2'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Format
+                </label>
+                <select
+                  value={ttsSettings.fish.format}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        format: e.target.value as
+                          | 'wav'
+                          | 'mp3'
+                          | 'opus'
+                          | 'pcm',
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                >
+                  <option value='wav'>wav</option>
+                  <option value='mp3'>mp3</option>
+                  <option value='opus'>opus</option>
+                  <option value='pcm'>pcm</option>
+                </select>
+              </div>
+
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Latency
+                </label>
+                <select
+                  value={ttsSettings.fish.latency}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        latency: e.target.value as 'normal' | 'balanced',
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                >
+                  <option value='normal'>normal</option>
+                  <option value='balanced'>balanced</option>
+                </select>
+              </div>
+            </div>
+          </>
+        )}
+
+        {ttsSettings.provider === 'chatterbox' && (
+          <>
+            {/* Temperature */}
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Temperature
+                </label>
+                <span className='text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded min-w-[2.5rem] text-center'>
+                  {ttsSettings.temperature.toFixed(1)}
+                </span>
+              </div>
+              <input
+                type='range'
+                min='0'
+                max='1'
+                step='0.1'
+                value={ttsSettings.temperature}
+                onChange={(e) =>
+                  updateTTSSettings({ temperature: parseFloat(e.target.value) })
+                }
+                className='w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider'
+              />
+              <div className='flex justify-between text-xs text-gray-500'>
+                <span>0.0</span>
+                <span>1.0</span>
+              </div>
+            </div>
+
+            {/* Exaggeration */}
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Exaggeration
+                </label>
+                <span className='text-xs font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded min-w-[2.5rem] text-center'>
+                  {ttsSettings.exaggeration.toFixed(1)}
+                </span>
+              </div>
+              <input
+                type='range'
+                min='0'
+                max='1'
+                step='0.1'
+                value={ttsSettings.exaggeration}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    exaggeration: parseFloat(e.target.value),
+                  })
+                }
+                className='w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider'
+              />
+              <div className='flex justify-between text-xs text-gray-500'>
+                <span>0.0</span>
+                <span>1.0</span>
+              </div>
+            </div>
+
+            {/* CFG Weight */}
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between'>
+                <label className='text-xs font-medium text-gray-700'>
+                  CFG Weight
+                </label>
+                <span className='text-xs font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded min-w-[2.5rem] text-center'>
+                  {ttsSettings.cfg_weight.toFixed(1)}
+                </span>
+              </div>
+              <input
+                type='range'
+                min='0'
+                max='1'
+                step='0.1'
+                value={ttsSettings.cfg_weight}
+                onChange={(e) =>
+                  updateTTSSettings({ cfg_weight: parseFloat(e.target.value) })
+                }
+                className='w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider'
+              />
+              <div className='flex justify-between text-xs text-gray-500'>
+                <span>0.0</span>
+                <span>1.0</span>
+              </div>
+            </div>
+
+            {/* Seed */}
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>Seed</label>
+              <input
+                type='number'
+                value={ttsSettings.seed}
+                onChange={(e) =>
+                  updateTTSSettings({ seed: parseInt(e.target.value) || 1212 })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                min='0'
+                placeholder='1212'
+              />
+            </div>
+
+            {/* Reference Audio Filename */}
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Reference
+              </label>
+              <input
+                type='text'
+                value={ttsSettings.reference_audio_filename}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    reference_audio_filename: e.target.value,
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='calmS5wave.wav'
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <style jsx>{`

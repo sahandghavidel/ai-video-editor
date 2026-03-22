@@ -1983,7 +1983,7 @@ export default function SceneCard({
           : effectiveTtsSettings;
 
         // Call our TTS API route that handles generation and MinIO upload
-        const response = await fetch('/api/generate-tts', {
+        const response = await fetch('/api/generate-tts-selected', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

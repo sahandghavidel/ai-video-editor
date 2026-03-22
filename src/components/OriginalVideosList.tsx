@@ -932,7 +932,7 @@ export default function OriginalVideosList({
         try {
           const voiceOverride = getVideoTtsVoiceReference(video);
 
-          const ttsRes = await fetch('/api/generate-tts', {
+          const ttsRes = await fetch('/api/generate-tts-selected', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1022,7 +1022,7 @@ export default function OriginalVideosList({
     try {
       const voiceOverride = getVideoTtsVoiceReference(video);
 
-      const ttsRes = await fetch('/api/generate-tts', {
+      const ttsRes = await fetch('/api/generate-tts-selected', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
