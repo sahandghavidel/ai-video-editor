@@ -932,7 +932,12 @@ export default function OriginalVideosList({
         try {
           const voiceOverride = getVideoTtsVoiceReference(video);
 
-          const ttsRes = await fetch('/api/generate-tts-selected', {
+          const ttsEndpoint =
+            ttsSettings.provider === 'fish-s2-pro'
+              ? '/api/generate-tts-fish'
+              : '/api/generate-tts';
+
+          const ttsRes = await fetch(ttsEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1022,7 +1027,12 @@ export default function OriginalVideosList({
     try {
       const voiceOverride = getVideoTtsVoiceReference(video);
 
-      const ttsRes = await fetch('/api/generate-tts-selected', {
+      const ttsEndpoint =
+        ttsSettings.provider === 'fish-s2-pro'
+          ? '/api/generate-tts-fish'
+          : '/api/generate-tts';
+
+      const ttsRes = await fetch(ttsEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

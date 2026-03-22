@@ -1982,8 +1982,13 @@ export default function SceneCard({
             }
           : effectiveTtsSettings;
 
-        // Call our TTS API route that handles generation and MinIO upload
-        const response = await fetch('/api/generate-tts-selected', {
+        const ttsEndpoint =
+          currentTtsSettings.provider === 'fish-s2-pro'
+            ? '/api/generate-tts-fish'
+            : '/api/generate-tts';
+
+        // Call provider-specific TTS API route directly to avoid double-hop timeouts
+        const response = await fetch(ttsEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+export const maxDuration = 900;
+
 type Provider = 'chatterbox' | 'fish-s2-pro';
 
 interface BodyWithProvider {

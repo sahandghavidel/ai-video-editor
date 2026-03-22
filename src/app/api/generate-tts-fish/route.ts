@@ -1,4 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Agent } from 'undici';
+
+export const runtime = 'nodejs';
+export const maxDuration = 900;
+
+const FISH_HEADERS_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+const FISH_BODY_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+const FISH_ABORT_TIMEOUT_MS = 65 * 60 * 1000; // 65 minutes safety cap
+
+const fishFetchDispatcher = new Agent({
+  headersTimeout: FISH_HEADERS_TIMEOUT_MS,
+  bodyTimeout: FISH_BODY_TIMEOUT_MS,
+});
 
 type FishFormat = 'wav' | 'mp3' | 'opus' | 'pcm';
 type FishLatency = 'normal' | 'balanced';
@@ -117,11 +130,25 @@ export async function POST(request: NextRequest) {
       headers.authorization = `Bearer ${apiKey}`;
     }
 
+    const fishController = new AbortController();
+    const fishAbortTimer = setTimeout(() => {
+      try {
+        fishController.abort();
+      } catch {
+        // ignore
+      }
+    }, FISH_ABORT_TIMEOUT_MS);
+
     const fishResponse = await fetch(`${fishBaseUrl}/v1/tts`, {
       method: 'POST',
       headers,
       body: JSON.stringify(fishPayload),
-    });
+      signal: fishController.signal,
+      // undici-specific option for Node fetch
+      dispatcher: fishFetchDispatcher,
+    } as unknown as RequestInit);
+
+    clearTimeout(fishAbortTimer);
 
     if (!fishResponse.ok) {
       const msg = await fishResponse.text().catch(() => '');
