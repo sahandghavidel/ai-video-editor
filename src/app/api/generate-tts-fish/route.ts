@@ -378,7 +378,7 @@ export async function POST(request: NextRequest) {
         Math.min(1.0, toFiniteNumber(fish.temperature, 0.8)),
       ),
       streaming: false,
-      use_memory_cache: (fish.use_memory_cache || 'off') as FishCache,
+      use_memory_cache: (fish.use_memory_cache || 'on') as FishCache,
       seed: stableSeed,
     };
 

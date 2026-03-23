@@ -29,7 +29,7 @@ const defaultTTSSettings = {
     top_p: 0.8,
     repetition_penalty: 1.1,
     temperature: 0.8,
-    use_memory_cache: 'off' as const,
+    use_memory_cache: 'on' as const,
   },
 };
 

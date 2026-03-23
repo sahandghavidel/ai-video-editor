@@ -451,7 +451,7 @@ const defaultTTSSettings: TTSSettings = {
     top_p: 0.8,
     repetition_penalty: 1.1,
     temperature: 0.8,
-    use_memory_cache: 'off',
+    use_memory_cache: 'on',
   },
 };
 
