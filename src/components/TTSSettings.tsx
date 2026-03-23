@@ -91,6 +91,22 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
 
             <div className='flex gap-1 items-center justify-between'>
               <label className='text-xs font-medium text-gray-700'>
+                Shared Seed
+              </label>
+              <input
+                type='number'
+                value={ttsSettings.seed}
+                onChange={(e) =>
+                  updateTTSSettings({ seed: parseInt(e.target.value) || 1212 })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                min='1'
+                placeholder='1212'
+              />
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
                 Fish URL
               </label>
               <input
@@ -106,6 +122,26 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
                 }
                 className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
                 placeholder='http://127.0.0.1:8080'
+              />
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                API Key
+              </label>
+              <input
+                type='password'
+                value={ttsSettings.fish.apiKey}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    fish: {
+                      ...ttsSettings.fish,
+                      apiKey: e.target.value,
+                    },
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='optional bearer token'
               />
             </div>
 
@@ -175,6 +211,156 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
                 >
                   <option value='normal'>normal</option>
                   <option value='balanced'>balanced</option>
+                </select>
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 gap-2'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Max New Tokens
+                </label>
+                <input
+                  type='number'
+                  min='128'
+                  max='8192'
+                  value={ttsSettings.fish.max_new_tokens}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        max_new_tokens: Math.max(
+                          128,
+                          Math.min(8192, parseInt(e.target.value) || 1024),
+                        ),
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                />
+              </div>
+
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Chunk Length
+                </label>
+                <input
+                  type='number'
+                  min='100'
+                  max='1000'
+                  value={ttsSettings.fish.chunk_length}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        chunk_length: Math.max(
+                          100,
+                          Math.min(1000, parseInt(e.target.value) || 500),
+                        ),
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                />
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 gap-2'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Top P
+                </label>
+                <input
+                  type='number'
+                  min='0.1'
+                  max='1'
+                  step='0.01'
+                  value={ttsSettings.fish.top_p}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        top_p: Math.max(
+                          0.1,
+                          Math.min(1, parseFloat(e.target.value) || 0.8),
+                        ),
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                />
+              </div>
+
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Temperature
+                </label>
+                <input
+                  type='number'
+                  min='0.1'
+                  max='1'
+                  step='0.01'
+                  value={ttsSettings.fish.temperature}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        temperature: Math.max(
+                          0.1,
+                          Math.min(1, parseFloat(e.target.value) || 0.8),
+                        ),
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                />
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 gap-2'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Repetition Penalty
+                </label>
+                <input
+                  type='number'
+                  min='0.9'
+                  max='2'
+                  step='0.01'
+                  value={ttsSettings.fish.repetition_penalty}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        repetition_penalty: Math.max(
+                          0.9,
+                          Math.min(2, parseFloat(e.target.value) || 1.1),
+                        ),
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                />
+              </div>
+
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Memory Cache
+                </label>
+                <select
+                  value={ttsSettings.fish.use_memory_cache}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      fish: {
+                        ...ttsSettings.fish,
+                        use_memory_cache: e.target.value as 'on' | 'off',
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                >
+                  <option value='off'>off</option>
+                  <option value='on'>on</option>
                 </select>
               </div>
             </div>

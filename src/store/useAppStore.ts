@@ -720,7 +720,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   // TTS Settings Actions
   updateTTSSettings: (updates) =>
     set((state) => {
-      const newSettings = { ...state.ttsSettings, ...updates };
+      const newSettings = {
+        ...state.ttsSettings,
+        ...updates,
+        fish: updates.fish
+          ? { ...state.ttsSettings.fish, ...updates.fish }
+          : state.ttsSettings.fish,
+      };
       // Save to localStorage whenever updated
       localStorage.setItem('ttsSettings', JSON.stringify(newSettings));
       return { ttsSettings: newSettings };
@@ -1410,8 +1416,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
 
+        const persistedTTSSettings =
+          (settings?.ttsSettings as Partial<TTSSettings> | undefined) || {};
+
         set((state) => ({
-          ttsSettings: { ...defaultTTSSettings, ...settings.ttsSettings },
+          ttsSettings: {
+            ...defaultTTSSettings,
+            ...persistedTTSSettings,
+            fish: {
+              ...defaultTTSSettings.fish,
+              ...(persistedTTSSettings.fish || {}),
+            },
+          },
           videoSettings: { ...defaultVideoSettings, ...settings.videoSettings },
           transcriptionSettings: {
             ...defaultTranscriptionSettings,
@@ -1649,7 +1665,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedTTSSettings) {
         try {
           const settings = JSON.parse(savedTTSSettings);
-          set({ ttsSettings: { ...defaultTTSSettings, ...settings } });
+          const parsed =
+            (settings as Partial<TTSSettings> | undefined) || undefined;
+          set({
+            ttsSettings: {
+              ...defaultTTSSettings,
+              ...(parsed || {}),
+              fish: {
+                ...defaultTTSSettings.fish,
+                ...((parsed && parsed.fish) || {}),
+              },
+            },
+          });
         } catch (e) {
           console.error('Failed to parse ttsSettings:', e);
         }
