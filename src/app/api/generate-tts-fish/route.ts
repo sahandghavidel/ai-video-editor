@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Agent } from 'undici';
+import { execFile } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import { constants as fsConstants } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 
 export const runtime = 'nodejs';
 export const maxDuration = 900;
@@ -13,6 +19,9 @@ const FISH_MAX_NEW_TOKENS_CAP = 8192;
 const FISH_LONG_TEXT_THRESHOLD_CHARS = 900;
 const FISH_DEFAULT_CHUNK_LENGTH = 300;
 const FISH_LONG_TEXT_MIN_CHUNK_LENGTH = 500;
+const FISH_TEXT_SPLIT_THRESHOLD_CHARS = 1000;
+const FISH_TEXT_SPLIT_THRESHOLD_TOKENS = 1100;
+const FISH_MAX_SEGMENT_CHARS = 1300;
 const FISH_CONNECT_RETRIES = 6;
 const FISH_CONNECT_RETRY_DELAY_MS = 1500;
 
@@ -20,6 +29,8 @@ const fishFetchDispatcher = new Agent({
   headersTimeout: FISH_HEADERS_TIMEOUT_MS,
   bodyTimeout: FISH_BODY_TIMEOUT_MS,
 });
+
+const execFileAsync = promisify(execFile);
 
 type FishFormat = 'wav' | 'mp3' | 'opus' | 'pcm';
 type FishLatency = 'normal' | 'balanced';
@@ -47,6 +58,22 @@ interface RequestBody {
     seed?: number;
     fish?: FishTtsSettings;
   };
+}
+
+interface FishPayload {
+  text: string;
+  references: unknown[];
+  reference_id: string | null;
+  format: FishFormat;
+  latency: FishLatency;
+  max_new_tokens: number;
+  chunk_length: number;
+  top_p: number;
+  repetition_penalty: number;
+  temperature: number;
+  streaming: boolean;
+  use_memory_cache: FishCache;
+  seed?: number;
 }
 
 function toPositiveInt(value: unknown, fallback: number): number {
@@ -111,6 +138,147 @@ async function fetchFishWithRetry(
   }
 
   throw lastError;
+}
+
+function splitTextIntoFishSegments(text: string): string[] {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+
+  const sentences = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [normalized];
+  const segments: string[] = [];
+
+  for (const sentenceRaw of sentences) {
+    const sentence = sentenceRaw.trim();
+    if (!sentence) continue;
+
+    if (sentence.length > FISH_MAX_SEGMENT_CHARS) {
+      const words = sentence.split(' ');
+      let sub = '';
+      for (const word of words) {
+        const candidate = sub ? `${sub} ${word}` : word;
+        if (candidate.length > FISH_MAX_SEGMENT_CHARS && sub) {
+          segments.push(sub.trim());
+          sub = word;
+        } else {
+          sub = candidate;
+        }
+      }
+      if (sub.trim()) segments.push(sub.trim());
+      continue;
+    }
+
+    // One sentence per chunk to preserve delivery consistency across joins.
+    segments.push(sentence);
+  }
+
+  return segments.length > 0 ? segments : [normalized];
+}
+
+function toStableSeed(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  const seed = Math.trunc(n);
+  if (seed === 0) return 1;
+  return Math.abs(seed);
+}
+
+function deriveDeterministicSeed(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const normalized = hash >>> 0;
+  return normalized === 0 ? 1 : normalized;
+}
+
+function quoteConcatFilePath(filePath: string): string {
+  return filePath.replace(/'/g, "'\\''");
+}
+
+async function resolveFfmpegBinary(): Promise<string> {
+  const localBinary = path.join(
+    process.cwd(),
+    'REAL-Video-Enhancer',
+    'bin',
+    'ffmpeg',
+  );
+  const candidates = [process.env.FFMPEG_PATH, localBinary].filter(
+    (v): v is string => typeof v === 'string' && v.trim().length > 0,
+  );
+
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return 'ffmpeg';
+}
+
+async function concatWavBuffersWithFfmpeg(
+  chunks: ArrayBuffer[],
+): Promise<Buffer> {
+  if (chunks.length === 0) {
+    throw new Error('No WAV chunks to concatenate');
+  }
+
+  if (chunks.length === 1) {
+    return Buffer.from(chunks[0]);
+  }
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fish-tts-'));
+  try {
+    const listPath = path.join(tempDir, 'inputs.txt');
+    const outPath = path.join(tempDir, 'merged.wav');
+
+    const listEntries: string[] = [];
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunkPath = path.join(tempDir, `part_${i}.wav`);
+      await fs.writeFile(chunkPath, Buffer.from(chunks[i]));
+      listEntries.push(`file '${quoteConcatFilePath(chunkPath)}'`);
+    }
+
+    await fs.writeFile(listPath, `${listEntries.join('\n')}\n`, 'utf8');
+
+    const ffmpegBin = await resolveFfmpegBinary();
+    await execFileAsync(ffmpegBin, [
+      '-y',
+      '-f',
+      'concat',
+      '-safe',
+      '0',
+      '-i',
+      listPath,
+      '-vn',
+      '-acodec',
+      'pcm_s16le',
+      outPath,
+    ]);
+
+    return await fs.readFile(outPath);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function synthesizeFishChunk(
+  fishBaseUrl: string,
+  headers: Record<string, string>,
+  payload: FishPayload,
+  signal: AbortSignal,
+): Promise<Response> {
+  return fetchFishWithRetry(`${fishBaseUrl}/v1/tts`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    signal,
+    // undici-specific option for Node fetch
+    dispatcher: fishFetchDispatcher,
+  } as unknown as RequestInit);
 }
 
 function estimateRecommendedMaxNewTokens(text: string): number {
@@ -183,7 +351,16 @@ export async function POST(request: NextRequest) {
         ? Math.max(requestedChunkLength, FISH_LONG_TEXT_MIN_CHUNK_LENGTH)
         : requestedChunkLength;
 
-    const fishPayload = {
+    const requestedSeed = toStableSeed(body.ttsSettings?.seed);
+    const stableSeed =
+      requestedSeed ??
+      deriveDeterministicSeed(
+        `${hasVideoId ? String(body.videoId) : ''}|${
+          hasSceneId ? String(body.sceneId) : ''
+        }|${text}`,
+      );
+
+    const fishPayload: FishPayload = {
       text,
       references: [],
       reference_id: referenceId,
@@ -202,10 +379,7 @@ export async function POST(request: NextRequest) {
       ),
       streaming: false,
       use_memory_cache: (fish.use_memory_cache || 'off') as FishCache,
-      seed:
-        typeof body.ttsSettings?.seed === 'number'
-          ? Math.trunc(body.ttsSettings.seed)
-          : undefined,
+      seed: stableSeed,
     };
 
     const headers: Record<string, string> = {
@@ -225,16 +399,79 @@ export async function POST(request: NextRequest) {
       }
     }, FISH_ABORT_TIMEOUT_MS);
 
-    let fishResponse: Response;
+    const shouldSplitText =
+      format === 'wav' &&
+      (text.length >= FISH_TEXT_SPLIT_THRESHOLD_CHARS ||
+        maxNewTokens >= FISH_TEXT_SPLIT_THRESHOLD_TOKENS);
+    const textSegments = shouldSplitText
+      ? splitTextIntoFishSegments(text)
+      : [text];
+
+    let fishResponse: Response | null = null;
+    let audioBuffer: ArrayBuffer | Buffer;
+
     try {
-      fishResponse = await fetchFishWithRetry(`${fishBaseUrl}/v1/tts`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(fishPayload),
-        signal: fishController.signal,
-        // undici-specific option for Node fetch
-        dispatcher: fishFetchDispatcher,
-      } as unknown as RequestInit);
+      if (!shouldSplitText || textSegments.length <= 1) {
+        fishResponse = await synthesizeFishChunk(
+          fishBaseUrl,
+          headers,
+          fishPayload,
+          fishController.signal,
+        );
+
+        if (!fishResponse.ok) {
+          const msg = await fishResponse.text().catch(() => '');
+          return NextResponse.json(
+            {
+              error: `Fish TTS failed (${fishResponse.status})${
+                msg ? `: ${msg.slice(0, 400)}` : ''
+              }`,
+            },
+            { status: 502 },
+          );
+        }
+
+        audioBuffer = await fishResponse.arrayBuffer();
+      } else {
+        const chunkBuffers: ArrayBuffer[] = [];
+
+        for (let i = 0; i < textSegments.length; i += 1) {
+          const segmentText = textSegments[i];
+          const segmentMaxNewTokens = Math.max(
+            fishPayload.max_new_tokens,
+            estimateRecommendedMaxNewTokens(segmentText),
+          );
+
+          const segmentPayload: FishPayload = {
+            ...fishPayload,
+            text: segmentText,
+            max_new_tokens: segmentMaxNewTokens,
+          };
+
+          fishResponse = await synthesizeFishChunk(
+            fishBaseUrl,
+            headers,
+            segmentPayload,
+            fishController.signal,
+          );
+
+          if (!fishResponse.ok) {
+            const msg = await fishResponse.text().catch(() => '');
+            return NextResponse.json(
+              {
+                error: `Fish TTS chunk ${i + 1}/${textSegments.length} failed (${fishResponse.status})${
+                  msg ? `: ${msg.slice(0, 400)}` : ''
+                }`,
+              },
+              { status: 502 },
+            );
+          }
+
+          chunkBuffers.push(await fishResponse.arrayBuffer());
+        }
+
+        audioBuffer = await concatWavBuffersWithFfmpeg(chunkBuffers);
+      }
     } catch (upstreamError) {
       const code = extractUpstreamErrorCode(upstreamError);
 
@@ -263,20 +500,6 @@ export async function POST(request: NextRequest) {
       clearTimeout(fishAbortTimer);
     }
 
-    if (!fishResponse.ok) {
-      const msg = await fishResponse.text().catch(() => '');
-      return NextResponse.json(
-        {
-          error: `Fish TTS failed (${fishResponse.status})${
-            msg ? `: ${msg.slice(0, 400)}` : ''
-          }`,
-        },
-        { status: 502 },
-      );
-    }
-
-    const audioBuffer = await fishResponse.arrayBuffer();
-
     const timestamp = Date.now();
     const extension = format === 'pcm' ? 'pcm' : format;
     const filename = hasVideoId
@@ -295,12 +518,21 @@ export async function POST(request: NextRequest) {
       pcm: 'audio/pcm',
     };
 
+    const uploadBody =
+      audioBuffer instanceof ArrayBuffer
+        ? new Uint8Array(audioBuffer)
+        : new Uint8Array(
+            audioBuffer.buffer,
+            audioBuffer.byteOffset,
+            audioBuffer.byteLength,
+          );
+
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
         'Content-Type': contentTypeMap[format],
       },
-      body: audioBuffer,
+      body: uploadBody as unknown as BodyInit,
     });
 
     if (!uploadResponse.ok) {
@@ -322,6 +554,10 @@ export async function POST(request: NextRequest) {
       generationParams: {
         max_new_tokens: maxNewTokens,
         chunk_length: chunkLength,
+        split_text: shouldSplitText,
+        segment_count: textSegments.length,
+        shared_seed: stableSeed,
+        split_strategy: shouldSplitText ? 'sentence' : 'none',
       },
     });
   } catch (error) {
