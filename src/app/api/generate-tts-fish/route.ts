@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Agent } from 'undici';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { constants as fsConstants } from 'node:fs';
 import os from 'node:os';
@@ -24,6 +24,10 @@ const FISH_TEXT_SPLIT_THRESHOLD_TOKENS = 1100;
 const FISH_MAX_SEGMENT_CHARS = 1300;
 const FISH_CONNECT_RETRIES = 6;
 const FISH_CONNECT_RETRY_DELAY_MS = 1500;
+const FISH_HEALTHCHECK_TIMEOUT_MS = 2000;
+const FISH_BOOT_POLL_INTERVAL_MS = 1500;
+const FISH_BOOT_WAIT_MAX_MS = 90 * 1000;
+const FISH_BOOT_COOLDOWN_MS = 15 * 1000;
 
 const fishFetchDispatcher = new Agent({
   headersTimeout: FISH_HEADERS_TIMEOUT_MS,
@@ -31,6 +35,13 @@ const fishFetchDispatcher = new Agent({
 });
 
 const execFileAsync = promisify(execFile);
+
+type GlobalWithFishBootstrap = typeof globalThis & {
+  __fishBootstrapPromise?: Promise<boolean>;
+  __fishBootstrapLastAttemptAt?: number;
+};
+
+const fishBootstrapGlobal = globalThis as GlobalWithFishBootstrap;
 
 type FishFormat = 'wav' | 'mp3' | 'opus' | 'pcm';
 type FishLatency = 'normal' | 'balanced';
@@ -109,6 +120,105 @@ function extractUpstreamErrorCode(error: unknown): string | null {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isLocalFishBaseUrl(baseUrl: string): boolean {
+  try {
+    const parsed = new URL(baseUrl);
+    const host = parsed.hostname.toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+async function isFishHealthy(fishBaseUrl: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    try {
+      controller.abort();
+    } catch {
+      // ignore
+    }
+  }, FISH_HEALTHCHECK_TIMEOUT_MS);
+
+  try {
+    const health = await fetch(`${fishBaseUrl}/v1/health`, {
+      method: 'GET',
+      signal: controller.signal,
+      dispatcher: fishFetchDispatcher,
+    } as unknown as RequestInit);
+    return health.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function startLocalFishServerIfAvailable(): Promise<boolean> {
+  const scriptPath = path.join(
+    process.cwd(),
+    'fish-speech-s2-pro',
+    'start_fish_mps.sh',
+  );
+
+  try {
+    await fs.access(scriptPath, fsConstants.X_OK);
+  } catch {
+    return false;
+  }
+
+  try {
+    const child = spawn(scriptPath, [], {
+      cwd: path.dirname(scriptPath),
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureFishServerReady(fishBaseUrl: string): Promise<void> {
+  if (await isFishHealthy(fishBaseUrl)) {
+    return;
+  }
+
+  if (!isLocalFishBaseUrl(fishBaseUrl)) {
+    return;
+  }
+
+  if (fishBootstrapGlobal.__fishBootstrapPromise) {
+    await fishBootstrapGlobal.__fishBootstrapPromise;
+    return;
+  }
+
+  fishBootstrapGlobal.__fishBootstrapPromise = (async () => {
+    const now = Date.now();
+    const lastAttempt = fishBootstrapGlobal.__fishBootstrapLastAttemptAt || 0;
+
+    if (now - lastAttempt >= FISH_BOOT_COOLDOWN_MS) {
+      fishBootstrapGlobal.__fishBootstrapLastAttemptAt = now;
+      await startLocalFishServerIfAvailable();
+    }
+
+    const deadline = Date.now() + FISH_BOOT_WAIT_MAX_MS;
+    while (Date.now() < deadline) {
+      if (await isFishHealthy(fishBaseUrl)) {
+        return true;
+      }
+      await sleep(FISH_BOOT_POLL_INTERVAL_MS);
+    }
+
+    return false;
+  })().finally(() => {
+    fishBootstrapGlobal.__fishBootstrapPromise = undefined;
+  });
+
+  await fishBootstrapGlobal.__fishBootstrapPromise;
 }
 
 async function fetchFishWithRetry(
@@ -321,6 +431,7 @@ export async function POST(request: NextRequest) {
 
     const fish = body.ttsSettings?.fish || {};
     const fishBaseUrl = normalizeBaseUrl(fish.apiBaseUrl);
+    await ensureFishServerReady(fishBaseUrl);
     const apiKey = (fish.apiKey || process.env.FISH_TTS_API_KEY || '').trim();
     const referenceId =
       (fish.referenceId || process.env.FISH_TTS_REFERENCE_ID || '').trim() ||
