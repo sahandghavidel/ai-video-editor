@@ -14,13 +14,10 @@ const FISH_HEADERS_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 const FISH_BODY_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 const FISH_ABORT_TIMEOUT_MS = 65 * 60 * 1000; // 65 minutes safety cap
 
-const FISH_DEFAULT_MAX_NEW_TOKENS = 1024;
-const FISH_MAX_NEW_TOKENS_CAP = 8192;
+const FISH_DEFAULT_MAX_NEW_TOKENS = 4096;
 const FISH_LONG_TEXT_THRESHOLD_CHARS = 900;
 const FISH_DEFAULT_CHUNK_LENGTH = 300;
 const FISH_LONG_TEXT_MIN_CHUNK_LENGTH = 500;
-const FISH_TEXT_SPLIT_THRESHOLD_CHARS = 1000;
-const FISH_TEXT_SPLIT_THRESHOLD_TOKENS = 1100;
 const FISH_MAX_SEGMENT_CHARS = 1300;
 const FISH_CONNECT_RETRIES = 6;
 const FISH_CONNECT_RETRY_DELAY_MS = 1500;
@@ -375,6 +372,43 @@ async function concatWavBuffersWithFfmpeg(
   }
 }
 
+async function transcodeWavBufferWithFfmpeg(
+  wavBuffer: Buffer,
+  targetFormat: Exclude<FishFormat, 'wav'>,
+): Promise<Buffer> {
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'fish-tts-transcode-'),
+  );
+  try {
+    const inPath = path.join(tempDir, 'input.wav');
+    const outExt = targetFormat === 'opus' ? 'opus' : targetFormat;
+    const outPath = path.join(tempDir, `output.${outExt}`);
+
+    await fs.writeFile(inPath, wavBuffer);
+
+    const ffmpegBin = await resolveFfmpegBinary();
+    const argsByFormat: Record<Exclude<FishFormat, 'wav'>, string[]> = {
+      mp3: ['-i', inPath, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outPath],
+      opus: ['-i', inPath, '-vn', '-acodec', 'libopus', '-b:a', '96k', outPath],
+      pcm: [
+        '-i',
+        inPath,
+        '-vn',
+        '-f',
+        's16le',
+        '-acodec',
+        'pcm_s16le',
+        outPath,
+      ],
+    };
+
+    await execFileAsync(ffmpegBin, ['-y', ...argsByFormat[targetFormat]]);
+    return await fs.readFile(outPath);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function synthesizeFishChunk(
   fishBaseUrl: string,
   headers: Record<string, string>,
@@ -398,14 +432,11 @@ function estimateRecommendedMaxNewTokens(text: string): number {
   const words = normalizedText.split(/\s+/).filter(Boolean).length;
   const chars = normalizedText.length;
 
-  // Heuristic sized for long narrative TTS scripts.
-  const byWordCount = Math.ceil(words * 2.6);
-  const byCharCount = Math.ceil(chars * 0.9);
+  // Intentionally generous to avoid truncated outputs on longer content.
+  const byWordCount = Math.ceil(words * 6.0);
+  const byCharCount = Math.ceil(chars * 2.2);
 
-  return Math.max(
-    FISH_DEFAULT_MAX_NEW_TOKENS,
-    Math.min(FISH_MAX_NEW_TOKENS_CAP, Math.max(byWordCount, byCharCount)),
-  );
+  return Math.max(FISH_DEFAULT_MAX_NEW_TOKENS, byWordCount, byCharCount);
 }
 
 export async function POST(request: NextRequest) {
@@ -510,13 +541,9 @@ export async function POST(request: NextRequest) {
       }
     }, FISH_ABORT_TIMEOUT_MS);
 
-    const shouldSplitText =
-      format === 'wav' &&
-      (text.length >= FISH_TEXT_SPLIT_THRESHOLD_CHARS ||
-        maxNewTokens >= FISH_TEXT_SPLIT_THRESHOLD_TOKENS);
-    const textSegments = shouldSplitText
-      ? splitTextIntoFishSegments(text)
-      : [text];
+    const splitCandidateSegments = splitTextIntoFishSegments(text);
+    const shouldSplitText = splitCandidateSegments.length > 1;
+    const textSegments = shouldSplitText ? splitCandidateSegments : [text];
 
     let fishResponse: Response | null = null;
     let audioBuffer: ArrayBuffer | Buffer;
@@ -556,6 +583,8 @@ export async function POST(request: NextRequest) {
           const segmentPayload: FishPayload = {
             ...fishPayload,
             text: segmentText,
+            // Always synthesize split chunks as WAV, then merge and transcode.
+            format: 'wav',
             max_new_tokens: segmentMaxNewTokens,
           };
 
@@ -581,7 +610,11 @@ export async function POST(request: NextRequest) {
           chunkBuffers.push(await fishResponse.arrayBuffer());
         }
 
-        audioBuffer = await concatWavBuffersWithFfmpeg(chunkBuffers);
+        const mergedWav = await concatWavBuffersWithFfmpeg(chunkBuffers);
+        audioBuffer =
+          format === 'wav'
+            ? mergedWav
+            : await transcodeWavBufferWithFfmpeg(mergedWav, format);
       }
     } catch (upstreamError) {
       const code = extractUpstreamErrorCode(upstreamError);
