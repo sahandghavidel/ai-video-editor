@@ -1,0 +1,8 @@
+transformers>=5.4.0
+torch
+huggingface_hub
+soundfile
+librosa
+sentencepiece
+protobuf
+numpy

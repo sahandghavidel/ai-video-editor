@@ -62,7 +62,49 @@ export async function POST(request: NextRequest) {
     // Handle different transcription models
     let transcriptionPromise: Promise<TranscriptionResult>;
 
-    if (model === 'parakeet') {
+    if (model === 'cohere-local') {
+      const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+      const headerHost =
+        request.headers.get('x-forwarded-host') || request.headers.get('host');
+      const headerProto =
+        request.headers.get('x-forwarded-proto') ||
+        request.nextUrl.protocol.replace(':', '');
+      const resolvedBaseUrl =
+        configuredBaseUrl ||
+        (headerHost ? `${headerProto}://${headerHost}` : undefined);
+
+      if (!resolvedBaseUrl) {
+        return NextResponse.json(
+          {
+            error:
+              'Unable to resolve base URL for Cohere local transcription route',
+          },
+          { status: 500 },
+        );
+      }
+
+      transcriptionPromise = fetch(
+        `${resolvedBaseUrl}/api/cohere-local/transcribe-video`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ media_url }),
+        },
+      ).then(async (res) => {
+        const payload = (await res
+          .json()
+          .catch(() => ({}))) as TranscriptionResult;
+        if (!res.ok) {
+          throw new Error(
+            (payload && 'error' in payload && payload.error) ||
+              `Cohere local route failed with status ${res.status}`,
+          );
+        }
+        return payload;
+      });
+    } else if (model === 'parakeet') {
       // Path to the Parakeet transcription script
       const scriptPath = path.join(process.cwd(), 'parakeet-transcribe.py');
       const { command: pythonCommand, source: pythonSource } =

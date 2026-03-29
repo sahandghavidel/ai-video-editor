@@ -14,6 +14,12 @@ export default function TranscriptionModelSelection() {
       recommended: false,
     },
     {
+      id: 'cohere-local',
+      name: 'Cohere Local',
+      description: '',
+      recommended: false,
+    },
+    {
       id: 'small',
       name: 'Small',
       description: '',
