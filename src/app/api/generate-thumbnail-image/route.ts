@@ -187,7 +187,7 @@ function buildThumbnailPrompt(
 
   return `Create a cinematic, high-contrast YouTube thumbnail in 16:9 ratio.
 
-Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, outfit (blue hoodie, white shirt, red pants, boots, chain), proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the video.
+Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the video.
 
 do it for this YouTube script:
 
