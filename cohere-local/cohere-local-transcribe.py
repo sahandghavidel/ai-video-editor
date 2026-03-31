@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -159,22 +158,6 @@ def _choose_dtype(device: str) -> Any:
     return torch.float32
 
 
-def _word_timestamps_from_text(text: str, duration: float) -> List[Dict[str, Any]]:
-    words = [w for w in re.findall(r"\S+", text) if w.strip()]
-    if not words:
-        return []
-
-    per_word = duration / max(len(words), 1)
-    out: List[Dict[str, Any]] = []
-    t = 0.0
-    for idx, word in enumerate(words):
-        start = round(t, 2)
-        end = round(duration if idx == len(words) - 1 else t + per_word, 2)
-        out.append({"word": word, "start": start, "end": end})
-        t += per_word
-    return out
-
-
 def _run_transcription(
     wav_path: Path,
     language: str,
@@ -248,7 +231,19 @@ def _run_transcription(
         text = " ".join(str(x) for x in text)
 
     text = str(text).strip()
-    words = _word_timestamps_from_text(text, duration)
+    # Keep a single payload item with the full transcript spanning the clip.
+    # This avoids fabricated per-word timing while preserving start/end fields.
+    words: List[Dict[str, Any]] = (
+        [
+            {
+                "word": text,
+                "start": 0.0,
+                "end": duration,
+            }
+        ]
+        if text
+        else []
+    )
 
     return {
         "response": {
