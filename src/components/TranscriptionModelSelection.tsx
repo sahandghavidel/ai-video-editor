@@ -49,6 +49,12 @@ export default function TranscriptionModelSelection() {
       description: '',
       recommended: false,
     },
+    {
+      id: 'whisperx',
+      name: 'WhisperX',
+      description: '',
+      recommended: false,
+    },
   ];
 
   return (
