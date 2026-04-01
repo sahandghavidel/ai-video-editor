@@ -55,6 +55,12 @@ export default function TranscriptionModelSelection() {
       description: '',
       recommended: false,
     },
+    {
+      id: 'mlx-whisperx',
+      name: 'MLX WhisperX',
+      description: 'Metal GPU + word alignment',
+      recommended: false,
+    },
   ];
 
   return (
