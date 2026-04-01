@@ -31,6 +31,12 @@ export default function TranscriptionModelSelection() {
       description: '',
       recommended: false,
     },
+    {
+      id: 'turbo',
+      name: 'Turbo',
+      description: '',
+      recommended: false,
+    },
   ];
 
   return (
