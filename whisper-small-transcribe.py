@@ -73,7 +73,7 @@ def transcribe_with_whisper_small(audio_path: str) -> dict:
         # Transcribe with word-level timestamps
         result = model.transcribe(
             audio_path,
-            language=None,  # Auto-detect language
+            language="en",  # English only - skips detection pass
             task="transcribe",
             verbose=False,
             word_timestamps=True
