@@ -37,6 +37,12 @@ export default function TranscriptionModelSelection() {
       description: '',
       recommended: false,
     },
+    {
+      id: 'large',
+      name: 'Large',
+      description: '',
+      recommended: false,
+    },
   ];
 
   return (
