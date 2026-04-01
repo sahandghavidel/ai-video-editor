@@ -83,14 +83,17 @@ def transcribe_with_whisperx(audio_path: str) -> dict:
         # Check for MPS (Apple Silicon) — WhisperX uses faster-whisper/ctranslate2
         # which does not support MPS, so we stay on CPU
 
-        batch_size = 16 if device == "cuda" else 4
+        batch_size = 16 if device == "cuda" else 8
 
         # Step 1: Transcribe with batched whisper (using faster-whisper backend)
+        # Use all available CPU threads for maximum performance
+        cpu_threads = os.cpu_count() or 4
         model = whisperx.load_model(
             "large-v2",
             device,
             compute_type=compute_type,
             language="en",
+            threads=cpu_threads,
         )
 
         audio = whisperx.load_audio(audio_path)
