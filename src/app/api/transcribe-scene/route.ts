@@ -442,6 +442,75 @@ export async function POST(request: NextRequest) {
           );
         });
       });
+    } else if (model === 'medium.en') {
+      // Path to the Whisper medium.en transcription script
+      const scriptPath = path.join(
+        process.cwd(),
+        'whisper-medium-en-transcribe.py',
+      );
+      const { command: pythonCommand, source: pythonSource } =
+        resolvePythonCommand({
+          envVarName: 'WHISPER_PYTHON',
+          absoluteCandidates: [
+            path.join(process.cwd(), 'whisper-env', 'bin', 'python'),
+            path.join(process.cwd(), 'whisper-env', 'bin', 'python3'),
+            path.join(process.cwd(), 'whisper-env', 'bin', 'python3.13'),
+            path.join(process.cwd(), 'parakeet-env', 'bin', 'python'),
+            path.join(process.cwd(), 'parakeet-env', 'bin', 'python3'),
+          ],
+          fallbackCommand: 'python3',
+        });
+
+      console.log(
+        `[SCENE_TRANSCRIBE] Using Whisper python: ${pythonCommand} (${pythonSource})`,
+      );
+
+      // Run the Whisper medium.en transcription script
+      transcriptionPromise = new Promise((resolve, reject) => {
+        const pythonProcess = spawn(pythonCommand, [scriptPath, media_url], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        pythonProcess.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        pythonProcess.on('close', (code) => {
+          if (code === 0) {
+            try {
+              const result = JSON.parse(stdout);
+              resolve(result);
+            } catch (parseError) {
+              reject(
+                new Error(
+                  `Failed to parse scene transcription result: ${parseError}`,
+                ),
+              );
+            }
+          } else {
+            reject(
+              new Error(
+                `Scene Whisper medium.en transcription failed with code ${code}: ${stderr}`,
+              ),
+            );
+          }
+        });
+
+        pythonProcess.on('error', (error) => {
+          reject(
+            new Error(
+              `Failed to start scene Whisper medium.en transcription process: ${error.message}`,
+            ),
+          );
+        });
+      });
     } else {
       return NextResponse.json(
         { error: `Unknown transcription model: ${model}` },

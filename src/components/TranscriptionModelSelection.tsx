@@ -43,6 +43,12 @@ export default function TranscriptionModelSelection() {
       description: '',
       recommended: false,
     },
+    {
+      id: 'medium.en',
+      name: 'Medium.en',
+      description: '',
+      recommended: false,
+    },
   ];
 
   return (
