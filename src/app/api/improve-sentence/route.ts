@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     if (!currentSentence) {
       return Response.json(
         { error: 'Current sentence is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     }
 
     console.log(
-      `Improving sentence for scene ${sceneId}: "${currentSentence}"`
+      `Improving sentence for scene ${sceneId}: "${currentSentence}"`,
     );
     console.log('Making OpenAI API call to OpenRouter...');
 
@@ -70,10 +70,10 @@ export async function POST(request: Request) {
     const videoId = currentScene?.field_6889;
     console.log(`Video ID for scene ${sceneId}: ${videoId}`);
 
-    // Filter scenes by video ID and extract sentences
-    let allSentences: string[] = [];
-    let sentenceNumber = 1;
+    // Filter scenes by video ID and build previous-scenes context
     let videoScenes: BaserowRow[] = [];
+    let previousScenesContext = '';
+    let previousScenesCount = 0;
 
     if (videoId && allScenes.length > 0) {
       videoScenes = allScenes.filter((scene) => {
@@ -83,58 +83,40 @@ export async function POST(request: Request) {
 
       console.log(`Found ${videoScenes.length} scenes for video ${videoId}`);
 
-      allSentences = videoScenes
-        .map((scene) => String(scene.field_6901 || scene.field_6891 || ''))
-        .filter((sentence) => sentence.trim())
-        .sort((a, b) => {
-          // Try to sort by some ordering field if available
-          const sceneA = videoScenes.find(
-            (s) => String(s.field_6901 || s.field_6891) === a
-          );
-          const sceneB = videoScenes.find(
-            (s) => String(s.field_6901 || s.field_6891) === b
-          );
-          return (sceneA?.id || 0) - (sceneB?.id || 0);
-        });
-
-      // Find the current sentence's position
-      const currentSentenceIndex = allSentences.findIndex(
-        (sentence) => sentence.trim() === currentSentence.trim()
-      );
-      sentenceNumber = currentSentenceIndex + 1;
-
-      console.log(
-        `Extracted ${allSentences.length} sentences, current is #${sentenceNumber}`
-      );
-    }
-
-    // Create context from all sentences if available
-    let scriptContext = '';
-    const hasContext = allSentences.length > 1; // Need at least 2 sentences for meaningful context
-
-    if (hasContext) {
-      // Create scene-sentence mapping for context
       const sceneSentenceMap = videoScenes
-        .filter((scene) => {
-          const sentence = String(
-            scene.field_6901 || scene.field_6891 || ''
-          ).trim();
-          return sentence && allSentences.includes(sentence);
-        })
         .map((scene) => ({
           sceneId: scene.id,
           sentence: String(scene.field_6901 || scene.field_6891 || '').trim(),
         }))
+        .filter((item) => Boolean(item.sentence))
         .sort((a, b) => a.sceneId - b.sceneId);
 
-      scriptContext = sceneSentenceMap
-        .map((item) => `Scene ${item.sceneId}: ${item.sentence}`)
-        .join('\n');
-      console.log(
-        `Using script context: YES (${sceneSentenceMap.length} sentences)`
+      const currentSceneIndex = sceneSentenceMap.findIndex(
+        (item) => item.sceneId === Number(sceneId),
       );
-    } else {
-      console.log('Insufficient context - operating independently');
+
+      if (currentSceneIndex > 0) {
+        const previousScenes = sceneSentenceMap.slice(
+          Math.max(0, currentSceneIndex - 10),
+          currentSceneIndex,
+        );
+
+        previousScenesCount = previousScenes.length;
+        previousScenesContext = previousScenes
+          .map((item) => `Scene ${item.sceneId}: ${item.sentence}`)
+          .join('\n');
+      }
+
+      console.log(
+        `Previous scenes context available: ${previousScenesCount} scenes before current scene`,
+      );
+    }
+
+    const hasContext = previousScenesCount > 0;
+    if (!hasContext) {
+      console.log(
+        'No previous scenes context available - operating independently',
+      );
     }
 
     const prompt = `This is a standalone, independent request. Do not reference or remember any previous conversations, requests, or context from other calls.
@@ -144,10 +126,17 @@ Request ID: ${Date.now()}-${Math.random().toString(36).substr(2, 9)}
 You are an expert script writer improving a single sentence from a video tutorial script.${
       hasContext
         ? ` 
+PREVIOUS SCENES CONTEXT (up to 10 scenes immediately before the current scene):
+${previousScenesContext}
+
 CURRENT SENTENCE TO IMPROVE (Scene #${sceneId}): ${currentSentence}
+
+Use the previous scenes only for continuity of tone and flow.
+Do not copy sentences directly from previous scenes.
 
 Please improve this sentence by following these guidelines:
 • Make it more engaging and natural for text-to-speech
+• Ensure the text is easy for TTS readers to read clearly and naturally
 • Keep the technical accuracy intact
 • Use simple English that's easy to understand
 • Avoid unnecessary jargon and complex vocabulary
@@ -168,6 +157,7 @@ SENTENCE TO IMPROVE: ${currentSentence}
 
 Please improve this sentence by following these guidelines:
 • Make it more engaging and natural for text-to-speech
+• Ensure the text is easy for TTS readers to read clearly and naturally
 • Keep the technical accuracy intact
 • Use simple English that's easy to understand
 • Avoid unnecessary jargon and complex vocabulary
@@ -190,7 +180,7 @@ Return only the improved sentence, nothing else.`;
 
     // Helper function to check if sentences meet word count requirements (5-12 words)
     const checkWordCount = (
-      text: string
+      text: string,
     ): { valid: boolean; issues: string[]; score: number } => {
       // Split by sentence-ending punctuation followed by space or end of string
       // This prevents splitting on periods in code like "JSON.stringify"
@@ -213,14 +203,14 @@ Return only the improved sentence, nothing else.`;
           issues.push(
             `Sentence ${
               index + 1
-            } has only ${wordCount} words (min: 5): "${sentence}"`
+            } has only ${wordCount} words (min: 5): "${sentence}"`,
           );
         } else if (wordCount > 12) {
           deviation = wordCount - 12;
           issues.push(
             `Sentence ${
               index + 1
-            } has ${wordCount} words (max: 12): "${sentence}"`
+            } has ${wordCount} words (max: 12): "${sentence}"`,
           );
         }
 
@@ -268,7 +258,7 @@ Return only the improved sentence, nothing else.`;
 
       console.log(
         'OpenAI completion response:',
-        JSON.stringify(completion, null, 2)
+        JSON.stringify(completion, null, 2),
       );
 
       // Check the standard OpenAI response structure
@@ -342,7 +332,7 @@ Return only the improved sentence, nothing else.`;
                   }
                   console.log(
                     'Extracted improved sentence:',
-                    currentImprovedSentence
+                    currentImprovedSentence,
                   );
                   break;
                 }
@@ -374,7 +364,7 @@ Return only the improved sentence, nothing else.`;
                       currentImprovedSentence = line;
                       console.log(
                         'Extracted from line-based search:',
-                        currentImprovedSentence
+                        currentImprovedSentence,
                       );
                       break;
                     }
@@ -406,13 +396,13 @@ Return only the improved sentence, nothing else.`;
         });
 
         console.log(
-          `Attempt ${attempt}: Score = ${validation.score} (lower is better)`
+          `Attempt ${attempt}: Score = ${validation.score} (lower is better)`,
         );
 
         if (validation.valid) {
           improvedSentence = currentImprovedSentence;
           console.log(
-            `✅ Attempt ${attempt} successful! Word count valid (perfect score: 0).`
+            `✅ Attempt ${attempt} successful! Word count valid (perfect score: 0).`,
           );
           break; // Exit the retry loop - found a perfect match
         } else {
@@ -431,28 +421,28 @@ Return only the improved sentence, nothing else.`;
           improvedSentence = bestAttempt.sentence;
 
           console.log(
-            `\n📊 Choosing best attempt from ${attempts.length} attempts:`
+            `\n📊 Choosing best attempt from ${attempts.length} attempts:`,
           );
           attempts.forEach((att, idx) => {
             console.log(
               `  ${idx === 0 ? '✅' : '  '} Attempt ${idx + 1}: Score ${
                 att.validation.score
-              }`
+              }`,
             );
           });
           console.log(
-            `\n⭐ Selected: "${improvedSentence}" (Score: ${bestAttempt.validation.score})`
+            `\n⭐ Selected: "${improvedSentence}" (Score: ${bestAttempt.validation.score})`,
           );
 
           if (!bestAttempt.validation.valid) {
             console.log(
-              "⚠️ Note: Best attempt still has validation issues, but it's the closest to requirements."
+              "⚠️ Note: Best attempt still has validation issues, but it's the closest to requirements.",
             );
           }
         } else {
           // No sentence extracted after max attempts
           console.log(
-            'No content from LLM after max attempts, using fallback improvement'
+            'No content from LLM after max attempts, using fallback improvement',
           );
           improvedSentence = currentSentence
             .replace(/^(Alright|Ok|Okay),?\s*/i, 'Great! ')
