@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const timedTranscript = buildTimedTranscript(words).slice(0, 140);
+    const timedTranscript = buildTimedTranscript(words);
 
     const transcriptForPrompt = timedTranscript
       .map((entry) => `[${formatTimestamp(entry.start)}] ${entry.text}`)
