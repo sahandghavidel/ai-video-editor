@@ -1864,7 +1864,10 @@ export default function OriginalVideosList({
   };
 
   // Transcribe all videos that don't have captions
-  const handleTranscribeAll = async (playSound = true) => {
+  const handleTranscribeAll = async (
+    playSound = true,
+    modelOverride?: string,
+  ) => {
     try {
       setTranscribingAll(true);
 
@@ -1896,7 +1899,11 @@ export default function OriginalVideosList({
           setTranscribing(video.id);
 
           try {
-            await handleTranscribeVideoInternal(video.id, videoUrl);
+            await handleTranscribeVideoInternal(
+              video.id,
+              videoUrl,
+              modelOverride,
+            );
             console.log(`Successfully transcribed video ${video.id}`);
           } catch (error) {
             console.error(`Failed to transcribe video ${video.id}:`, error);
@@ -1933,6 +1940,7 @@ export default function OriginalVideosList({
   const handleTranscribeVideoInternal = async (
     videoId: number,
     videoUrl: string,
+    modelOverride?: string,
   ) => {
     // Step 1: Transcribe the video using selected model
     const transcribeResponse = await fetch('/api/transcribe-video', {
@@ -1942,7 +1950,7 @@ export default function OriginalVideosList({
       },
       body: JSON.stringify({
         media_url: videoUrl,
-        model: transcriptionSettings.selectedModel,
+        model: modelOverride || transcriptionSettings.selectedModel,
       }),
     });
 
@@ -6534,7 +6542,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Transcribing all videos...`);
         console.log(`Step ${stepNumber}: Transcribing all videos`);
         try {
-          await handleTranscribeAll(false);
+          await handleTranscribeAll(false, 'whisperx');
           console.log(`✓ Step ${stepNumber} Complete: Transcription finished`);
 
           // Refresh data to get updated captions URLs
