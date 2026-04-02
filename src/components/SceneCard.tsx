@@ -2418,7 +2418,7 @@ export default function SceneCard({
       };
 
       try {
-        const maxAttempts = 3;
+        const maxAttempts = 2;
 
         const setFlaggedTrue = async () => {
           try {
@@ -2670,9 +2670,11 @@ export default function SceneCard({
           }
         }
 
-        setStatus('Still mismatched after 3 attempts — flagging.');
+        setStatus(`Still mismatched after ${maxAttempts} attempts — flagging.`);
         await setFlaggedTrue();
-        setStatus('Still mismatched after 3 attempts. (Flagged=true)');
+        setStatus(
+          `Still mismatched after ${maxAttempts} attempts. (Flagged=true)`,
+        );
         refreshDataRef.current?.();
       } catch (err) {
         console.error('Auto-fix mismatch failed:', err);
@@ -5560,7 +5562,7 @@ export default function SceneCard({
                           title={
                             autoFixMismatchStatus[scene.id]
                               ? `Fix mismatch: ${autoFixMismatchStatus[scene.id]}`
-                              : 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 3 tries)'
+                              : 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries)'
                           }
                         >
                           {autoFixingMismatchSceneId === scene.id ? (

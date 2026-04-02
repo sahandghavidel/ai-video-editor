@@ -115,7 +115,7 @@ export function TranscriptionControls({
               onClick={onAutoFixMismatch}
               disabled={isTranscribing || !!isAutoFixingMismatch}
               className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
-              title='Auto-fix mismatch: will transcribe if needed, then regenerate TTS + sync + retranscribe (max 3 tries)'
+              title='Auto-fix mismatch: will transcribe if needed, then regenerate TTS + sync + retranscribe (max 2 tries)'
               aria-label='Auto-fix mismatch between scene text and transcription'
             >
               {isAutoFixingMismatch ? (
@@ -252,7 +252,7 @@ export function TranscriptionControls({
             onClick={onAutoFixMismatch}
             disabled={isTranscribing || !!isAutoFixingMismatch}
             className='p-2 text-gray-700 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
-            title='If transcription differs from the scene text, regenerate TTS with a new random seed, sync video, and retranscribe (max 3 tries)'
+            title='If transcription differs from the scene text, regenerate TTS with a new random seed, sync video, and retranscribe (max 2 tries)'
             aria-label='Auto-fix mismatch between scene text and transcription'
           >
             {isAutoFixingMismatch ? (
