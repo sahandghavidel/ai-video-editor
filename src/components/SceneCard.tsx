@@ -728,6 +728,18 @@ export default function SceneCard({
   const [combiningId, setCombiningId] = useState<number | null>(null);
   const [splittingId, setSplittingId] = useState<number | null>(null);
 
+  const clearedGeneratedFields: Record<string, unknown> = {
+    field_6886: '', // Videos
+    field_6888: '', // Video Clip URL
+    field_6891: '', // TTS
+    field_6910: '', // Captions URL for Scene
+    field_7094: '', // Image for Scene
+    field_7098: '', // Video for Scene
+    field_7095: '', // Upscaled Image for Scene
+    field_7096: null, // Flagged
+    field_7099: '', // hasText
+  };
+
   const splitIntoSentences = (text: string): string[] => {
     const normalized = text.replace(/\r\n/g, ' ').replace(/\n+/g, ' ').trim();
     if (!normalized) return [];
@@ -866,6 +878,7 @@ export default function SceneCard({
               field_6901: newOriginal,
               field_6897: newEndTime,
               field_6884: newDuration,
+              ...clearedGeneratedFields,
             }
           : s,
       )
@@ -880,6 +893,7 @@ export default function SceneCard({
         field_6901: newOriginal,
         field_6897: newEndTime,
         field_6884: newDuration,
+        ...clearedGeneratedFields,
       });
 
       // Delete the next scene row via API
@@ -967,6 +981,7 @@ export default function SceneCard({
           field_6898: seg.start,
           field_6884: seg.duration,
           field_7104: Number((baseSceneOrder + i * splitOrderStep).toFixed(3)),
+          ...clearedGeneratedFields,
         };
 
         const createRes = await fetch('/api/baserow/scenes', {
@@ -1001,6 +1016,7 @@ export default function SceneCard({
         field_6898: segments[0].start,
         field_6884: segments[0].duration,
         field_7104: Number(baseSceneOrder.toFixed(3)),
+        ...clearedGeneratedFields,
       });
 
       // Update linked scene ordering so new scenes are immediately after current.
@@ -1072,13 +1088,18 @@ export default function SceneCard({
         field_6898: segments[0].start,
         field_6884: segments[0].duration,
         field_7104: Number(baseSceneOrder.toFixed(3)),
+        ...clearedGeneratedFields,
       } as BaserowRow;
 
       const nextData = data.map((row) =>
         row.id === sceneId ? updatedCurrentScene : row,
       );
       if (currentIndexInData >= 0 && createdScenes.length > 0) {
-        nextData.splice(currentIndexInData + 1, 0, ...createdScenes);
+        const sanitizedCreatedScenes = createdScenes.map((scene) => ({
+          ...scene,
+          ...clearedGeneratedFields,
+        }));
+        nextData.splice(currentIndexInData + 1, 0, ...sanitizedCreatedScenes);
       }
 
       onDataUpdate?.(nextData);
