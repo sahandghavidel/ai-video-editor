@@ -2059,26 +2059,29 @@ export default function OriginalVideosList({
 
           const transcriptionData = await transcribeResponse.json();
 
-          // Step 2: Build word timestamps array
-          const wordTimestamps = [];
+          // Step 2: Build segment timestamps array (not word-level)
+          const segmentTimestamps = [];
           const segments = transcriptionData.response?.segments;
 
           if (segments && segments.length > 0) {
             for (const segment of segments) {
-              if (segment.words) {
-                for (const wordObj of segment.words) {
-                  wordTimestamps.push({
-                    word: wordObj.word.trim(),
-                    start: wordObj.start,
-                    end: wordObj.end,
-                  });
-                }
+              const text =
+                typeof segment?.text === 'string' ? segment.text.trim() : '';
+              const start = Number(segment?.start);
+              const end = Number(segment?.end);
+
+              if (text && Number.isFinite(start) && Number.isFinite(end)) {
+                segmentTimestamps.push({
+                  text,
+                  start,
+                  end,
+                });
               }
             }
           }
 
           // Step 3: Upload captions file
-          const captionsData = JSON.stringify(wordTimestamps);
+          const captionsData = JSON.stringify(segmentTimestamps);
           const timestamp = Date.now();
           const filename = `video_${video.id}_final_captions_${timestamp}.json`;
 

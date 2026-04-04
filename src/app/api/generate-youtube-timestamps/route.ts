@@ -7,6 +7,12 @@ interface WordSegment {
   end: number;
 }
 
+interface CaptionSegment {
+  text: string;
+  start: number;
+  end: number;
+}
+
 interface TimedChunk {
   start: number;
   end: number;
@@ -84,6 +90,51 @@ function extractWordSegments(input: unknown): WordSegment[] {
     .sort((a, b) => a.start - b.start);
 }
 
+function extractCaptionSegments(input: unknown): CaptionSegment[] {
+  let rawSegments: unknown[] = [];
+
+  if (Array.isArray(input)) {
+    rawSegments = input;
+  } else if (input && typeof input === 'object') {
+    const obj = input as {
+      Segments?: unknown;
+      segments?: unknown;
+    };
+    if (Array.isArray(obj.Segments)) {
+      rawSegments = obj.Segments;
+    } else if (Array.isArray(obj.segments)) {
+      rawSegments = obj.segments;
+    }
+  }
+
+  return rawSegments
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const maybe = item as { text?: unknown; start?: unknown; end?: unknown };
+      const text = typeof maybe.text === 'string' ? maybe.text.trim() : '';
+      const start =
+        typeof maybe.start === 'number'
+          ? maybe.start
+          : Number.parseFloat(String(maybe.start ?? ''));
+      const end =
+        typeof maybe.end === 'number'
+          ? maybe.end
+          : Number.parseFloat(String(maybe.end ?? ''));
+
+      if (!text || !Number.isFinite(start) || !Number.isFinite(end)) {
+        return null;
+      }
+
+      return {
+        text,
+        start,
+        end,
+      };
+    })
+    .filter((segment): segment is CaptionSegment => !!segment)
+    .sort((a, b) => a.start - b.start);
+}
+
 function buildTimedTranscript(words: WordSegment[]): TimedChunk[] {
   if (words.length === 0) return [];
 
@@ -158,15 +209,23 @@ export async function POST(request: NextRequest) {
 
     const captionsJson = (await captionsResponse.json()) as unknown;
     const words = extractWordSegments(captionsJson);
+    const segments = extractCaptionSegments(captionsJson);
 
-    if (words.length === 0) {
+    if (words.length === 0 && segments.length === 0) {
       return NextResponse.json(
-        { error: 'Captions data has no word timestamps' },
+        { error: 'Captions data has no valid timestamps' },
         { status: 400 },
       );
     }
 
-    const timedTranscript = buildTimedTranscript(words);
+    const timedTranscript =
+      words.length > 0
+        ? buildTimedTranscript(words)
+        : segments.map((segment) => ({
+            start: segment.start,
+            end: segment.end,
+            text: segment.text,
+          }));
 
     const transcriptForPrompt = timedTranscript
       .map((entry) => `[${formatTimestamp(entry.start)}] ${entry.text}`)
