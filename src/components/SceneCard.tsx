@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   updateBaserowRow,
   updateSceneRow,
+  updateOriginalVideoRow,
   BaserowRow,
   getSceneById,
 } from '@/lib/baserow-actions';
@@ -264,6 +265,8 @@ export default function SceneCard({
     clipGeneration,
     setGeneratingSingleClip,
     setCreatingTypingEffect,
+    selectedOriginalVideo,
+    setSelectedOriginalVideo,
   } = useAppStore();
 
   // Click outside handler for time adjustment and settings dropdowns
@@ -723,6 +726,94 @@ export default function SceneCard({
 
   // State for combining scenes
   const [combiningId, setCombiningId] = useState<number | null>(null);
+  const [splittingId, setSplittingId] = useState<number | null>(null);
+
+  const splitIntoSentences = (text: string): string[] => {
+    const normalized = text.replace(/\r\n/g, ' ').replace(/\n+/g, ' ').trim();
+    if (!normalized) return [];
+
+    const matches = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+    const sentences = (matches || [normalized])
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    return sentences.length > 0 ? sentences : [normalized];
+  };
+
+  const getVideoIdFromScene = (scene: BaserowRow): number | null => {
+    const videoIdField = scene.field_6889;
+    if (typeof videoIdField === 'number') return videoIdField;
+    if (typeof videoIdField === 'string') {
+      const parsed = parseInt(videoIdField, 10);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+    if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+      const first = videoIdField[0] as unknown;
+      const raw =
+        typeof first === 'object' && first !== null
+          ? ((first as Record<string, unknown>).id ??
+            (first as Record<string, unknown>).value)
+          : first;
+      const parsed = parseInt(String(raw), 10);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
+
+  const buildWeightedTimingSegments = (
+    sentences: string[],
+    startTime: number,
+    endTime: number,
+  ): Array<{
+    sentence: string;
+    start: number;
+    end: number;
+    duration: number;
+  }> => {
+    const safeStart = Number.isFinite(startTime) ? startTime : 0;
+    const safeEnd = Number.isFinite(endTime) ? endTime : safeStart;
+    const totalDuration = Math.max(0, safeEnd - safeStart);
+
+    const weights = sentences.map((sentence) => {
+      const weight = sentence.replace(/\s+/g, '').length;
+      return Math.max(weight, 1);
+    });
+    const totalWeight =
+      weights.reduce((sum, w) => sum + w, 0) || sentences.length;
+
+    const segments: Array<{
+      sentence: string;
+      start: number;
+      end: number;
+      duration: number;
+    }> = [];
+
+    let cursor = safeStart;
+
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i];
+      const isLast = i === sentences.length - 1;
+      const rawDuration =
+        totalDuration <= 0 ? 0 : (totalDuration * weights[i]) / totalWeight;
+
+      const start = Number(cursor.toFixed(2));
+      const end = isLast
+        ? Number(safeEnd.toFixed(2))
+        : Number((cursor + rawDuration).toFixed(2));
+      const duration = Number(Math.max(0, end - start).toFixed(2));
+
+      segments.push({
+        sentence,
+        start,
+        end,
+        duration,
+      });
+
+      cursor = end;
+    }
+
+    return segments;
+  };
 
   // Combine this scene with the next scene (remove next scene, append its text, update timings)
   const handleCombineWithNext = async (sceneId: number) => {
@@ -811,6 +902,197 @@ export default function SceneCard({
       onDataUpdate?.(data);
     } finally {
       setCombiningId(null);
+    }
+  };
+
+  const handleSplitSceneIntoSentences = async (sceneId: number) => {
+    if (splittingId !== null) return;
+
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    const sourceText = String(
+      currentScene.field_6890 || currentScene.field_6901 || '',
+    ).trim();
+    const sentences = splitIntoSentences(sourceText);
+
+    if (sentences.length < 2) {
+      alert('This scene has fewer than 2 sentences, so nothing to split.');
+      return;
+    }
+
+    const confirmed = confirm(
+      `Split this scene into ${sentences.length} scenes? New scenes will be created immediately after this one with weighted timing by sentence length.`,
+    );
+    if (!confirmed) return;
+
+    const videoId = getVideoIdFromScene(currentScene);
+    if (!videoId) {
+      alert('Video ID not found for this scene. Cannot create new scenes.');
+      return;
+    }
+
+    const startTime = Number(currentScene.field_6896) || 0;
+    const endTime = Number(currentScene.field_6897) || startTime;
+    const segments = buildWeightedTimingSegments(sentences, startTime, endTime);
+    const filteredIndex = filteredAndSortedData.findIndex(
+      (s) => s.id === sceneId,
+    );
+    const nextSceneInOrder =
+      filteredIndex >= 0 ? filteredAndSortedData[filteredIndex + 1] : undefined;
+    const beforeSceneId = nextSceneInOrder?.id;
+    const fallbackBaseOrder = filteredIndex >= 0 ? filteredIndex + 1 : 1;
+    const currentSceneOrder = Number(currentScene.field_7104);
+    const baseSceneOrder = Number.isFinite(currentSceneOrder)
+      ? currentSceneOrder
+      : fallbackBaseOrder;
+    const splitOrderStep = 0.001;
+
+    setSplittingId(sceneId);
+
+    try {
+      const createdScenes: BaserowRow[] = [];
+
+      // Duplicate the current scene row first, then edit the duplicate(s).
+      // This preserves the same row shape/fields as a manual Baserow duplicate.
+      for (let i = 1; i < segments.length; i++) {
+        const seg = segments[i];
+
+        const createPayload: Record<string, unknown> = {
+          sourceSceneId: currentScene.id,
+          field_6890: seg.sentence,
+          field_6901: seg.sentence,
+          field_6896: seg.start,
+          field_6897: seg.end,
+          field_6898: seg.start,
+          field_6884: seg.duration,
+          field_7104: Number((baseSceneOrder + i * splitOrderStep).toFixed(3)),
+        };
+
+        const createRes = await fetch('/api/baserow/scenes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...createPayload,
+            ...(typeof beforeSceneId === 'number' ? { beforeSceneId } : {}),
+          }),
+        });
+
+        if (!createRes.ok) {
+          const errorText = await createRes.text().catch(() => '');
+          throw new Error(
+            `Failed to create split scene (${createRes.status}): ${errorText}`,
+          );
+        }
+
+        const createdScene = (await createRes.json()) as BaserowRow;
+        createdScenes.push(createdScene);
+      }
+
+      // Only after duplicating from the untouched original row do we modify
+      // the current scene to hold the first sentence segment.
+      await updateSceneRow(sceneId, {
+        field_6890: segments[0].sentence,
+        field_6901: segments[0].sentence,
+        field_6896: segments[0].start,
+        field_6897: segments[0].end,
+        field_6898: segments[0].start,
+        field_6884: segments[0].duration,
+        field_7104: Number(baseSceneOrder.toFixed(3)),
+      });
+
+      // Update linked scene ordering so new scenes are immediately after current.
+      if (selectedOriginalVideo.id) {
+        const normalizeSceneIds = (ids: unknown[]): number[] => {
+          const result: number[] = [];
+          const seen = new Set<number>();
+          for (const id of ids) {
+            const parsed =
+              typeof id === 'number'
+                ? id
+                : typeof id === 'string'
+                  ? parseInt(id, 10)
+                  : NaN;
+            if (!Number.isFinite(parsed) || parsed <= 0) continue;
+            if (seen.has(parsed)) continue;
+            seen.add(parsed);
+            result.push(parsed);
+          }
+          return result;
+        };
+
+        // IMPORTANT: build from currently loaded scene rows (selected video data)
+        // instead of selectedOriginalVideo.sceneIds, which can be stale after
+        // combine/delete operations and cause Baserow linked-row update failures.
+        const existingIds = normalizeSceneIds(data.map((s) => s.id));
+        const currentIndex = existingIds.indexOf(sceneId);
+        const insertAt =
+          currentIndex >= 0 ? currentIndex + 1 : existingIds.length;
+        const createdIds = normalizeSceneIds(createdScenes.map((s) => s.id));
+
+        const updatedSceneIds = [...existingIds];
+        updatedSceneIds.splice(insertAt, 0, ...createdIds);
+        const normalizedUpdatedSceneIds = normalizeSceneIds(updatedSceneIds);
+
+        try {
+          await updateOriginalVideoRow(selectedOriginalVideo.id, {
+            field_6866: normalizedUpdatedSceneIds,
+          });
+        } catch (linkUpdateError) {
+          const message =
+            linkUpdateError instanceof Error
+              ? linkUpdateError.message
+              : String(linkUpdateError);
+          console.warn('Failed to update linked scene IDs (field_6866):', {
+            selectedVideoId: selectedOriginalVideo.id,
+            payload: normalizedUpdatedSceneIds,
+            error: message,
+          });
+        }
+
+        setSelectedOriginalVideo(
+          selectedOriginalVideo.id,
+          selectedOriginalVideo.videoUrl,
+          selectedOriginalVideo.status,
+          normalizedUpdatedSceneIds,
+          selectedOriginalVideo.ttsVoiceReference,
+        );
+      }
+
+      // Immediate local insertion right after current scene (no waiting for refresh).
+      const currentIndexInData = data.findIndex((s) => s.id === sceneId);
+      const updatedCurrentScene = {
+        ...currentScene,
+        field_6890: segments[0].sentence,
+        field_6901: segments[0].sentence,
+        field_6896: segments[0].start,
+        field_6897: segments[0].end,
+        field_6898: segments[0].start,
+        field_6884: segments[0].duration,
+        field_7104: Number(baseSceneOrder.toFixed(3)),
+      } as BaserowRow;
+
+      const nextData = data.map((row) =>
+        row.id === sceneId ? updatedCurrentScene : row,
+      );
+      if (currentIndexInData >= 0 && createdScenes.length > 0) {
+        nextData.splice(currentIndexInData + 1, 0, ...createdScenes);
+      }
+
+      onDataUpdate?.(nextData);
+      setData(nextData);
+
+      playSuccessSound();
+      refreshData?.();
+    } catch (error) {
+      console.error('Failed to split scene into sentences:', error);
+      playErrorSound();
+      alert('Failed to split scene. Please try again.');
+      refreshData?.();
+    } finally {
+      setSplittingId(null);
     }
   };
 
@@ -5600,6 +5882,30 @@ export default function SceneCard({
                         </button>
                       </>
                     )}
+
+                  {/* Combine Next Scene Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleSplitSceneIntoSentences(scene.id);
+                    }}
+                    disabled={splittingId !== null}
+                    className={`flex items-center justify-center space-x-1 px-1 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
+                      splittingId === scene.id
+                        ? 'bg-gray-100 text-gray-500'
+                        : splittingId !== null
+                          ? 'bg-gray-50 text-gray-400'
+                          : 'bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title='Split this scene into multiple scenes by sentence and redistribute timing'
+                  >
+                    {splittingId === scene.id ? (
+                      <Loader2 className='animate-spin h-3 w-3' />
+                    ) : (
+                      <Scissors className='h-3 w-3' />
+                    )}
+                    <span>Sep</span>
+                  </button>
 
                   {/* Combine Next Scene Button */}
                   <button

@@ -691,7 +691,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Filter scenes that belong to the selected original video
     // field_6889 is the "Videos ID" column that references Table 713 (Original Videos)
-    return data.filter((scene) => {
+    const filteredScenes = data.filter((scene) => {
       const videoId = scene.field_6889;
       // Handle different data types that might come from Baserow
       if (typeof videoId === 'number') {
@@ -710,6 +710,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return false;
     });
+
+    // Preserve Baserow-provided row order by default.
+    return filteredScenes;
   },
 
   // Actions
