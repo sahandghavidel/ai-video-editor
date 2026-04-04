@@ -2636,6 +2636,7 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
 
       const videosToProcess = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
         const script =
           typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
         const title =
@@ -2643,6 +2644,7 @@ export default function OriginalVideosList({
             ? video.field_6852.trim()
             : extractFieldValue(video.field_6852).trim();
 
+        if (status !== 'Processing') return false;
         if (!title) return false;
         if (script.length > 0) return false;
         if (/\bscript\b/i.test(title)) return false;
@@ -2651,7 +2653,7 @@ export default function OriginalVideosList({
       });
 
       if (videosToProcess.length === 0) {
-        console.log('No videos matched Script-from-Title criteria');
+        console.log('No Processing videos matched Script-from-Title criteria');
         return;
       }
 
