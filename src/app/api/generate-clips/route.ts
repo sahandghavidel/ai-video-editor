@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
           let usingFallbackStockVideo = false;
 
           if (!videoUrl) {
-            const { dimension, bgColor } = getVideoDimensionAndBg(originalVideo);
+            const { dimension, bgColor } =
+              getVideoDimensionAndBg(originalVideo);
             videoUrl = await uploadStockVideoForFallback(
               dimension,
               bgColor,

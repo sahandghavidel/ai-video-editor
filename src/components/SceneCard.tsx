@@ -5420,7 +5420,7 @@ export default function SceneCard({
                     )}
                     <span>
                       {sceneLoading.producingTTS === scene.id
-                        ? 'Producing...'
+                        ? 'Prod...'
                         : sceneLoading.producingTTS !== null ||
                             batchOperations.generatingAllTTS
                           ? 'TTS'
@@ -5495,7 +5495,7 @@ export default function SceneCard({
                     )}
                     <span>
                       {sceneLoading.improvingSentence === scene.id
-                        ? 'Improving...'
+                        ? 'Imp...'
                         : sceneLoading.improvingSentence !== null ||
                             batchOperations.improvingAll
                           ? 'Busy'
@@ -5607,10 +5607,10 @@ export default function SceneCard({
                         )}
                         <span>
                           {sceneLoading.speedingUpVideo === scene.id
-                            ? 'Processing...'
+                            ? 'Pro...'
                             : sceneLoading.speedingUpVideo !== null ||
                                 batchOperations.speedingUpAllVideos
-                              ? 'Speed Busy'
+                              ? 'Spe..'
                               : 'Speed'}
                         </span>
                       </button>
@@ -5671,10 +5671,10 @@ export default function SceneCard({
                         )}
                         <span>
                           {clipGeneration.generatingSingleClip === scene.id
-                            ? 'Generating...'
+                            ? 'Gen..'
                             : clipGeneration.generatingSingleClip !== null ||
                                 clipGeneration.generatingClips !== null
-                              ? 'Clip Busy'
+                              ? 'Clip'
                               : 'Gen'}
                         </span>
                       </button>
@@ -5827,7 +5827,7 @@ export default function SceneCard({
                         )}
                         <span>
                           {sceneLoading.generatingVideo === scene.id
-                            ? 'Generating...'
+                            ? 'Gen..'
                             : sceneLoading.generatingVideo !== null
                               ? 'Busy'
                               : batchOperations.generatingAllVideos
