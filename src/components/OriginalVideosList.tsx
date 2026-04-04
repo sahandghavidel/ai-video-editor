@@ -4600,6 +4600,18 @@ export default function OriginalVideosList({
   ) => {
     if (combiningLongTextPairsAllVideos) return;
 
+    const clearedGeneratedFields: Record<string, unknown> = {
+      field_6886: '', // Videos
+      field_6888: '', // Video Clip URL
+      field_6891: '', // TTS
+      field_6910: '', // Captions URL for Scene
+      field_7094: '', // Image for Scene
+      field_7098: '', // Video for Scene
+      field_7095: '', // Upscaled Image for Scene
+      field_7096: null, // Flagged
+      field_7099: '', // hasText
+    };
+
     if (!subtitleGenerationSettings.enableCharLimit) {
       console.log(
         'Combine Long-Text Pairs skipped: subtitle character limit is disabled',
@@ -4689,6 +4701,7 @@ export default function OriginalVideosList({
                 field_6901: newOriginal,
                 field_6897: newEndTime,
                 field_6884: newDuration,
+                ...clearedGeneratedFields,
               }),
             },
           );

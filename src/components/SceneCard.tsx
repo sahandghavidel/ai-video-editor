@@ -5423,7 +5423,7 @@ export default function SceneCard({
                         ? 'Producing...'
                         : sceneLoading.producingTTS !== null ||
                             batchOperations.generatingAllTTS
-                          ? 'TTS Busy'
+                          ? 'TTS'
                           : typeof scene['field_6891'] === 'string' &&
                               scene['field_6891']
                             ? 'TTS'

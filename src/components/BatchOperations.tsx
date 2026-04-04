@@ -381,6 +381,18 @@ export default function BatchOperations({
   const handleCombineNoSubtitlePairs = async () => {
     if (combiningNoSubtitlePairs) return;
 
+    const clearedGeneratedFields: Record<string, unknown> = {
+      field_6886: '', // Videos
+      field_6888: '', // Video Clip URL
+      field_6891: '', // TTS
+      field_6910: '', // Captions URL for Scene
+      field_7094: '', // Image for Scene
+      field_7098: '', // Video for Scene
+      field_7095: '', // Upscaled Image for Scene
+      field_7096: null, // Flagged
+      field_7099: '', // hasText
+    };
+
     // Reuse the subtitle-setting threshold logic used by batch subtitle generation.
     // Subtitles are generated only when charCount < maxChars (strictly less).
     // So scenes with charCount >= maxChars are the ones expected to have no subtitles.
@@ -467,6 +479,7 @@ export default function BatchOperations({
             field_6901: newOriginal,
             field_6897: newEndTime,
             field_6884: newDuration,
+            ...clearedGeneratedFields,
           }),
         });
 
