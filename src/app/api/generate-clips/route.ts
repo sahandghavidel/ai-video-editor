@@ -47,10 +47,20 @@ export async function POST(request: NextRequest) {
 
           // Step 1: Get the original video data to get the video URL
           const originalVideo = await getOriginalVideoData(videoId);
-          const videoUrl = extractVideoUrl(originalVideo.field_6881); // Video Uploaded URL
+          let videoUrl = extractVideoUrl(originalVideo.field_6881); // Video Uploaded URL
+          let usingFallbackStockVideo = false;
 
           if (!videoUrl) {
-            throw new Error('No video URL found for this video');
+            const { dimension, bgColor } = getVideoDimensionAndBg(originalVideo);
+            videoUrl = await uploadStockVideoForFallback(
+              dimension,
+              bgColor,
+              String(videoId),
+            );
+            usingFallbackStockVideo = true;
+            console.log(
+              `Using fallback stock video for batch video ${videoId}: ${videoUrl}`,
+            );
           }
 
           // Step 2: Get all scenes for this video
@@ -156,7 +166,9 @@ export async function POST(request: NextRequest) {
             );
 
             try {
-              const clipUrl = await createVideoClipDirect(videoUrl, scene);
+              const clipUrl = usingFallbackStockVideo
+                ? videoUrl
+                : await createVideoClipDirect(videoUrl, scene);
 
               await updateSceneWithClipUrl(scene.id, clipUrl);
 
@@ -285,6 +297,93 @@ function extractVideoUrl(field: BaserowFileField): string | null {
   }
 
   return null;
+}
+
+function extractStringField(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  if (value && typeof value === 'object') {
+    const maybeValue = value as { value?: unknown };
+    if (typeof maybeValue.value === 'string') return maybeValue.value;
+    if (typeof maybeValue.value === 'number') return String(maybeValue.value);
+  }
+  return '';
+}
+
+function parseDimension(
+  input: string,
+): { width: number; height: number } | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/(\d{2,5})\s*[x×X]\s*(\d{2,5})/);
+  if (!match) return null;
+
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  if (width <= 0 || height <= 0) return null;
+  return { width, height };
+}
+
+function parseHexColor(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/#?[0-9a-fA-F]{6}/);
+  if (!match) return null;
+
+  const hex = match[0].startsWith('#') ? match[0] : `#${match[0]}`;
+  return hex.toUpperCase();
+}
+
+function getVideoDimensionAndBg(row: Record<string, unknown>): {
+  dimension: string;
+  bgColor: string;
+} {
+  const dimensionRaw = extractStringField(row['field_7092']);
+  const bgRaw = extractStringField(row['field_7093']);
+
+  const parsedDim = parseDimension(dimensionRaw);
+  const parsedBg = parseHexColor(bgRaw);
+
+  if (!parsedDim) {
+    throw new Error(
+      `Invalid or missing Dimension (7092) value: "${dimensionRaw}"`,
+    );
+  }
+  if (!parsedBg) {
+    throw new Error(`Invalid or missing BG color (7093) value: "${bgRaw}"`);
+  }
+
+  return {
+    dimension: `${parsedDim.width}x${parsedDim.height}`,
+    bgColor: parsedBg,
+  };
+}
+
+async function uploadStockVideoForFallback(
+  dimension: string,
+  bgColor: string,
+  videoId: string,
+): Promise<string> {
+  const videosDir = path.join(process.cwd(), 'public', 'videos');
+  const entries = await fs.readdir(videosDir);
+  const hexNoHash = bgColor.replace('#', '');
+  const pattern = new RegExp(`^${dimension}-#?${hexNoHash}\\.mp4$`, 'i');
+
+  const filename = entries.find((entry) => pattern.test(entry));
+  if (!filename) {
+    throw new Error(
+      `No stock video found for ${dimension} and ${bgColor} in public/videos`,
+    );
+  }
+
+  const filePath = path.join(videosDir, filename);
+  const uploadName = `video_${videoId}_clip_${Date.now()}.mp4`;
+  // Reuse existing upload helper to keep URL handling consistent with generate-scenes.
+  const { uploadToMinio } = await import('@/utils/ffmpeg-direct');
+  return uploadToMinio(filePath, uploadName, 'video/mp4');
 }
 
 // Import the working authentication from baserow-actions
