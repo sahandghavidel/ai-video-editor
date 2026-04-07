@@ -52,7 +52,9 @@ function normalizeRefAudioName(value: unknown): string | null {
 }
 
 function hasIdValue(value: unknown): boolean {
-  return value !== undefined && value !== null && String(value).trim().length > 0;
+  return (
+    value !== undefined && value !== null && String(value).trim().length > 0
+  );
 }
 
 function resolvePythonCommand(options: {
@@ -77,7 +79,10 @@ function resolvePythonCommand(options: {
     }
     return {
       command: configured,
-      source: configured === configuredEnv?.trim() ? `env:${options.envVarName}` : 'settings:ttsSettings.omniVoice.pythonPath',
+      source:
+        configured === configuredEnv?.trim()
+          ? `env:${options.envVarName}`
+          : 'settings:ttsSettings.omniVoice.pythonPath',
     };
   }
 
@@ -275,7 +280,9 @@ async function runOmniVoiceProcess(input: {
         };
 
         if (!parsed.ok) {
-          reject(new Error(parsed.error || 'OmniVoice runner reported failure'));
+          reject(
+            new Error(parsed.error || 'OmniVoice runner reported failure'),
+          );
           return;
         }
 
@@ -313,8 +320,14 @@ export async function POST(request: NextRequest) {
     const modelId = (omniVoice.modelId || 'k2-fsa/OmniVoice').trim();
     const deviceMap = resolveDeviceMap(omniVoice.deviceMap);
     const dtype = resolveDType(omniVoice.dtype);
-    const numStep = Math.max(8, Math.min(64, toPositiveInt(omniVoice.numStep, 32)));
-    const speed = Math.max(0.5, Math.min(2.0, toFiniteNumber(omniVoice.speed, 1.0)));
+    const numStep = Math.max(
+      8,
+      Math.min(64, toPositiveInt(omniVoice.numStep, 32)),
+    );
+    const speed = Math.max(
+      0.5,
+      Math.min(2.0, toFiniteNumber(omniVoice.speed, 1.0)),
+    );
 
     const referenceAudioName =
       normalizeRefAudioName(body.referenceAudioFilename) ||
@@ -408,8 +421,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text().catch(() => 'Unknown error');
-      throw new Error(`MinIO upload failed (${uploadResponse.status}): ${errorText}`);
+      const errorText = await uploadResponse
+        .text()
+        .catch(() => 'Unknown error');
+      throw new Error(
+        `MinIO upload failed (${uploadResponse.status}): ${errorText}`,
+      );
     }
 
     return NextResponse.json({

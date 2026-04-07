@@ -937,7 +937,7 @@ export default function OriginalVideosList({
               ? '/api/generate-tts-fish'
               : ttsSettings.provider === 'omnivoice'
                 ? '/api/generate-tts-omnivoice'
-              : '/api/generate-tts';
+                : '/api/generate-tts';
 
           const ttsRes = await fetch(ttsEndpoint, {
             method: 'POST',
@@ -1034,7 +1034,7 @@ export default function OriginalVideosList({
           ? '/api/generate-tts-fish'
           : ttsSettings.provider === 'omnivoice'
             ? '/api/generate-tts-omnivoice'
-          : '/api/generate-tts';
+            : '/api/generate-tts';
 
       const ttsRes = await fetch(ttsEndpoint, {
         method: 'POST',

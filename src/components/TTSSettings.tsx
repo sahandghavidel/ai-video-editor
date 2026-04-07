@@ -98,8 +98,8 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
         {ttsSettings.provider === 'omnivoice' && (
           <>
             <div className='rounded-md border border-indigo-200 bg-indigo-50 p-2 text-[11px] text-indigo-800'>
-              OmniVoice runs locally via Python on Apple Silicon (MPS). It
-              uses your selected reference filename for voice cloning.
+              OmniVoice runs locally via Python on Apple Silicon (MPS). It uses
+              your selected reference filename for voice cloning.
             </div>
 
             <div className='flex gap-1 items-center justify-between'>

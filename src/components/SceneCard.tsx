@@ -2290,7 +2290,7 @@ export default function SceneCard({
             ? '/api/generate-tts-fish'
             : currentTtsSettings.provider === 'omnivoice'
               ? '/api/generate-tts-omnivoice'
-            : '/api/generate-tts';
+              : '/api/generate-tts';
 
         // Call provider-specific TTS API route directly to avoid double-hop timeouts
         const response = await fetch(ttsEndpoint, {
