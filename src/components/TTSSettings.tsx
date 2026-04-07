@@ -37,6 +37,7 @@ const defaultTTSSettings = {
     deviceMap: 'mps' as const,
     dtype: 'float16' as const,
     referenceAudioDir: '',
+    referenceText: '',
     numStep: 32,
     speed: 1,
   },
@@ -175,6 +176,26 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
                 }
                 className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
                 placeholder='auto (omnivoice-local/references)'
+              />
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Reference Text
+              </label>
+              <textarea
+                value={ttsSettings.omniVoice.referenceText}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    omniVoice: {
+                      ...ttsSettings.omniVoice,
+                      referenceText: e.target.value,
+                    },
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='optional transcript of the reference audio'
+                rows={2}
               />
             </div>
 

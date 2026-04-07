@@ -10,6 +10,7 @@ export interface OmniVoiceTTSSettings {
   deviceMap: 'mps' | 'cpu' | 'auto';
   dtype: 'float16' | 'float32' | 'bfloat16';
   referenceAudioDir: string;
+  referenceText: string;
   numStep: number;
   speed: number;
 }
@@ -470,6 +471,7 @@ const defaultTTSSettings: TTSSettings = {
     deviceMap: 'mps',
     dtype: 'float16',
     referenceAudioDir: '',
+    referenceText: '',
     numStep: 32,
     speed: 1.0,
   },

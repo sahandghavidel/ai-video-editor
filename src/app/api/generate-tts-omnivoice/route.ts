@@ -17,6 +17,7 @@ interface OmniVoiceTtsSettings {
   deviceMap?: OmniVoiceDeviceMap;
   dtype?: OmniVoiceDType;
   referenceAudioDir?: string;
+  referenceText?: string;
   numStep?: number;
   speed?: number;
 }
@@ -207,6 +208,7 @@ async function runOmniVoiceProcess(input: {
   text: string;
   outputPath: string;
   referenceAudioPath: string;
+  referenceText?: string;
   modelId: string;
   deviceMap: OmniVoiceDeviceMap;
   dtype: OmniVoiceDType;
@@ -232,6 +234,10 @@ async function runOmniVoiceProcess(input: {
     '--speed',
     String(input.speed),
   ];
+
+  if (input.referenceText && input.referenceText.trim().length > 0) {
+    args.push('--reference-text', input.referenceText.trim());
+  }
 
   return new Promise((resolve, reject) => {
     const child = spawn(input.pythonCommand, args, {
@@ -328,6 +334,10 @@ export async function POST(request: NextRequest) {
       0.5,
       Math.min(2.0, toFiniteNumber(omniVoice.speed, 1.0)),
     );
+    const referenceText =
+      typeof omniVoice.referenceText === 'string'
+        ? omniVoice.referenceText.trim()
+        : '';
 
     const referenceAudioName =
       normalizeRefAudioName(body.referenceAudioFilename) ||
@@ -393,6 +403,7 @@ export async function POST(request: NextRequest) {
       text,
       outputPath,
       referenceAudioPath: referenceAudioResolution.fullPath,
+      referenceText,
       modelId,
       deviceMap,
       dtype,
