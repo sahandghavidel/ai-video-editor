@@ -7,7 +7,7 @@ This project now includes OmniVoice as a new TTS provider option.
 - Provider key: `omnivoice`
 - Frontend option: **OmniVoice (Apple Silicon)** in `TTS Settings`
 - API route: `/api/generate-tts-omnivoice`
-- Local runner: `omnivoice-local/run_omnivoice_tts.py`
+- Local worker: `omnivoice-local/omnivoice_worker.py`
 
 ## Voice-cloning mode
 
@@ -51,3 +51,4 @@ Install from:
 
 - Existing providers (`chatterbox`, `fish-s2-pro`) are unchanged.
 - OmniVoice outputs WAV and uploads it to MinIO in the same pattern as existing TTS flows.
+- OmniVoice model is kept warm in a persistent worker and auto-unloaded after ~5 minutes of inactivity.

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
+import type { ChildProcessWithoutNullStreams } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { promises as fsp } from 'fs';
@@ -32,6 +33,36 @@ interface RequestBody {
     omniVoice?: OmniVoiceTtsSettings;
   };
 }
+
+const OMNIVOICE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const OMNIVOICE_JOB_TIMEOUT_MS = 10 * 60 * 1000;
+
+type WorkerJobResult = {
+  sampleRate: number;
+};
+
+type WorkerPendingJob = {
+  resolve: (value: WorkerJobResult) => void;
+  reject: (reason: Error) => void;
+  timer: NodeJS.Timeout;
+};
+
+type OmniVoiceWorkerState = {
+  child: ChildProcessWithoutNullStreams;
+  key: string;
+  pythonCommand: string;
+  pythonSource: string;
+  pending: Map<string, WorkerPendingJob>;
+  stdoutBuffer: string;
+  stderrTail: string;
+  idleTimer?: NodeJS.Timeout;
+};
+
+type GlobalWithOmniVoiceWorker = typeof globalThis & {
+  __omniVoiceWorkerState?: OmniVoiceWorkerState;
+};
+
+const omniVoiceGlobal = globalThis as GlobalWithOmniVoiceWorker;
 
 function toPositiveInt(value: unknown, fallback: number): number {
   const n = typeof value === 'number' ? value : Number(value);
@@ -202,105 +233,268 @@ function resolveDeviceMap(value: unknown): OmniVoiceDeviceMap {
   return value === 'cpu' || value === 'auto' || value === 'mps' ? value : 'mps';
 }
 
-async function runOmniVoiceProcess(input: {
+function buildWorkerKey(input: {
   pythonCommand: string;
   scriptPath: string;
-  text: string;
-  outputPath: string;
-  referenceAudioPath: string;
-  referenceText?: string;
   modelId: string;
   deviceMap: OmniVoiceDeviceMap;
   dtype: OmniVoiceDType;
-  numStep: number;
-  speed: number;
-}): Promise<{ sampleRate: number }> {
-  const args = [
+}): string {
+  return [
+    input.pythonCommand,
     input.scriptPath,
-    '--text',
-    input.text,
-    '--output',
-    input.outputPath,
-    '--reference-audio',
-    input.referenceAudioPath,
-    '--model-id',
     input.modelId,
-    '--device-map',
     input.deviceMap,
-    '--dtype',
     input.dtype,
-    '--num-step',
-    String(input.numStep),
-    '--speed',
-    String(input.speed),
-  ];
+  ].join('|');
+}
 
-  if (input.referenceText && input.referenceText.trim().length > 0) {
-    args.push('--reference-text', input.referenceText.trim());
+function stopOmniVoiceWorker(reason: string): void {
+  const worker = omniVoiceGlobal.__omniVoiceWorkerState;
+  if (!worker) return;
+
+  if (worker.idleTimer) {
+    clearTimeout(worker.idleTimer);
+    worker.idleTimer = undefined;
   }
 
-  return new Promise((resolve, reject) => {
-    const child = spawn(input.pythonCommand, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+  for (const [jobId, pending] of worker.pending.entries()) {
+    clearTimeout(pending.timer);
+    pending.reject(
+      new Error(`OmniVoice worker stopped (${reason}) before job ${jobId}`),
+    );
+    worker.pending.delete(jobId);
+  }
+
+  try {
+    worker.child.kill('SIGTERM');
+  } catch {
+    // ignore
+  }
+
+  omniVoiceGlobal.__omniVoiceWorkerState = undefined;
+}
+
+function scheduleWorkerIdleShutdown(worker: OmniVoiceWorkerState): void {
+  if (worker.idleTimer) {
+    clearTimeout(worker.idleTimer);
+  }
+
+  worker.idleTimer = setTimeout(() => {
+    if (worker.pending.size > 0) {
+      scheduleWorkerIdleShutdown(worker);
+      return;
+    }
+
+    if (omniVoiceGlobal.__omniVoiceWorkerState?.key === worker.key) {
+      stopOmniVoiceWorker('idle-timeout');
+    }
+  }, OMNIVOICE_IDLE_TIMEOUT_MS);
+}
+
+function startOmniVoiceWorker(input: {
+  pythonCommand: string;
+  pythonSource: string;
+  scriptPath: string;
+  modelId: string;
+  deviceMap: OmniVoiceDeviceMap;
+  dtype: OmniVoiceDType;
+}): OmniVoiceWorkerState {
+  const key = buildWorkerKey({
+    pythonCommand: input.pythonCommand,
+    scriptPath: input.scriptPath,
+    modelId: input.modelId,
+    deviceMap: input.deviceMap,
+    dtype: input.dtype,
+  });
+
+  const child = spawn(
+    input.pythonCommand,
+    [
+      input.scriptPath,
+      '--model-id',
+      input.modelId,
+      '--device-map',
+      input.deviceMap,
+      '--dtype',
+      input.dtype,
+    ],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
         PYTORCH_ENABLE_MPS_FALLBACK:
           process.env.PYTORCH_ENABLE_MPS_FALLBACK || '1',
       },
-    });
+    },
+  );
 
-    let stdout = '';
-    let stderr = '';
+  const worker: OmniVoiceWorkerState = {
+    child,
+    key,
+    pythonCommand: input.pythonCommand,
+    pythonSource: input.pythonSource,
+    pending: new Map<string, WorkerPendingJob>(),
+    stdoutBuffer: '',
+    stderrTail: '',
+    idleTimer: undefined,
+  };
 
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
 
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
+  child.stdout.on('data', (chunk: string) => {
+    worker.stdoutBuffer += chunk;
+    const lines = worker.stdoutBuffer.split(/\r?\n/);
+    worker.stdoutBuffer = lines.pop() || '';
 
-    child.on('error', (err) => {
-      reject(new Error(`Failed to start OmniVoice runner: ${err.message}`));
-    });
+    for (const lineRaw of lines) {
+      const line = lineRaw.trim();
+      if (!line) continue;
 
-    child.on('close', (code) => {
-      if (code !== 0) {
-        const details = stderr.trim() || stdout.trim() || `exit code ${code}`;
-        reject(new Error(`OmniVoice runner failed: ${details}`));
-        return;
-      }
-
-      const trimmed = stdout.trim();
-      if (!trimmed) {
-        reject(new Error('OmniVoice runner returned empty output'));
-        return;
-      }
+      let parsed: {
+        id?: string;
+        ok?: boolean;
+        error?: string;
+        sample_rate?: number;
+      };
 
       try {
-        const parsed = JSON.parse(trimmed) as {
+        parsed = JSON.parse(line) as {
+          id?: string;
           ok?: boolean;
-          output_path?: string;
-          sample_rate?: number;
           error?: string;
+          sample_rate?: number;
         };
-
-        if (!parsed.ok) {
-          reject(
-            new Error(parsed.error || 'OmniVoice runner reported failure'),
-          );
-          return;
-        }
-
-        resolve({ sampleRate: parsed.sample_rate || 24000 });
       } catch {
-        reject(
-          new Error(
-            `OmniVoice runner returned invalid JSON: ${trimmed.slice(0, 500)}`,
-          ),
+        continue;
+      }
+
+      if (!parsed.id) continue;
+      const pending = worker.pending.get(parsed.id);
+      if (!pending) continue;
+
+      clearTimeout(pending.timer);
+      worker.pending.delete(parsed.id);
+
+      if (parsed.ok) {
+        pending.resolve({ sampleRate: parsed.sample_rate || 24000 });
+      } else {
+        pending.reject(
+          new Error(parsed.error || 'OmniVoice worker returned failure'),
         );
       }
+    }
+  });
+
+  child.stderr.on('data', (chunk: string) => {
+    const next = `${worker.stderrTail}${chunk}`;
+    worker.stderrTail = next.slice(-4000);
+  });
+
+  child.on('error', (err) => {
+    const current = omniVoiceGlobal.__omniVoiceWorkerState;
+    if (!current || current.key !== worker.key) return;
+    stopOmniVoiceWorker(`process-error: ${err.message}`);
+  });
+
+  child.on('close', (code, signal) => {
+    const current = omniVoiceGlobal.__omniVoiceWorkerState;
+    if (!current || current.key !== worker.key) return;
+    stopOmniVoiceWorker(
+      `process-exit: code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+    );
+  });
+
+  scheduleWorkerIdleShutdown(worker);
+  omniVoiceGlobal.__omniVoiceWorkerState = worker;
+  return worker;
+}
+
+function ensureOmniVoiceWorker(input: {
+  pythonCommand: string;
+  pythonSource: string;
+  scriptPath: string;
+  modelId: string;
+  deviceMap: OmniVoiceDeviceMap;
+  dtype: OmniVoiceDType;
+}): OmniVoiceWorkerState {
+  const key = buildWorkerKey({
+    pythonCommand: input.pythonCommand,
+    scriptPath: input.scriptPath,
+    modelId: input.modelId,
+    deviceMap: input.deviceMap,
+    dtype: input.dtype,
+  });
+
+  const existing = omniVoiceGlobal.__omniVoiceWorkerState;
+  if (existing && existing.key === key && !existing.child.killed) {
+    scheduleWorkerIdleShutdown(existing);
+    return existing;
+  }
+
+  if (existing) {
+    stopOmniVoiceWorker('config-changed');
+  }
+
+  return startOmniVoiceWorker(input);
+}
+
+async function runOmniVoiceWorkerJob(input: {
+  worker: OmniVoiceWorkerState;
+  text: string;
+  outputPath: string;
+  referenceAudioPath: string;
+  referenceText?: string;
+  numStep: number;
+  speed: number;
+}): Promise<WorkerJobResult> {
+  const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const payload = {
+    id: jobId,
+    text: input.text,
+    output_path: input.outputPath,
+    reference_audio: input.referenceAudioPath,
+    reference_text: input.referenceText || '',
+    num_step: input.numStep,
+    speed: input.speed,
+  };
+
+  const worker = input.worker;
+  scheduleWorkerIdleShutdown(worker);
+
+  return new Promise<WorkerJobResult>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      worker.pending.delete(jobId);
+      reject(
+        new Error(
+          `OmniVoice worker timed out after ${Math.round(OMNIVOICE_JOB_TIMEOUT_MS / 1000)}s`,
+        ),
+      );
+    }, OMNIVOICE_JOB_TIMEOUT_MS);
+
+    worker.pending.set(jobId, {
+      resolve: (value) => {
+        resolve(value);
+      },
+      reject,
+      timer,
     });
+
+    try {
+      worker.child.stdin.write(`${JSON.stringify(payload)}\n`);
+    } catch (error) {
+      clearTimeout(timer);
+      worker.pending.delete(jobId);
+      reject(
+        new Error(
+          `Failed to dispatch OmniVoice worker job: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        ),
+      );
+    }
   });
 }
 
@@ -361,14 +555,14 @@ export async function POST(request: NextRequest) {
     const scriptPath = path.join(
       process.cwd(),
       'omnivoice-local',
-      'run_omnivoice_tts.py',
+      'omnivoice_worker.py',
     );
 
     if (!fs.existsSync(scriptPath)) {
       return NextResponse.json(
         {
           error:
-            'OmniVoice runner is missing at omnivoice-local/run_omnivoice_tts.py',
+            'OmniVoice worker is missing at omnivoice-local/omnivoice_worker.py',
         },
         { status: 500 },
       );
@@ -397,16 +591,21 @@ export async function POST(request: NextRequest) {
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'omnivoice-tts-'));
     outputPath = path.join(tmpDir, 'out.wav');
 
-    const runResult = await runOmniVoiceProcess({
+    const worker = ensureOmniVoiceWorker({
       pythonCommand,
+      pythonSource,
       scriptPath,
+      modelId,
+      deviceMap,
+      dtype,
+    });
+
+    const runResult = await runOmniVoiceWorkerJob({
+      worker,
       text,
       outputPath,
       referenceAudioPath: referenceAudioResolution.fullPath,
       referenceText,
-      modelId,
-      deviceMap,
-      dtype,
       numStep,
       speed,
     });
