@@ -2,7 +2,17 @@ import { create } from 'zustand';
 import { BaserowRow } from '@/lib/baserow-actions';
 
 // TTS Settings interface
-export type TTSProvider = 'chatterbox' | 'fish-s2-pro';
+export type TTSProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
+
+export interface OmniVoiceTTSSettings {
+  pythonPath: string;
+  modelId: string;
+  deviceMap: 'mps' | 'cpu' | 'auto';
+  dtype: 'float16' | 'float32' | 'bfloat16';
+  referenceAudioDir: string;
+  numStep: number;
+  speed: number;
+}
 
 export interface FishTTSSettings {
   apiBaseUrl: string;
@@ -26,6 +36,7 @@ export interface TTSSettings {
   seed: number;
   reference_audio_filename: string;
   fish: FishTTSSettings;
+  omniVoice: OmniVoiceTTSSettings;
 }
 
 // Speed up filtering modes
@@ -453,6 +464,15 @@ const defaultTTSSettings: TTSSettings = {
     temperature: 0.8,
     use_memory_cache: 'on',
   },
+  omniVoice: {
+    pythonPath: '',
+    modelId: 'k2-fsa/OmniVoice',
+    deviceMap: 'mps',
+    dtype: 'float16',
+    referenceAudioDir: '',
+    numStep: 32,
+    speed: 1.0,
+  },
 };
 
 // Default video settings
@@ -729,6 +749,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         fish: updates.fish
           ? { ...state.ttsSettings.fish, ...updates.fish }
           : state.ttsSettings.fish,
+        omniVoice: updates.omniVoice
+          ? { ...state.ttsSettings.omniVoice, ...updates.omniVoice }
+          : state.ttsSettings.omniVoice,
       };
       // Save to localStorage whenever updated
       localStorage.setItem('ttsSettings', JSON.stringify(newSettings));
@@ -1430,6 +1453,10 @@ export const useAppStore = create<AppState>((set, get) => ({
               ...defaultTTSSettings.fish,
               ...(persistedTTSSettings.fish || {}),
             },
+            omniVoice: {
+              ...defaultTTSSettings.omniVoice,
+              ...(persistedTTSSettings.omniVoice || {}),
+            },
           },
           videoSettings: { ...defaultVideoSettings, ...settings.videoSettings },
           transcriptionSettings: {
@@ -1677,6 +1704,10 @@ export const useAppStore = create<AppState>((set, get) => ({
               fish: {
                 ...defaultTTSSettings.fish,
                 ...((parsed && parsed.fish) || {}),
+              },
+              omniVoice: {
+                ...defaultTTSSettings.omniVoice,
+                ...((parsed && parsed.omniVoice) || {}),
               },
             },
           });

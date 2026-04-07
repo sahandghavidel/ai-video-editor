@@ -31,6 +31,15 @@ const defaultTTSSettings = {
     temperature: 0.8,
     use_memory_cache: 'on' as const,
   },
+  omniVoice: {
+    pythonPath: '',
+    modelId: 'k2-fsa/OmniVoice',
+    deviceMap: 'mps' as const,
+    dtype: 'float16' as const,
+    referenceAudioDir: '',
+    numStep: 32,
+    speed: 1,
+  },
 };
 
 export default function TTSSettings({ className = '' }: TTSSettingsProps) {
@@ -72,15 +81,204 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
             value={ttsSettings.provider}
             onChange={(e) =>
               updateTTSSettings({
-                provider: e.target.value as 'chatterbox' | 'fish-s2-pro',
+                provider: e.target.value as
+                  | 'chatterbox'
+                  | 'fish-s2-pro'
+                  | 'omnivoice',
               })
             }
             className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
           >
             <option value='chatterbox'>Current TTS (Chatterbox)</option>
             <option value='fish-s2-pro'>Fish Audio S2 Pro</option>
+            <option value='omnivoice'>OmniVoice (Apple Silicon)</option>
           </select>
         </div>
+
+        {ttsSettings.provider === 'omnivoice' && (
+          <>
+            <div className='rounded-md border border-indigo-200 bg-indigo-50 p-2 text-[11px] text-indigo-800'>
+              OmniVoice runs locally via Python on Apple Silicon (MPS). It
+              uses your selected reference filename for voice cloning.
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Shared Seed
+              </label>
+              <input
+                type='number'
+                value={ttsSettings.seed}
+                onChange={(e) =>
+                  updateTTSSettings({ seed: parseInt(e.target.value) || 1212 })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                min='1'
+                placeholder='1212'
+              />
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Python Path
+              </label>
+              <input
+                type='text'
+                value={ttsSettings.omniVoice.pythonPath}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    omniVoice: {
+                      ...ttsSettings.omniVoice,
+                      pythonPath: e.target.value,
+                    },
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='auto (.venv/bin/python)'
+              />
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Model ID
+              </label>
+              <input
+                type='text'
+                value={ttsSettings.omniVoice.modelId}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    omniVoice: {
+                      ...ttsSettings.omniVoice,
+                      modelId: e.target.value,
+                    },
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='k2-fsa/OmniVoice'
+              />
+            </div>
+
+            <div className='flex gap-1 items-center justify-between'>
+              <label className='text-xs font-medium text-gray-700'>
+                Reference Dir
+              </label>
+              <input
+                type='text'
+                value={ttsSettings.omniVoice.referenceAudioDir}
+                onChange={(e) =>
+                  updateTTSSettings({
+                    omniVoice: {
+                      ...ttsSettings.omniVoice,
+                      referenceAudioDir: e.target.value,
+                    },
+                  })
+                }
+                className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                placeholder='auto (omnivoice-local/references)'
+              />
+            </div>
+
+            <div className='grid grid-cols-2 gap-2'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Device
+                </label>
+                <select
+                  value={ttsSettings.omniVoice.deviceMap}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      omniVoice: {
+                        ...ttsSettings.omniVoice,
+                        deviceMap: e.target.value as 'mps' | 'cpu' | 'auto',
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                >
+                  <option value='mps'>mps</option>
+                  <option value='auto'>auto</option>
+                  <option value='cpu'>cpu</option>
+                </select>
+              </div>
+
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  DType
+                </label>
+                <select
+                  value={ttsSettings.omniVoice.dtype}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      omniVoice: {
+                        ...ttsSettings.omniVoice,
+                        dtype: e.target.value as
+                          | 'float16'
+                          | 'float32'
+                          | 'bfloat16',
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                >
+                  <option value='float16'>float16</option>
+                  <option value='float32'>float32</option>
+                  <option value='bfloat16'>bfloat16</option>
+                </select>
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 gap-2'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Num Step
+                </label>
+                <input
+                  type='number'
+                  min='8'
+                  max='64'
+                  value={ttsSettings.omniVoice.numStep}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      omniVoice: {
+                        ...ttsSettings.omniVoice,
+                        numStep: Math.max(
+                          8,
+                          Math.min(64, parseInt(e.target.value) || 32),
+                        ),
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                />
+              </div>
+
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-gray-700'>
+                  Speed
+                </label>
+                <input
+                  type='number'
+                  min='0.5'
+                  max='2'
+                  step='0.05'
+                  value={ttsSettings.omniVoice.speed}
+                  onChange={(e) =>
+                    updateTTSSettings({
+                      omniVoice: {
+                        ...ttsSettings.omniVoice,
+                        speed: Math.max(
+                          0.5,
+                          Math.min(2, parseFloat(e.target.value) || 1),
+                        ),
+                      },
+                    })
+                  }
+                  className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         {ttsSettings.provider === 'fish-s2-pro' && (
           <>

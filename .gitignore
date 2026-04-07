@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+.hf-cache/
 
 # debug
 npm-debug.log*
@@ -44,3 +45,6 @@ next-env.d.ts
 tts-timeout-state.json
 public/sounds/*
 public/photos/character.png
+omnivoice-env/*
+parakeet-env/*
+omnivoice-local/*

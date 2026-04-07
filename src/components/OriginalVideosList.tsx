@@ -935,6 +935,8 @@ export default function OriginalVideosList({
           const ttsEndpoint =
             ttsSettings.provider === 'fish-s2-pro'
               ? '/api/generate-tts-fish'
+              : ttsSettings.provider === 'omnivoice'
+                ? '/api/generate-tts-omnivoice'
               : '/api/generate-tts';
 
           const ttsRes = await fetch(ttsEndpoint, {
@@ -1030,6 +1032,8 @@ export default function OriginalVideosList({
       const ttsEndpoint =
         ttsSettings.provider === 'fish-s2-pro'
           ? '/api/generate-tts-fish'
+          : ttsSettings.provider === 'omnivoice'
+            ? '/api/generate-tts-omnivoice'
           : '/api/generate-tts';
 
       const ttsRes = await fetch(ttsEndpoint, {
