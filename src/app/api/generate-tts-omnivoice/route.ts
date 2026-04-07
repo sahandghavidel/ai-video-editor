@@ -39,6 +39,8 @@ const OMNIVOICE_JOB_TIMEOUT_MS = 10 * 60 * 1000;
 
 type WorkerJobResult = {
   sampleRate: number;
+  cacheHit: boolean;
+  promptCacheSize: number;
 };
 
 type WorkerPendingJob = {
@@ -357,6 +359,8 @@ function startOmniVoiceWorker(input: {
         ok?: boolean;
         error?: string;
         sample_rate?: number;
+        cache_hit?: boolean;
+        prompt_cache_size?: number;
       };
 
       try {
@@ -365,6 +369,8 @@ function startOmniVoiceWorker(input: {
           ok?: boolean;
           error?: string;
           sample_rate?: number;
+          cache_hit?: boolean;
+          prompt_cache_size?: number;
         };
       } catch {
         continue;
@@ -378,7 +384,11 @@ function startOmniVoiceWorker(input: {
       worker.pending.delete(parsed.id);
 
       if (parsed.ok) {
-        pending.resolve({ sampleRate: parsed.sample_rate || 24000 });
+        pending.resolve({
+          sampleRate: parsed.sample_rate || 24000,
+          cacheHit: Boolean(parsed.cache_hit),
+          promptCacheSize: Math.max(0, Number(parsed.prompt_cache_size || 0)),
+        });
       } else {
         pending.reject(
           new Error(parsed.error || 'OmniVoice worker returned failure'),
@@ -610,6 +620,10 @@ export async function POST(request: NextRequest) {
       speed,
     });
 
+    console.info(
+      `[OmniVoice] cache=${runResult.cacheHit ? 'HIT' : 'MISS'} cacheSize=${runResult.promptCacheSize} ref=${path.basename(referenceAudioResolution.fullPath)} steps=${numStep} speed=${speed}`,
+    );
+
     const audioBytes = await fsp.readFile(outputPath);
 
     const timestamp = Date.now();
@@ -655,6 +669,8 @@ export async function POST(request: NextRequest) {
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
         pythonSource,
         sampleRate: runResult.sampleRate,
+        cacheHit: runResult.cacheHit,
+        promptCacheSize: runResult.promptCacheSize,
       },
     });
   } catch (error) {
