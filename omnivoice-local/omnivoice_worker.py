@@ -33,20 +33,16 @@ def _normalize_device_map(requested: str) -> str:
 
     requested = (requested or "mps").strip().lower()
 
-    if requested == "auto":
-        if torch.backends.mps.is_available():
-            return "mps"
-        if torch.cuda.is_available():
-            return "cuda:0"
-        return "cpu"
+    if requested != "mps":
+        # Strict MPS mode by user request: do not allow auto/cpu/cuda selection.
+        return "mps"
 
-    if requested == "mps" and not torch.backends.mps.is_available():
-        return "cpu"
+    if not torch.backends.mps.is_available():
+        raise RuntimeError(
+            "MPS device is not available. Strict MPS mode is enabled, so CPU fallback is disabled."
+        )
 
-    if requested in {"cuda", "cuda:0"} and not torch.cuda.is_available():
-        return "cpu"
-
-    return requested
+    return "mps"
 
 
 def parse_args() -> argparse.Namespace:
@@ -130,7 +126,8 @@ def _get_or_create_voice_clone_prompt(
 def main() -> int:
     try:
         args = parse_args()
-        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+        # Strict MPS mode: disable silent CPU fallback for unsupported MPS ops.
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
 
         import torchaudio
         from omnivoice import OmniVoice

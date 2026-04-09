@@ -31,20 +31,15 @@ def _normalize_device_map(requested: str) -> str:
 
     requested = (requested or "mps").strip().lower()
 
-    if requested == "auto":
-        if torch.backends.mps.is_available():
-            return "mps"
-        if torch.cuda.is_available():
-            return "cuda:0"
-        return "cpu"
+    if requested != "mps":
+        return "mps"
 
-    if requested == "mps" and not torch.backends.mps.is_available():
-        return "cpu"
+    if not torch.backends.mps.is_available():
+        raise RuntimeError(
+            "MPS device is not available. Strict MPS mode is enabled, so CPU fallback is disabled."
+        )
 
-    if requested == "cuda" and not torch.cuda.is_available():
-        return "cpu"
-
-    return requested
+    return "mps"
 
 
 def parse_args() -> argparse.Namespace:
@@ -89,8 +84,8 @@ def main() -> int:
     try:
         args = parse_args()
 
-        # Helpful defaults for Apple Silicon fallback behavior.
-        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+        # Strict MPS mode: disable silent CPU fallback for unsupported MPS ops.
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
 
         output_path = Path(args.output).expanduser().resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -149,8 +149,7 @@ async function hasRequiredOmniVoiceModules(
         stdio: 'ignore',
         env: {
           ...process.env,
-          PYTORCH_ENABLE_MPS_FALLBACK:
-            process.env.PYTORCH_ENABLE_MPS_FALLBACK || '1',
+          PYTORCH_ENABLE_MPS_FALLBACK: '0',
         },
       },
     );
@@ -235,7 +234,10 @@ function resolveDType(value: unknown): OmniVoiceDType {
 }
 
 function resolveDeviceMap(value: unknown): OmniVoiceDeviceMap {
-  return value === 'cpu' || value === 'auto' || value === 'mps' ? value : 'mps';
+  // Strict MPS mode: always run OmniVoice on Apple Silicon MPS.
+  // We intentionally ignore cpu/auto here to avoid silent CPU fallback behavior.
+  void value;
+  return 'mps';
 }
 
 function formatMs(value: unknown): string {
@@ -350,8 +352,7 @@ function startOmniVoiceWorker(input: {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        PYTORCH_ENABLE_MPS_FALLBACK:
-          process.env.PYTORCH_ENABLE_MPS_FALLBACK || '1',
+        PYTORCH_ENABLE_MPS_FALLBACK: '0',
       },
     },
   );
