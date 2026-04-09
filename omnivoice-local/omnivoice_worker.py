@@ -237,6 +237,8 @@ def main() -> int:
                         "output_path": str(output_path),
                         "cache_hit": cache_hit,
                         "prompt_cache_size": len(prompt_cache),
+                        "prompt_ms": round(prompt_ms, 3),
+                        "generate_ms": round(generate_ms, 3),
                     }
                 )
             except Exception as exc:  # pylint: disable=broad-except

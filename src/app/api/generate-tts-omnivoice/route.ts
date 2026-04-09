@@ -36,11 +36,14 @@ interface RequestBody {
 
 const OMNIVOICE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const OMNIVOICE_JOB_TIMEOUT_MS = 10 * 60 * 1000;
+const OMNIVOICE_WORKER_PROTOCOL_VERSION = '2';
 
 type WorkerJobResult = {
   sampleRate: number;
   cacheHit: boolean;
   promptCacheSize: number;
+  promptMs: number;
+  generateMs: number;
 };
 
 type WorkerPendingJob = {
@@ -235,9 +238,24 @@ function resolveDeviceMap(value: unknown): OmniVoiceDeviceMap {
   return value === 'cpu' || value === 'auto' || value === 'mps' ? value : 'mps';
 }
 
+function formatMs(value: unknown): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(1) : 'n/a';
+}
+
+function getWorkerScriptVersion(scriptPath: string): string {
+  try {
+    const stat = fs.statSync(scriptPath);
+    return `${OMNIVOICE_WORKER_PROTOCOL_VERSION}:${stat.mtimeMs}`;
+  } catch {
+    return `${OMNIVOICE_WORKER_PROTOCOL_VERSION}:missing`;
+  }
+}
+
 function buildWorkerKey(input: {
   pythonCommand: string;
   scriptPath: string;
+  scriptVersion: string;
   modelId: string;
   deviceMap: OmniVoiceDeviceMap;
   dtype: OmniVoiceDType;
@@ -245,6 +263,7 @@ function buildWorkerKey(input: {
   return [
     input.pythonCommand,
     input.scriptPath,
+    input.scriptVersion,
     input.modelId,
     input.deviceMap,
     input.dtype,
@@ -298,13 +317,19 @@ function startOmniVoiceWorker(input: {
   pythonCommand: string;
   pythonSource: string;
   scriptPath: string;
+  scriptVersion: string;
   modelId: string;
   deviceMap: OmniVoiceDeviceMap;
   dtype: OmniVoiceDType;
 }): OmniVoiceWorkerState {
+  console.info(
+    `[OmniVoice] worker=starting source=${input.pythonSource} model=${input.modelId} device=${input.deviceMap} dtype=${input.dtype}`,
+  );
+
   const key = buildWorkerKey({
     pythonCommand: input.pythonCommand,
     scriptPath: input.scriptPath,
+    scriptVersion: input.scriptVersion,
     modelId: input.modelId,
     deviceMap: input.deviceMap,
     dtype: input.dtype,
@@ -361,6 +386,8 @@ function startOmniVoiceWorker(input: {
         sample_rate?: number;
         cache_hit?: boolean;
         prompt_cache_size?: number;
+        prompt_ms?: number;
+        generate_ms?: number;
       };
 
       try {
@@ -371,6 +398,8 @@ function startOmniVoiceWorker(input: {
           sample_rate?: number;
           cache_hit?: boolean;
           prompt_cache_size?: number;
+          prompt_ms?: number;
+          generate_ms?: number;
         };
       } catch {
         continue;
@@ -388,6 +417,8 @@ function startOmniVoiceWorker(input: {
           sampleRate: parsed.sample_rate || 24000,
           cacheHit: Boolean(parsed.cache_hit),
           promptCacheSize: Math.max(0, Number(parsed.prompt_cache_size || 0)),
+          promptMs: Math.max(0, Number(parsed.prompt_ms || 0)),
+          generateMs: Math.max(0, Number(parsed.generate_ms || 0)),
         });
       } else {
         pending.reject(
@@ -425,6 +456,7 @@ function ensureOmniVoiceWorker(input: {
   pythonCommand: string;
   pythonSource: string;
   scriptPath: string;
+  scriptVersion: string;
   modelId: string;
   deviceMap: OmniVoiceDeviceMap;
   dtype: OmniVoiceDType;
@@ -432,6 +464,7 @@ function ensureOmniVoiceWorker(input: {
   const key = buildWorkerKey({
     pythonCommand: input.pythonCommand,
     scriptPath: input.scriptPath,
+    scriptVersion: input.scriptVersion,
     modelId: input.modelId,
     deviceMap: input.deviceMap,
     dtype: input.dtype,
@@ -439,6 +472,9 @@ function ensureOmniVoiceWorker(input: {
 
   const existing = omniVoiceGlobal.__omniVoiceWorkerState;
   if (existing && existing.key === key && !existing.child.killed) {
+    console.info(
+      `[OmniVoice] worker=reused source=${existing.pythonSource} model=${input.modelId} device=${input.deviceMap} dtype=${input.dtype}`,
+    );
     scheduleWorkerIdleShutdown(existing);
     return existing;
   }
@@ -510,6 +546,7 @@ async function runOmniVoiceWorkerJob(input: {
 
 export async function POST(request: NextRequest) {
   let outputPath = '';
+  const requestStartedAt = Date.now();
 
   try {
     const body = (await request.json()) as RequestBody;
@@ -567,6 +604,7 @@ export async function POST(request: NextRequest) {
       'omnivoice-local',
       'omnivoice_worker.py',
     );
+    const scriptVersion = getWorkerScriptVersion(scriptPath);
 
     if (!fs.existsSync(scriptPath)) {
       return NextResponse.json(
@@ -605,11 +643,13 @@ export async function POST(request: NextRequest) {
       pythonCommand,
       pythonSource,
       scriptPath,
+      scriptVersion,
       modelId,
       deviceMap,
       dtype,
     });
 
+    const workerJobStartedAt = Date.now();
     const runResult = await runOmniVoiceWorkerJob({
       worker,
       text,
@@ -619,10 +659,7 @@ export async function POST(request: NextRequest) {
       numStep,
       speed,
     });
-
-    console.info(
-      `[OmniVoice] cache=${runResult.cacheHit ? 'HIT' : 'MISS'} cacheSize=${runResult.promptCacheSize} ref=${path.basename(referenceAudioResolution.fullPath)} steps=${numStep} speed=${speed}`,
-    );
+    const workerJobMs = Date.now() - workerJobStartedAt;
 
     const audioBytes = await fsp.readFile(outputPath);
 
@@ -636,6 +673,7 @@ export async function POST(request: NextRequest) {
     const bucket = 'nca-toolkit';
     const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
 
+    const uploadStartedAt = Date.now();
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
@@ -643,6 +681,7 @@ export async function POST(request: NextRequest) {
       },
       body: new Uint8Array(audioBytes),
     });
+    const uploadMs = Date.now() - uploadStartedAt;
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse
@@ -652,6 +691,11 @@ export async function POST(request: NextRequest) {
         `MinIO upload failed (${uploadResponse.status}): ${errorText}`,
       );
     }
+
+    const totalMs = Date.now() - requestStartedAt;
+    console.info(
+      `[OmniVoice] cache=${runResult.cacheHit ? 'HIT' : 'MISS'} cacheSize=${runResult.promptCacheSize} ref=${path.basename(referenceAudioResolution.fullPath)} steps=${numStep} speed=${speed} workerJobMs=${workerJobMs} promptMs=${formatMs(runResult.promptMs)} generateMs=${formatMs(runResult.generateMs)} uploadMs=${uploadMs} totalMs=${totalMs}`,
+    );
 
     return NextResponse.json({
       provider: 'omnivoice',
@@ -671,6 +715,11 @@ export async function POST(request: NextRequest) {
         sampleRate: runResult.sampleRate,
         cacheHit: runResult.cacheHit,
         promptCacheSize: runResult.promptCacheSize,
+        promptMs: runResult.promptMs,
+        generateMs: runResult.generateMs,
+        workerJobMs,
+        uploadMs,
+        totalMs,
       },
     });
   } catch (error) {
