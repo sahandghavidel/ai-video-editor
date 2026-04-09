@@ -148,10 +148,9 @@ def main() -> int:
             1,
             int(os.environ.get("OMNIVOICE_PROMPT_CACHE_SIZE", "16")),
         )
-        preprocess_prompt = (
-            os.environ.get("OMNIVOICE_PREPROCESS_PROMPT", "1").strip().lower()
-            not in {"0", "false", "no", "off"}
-        )
+        # User requirement: keep all automatic processing off.
+        # Explicitly disable prompt preprocessing (library default is True).
+        preprocess_prompt = False
         cache_log_enabled = (
             os.environ.get("OMNIVOICE_CACHE_LOG", "1").strip().lower()
             not in {"0", "false", "no", "off"}
@@ -210,6 +209,10 @@ def main() -> int:
                     "voice_clone_prompt": voice_clone_prompt,
                     "num_step": max(8, min(64, num_step)),
                     "speed": max(0.5, min(2.0, speed)),
+                    # Explicitly disable defaults from OmniVoiceGenerationConfig
+                    # (denoise=True, postprocess_output=True).
+                    "denoise": False,
+                    "postprocess_output": False,
                 }
 
                 generate_start = time.perf_counter()
