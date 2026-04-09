@@ -182,6 +182,7 @@ def main() -> int:
                 output_path = Path(str(req.get("output_path", "")).strip()).expanduser().resolve()
                 reference_audio = Path(str(req.get("reference_audio", "")).strip()).expanduser().resolve()
                 reference_text = str(req.get("reference_text", "")).strip()
+                language = str(req.get("language", "")).strip()
                 num_step = int(req.get("num_step", 32))
                 speed = float(req.get("speed", 1.0))
 
@@ -211,6 +212,9 @@ def main() -> int:
                     "denoise": False,
                     "postprocess_output": False,
                 }
+
+                if language:
+                    generate_kwargs["language"] = language
 
                 generate_start = time.perf_counter()
                 audio = model.generate(**generate_kwargs)

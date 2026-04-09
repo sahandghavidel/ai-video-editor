@@ -15,6 +15,7 @@ type OmniVoiceDType = 'float16' | 'float32' | 'bfloat16';
 interface OmniVoiceTtsSettings {
   pythonPath?: string;
   modelId?: string;
+  language?: string;
   deviceMap?: OmniVoiceDeviceMap;
   dtype?: OmniVoiceDType;
   referenceAudioDir?: string;
@@ -493,6 +494,7 @@ async function runOmniVoiceWorkerJob(input: {
   outputPath: string;
   referenceAudioPath: string;
   referenceText?: string;
+  language?: string;
   numStep: number;
   speed: number;
 }): Promise<WorkerJobResult> {
@@ -504,6 +506,7 @@ async function runOmniVoiceWorkerJob(input: {
     output_path: input.outputPath,
     reference_audio: input.referenceAudioPath,
     reference_text: input.referenceText || '',
+    language: input.language || '',
     num_step: input.numStep,
     speed: input.speed,
   };
@@ -580,6 +583,8 @@ export async function POST(request: NextRequest) {
       typeof omniVoice.referenceText === 'string'
         ? omniVoice.referenceText.trim()
         : '';
+    const language =
+      typeof omniVoice.language === 'string' ? omniVoice.language.trim() : '';
 
     const referenceAudioName =
       normalizeRefAudioName(body.referenceAudioFilename) ||
@@ -657,6 +662,7 @@ export async function POST(request: NextRequest) {
       outputPath,
       referenceAudioPath: referenceAudioResolution.fullPath,
       referenceText,
+      language,
       numStep,
       speed,
     });
@@ -711,6 +717,7 @@ export async function POST(request: NextRequest) {
         dtype,
         numStep,
         speed,
+        language,
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
         pythonSource,
         sampleRate: runResult.sampleRate,

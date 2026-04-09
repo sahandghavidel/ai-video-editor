@@ -7,6 +7,7 @@ export type TTSProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
 export interface OmniVoiceTTSSettings {
   pythonPath: string;
   modelId: string;
+  language: string;
   deviceMap: 'mps' | 'cpu' | 'auto';
   dtype: 'float16' | 'float32' | 'bfloat16';
   referenceAudioDir: string;
@@ -468,6 +469,7 @@ const defaultTTSSettings: TTSSettings = {
   omniVoice: {
     pythonPath: '',
     modelId: 'k2-fsa/OmniVoice',
+    language: '',
     deviceMap: 'mps',
     dtype: 'float16',
     referenceAudioDir: '',
