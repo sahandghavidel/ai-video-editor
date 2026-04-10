@@ -36,7 +36,10 @@ interface RequestBody {
 }
 
 const OMNIVOICE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
-const OMNIVOICE_JOB_TIMEOUT_MS = 10 * 60 * 1000;
+const OMNIVOICE_JOB_TIMEOUT_MS = Math.max(
+  0,
+  Number(process.env.OMNIVOICE_JOB_TIMEOUT_MS || 0) || 0,
+);
 const OMNIVOICE_WORKER_PROTOCOL_VERSION = '2';
 
 type WorkerJobResult = {
@@ -50,7 +53,7 @@ type WorkerJobResult = {
 type WorkerPendingJob = {
   resolve: (value: WorkerJobResult) => void;
   reject: (reason: Error) => void;
-  timer: NodeJS.Timeout;
+  timer?: NodeJS.Timeout;
 };
 
 type OmniVoiceWorkerState = {
@@ -283,7 +286,9 @@ function stopOmniVoiceWorker(reason: string): void {
   }
 
   for (const [jobId, pending] of worker.pending.entries()) {
-    clearTimeout(pending.timer);
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+    }
     pending.reject(
       new Error(`OmniVoice worker stopped (${reason}) before job ${jobId}`),
     );
@@ -411,7 +416,9 @@ function startOmniVoiceWorker(input: {
       const pending = worker.pending.get(parsed.id);
       if (!pending) continue;
 
-      clearTimeout(pending.timer);
+      if (pending.timer) {
+        clearTimeout(pending.timer);
+      }
       worker.pending.delete(parsed.id);
 
       if (parsed.ok) {
@@ -515,14 +522,17 @@ async function runOmniVoiceWorkerJob(input: {
   scheduleWorkerIdleShutdown(worker);
 
   return new Promise<WorkerJobResult>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      worker.pending.delete(jobId);
-      reject(
-        new Error(
-          `OmniVoice worker timed out after ${Math.round(OMNIVOICE_JOB_TIMEOUT_MS / 1000)}s`,
-        ),
-      );
-    }, OMNIVOICE_JOB_TIMEOUT_MS);
+    const timer =
+      OMNIVOICE_JOB_TIMEOUT_MS > 0
+        ? setTimeout(() => {
+            worker.pending.delete(jobId);
+            reject(
+              new Error(
+                `OmniVoice worker timed out after ${Math.round(OMNIVOICE_JOB_TIMEOUT_MS / 1000)}s`,
+              ),
+            );
+          }, OMNIVOICE_JOB_TIMEOUT_MS)
+        : undefined;
 
     worker.pending.set(jobId, {
       resolve: (value) => {
@@ -535,7 +545,9 @@ async function runOmniVoiceWorkerJob(input: {
     try {
       worker.child.stdin.write(`${JSON.stringify(payload)}\n`);
     } catch (error) {
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
       worker.pending.delete(jobId);
       reject(
         new Error(
