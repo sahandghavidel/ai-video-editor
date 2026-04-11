@@ -73,6 +73,22 @@ def _log(message: str) -> None:
     sys.stderr.flush()
 
 
+def _parse_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _build_prompt_cache_key(
     reference_audio: Path,
     reference_text: str,
@@ -152,6 +168,12 @@ def main() -> int:
             os.environ.get("OMNIVOICE_CACHE_LOG", "1").strip().lower()
             not in {"0", "false", "no", "off"}
         )
+        # Keep postprocessing on, but add small guard margins to avoid
+        # sounding cut too close to the beginning/end.
+        default_postprocess_output = _parse_bool(
+            os.environ.get("OMNIVOICE_POSTPROCESS_OUTPUT"),
+            True,
+        )
         prompt_cache: "OrderedDict[str, Any]" = OrderedDict()
 
         if cache_log_enabled:
@@ -185,6 +207,10 @@ def main() -> int:
                 language = str(req.get("language", "")).strip()
                 num_step = int(req.get("num_step", 32))
                 speed = float(req.get("speed", 1.0))
+                postprocess_output = _parse_bool(
+                    req.get("postprocess_output"),
+                    default_postprocess_output,
+                )
 
                 if not text:
                     raise ValueError("Text is required")
@@ -210,7 +236,7 @@ def main() -> int:
                     # Explicitly disable defaults from OmniVoiceGenerationConfig
                     # (denoise=True, postprocess_output=True).
                     "denoise": False,
-                    "postprocess_output": False,
+                    "postprocess_output": postprocess_output,
                 }
 
                 if language:
@@ -230,6 +256,7 @@ def main() -> int:
                         f"job={job_id} cache={'HIT' if cache_hit else 'MISS'} "
                         f"cache_entries={len(prompt_cache)} "
                         f"prompt_ms={prompt_ms:.1f} gen_ms={generate_ms:.1f} "
+                        f"postprocess_output={postprocess_output} "
                         f"ref={reference_audio.name}"
                     )
 
