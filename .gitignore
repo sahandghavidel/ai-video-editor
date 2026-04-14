@@ -48,3 +48,16 @@ public/photos/character.png
 omnivoice-env/*
 parakeet-env/*
 omnivoice-local/references/*
+
+# keep one OmniVoice patched file tracked
+!omnivoice-env/lib/
+omnivoice-env/lib/*
+!omnivoice-env/lib/python3.10/
+omnivoice-env/lib/python3.10/*
+!omnivoice-env/lib/python3.10/site-packages/
+omnivoice-env/lib/python3.10/site-packages/*
+!omnivoice-env/lib/python3.10/site-packages/omnivoice/
+omnivoice-env/lib/python3.10/site-packages/omnivoice/*
+!omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/
+omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/*
+!omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/audio.py

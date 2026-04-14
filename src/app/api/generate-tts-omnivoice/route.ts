@@ -63,6 +63,7 @@ type OmniVoiceWorkerState = {
   pythonSource: string;
   pending: Map<string, WorkerPendingJob>;
   stdoutBuffer: string;
+  stderrBuffer: string;
   stderrTail: string;
   idleTimer?: NodeJS.Timeout;
 };
@@ -370,6 +371,7 @@ function startOmniVoiceWorker(input: {
     pythonSource: input.pythonSource,
     pending: new Map<string, WorkerPendingJob>(),
     stdoutBuffer: '',
+    stderrBuffer: '',
     stderrTail: '',
     idleTimer: undefined,
   };
@@ -440,6 +442,16 @@ function startOmniVoiceWorker(input: {
   child.stderr.on('data', (chunk: string) => {
     const next = `${worker.stderrTail}${chunk}`;
     worker.stderrTail = next.slice(-4000);
+
+    worker.stderrBuffer += chunk;
+    const lines = worker.stderrBuffer.split(/\r?\n/);
+    worker.stderrBuffer = lines.pop() || '';
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      console.info(`[OmniVoice][worker] ${line}`);
+    }
   });
 
   child.on('error', (err) => {
