@@ -172,7 +172,7 @@ def main() -> int:
         # sounding cut too close to the beginning/end.
         default_postprocess_output = _parse_bool(
             os.environ.get("OMNIVOICE_POSTPROCESS_OUTPUT"),
-            True,
+            False,
         )
         prompt_cache: "OrderedDict[str, Any]" = OrderedDict()
 
