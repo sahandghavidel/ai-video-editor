@@ -35,7 +35,7 @@ export const handleImproveAllSentences = async (
         selectedModel || undefined,
         scene,
       );
-      await wait(10000); // 10 seconds delay
+      await wait(2000); // 2 seconds delay
     }
     // Otherwise skip
   }
@@ -68,7 +68,7 @@ export const handleGenerateAllTTS = async (
       setProducingTTS(scene.id);
       try {
         await handleTTSProduce(scene.id, currentSentence, scene);
-        await wait(3000); // 3 seconds delay between generations
+        await wait(2000); // 2 seconds delay between generations
       } finally {
         setProducingTTS(null);
       }
@@ -537,7 +537,7 @@ export const handleImproveAllSentencesForAllVideos = async (
           );
           totalImproved++;
           console.log(`  ✓ Successfully improved scene ${scene.id}`);
-          await wait(10000); // 10 seconds delay
+          await wait(2000); // 2 seconds delay
         } else {
           console.log(
             `  ✗ Skipping scene ${scene.id} (already improved or empty)`,
