@@ -5934,8 +5934,6 @@ export default function SceneCard({
                   <button
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (!confirm('Combine the next scene into this one?'))
-                        return;
                       await handleCombineWithNext(scene.id);
                     }}
                     disabled={combiningId === scene.id}
