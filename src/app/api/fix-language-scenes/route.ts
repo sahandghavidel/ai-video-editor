@@ -11,7 +11,7 @@ type ParsedSentence = {
   fixedSentence: string;
 };
 
-const MAX_BATCH_SIZE = 10;
+const MAX_BATCH_SIZE = 30;
 const DEFAULT_MODEL = 'deepseek/deepseek-v3.2-exp';
 
 const openai = new OpenAI({
@@ -299,12 +299,16 @@ export async function POST(request: Request) {
       )
       .join('\n\n');
 
-    const userPrompt = `Fix language issues (spelling, grammar, punctuation, capitalization) for these scenes.
+    const userPrompt = `Fix language issues (spelling, grammar, punctuation, capitalization) for these scenes while keeping a friendly tutorial tone and improving flow between consecutive scenes.
 
 Rules:
 - Keep the same meaning and intent.
 - Do NOT add new facts or remove important details.
 - Keep technical terms and numbers unless clearly misspelled.
+  - Use a friendly, clear, conversational tutorial tone in fixedSentence.
+  - The input scenes are in chronological order; improve connection between neighboring scenes with natural transitions when appropriate.
+  - Keep each fixedSentence focused on its own scene content while still sounding coherent with nearby scenes.
+  - Do not change the step order.
 - You will receive between 1 and ${MAX_BATCH_SIZE} scenes.
 - Return ALL ${sceneIds.length} scenes exactly once.
 - The output MUST be valid JSON and follow this exact shape:
@@ -336,7 +340,7 @@ ${scenesPayload}`;
           {
             role: 'system' as const,
             content:
-              'You are a precise text editor. Return only strict JSON with the exact required schema.',
+              'You are a precise text editor for tutorial scripts. Return only strict JSON with the exact required schema.',
           },
           {
             role: 'user' as const,

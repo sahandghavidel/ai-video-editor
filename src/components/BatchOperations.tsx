@@ -681,7 +681,7 @@ export default function BatchOperations({
     const runId = `fixlang-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logPrefix = `[FixLanguage x10][${runId}]`;
     const startedAt = Date.now();
-    const batchSize = 10;
+    const batchSize = 30;
     const normalizeTextForComparison = (value: string) =>
       String(value).replace(/\s+/g, ' ').trim();
 
