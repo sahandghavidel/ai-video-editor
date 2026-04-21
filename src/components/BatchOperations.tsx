@@ -175,6 +175,10 @@ export default function BatchOperations({
 
   const [promptingAllScenes, setPromptingAllScenes] = useState(false);
   const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
+  const [fixingLanguageTenScenes, setFixingLanguageTenScenes] = useState(false);
+  const [fixingLanguageSceneId, setFixingLanguageSceneId] = useState<
+    number | null
+  >(null);
 
   const [combiningNoSubtitlePairs, setCombiningNoSubtitlePairs] =
     useState(false);
@@ -670,6 +674,371 @@ export default function BatchOperations({
     } finally {
       setPromptingAllScenes(false);
       setPromptingSceneId(null);
+    }
+  };
+
+  const onFixLanguageTenScenes = async () => {
+    const runId = `fixlang-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const logPrefix = `[FixLanguage x10][${runId}]`;
+    const startedAt = Date.now();
+    const batchSize = 10;
+    const normalizeTextForComparison = (value: string) =>
+      String(value).replace(/\s+/g, ' ').trim();
+
+    if (fixingLanguageTenScenes) {
+      console.info(
+        `${logPrefix} Ignored click: another run is already active.`,
+      );
+      return;
+    }
+    if (!modelSelection.selectedModel) {
+      console.warn(`${logPrefix} Aborted: no model selected.`);
+      return;
+    }
+
+    console.info(`${logPrefix} Run started.`, {
+      selectedModel: modelSelection.selectedModel,
+      totalScenesInView: data.length,
+    });
+
+    const candidateScenes = [...data]
+      .map((scene) => {
+        const sentence = String(scene['field_6890'] ?? '').trim();
+        const original = String(
+          scene['field_6901'] ?? scene['field_6900'] ?? '',
+        ).trim();
+        return {
+          scene,
+          text: sentence || original,
+        };
+      })
+      .filter((item) => Boolean(item.text))
+      .sort(
+        (a, b) => (Number(a.scene.order) || 0) - (Number(b.scene.order) || 0),
+      );
+
+    console.info(`${logPrefix} Eligible scenes identified.`, {
+      eligibleCount: candidateScenes.length,
+      eligibleSceneIdsPreview: candidateScenes
+        .slice(0, 20)
+        .map((item) => item.scene.id),
+    });
+
+    if (candidateScenes.length === 0) {
+      console.info(`${logPrefix} Aborted: no eligible scenes found.`);
+      return;
+    }
+
+    const totalBatches = Math.ceil(candidateScenes.length / batchSize);
+
+    console.info(`${logPrefix} Batch plan created.`, {
+      batchSize,
+      totalEligibleScenes: candidateScenes.length,
+      totalBatches,
+    });
+
+    setFixingLanguageTenScenes(true);
+    setFixingLanguageSceneId(null);
+
+    try {
+      let processedSceneCount = 0;
+      let updatedScenesCount = 0;
+      const failedBatches: Array<{
+        batchNumber: number;
+        sceneIds: number[];
+        error: string;
+      }> = [];
+
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+        const batchNumber = batchIndex + 1;
+        const selectedBatch = candidateScenes.slice(
+          batchIndex * batchSize,
+          (batchIndex + 1) * batchSize,
+        );
+        const expectedSceneIds = selectedBatch.map((item) => item.scene.id);
+        const expectedSceneIdSet = new Set(expectedSceneIds);
+        const expectedTextBySceneId = new Map<number, string>(
+          selectedBatch.map((item) => [item.scene.id, item.text]),
+        );
+        const expectedCount = selectedBatch.length;
+
+        console.info(
+          `${logPrefix} Starting batch ${batchNumber}/${totalBatches}.`,
+          {
+            expectedCount,
+            sceneIds: expectedSceneIds,
+          },
+        );
+
+        try {
+          console.info(
+            `${logPrefix} Sending batch ${batchNumber}/${totalBatches} to /api/fix-language-scenes...`,
+            {
+              sceneIds: expectedSceneIds,
+              textCharCounts: selectedBatch.map((item) => ({
+                sceneId: item.scene.id,
+                charCount: item.text.length,
+              })),
+            },
+          );
+
+          const res = await fetch('/api/fix-language-scenes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: modelSelection.selectedModel,
+              scenes: selectedBatch.map((item) => ({
+                sceneId: item.scene.id,
+                text: item.text,
+              })),
+            }),
+          });
+
+          console.info(
+            `${logPrefix} Batch ${batchNumber}/${totalBatches} API responded.`,
+            {
+              status: res.status,
+              ok: res.ok,
+            },
+          );
+
+          let apiRequestId: string | null = null;
+
+          if (!res.ok) {
+            let message = `Language fix failed: ${res.status}`;
+            try {
+              const json = (await res.json().catch(() => null)) as {
+                error?: unknown;
+                requestId?: unknown;
+              } | null;
+              apiRequestId =
+                typeof json?.requestId === 'string' ? json.requestId : null;
+              if (typeof json?.error === 'string' && json.error.trim()) {
+                message = json.error;
+              }
+            } catch {
+              const t = await res.text().catch(() => '');
+              if (t) {
+                message = `${message} ${t}`;
+              }
+            }
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} failed (apiRequestId=${apiRequestId ?? 'n/a'}): ${message}`,
+            );
+          }
+
+          const payload = (await res.json().catch(() => null)) as {
+            sentences?: unknown;
+            requestId?: unknown;
+          } | null;
+
+          apiRequestId =
+            typeof payload?.requestId === 'string' ? payload.requestId : null;
+
+          console.info(
+            `${logPrefix} Batch ${batchNumber}/${totalBatches} response payload parsed.`,
+            {
+              apiRequestId,
+              hasSentencesArray: Array.isArray(payload?.sentences),
+              returnedCount: Array.isArray(payload?.sentences)
+                ? payload.sentences.length
+                : null,
+            },
+          );
+
+          if (!Array.isArray(payload?.sentences)) {
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} response is missing "sentences" array.`,
+            );
+          }
+
+          if (payload.sentences.length !== expectedCount) {
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} must return exactly ${expectedCount} sentences, received ${payload.sentences.length}.`,
+            );
+          }
+
+          const normalizedSentences = payload.sentences.map((item, index) => {
+            if (!item || typeof item !== 'object') {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} has invalid response item at index ${index}.`,
+              );
+            }
+
+            const sceneId = Number((item as { sceneId?: unknown }).sceneId);
+            const sourceTextRaw = (item as { sourceText?: unknown }).sourceText;
+            const fixedSentenceRaw = (item as { fixedSentence?: unknown })
+              .fixedSentence;
+            const sourceText =
+              typeof sourceTextRaw === 'string' ? sourceTextRaw.trim() : '';
+            const fixedSentence =
+              typeof fixedSentenceRaw === 'string'
+                ? fixedSentenceRaw.trim()
+                : '';
+
+            if (!Number.isFinite(sceneId) || sceneId <= 0) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} has invalid sceneId at response index ${index}.`,
+              );
+            }
+
+            if (!expectedSceneIdSet.has(sceneId)) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned unexpected sceneId ${sceneId}.`,
+              );
+            }
+
+            if (!fixedSentence) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned empty fixed sentence for scene ${sceneId}.`,
+              );
+            }
+
+            if (!sourceText) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned empty sourceText for scene ${sceneId}.`,
+              );
+            }
+
+            const expectedText = expectedTextBySceneId.get(sceneId) || '';
+            if (!expectedText) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} missing expected input value for scene ${sceneId}.`,
+              );
+            }
+
+            const expectedNormalized = normalizeTextForComparison(expectedText);
+            const returnedNormalized = normalizeTextForComparison(sourceText);
+            if (expectedNormalized !== returnedNormalized) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} sourceText mismatch for scene ${sceneId}.`,
+              );
+            }
+
+            return { sceneId, sourceText, fixedSentence };
+          });
+
+          console.info(
+            `${logPrefix} Batch ${batchNumber}/${totalBatches} response normalization completed.`,
+            {
+              returnedSceneIds: normalizedSentences.map((item) => item.sceneId),
+            },
+          );
+
+          const seenIds = new Set<number>();
+          for (const item of normalizedSentences) {
+            if (seenIds.has(item.sceneId)) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned duplicate sceneId: ${item.sceneId}.`,
+              );
+            }
+            seenIds.add(item.sceneId);
+          }
+
+          const missingIds = expectedSceneIds.filter((id) => !seenIds.has(id));
+          if (missingIds.length > 0) {
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} response is missing scene IDs: ${missingIds.join(', ')}.`,
+            );
+          }
+
+          for (let i = 0; i < normalizedSentences.length; i += 1) {
+            const item = normalizedSentences[i];
+            setFixingLanguageSceneId(item.sceneId);
+
+            console.info(`${logPrefix} Saving scene text...`, {
+              batch: `${batchNumber}/${totalBatches}`,
+              batchProgress: `${i + 1}/${normalizedSentences.length}`,
+              overallProgress: `${processedSceneCount + 1}/${candidateScenes.length}`,
+              sceneId: item.sceneId,
+              fixedSentencePreview: item.fixedSentence.slice(0, 80),
+            });
+
+            const patchRes = await fetch(
+              `/api/baserow/scenes/${item.sceneId}`,
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  field_6890: item.fixedSentence,
+                }),
+              },
+            );
+
+            if (!patchRes.ok) {
+              const t = await patchRes.text().catch(() => '');
+              console.error(`${logPrefix} Failed while saving scene text.`, {
+                batch: `${batchNumber}/${totalBatches}`,
+                sceneId: item.sceneId,
+                status: patchRes.status,
+                responseText: t,
+              });
+              throw new Error(
+                `Failed to save fixed sentence for scene ${item.sceneId}: ${patchRes.status} ${t}`,
+              );
+            }
+
+            processedSceneCount += 1;
+            updatedScenesCount += 1;
+            await new Promise((resolve) => setTimeout(resolve, 150));
+          }
+
+          console.info(
+            `${logPrefix} Batch ${batchNumber}/${totalBatches} completed successfully.`,
+            {
+              updatedInBatch: normalizedSentences.length,
+              processedSceneCount,
+              totalScenesPlanned: candidateScenes.length,
+            },
+          );
+        } catch (batchError) {
+          const errorMessage =
+            batchError instanceof Error
+              ? batchError.message
+              : String(batchError);
+
+          failedBatches.push({
+            batchNumber,
+            sceneIds: expectedSceneIds,
+            error: errorMessage,
+          });
+
+          console.error(
+            `${logPrefix} Batch ${batchNumber}/${totalBatches} failed. Continuing with next batch.`,
+            {
+              error: errorMessage,
+              sceneIds: expectedSceneIds,
+            },
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      playBatchDoneSound();
+      onRefresh?.();
+
+      if (failedBatches.length > 0) {
+        console.warn(`${logPrefix} Run completed with failed batches.`, {
+          failedBatchCount: failedBatches.length,
+          failedBatches,
+        });
+      }
+
+      console.info(`${logPrefix} Run completed.`, {
+        updatedScenes: updatedScenesCount,
+        totalEligibleScenes: candidateScenes.length,
+        failedBatchCount: failedBatches.length,
+        durationMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      console.error(`${logPrefix} Run failed.`, error);
+    } finally {
+      setFixingLanguageTenScenes(false);
+      setFixingLanguageSceneId(null);
+      console.info(`${logPrefix} Run finished.`, {
+        durationMs: Date.now() - startedAt,
+      });
     }
   };
 
@@ -2060,6 +2429,7 @@ export default function BatchOperations({
                 onClick={onPromptAllScenes}
                 disabled={
                   promptingAllScenes ||
+                  fixingLanguageTenScenes ||
                   batchOperations.improvingAll ||
                   sceneLoading.improvingSentence !== null
                 }
@@ -2081,6 +2451,35 @@ export default function BatchOperations({
                       ? `Prompting #${promptingSceneId}`
                       : 'Processing...'
                     : 'Prompt All'}
+                </span>
+              </button>
+
+              <button
+                onClick={onFixLanguageTenScenes}
+                disabled={
+                  fixingLanguageTenScenes ||
+                  promptingAllScenes ||
+                  batchOperations.improvingAll ||
+                  sceneLoading.improvingSentence !== null
+                }
+                className='mt-3 w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  fixingLanguageTenScenes
+                    ? fixingLanguageSceneId
+                      ? `Fixing language for scene ${fixingLanguageSceneId}`
+                      : 'Fixing language in 10-scene batches...'
+                    : 'Fix language for all eligible scenes in 10-scene batches'
+                }
+              >
+                {fixingLanguageTenScenes && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {fixingLanguageTenScenes
+                    ? fixingLanguageSceneId
+                      ? `Fixing #${fixingLanguageSceneId}`
+                      : 'Processing...'
+                    : 'Fix Language All'}
                 </span>
               </button>
             </div>
