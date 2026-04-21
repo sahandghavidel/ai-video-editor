@@ -935,11 +935,6 @@ export default function SceneCard({
       return;
     }
 
-    const confirmed = confirm(
-      `Split this scene into ${sentences.length} scenes? New scenes will be created immediately after this one with weighted timing by sentence length.`,
-    );
-    if (!confirmed) return;
-
     const videoId = getVideoIdFromScene(currentScene);
     if (!videoId) {
       alert('Video ID not found for this scene. Cannot create new scenes.');
