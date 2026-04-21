@@ -701,25 +701,44 @@ export default function BatchOperations({
       totalScenesInView: data.length,
     });
 
-    const candidateScenes = [...data]
+    const mappedScenes = [...data]
       .map((scene) => {
         const sentence = String(scene['field_6890'] ?? '').trim();
         const original = String(
           scene['field_6901'] ?? scene['field_6900'] ?? '',
         ).trim();
+
+        const normalizedSentence = normalizeTextForComparison(sentence);
+        const normalizedOriginal = normalizeTextForComparison(original);
+        const alreadyFixed =
+          Boolean(normalizedSentence) &&
+          Boolean(normalizedOriginal) &&
+          normalizedSentence !== normalizedOriginal;
+
         return {
           scene,
           text: sentence || original,
+          alreadyFixed,
         };
       })
-      .filter((item) => Boolean(item.text))
       .sort(
         (a, b) => (Number(a.scene.order) || 0) - (Number(b.scene.order) || 0),
       );
 
+    const skippedAlreadyFixed = mappedScenes.filter(
+      (item) => item.alreadyFixed,
+    );
+    const candidateScenes = mappedScenes.filter(
+      (item) => Boolean(item.text) && !item.alreadyFixed,
+    );
+
     console.info(`${logPrefix} Eligible scenes identified.`, {
       eligibleCount: candidateScenes.length,
       eligibleSceneIdsPreview: candidateScenes
+        .slice(0, 20)
+        .map((item) => item.scene.id),
+      skippedAlreadyFixedCount: skippedAlreadyFixed.length,
+      skippedAlreadyFixedIdsPreview: skippedAlreadyFixed
         .slice(0, 20)
         .map((item) => item.scene.id),
     });
