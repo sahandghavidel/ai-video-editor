@@ -707,13 +707,10 @@ export default function BatchOperations({
         const original = String(
           scene['field_6901'] ?? scene['field_6900'] ?? '',
         ).trim();
-
-        const normalizedSentence = normalizeTextForComparison(sentence);
-        const normalizedOriginal = normalizeTextForComparison(original);
-        const alreadyFixed =
-          Boolean(normalizedSentence) &&
-          Boolean(normalizedOriginal) &&
-          normalizedSentence !== normalizedOriginal;
+        const fixedSentenceConfirmation = String(
+          scene['field_7105'] ?? '',
+        ).trim();
+        const alreadyFixed = Boolean(fixedSentenceConfirmation);
 
         return {
           scene,
@@ -738,7 +735,7 @@ export default function BatchOperations({
         .slice(0, 20)
         .map((item) => item.scene.id),
       skippedAlreadyFixedCount: skippedAlreadyFixed.length,
-      skippedAlreadyFixedIdsPreview: skippedAlreadyFixed
+      skippedAlreadyFixedByField7105IdsPreview: skippedAlreadyFixed
         .slice(0, 20)
         .map((item) => item.scene.id),
     });
@@ -971,6 +968,7 @@ export default function BatchOperations({
               overallProgress: `${processedSceneCount + 1}/${candidateScenes.length}`,
               sceneId: item.sceneId,
               fixedSentencePreview: item.fixedSentence.slice(0, 80),
+              saveFields: ['field_7105', 'field_6890'],
             });
 
             const patchRes = await fetch(
@@ -979,6 +977,7 @@ export default function BatchOperations({
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                  field_7105: item.fixedSentence,
                   field_6890: item.fixedSentence,
                 }),
               },
