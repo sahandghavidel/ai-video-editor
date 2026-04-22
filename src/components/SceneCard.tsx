@@ -5958,7 +5958,7 @@ export default function SceneCard({
                           )
                         }
                         disabled={loadingProducedVideo === scene.id}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[85px] rounded-full text-xs font-medium transition-colors ${
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[65px] rounded-full text-xs font-medium transition-colors ${
                           mediaPlayer.playingProducedVideoId === scene.id
                             ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                             : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
@@ -5979,7 +5979,7 @@ export default function SceneCard({
                         <span>
                           {mediaPlayer.playingProducedVideoId === scene.id
                             ? 'Stop'
-                            : 'Final Vid'}
+                            : 'Final'}
                         </span>
                       </button>
                     )}

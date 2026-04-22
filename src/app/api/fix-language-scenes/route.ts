@@ -333,6 +333,13 @@ ${scenesPayload}`;
           ? `\n\nIMPORTANT RETRY INSTRUCTIONS (attempt ${attempt}/${maxAttempts}):\nThe previous response failed validation: ${lastFailureReason || 'unknown reason'}.\nReturn valid JSON only, and include sceneId, sourceText (exact input text for same sceneId), and fixedSentence for every scene.`
           : '';
 
+      const promptForAttempt = `${userPrompt}${retryInstruction}`;
+
+      console.info(
+        `${logPrefix} Prompt sent to model (attempt ${attempt}/${maxAttempts}):`,
+      );
+      console.info(promptForAttempt);
+
       const baseCompletionPayload = {
         model,
         temperature: 0,
@@ -344,7 +351,7 @@ ${scenesPayload}`;
           },
           {
             role: 'user' as const,
-            content: `${userPrompt}${retryInstruction}`,
+            content: promptForAttempt,
           },
         ],
       };
@@ -386,14 +393,16 @@ ${scenesPayload}`;
             continue;
           }
 
-          return Response.json(
-            {
-              error: lastFailureReason,
-              requestId,
-              attemptsUsed: attempt,
-            },
-            { status: 502 },
+          const modelCallFailurePayload = {
+            error: lastFailureReason,
+            requestId,
+            attemptsUsed: attempt,
+          };
+          console.info(
+            `${logPrefix} API return value (model call failure):`,
+            modelCallFailurePayload,
           );
+          return Response.json(modelCallFailurePayload, { status: 502 });
         }
       }
 
@@ -404,6 +413,10 @@ ${scenesPayload}`;
         contentLength: rawContent?.length ?? 0,
         choicesCount: completion.choices?.length ?? 0,
       });
+      console.info(
+        `${logPrefix} Raw model return value (attempt ${attempt}/${maxAttempts}):`,
+      );
+      console.info(rawContent ?? '(empty)');
 
       if (!rawContent) {
         lastFailureReason = 'Model returned empty content';
@@ -418,14 +431,16 @@ ${scenesPayload}`;
           continue;
         }
 
-        return Response.json(
-          {
-            error: lastFailureReason,
-            requestId,
-            attemptsUsed: attempt,
-          },
-          { status: 502 },
+        const emptyContentPayload = {
+          error: lastFailureReason,
+          requestId,
+          attemptsUsed: attempt,
+        };
+        console.info(
+          `${logPrefix} API return value (empty model content):`,
+          emptyContentPayload,
         );
+        return Response.json(emptyContentPayload, { status: 502 });
       }
 
       let parsed: unknown;
@@ -446,17 +461,19 @@ ${scenesPayload}`;
           continue;
         }
 
-        return Response.json(
-          {
-            error:
-              error instanceof Error
-                ? error.message
-                : 'Failed to parse model response JSON',
-            requestId,
-            attemptsUsed: attempt,
-          },
-          { status: 422 },
+        const parseFailurePayload = {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to parse model response JSON',
+          requestId,
+          attemptsUsed: attempt,
+        };
+        console.info(
+          `${logPrefix} API return value (parse failure):`,
+          parseFailurePayload,
         );
+        return Response.json(parseFailurePayload, { status: 422 });
       }
 
       let sentences: ParsedSentence[];
@@ -478,17 +495,19 @@ ${scenesPayload}`;
           continue;
         }
 
-        return Response.json(
-          {
-            error:
-              error instanceof Error
-                ? error.message
-                : 'Model response failed validation',
-            requestId,
-            attemptsUsed: attempt,
-          },
-          { status: 422 },
+        const validationFailurePayload = {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Model response failed validation',
+          requestId,
+          attemptsUsed: attempt,
+        };
+        console.info(
+          `${logPrefix} API return value (validation failure):`,
+          validationFailurePayload,
         );
+        return Response.json(validationFailurePayload, { status: 422 });
       }
 
       console.info(`${logPrefix} Validation succeeded.`, {
@@ -497,25 +516,31 @@ ${scenesPayload}`;
         durationMs: Date.now() - startedAt,
       });
 
-      return Response.json({ sentences, requestId, attemptsUsed: attempt });
+      const successPayload = { sentences, requestId, attemptsUsed: attempt };
+      console.info(`${logPrefix} API return value (success):`, successPayload);
+      return Response.json(successPayload);
     }
 
-    return Response.json(
-      {
-        error: `Model output failed after ${maxAttempts} attempts`,
-        requestId,
-        attemptsUsed: maxAttempts,
-      },
-      { status: 422 },
+    const exhaustedPayload = {
+      error: `Model output failed after ${maxAttempts} attempts`,
+      requestId,
+      attemptsUsed: maxAttempts,
+    };
+    console.info(
+      `${logPrefix} API return value (exhausted attempts):`,
+      exhaustedPayload,
     );
+    return Response.json(exhaustedPayload, { status: 422 });
   } catch (error) {
     console.error(`${logPrefix} Unhandled failure.`, error);
-    return Response.json(
-      {
-        error: getErrorMessage(error) || 'Failed to fix language for scenes',
-        requestId,
-      },
-      { status: 500 },
+    const unhandledPayload = {
+      error: getErrorMessage(error) || 'Failed to fix language for scenes',
+      requestId,
+    };
+    console.info(
+      `${logPrefix} API return value (unhandled error):`,
+      unhandledPayload,
     );
+    return Response.json(unhandledPayload, { status: 500 });
   }
 }
