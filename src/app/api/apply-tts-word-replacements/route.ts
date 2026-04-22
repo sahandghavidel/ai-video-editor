@@ -13,6 +13,7 @@ const WORD_CHAR_CLASS = 'A-Za-z0-9_';
 type BaserowSceneRow = Record<string, unknown> & {
   id?: unknown;
   field_6890?: unknown;
+  field_6889?: unknown;
 };
 
 type PreparedReplacement = TtsWordReplacementEntry & {
@@ -53,6 +54,51 @@ function applyReplacementsToSentence(
     text: updated,
     substitutions,
   };
+}
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? parseInt(value, 10)
+        : Number.NaN;
+
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.floor(parsed);
+}
+
+function extractLinkedVideoIds(raw: unknown): number[] {
+  const ids = new Set<number>();
+
+  const add = (value: unknown) => {
+    const parsed = parsePositiveInt(value);
+    if (parsed !== null) ids.add(parsed);
+  };
+
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+
+    if (value && typeof value === 'object') {
+      const obj = value as Record<string, unknown>;
+      add(obj.id);
+      add(obj.value);
+      return;
+    }
+
+    add(value);
+  };
+
+  visit(raw);
+  return Array.from(ids);
+}
+
+function sceneBelongsToVideo(scene: BaserowSceneRow, videoId: number): boolean {
+  const linkedVideoIds = extractLinkedVideoIds(scene.field_6889);
+  return linkedVideoIds.includes(videoId);
 }
 
 async function getJWTToken(): Promise<string> {
@@ -159,8 +205,13 @@ async function patchSceneSentence(
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const body = (await request.json().catch(() => null)) as {
+      videoId?: unknown;
+    } | null;
+    const selectedVideoId = parsePositiveInt(body?.videoId);
+
     const baserowUrl = process.env.BASEROW_API_URL;
     if (!baserowUrl) {
       return NextResponse.json(
@@ -185,6 +236,26 @@ export async function POST() {
     const replacements = prepareReplacements(entries);
     const token = await getJWTToken();
     const scenes = await fetchAllScenes(baserowUrl, token);
+    const targetScenes =
+      selectedVideoId !== null
+        ? scenes.filter((scene) => sceneBelongsToVideo(scene, selectedVideoId))
+        : scenes;
+
+    if (!targetScenes.length) {
+      return NextResponse.json({
+        scannedScenes: 0,
+        changedScenes: 0,
+        updatedScenes: 0,
+        failedUpdates: [],
+        substitutionsApplied: 0,
+        replacementsCount: replacements.length,
+        scopedVideoId: selectedVideoId,
+        message:
+          selectedVideoId !== null
+            ? `No scenes found for selected video ${selectedVideoId}.`
+            : 'No scenes found.',
+      });
+    }
 
     const plannedUpdates: Array<{
       sceneId: number;
@@ -192,7 +263,7 @@ export async function POST() {
       substitutions: number;
     }> = [];
 
-    for (const scene of scenes) {
+    for (const scene of targetScenes) {
       const sceneId = Number(scene.id);
       if (!Number.isFinite(sceneId) || sceneId <= 0) continue;
 
@@ -217,12 +288,13 @@ export async function POST() {
 
     if (!plannedUpdates.length) {
       return NextResponse.json({
-        scannedScenes: scenes.length,
+        scannedScenes: targetScenes.length,
         changedScenes: 0,
         updatedScenes: 0,
         failedUpdates: [],
         substitutionsApplied: 0,
         replacementsCount: replacements.length,
+        scopedVideoId: selectedVideoId,
         message: 'No scene sentence required replacement.',
       });
     }
@@ -252,12 +324,13 @@ export async function POST() {
     }
 
     return NextResponse.json({
-      scannedScenes: scenes.length,
+      scannedScenes: targetScenes.length,
       changedScenes: plannedUpdates.length,
       updatedScenes,
       failedUpdates,
       substitutionsApplied,
       replacementsCount: replacements.length,
+      scopedVideoId: selectedVideoId,
       updatedSceneIdsPreview: plannedUpdates.slice(0, 50).map((u) => u.sceneId),
       message:
         failedUpdates.length > 0

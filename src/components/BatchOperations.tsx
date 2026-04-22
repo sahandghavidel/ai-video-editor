@@ -179,6 +179,10 @@ export default function BatchOperations({
   const [fixingLanguageSceneId, setFixingLanguageSceneId] = useState<
     number | null
   >(null);
+  const [
+    applyingCurrentVideoWordReplacements,
+    setApplyingCurrentVideoWordReplacements,
+  ] = useState(false);
 
   const [combiningNoSubtitlePairs, setCombiningNoSubtitlePairs] =
     useState(false);
@@ -1057,6 +1061,64 @@ export default function BatchOperations({
       console.info(`${logPrefix} Run finished.`, {
         durationMs: Date.now() - startedAt,
       });
+    }
+  };
+
+  const onApplyWordReplacementsCurrentVideo = async () => {
+    if (applyingCurrentVideoWordReplacements) return;
+
+    const selectedVideoId = Number(selectedOriginalVideo.id);
+    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) {
+      return;
+    }
+
+    setApplyingCurrentVideoWordReplacements(true);
+
+    try {
+      const res = await fetch('/api/apply-tts-word-replacements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: selectedVideoId }),
+      });
+
+      const payload = (await res.json().catch(() => null)) as {
+        error?: unknown;
+        message?: unknown;
+        scannedScenes?: unknown;
+        changedScenes?: unknown;
+        updatedScenes?: unknown;
+        failedUpdates?: unknown;
+      } | null;
+
+      if (!res.ok) {
+        const message =
+          typeof payload?.error === 'string'
+            ? payload.error
+            : `Failed to apply word replacements (${res.status})`;
+        throw new Error(message);
+      }
+
+      console.info('[TTS Word Replacements][Current Video] Completed.', {
+        selectedVideoId,
+        message:
+          typeof payload?.message === 'string' ? payload.message : undefined,
+        scannedScenes: Number(payload?.scannedScenes ?? 0),
+        changedScenes: Number(payload?.changedScenes ?? 0),
+        updatedScenes: Number(payload?.updatedScenes ?? 0),
+        failedCount: Array.isArray(payload?.failedUpdates)
+          ? payload.failedUpdates.length
+          : 0,
+      });
+
+      playBatchDoneSound();
+      onRefresh?.();
+    } catch (error) {
+      console.error(
+        '[TTS Word Replacements][Current Video] Failed to apply.',
+        error,
+      );
+    } finally {
+      setApplyingCurrentVideoWordReplacements(false);
     }
   };
 
@@ -2498,6 +2560,35 @@ export default function BatchOperations({
                       ? `Fixing #${fixingLanguageSceneId}`
                       : 'Processing...'
                     : 'Fix Language All'}
+                </span>
+              </button>
+
+              <button
+                onClick={onApplyWordReplacementsCurrentVideo}
+                disabled={
+                  !selectedOriginalVideo.id ||
+                  applyingCurrentVideoWordReplacements ||
+                  fixingLanguageTenScenes ||
+                  promptingAllScenes ||
+                  batchOperations.improvingAll ||
+                  sceneLoading.improvingSentence !== null
+                }
+                className='mt-3 w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                title={
+                  !selectedOriginalVideo.id
+                    ? 'Select an original video first'
+                    : applyingCurrentVideoWordReplacements
+                      ? 'Applying saved word replacements to scenes of current video...'
+                      : `Apply saved word replacements to scenes of selected video #${selectedOriginalVideo.id}`
+                }
+              >
+                {applyingCurrentVideoWordReplacements && (
+                  <Loader2 className='w-4 h-4 animate-spin' />
+                )}
+                <span className='font-medium'>
+                  {applyingCurrentVideoWordReplacements
+                    ? 'Applying...'
+                    : 'Apply Word Fixes'}
                 </span>
               </button>
             </div>
