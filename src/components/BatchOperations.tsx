@@ -11,6 +11,10 @@ import {
   handleSpeedUpAllVideos,
   cycleSpeed as cycleThroughSpeeds,
 } from '@/utils/batchOperations';
+import {
+  getFixTtsEligibleScenes,
+  withSceneVoiceOverride,
+} from '@/utils/fixTtsBatch';
 import { playSuccessSound } from '@/utils/soundManager';
 import {
   formatSceneHasTextField,
@@ -1176,15 +1180,7 @@ export default function BatchOperations({
     startBatchOperation('transcribingAllFinalScenes');
     try {
       // Run sequentially, ordered, to avoid concurrency issues and ensure robust per-scene comparison.
-      const scenesToFix = [...data]
-        .filter((scene) => {
-          const hasFinal =
-            typeof scene['field_6886'] === 'string' &&
-            String(scene['field_6886']).trim();
-          const hasText = String(scene['field_6890'] || '').trim();
-          return Boolean(hasFinal && hasText);
-        })
-        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+      const scenesToFix = getFixTtsEligibleScenes(data);
 
       if (scenesToFix.length === 0) {
         console.log('No scenes with final video + text found to fix.');
@@ -1194,12 +1190,10 @@ export default function BatchOperations({
       for (const scene of scenesToFix) {
         setTranscribingScene(scene.id);
         try {
-          const sceneWithVoiceOverride = voiceOverride
-            ? ({
-                ...scene,
-                field_6860: voiceOverride,
-              } as BaserowRow)
-            : scene;
+          const sceneWithVoiceOverride = withSceneVoiceOverride(
+            scene,
+            voiceOverride,
+          );
 
           await handleAutoFixMismatch(scene.id, sceneWithVoiceOverride);
         } catch (error) {

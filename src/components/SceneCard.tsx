@@ -230,6 +230,12 @@ export default function SceneCard({
   >({});
 
   type CaptionsWord = { word: string; start: number; end: number };
+  type TtsComparisonAliasEntry = { word: string; replacement: string };
+  type AliasCanonicalRule = {
+    phrase: string;
+    canonical: string;
+    pattern: RegExp;
+  };
 
   // State for improving all sentences
   // OpenRouter model selection - now using global state
@@ -2560,6 +2566,151 @@ export default function SceneCard({
       .trim();
   }, []);
 
+  const compactSpeechTextForCompare = useCallback((s: string) => {
+    // Compact form comparison requested by user:
+    // remove spaces + punctuation and compare dense token stream.
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '')
+      .trim();
+  }, []);
+
+  const loadTtsComparisonAliases = useCallback(async (): Promise<
+    TtsComparisonAliasEntry[]
+  > => {
+    try {
+      const res = await fetch('/api/tts-word-replacements', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      if (!res.ok) return [];
+
+      const payload = (await res.json().catch(() => null)) as {
+        entries?: unknown;
+      } | null;
+      if (!Array.isArray(payload?.entries)) return [];
+
+      return payload.entries
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const rec = item as Record<string, unknown>;
+          const word = typeof rec.word === 'string' ? rec.word : '';
+          const replacement =
+            typeof rec.replacement === 'string' ? rec.replacement : '';
+          if (!word.trim() || !replacement.trim()) return null;
+          return { word, replacement };
+        })
+        .filter((item): item is TtsComparisonAliasEntry => Boolean(item));
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const buildAliasCanonicalizationRules = useCallback(
+    (entries: TtsComparisonAliasEntry[]): AliasCanonicalRule[] => {
+      const phraseToCanonical = new Map<string, string>();
+
+      const escapeRegExp = (value: string) =>
+        value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      for (const entry of entries) {
+        const left = normalizeSpeechTextForCompare(entry.word);
+        const right = normalizeSpeechTextForCompare(entry.replacement);
+        if (!left || !right) continue;
+
+        // Canonical form: normalized original side of dictionary entry.
+        const canonical = left;
+
+        if (!phraseToCanonical.has(left)) {
+          phraseToCanonical.set(left, canonical);
+        }
+        if (!phraseToCanonical.has(right)) {
+          phraseToCanonical.set(right, canonical);
+        }
+      }
+
+      return Array.from(phraseToCanonical.entries())
+        .filter(([phrase, canonical]) => phrase !== canonical)
+        .sort((a, b) => b[0].length - a[0].length)
+        .map(([phrase, canonical]) => ({
+          phrase,
+          canonical,
+          pattern: new RegExp(`(^| )${escapeRegExp(phrase)}(?= |$)`, 'g'),
+        }));
+    },
+    [normalizeSpeechTextForCompare],
+  );
+
+  const applyAliasCanonicalization = useCallback(
+    (normalizedText: string, rules: AliasCanonicalRule[]): string => {
+      let current = String(normalizedText || '').trim();
+      if (!current || rules.length === 0) return current;
+
+      for (const rule of rules) {
+        current = current.replace(rule.pattern, (_match, prefix: string) => {
+          return `${prefix}${rule.canonical}`;
+        });
+      }
+
+      return current.replace(/\s+/g, ' ').trim();
+    },
+    [],
+  );
+
+  const isSpeechMatchForAutoFix = useCallback(
+    (
+      expectedNormalized: string,
+      transcriptNormalized: string,
+      aliasRules: AliasCanonicalRule[],
+    ): boolean => {
+      const expected = String(expectedNormalized || '').trim();
+      const transcript = String(transcriptNormalized || '').trim();
+      if (!expected || !transcript) return false;
+
+      // 1) exact normalized match first (fast + safe)
+      if (expected === transcript) return true;
+
+      // 2) compact match fallback (ignore spaces + punctuation)
+      const expectedCompact = compactSpeechTextForCompare(expected);
+      const transcriptCompact = compactSpeechTextForCompare(transcript);
+      if (
+        expectedCompact &&
+        transcriptCompact &&
+        expectedCompact === transcriptCompact
+      ) {
+        return true;
+      }
+
+      // 3) dictionary alias layer fallback
+      if (aliasRules.length === 0) return false;
+
+      const expectedAliased = applyAliasCanonicalization(expected, aliasRules);
+      const transcriptAliased = applyAliasCanonicalization(
+        transcript,
+        aliasRules,
+      );
+
+      if (
+        expectedAliased &&
+        transcriptAliased &&
+        expectedAliased === transcriptAliased
+      ) {
+        return true;
+      }
+
+      const expectedAliasedCompact =
+        compactSpeechTextForCompare(expectedAliased);
+      const transcriptAliasedCompact =
+        compactSpeechTextForCompare(transcriptAliased);
+      return Boolean(
+        expectedAliasedCompact &&
+        transcriptAliasedCompact &&
+        expectedAliasedCompact === transcriptAliasedCompact,
+      );
+    },
+    [applyAliasCanonicalization, compactSpeechTextForCompare],
+  );
+
   const withCacheBustSafe = useCallback((url: string) => {
     const u = String(url || '').trim();
     if (!u) return u;
@@ -2742,6 +2893,24 @@ export default function SceneCard({
           }
         };
 
+        const clearFlagged = async () => {
+          try {
+            const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ field_7096: null }),
+            });
+            if (!res.ok) {
+              const t = await res.text().catch(() => '');
+              console.warn(
+                `Failed to clear Flagged for scene ${sceneId}: ${res.status} ${t}`,
+              );
+            }
+          } catch (e) {
+            console.warn(`Failed to clear Flagged for scene ${sceneId}:`, e);
+          }
+        };
+
         const initialScene =
           (sceneData as BaserowRow | undefined) ||
           (dataRef.current.find((s) => s.id === sceneId) as
@@ -2767,6 +2936,9 @@ export default function SceneCard({
           setStatus('Scene text normalizes to empty.');
           return;
         }
+
+        const comparisonAliases = await loadTtsComparisonAliases();
+        const aliasRules = buildAliasCanonicalizationRules(comparisonAliases);
 
         const baseVideoUrl = String(
           (initialFromApi?.field_6888 as string) ??
@@ -2838,8 +3010,10 @@ export default function SceneCard({
             .trim();
 
         const b0 = normalizeSpeechTextForCompare(toTranscriptText(words));
-        if (a && b0 && a === b0) {
+        if (isSpeechMatchForAutoFix(a, b0, aliasRules)) {
+          await clearFlagged();
           setStatus('Match — nothing to do.');
+          refreshDataRef.current?.();
           return;
         }
 
@@ -2967,7 +3141,8 @@ export default function SceneCard({
             delayMs: 350,
           });
           const b2 = normalizeSpeechTextForCompare(toTranscriptText(newWords));
-          if (a && b2 && a === b2) {
+          if (isSpeechMatchForAutoFix(a, b2, aliasRules)) {
+            await clearFlagged();
             setStatus(`Fixed — match after ${attempt}/${maxAttempts}.`);
             refreshDataRef.current?.();
             return;
@@ -2996,6 +3171,9 @@ export default function SceneCard({
       handleTTSProduce,
       handleVideoGenerate,
       getStringField,
+      buildAliasCanonicalizationRules,
+      isSpeechMatchForAutoFix,
+      loadTtsComparisonAliases,
       normalizeSpeechTextForCompare,
       sleep,
       waitForCaptionsWordsFromUrl,

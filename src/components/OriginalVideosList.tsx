@@ -55,6 +55,11 @@ import {
   handleGenerateAllVideos,
   handleOptimizeSilenceForAllVideos,
 } from '@/utils/batchOperations';
+import {
+  extractLinkedVideoId as extractLinkedVideoIdFromField,
+  getFixTtsEligibleScenes,
+  withSceneVoiceOverride,
+} from '@/utils/fixTtsBatch';
 import { getVideoTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { deleteFromMinio } from '@/utils/minio-client';
 
@@ -3959,46 +3964,6 @@ export default function OriginalVideosList({
         );
       }
 
-      const extractLinkedVideoId = (videoIdField: unknown): number | null => {
-        if (typeof videoIdField === 'number') {
-          return videoIdField;
-        }
-
-        if (typeof videoIdField === 'string') {
-          const parsed = parseInt(videoIdField, 10);
-          return Number.isFinite(parsed) ? parsed : null;
-        }
-
-        if (Array.isArray(videoIdField) && videoIdField.length > 0) {
-          const first = videoIdField[0];
-
-          if (typeof first === 'number') {
-            return first;
-          }
-
-          if (typeof first === 'string') {
-            const parsed = parseInt(first, 10);
-            return Number.isFinite(parsed) ? parsed : null;
-          }
-
-          if (typeof first === 'object' && first !== null) {
-            const rec = first as Record<string, unknown>;
-            const candidate = rec.id ?? rec.value;
-            const parsed = parseInt(String(candidate ?? ''), 10);
-            return Number.isFinite(parsed) ? parsed : null;
-          }
-        }
-
-        if (typeof videoIdField === 'object' && videoIdField !== null) {
-          const rec = videoIdField as Record<string, unknown>;
-          const candidate = rec.id ?? rec.value;
-          const parsed = parseInt(String(candidate ?? ''), 10);
-          return Number.isFinite(parsed) ? parsed : null;
-        }
-
-        return null;
-      };
-
       // Fetch fresh original videos and scenes
       const freshVideosData = await getOriginalVideosData();
       const freshScenesData = await getBaserowData();
@@ -4026,20 +3991,12 @@ export default function OriginalVideosList({
 
       // Filter scenes for Processing videos
       const scenesForProcessingVideos = freshScenesData.filter((scene) => {
-        const videoId = extractLinkedVideoId(scene['field_6889']);
+        const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
         return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
       });
 
       // Fix only scenes that have final video + text (auto-fix will bootstrap transcription if missing).
-      const scenesToFix = [...scenesForProcessingVideos]
-        .filter((scene) => {
-          const hasFinalVideo =
-            typeof scene['field_6886'] === 'string' &&
-            String(scene['field_6886']).trim().length > 0;
-          const hasText = String(scene['field_6890'] ?? '').trim().length > 0;
-          return hasFinalVideo && hasText;
-        })
-        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+      const scenesToFix = getFixTtsEligibleScenes(scenesForProcessingVideos);
 
       console.log(`Processing videos: ${processingVideos.length}`);
       console.log(
@@ -4057,16 +4014,16 @@ export default function OriginalVideosList({
       }
 
       for (const scene of scenesToFix) {
-        const videoId = extractLinkedVideoId(scene['field_6889']);
+        const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
         if (videoId && !isNaN(videoId)) {
           setCurrentProcessingVideoId(videoId);
         }
 
         try {
-          const sceneWithVoiceOverride =
-            videoId && !isNaN(videoId) && ttsVoiceByVideoId.get(videoId)
-              ? { ...scene, field_6860: ttsVoiceByVideoId.get(videoId) }
-              : scene;
+          const sceneWithVoiceOverride = withSceneVoiceOverride(
+            scene,
+            videoId && !isNaN(videoId) ? ttsVoiceByVideoId.get(videoId) : null,
+          );
 
           await sceneHandlers.handleAutoFixMismatch(
             scene.id,

@@ -1,0 +1,73 @@
+import { BaserowRow } from '@/lib/baserow-actions';
+
+export const extractLinkedVideoId = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    const first = value[0] as unknown;
+
+    if (typeof first === 'number') {
+      return first;
+    }
+
+    if (typeof first === 'string') {
+      const parsed = parseInt(first, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (typeof first === 'object' && first !== null) {
+      const rec = first as Record<string, unknown>;
+      const candidate = rec.id ?? rec.value;
+      const parsed = parseInt(String(candidate ?? ''), 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const rec = value as Record<string, unknown>;
+    const candidate = rec.id ?? rec.value;
+    const parsed = parseInt(String(candidate ?? ''), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+export const isFixTtsEligibleScene = (scene: BaserowRow): boolean => {
+  const hasFinalVideo =
+    typeof scene['field_6886'] === 'string' &&
+    String(scene['field_6886']).trim().length > 0;
+  const hasText = String(scene['field_6890'] ?? '').trim().length > 0;
+
+  return hasFinalVideo && hasText;
+};
+
+export const getFixTtsEligibleScenes = (scenes: BaserowRow[]): BaserowRow[] => {
+  return [...scenes]
+    .filter(isFixTtsEligibleScene)
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+};
+
+export const withSceneVoiceOverride = (
+  scene: BaserowRow,
+  ttsVoiceReference: string | null | undefined,
+): BaserowRow => {
+  const normalizedVoice =
+    typeof ttsVoiceReference === 'string' ? ttsVoiceReference.trim() : '';
+
+  if (!normalizedVoice) {
+    return scene;
+  }
+
+  return {
+    ...scene,
+    field_6860: normalizedVoice,
+  } as BaserowRow;
+};
