@@ -43,6 +43,7 @@ next-env.d.ts
 
 # runtime state files
 tts-timeout-state.json
+src/data/tts-word-replacements.json
 public/sounds/*
 public/photos/character.png
 omnivoice-env/*

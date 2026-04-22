@@ -36,6 +36,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { ImageOverlayModal } from './ImageOverlayModal';
+import { TTSWordReplacementsModal } from './TTSWordReplacementsModal';
 
 // Helper: get original sentence from field_6901
 
@@ -215,6 +216,8 @@ export default function SceneCard({
     sceneId: null,
     videoUrl: null,
   });
+  const [ttsWordReplacementsModalOpen, setTtsWordReplacementsModalOpen] =
+    useState(false);
   const [addingImageOverlay, setAddingImageOverlay] = useState<number | null>(
     null,
   );
@@ -387,7 +390,7 @@ export default function SceneCard({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // When the image overlay modal is open, don't let homepage shortcuts run.
-      if (imageOverlayModal.isOpen) return;
+      if (imageOverlayModal.isOpen || ttsWordReplacementsModalOpen) return;
 
       // Only handle shortcuts when not typing in input fields
       if (
@@ -637,6 +640,7 @@ export default function SceneCard({
     sortByDuration,
     sortByLastModified,
     showRecentlyModifiedTTS,
+    ttsWordReplacementsModalOpen,
   ]);
 
   // Local wrapper for cycling through speeds
@@ -6097,41 +6101,52 @@ export default function SceneCard({
 
       {/* Floating Scroll to Top Button */}
       {!imageOverlayModal.isOpen && (
-        <button
-          onClick={() => {
-            // Scroll to just above the first scene
-            if (filteredAndSortedData.length > 0) {
-              const firstScene = filteredAndSortedData[0];
-              const cardElement = sceneCardRefs.current[firstScene.id];
-              if (cardElement) {
-                const cardTop =
-                  cardElement.getBoundingClientRect().top + window.pageYOffset;
-                const offsetTop = cardTop - 100; // 100px above the first scene
-                window.scrollTo({
-                  top: Math.max(0, offsetTop), // Ensure we don't go above the page
-                  behavior: 'smooth',
-                });
-              }
-            }
-          }}
-          className='fixed bottom-8 right-8 z-40 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl hover:bg-blue-700 hover:shadow-3xl transition-all duration-300 flex items-center justify-center border-2 border-white'
-          title='Scroll to first scene'
-        >
-          <svg
-            className='w-7 h-7'
-            fill='none'
-            stroke='currentColor'
-            viewBox='0 0 24 24'
-            xmlns='http://www.w3.org/2000/svg'
+        <>
+          <button
+            onClick={() => setTtsWordReplacementsModalOpen(true)}
+            className='fixed bottom-24 right-8 z-40 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl hover:bg-indigo-700 hover:shadow-3xl transition-all duration-300 flex items-center justify-center border-2 border-white'
+            title='Manage TTS word replacements'
           >
-            <path
-              strokeLinecap='round'
-              strokeLinejoin='round'
-              strokeWidth={2}
-              d='M5 10l7-7m0 0l7 7m-7-7v18'
-            />
-          </svg>
-        </button>
+            <Keyboard className='w-7 h-7' />
+          </button>
+
+          <button
+            onClick={() => {
+              // Scroll to just above the first scene
+              if (filteredAndSortedData.length > 0) {
+                const firstScene = filteredAndSortedData[0];
+                const cardElement = sceneCardRefs.current[firstScene.id];
+                if (cardElement) {
+                  const cardTop =
+                    cardElement.getBoundingClientRect().top +
+                    window.pageYOffset;
+                  const offsetTop = cardTop - 100; // 100px above the first scene
+                  window.scrollTo({
+                    top: Math.max(0, offsetTop), // Ensure we don't go above the page
+                    behavior: 'smooth',
+                  });
+                }
+              }
+            }}
+            className='fixed bottom-8 right-8 z-40 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl hover:bg-blue-700 hover:shadow-3xl transition-all duration-300 flex items-center justify-center border-2 border-white'
+            title='Scroll to first scene'
+          >
+            <svg
+              className='w-7 h-7'
+              fill='none'
+              stroke='currentColor'
+              viewBox='0 0 24 24'
+              xmlns='http://www.w3.org/2000/svg'
+            >
+              <path
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                strokeWidth={2}
+                d='M5 10l7-7m0 0l7 7m-7-7v18'
+              />
+            </svg>
+          </button>
+        </>
       )}
 
       {/* Image Overlay Modal */}
@@ -6154,6 +6169,14 @@ export default function SceneCard({
         }
         isApplying={addingImageOverlay !== null}
         handleTranscribeScene={handleTranscribeScene}
+      />
+
+      <TTSWordReplacementsModal
+        isOpen={ttsWordReplacementsModalOpen}
+        onClose={() => setTtsWordReplacementsModalOpen(false)}
+        onApplied={() => {
+          refreshData?.();
+        }}
       />
     </div>
   );
