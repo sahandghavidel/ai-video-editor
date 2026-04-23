@@ -60,6 +60,7 @@ import {
   getFixTtsEligibleScenes,
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
+import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
 import { getVideoTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { deleteFromMinio } from '@/utils/minio-client';
 
@@ -1518,8 +1519,11 @@ export default function OriginalVideosList({
         }
       }
 
+      const cleanedWordTimestamps =
+        sanitizeCaptionWordTimestamps(wordTimestamps);
+
       // Step 3: Upload the captions file to Baserow
-      const captionsData = JSON.stringify(wordTimestamps);
+      const captionsData = JSON.stringify(cleanedWordTimestamps);
       const timestamp = Date.now();
       const filename = `video_${videoId}_captions_${timestamp}.json`;
 
@@ -1987,8 +1991,10 @@ export default function OriginalVideosList({
       }
     }
 
+    const cleanedWordTimestamps = sanitizeCaptionWordTimestamps(wordTimestamps);
+
     // Step 3: Upload the captions file to MinIO
-    const captionsData = JSON.stringify(wordTimestamps);
+    const captionsData = JSON.stringify(cleanedWordTimestamps);
     const timestamp = Date.now();
     const filename = `video_${videoId}_captions_${timestamp}.json`;
 

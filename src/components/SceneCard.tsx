@@ -12,6 +12,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
+import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
 import {
   Loader2,
   Sparkles,
@@ -1633,8 +1634,11 @@ export default function SceneCard({
           }
         }
 
+        const cleanedWordTimestamps =
+          sanitizeCaptionWordTimestamps(wordTimestamps);
+
         // Step 3: Upload the captions file to MinIO
-        const captionsData = JSON.stringify(wordTimestamps);
+        const captionsData = JSON.stringify(cleanedWordTimestamps);
         const timestamp = Date.now();
         const filename = `scene_${sceneId}_captions_${timestamp}.json`;
 
@@ -1655,7 +1659,9 @@ export default function SceneCard({
         console.log('Scene captions uploaded successfully:', uploadResult);
 
         // Step 4: Extract full text from transcription
-        const fullText = wordTimestamps.map((word) => word.word).join(' ');
+        const fullText = cleanedWordTimestamps
+          .map((word) => word.word)
+          .join(' ');
         console.log('Extracted full text from transcription:', fullText);
 
         // Step 5: Update the scene record with the captions URL (field_6910) and optional sentence text (field_6890)
