@@ -7,13 +7,87 @@ Loads OmniVoice once and serves multiple synthesis jobs over stdin/stdout JSONL.
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
+import re
 import sys
 import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Tuple
+
+
+_SUPPORTED_NON_VERBAL_TAGS = (
+    "laughter",
+    "sigh",
+    "confirmation-en",
+    "question-en",
+    "question-ah",
+    "question-oh",
+    "question-ei",
+    "question-yi",
+    "surprise-ah",
+    "surprise-oh",
+    "surprise-wa",
+    "surprise-yo",
+    "dissatisfaction-hnn",
+)
+_SUPPORTED_NON_VERBAL_TAG_SET = set(_SUPPORTED_NON_VERBAL_TAGS)
+
+# Common user typos / variants observed in prompts.
+_NON_VERBAL_TAG_ALIASES = {
+    "laugh": "laughter",
+    "laughing": "laughter",
+    "laughter": "laughter",
+    "laugther": "laughter",
+    "laghter": "laughter",
+    "laughtter": "laughter",
+    "laughtre": "laughter",
+    "lafter": "laughter",
+}
+
+_BRACKET_TAG_PATTERN = re.compile(r"\[\s*([^\]\r\n]{1,64})\s*\]")
+
+
+def _normalize_non_verbal_tags(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """Normalize supported OmniVoice non-verbal tags in text.
+
+    Rules:
+    - Keep unknown bracketed text untouched (avoid breaking code-like text).
+    - Canonicalize supported tags to lowercase/hyphen form.
+    - Correct common misspellings (e.g. [laghter] -> [laughter]).
+    - Apply conservative fuzzy matching for near misses of known tags.
+    """
+
+    fixes: list[tuple[str, str]] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        original_inner = match.group(1)
+        candidate = original_inner.strip().lower()
+        candidate = candidate.replace("_", "-").replace("–", "-").replace("—", "-")
+        candidate = re.sub(r"\s+", "-", candidate).strip("-")
+
+        canonical = _NON_VERBAL_TAG_ALIASES.get(candidate, candidate)
+
+        if canonical not in _SUPPORTED_NON_VERBAL_TAG_SET:
+            near = difflib.get_close_matches(
+                canonical,
+                _SUPPORTED_NON_VERBAL_TAGS,
+                n=1,
+                cutoff=0.86,
+            )
+            if not near:
+                return match.group(0)
+            canonical = near[0]
+
+        if canonical != original_inner:
+            fixes.append((original_inner, canonical))
+
+        return f"[{canonical}]"
+
+    normalized = _BRACKET_TAG_PATTERN.sub(_replace, text)
+    return normalized, fixes
 
 
 def _normalize_dtype(requested: str):
@@ -217,6 +291,18 @@ def main() -> int:
                 if not reference_audio.exists():
                     raise FileNotFoundError(f"Reference audio does not exist: {reference_audio}")
 
+                normalized_text, normalized_tag_fixes = _normalize_non_verbal_tags(text)
+                if normalized_tag_fixes and cache_log_enabled:
+                    preview = ", ".join(
+                        f"[{before}]→[{after}]"
+                        for before, after in normalized_tag_fixes[:5]
+                    )
+                    suffix = "..." if len(normalized_tag_fixes) > 5 else ""
+                    _log(
+                        f"job={job_id} normalized_non_verbal_tags={len(normalized_tag_fixes)} "
+                        f"{preview}{suffix}"
+                    )
+
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
                 voice_clone_prompt, cache_hit, prompt_ms = _get_or_create_voice_clone_prompt(
@@ -229,7 +315,7 @@ def main() -> int:
                 )
 
                 generate_kwargs = {
-                    "text": text,
+                    "text": normalized_text,
                     "voice_clone_prompt": voice_clone_prompt,
                     "num_step": max(8, min(64, num_step)),
                     "speed": max(0.5, min(2.0, speed)),
