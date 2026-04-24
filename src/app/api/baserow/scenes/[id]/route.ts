@@ -18,6 +18,8 @@ type BaserowField = {
 const SCENES_TABLE_ID = '714';
 const FLAGGED_FIELD_ID = 7096;
 const FLAGGED_FIELD_KEY = 'field_7096';
+const SENTENCE_FIELD_KEY = 'field_6890';
+const TTS_AUDIO_FIELD_KEY = 'field_6891';
 // Legacy: hasText (7097) was a single-select field (true/false). We keep
 // normalization for backwards compatibility if any older clients still send it.
 // New: hasText (7099) is a single-line text field (e.g. "true|<imageUrl>") and
@@ -162,6 +164,24 @@ function normalizeSelectValueToBoolLabel(
   return null;
 }
 
+function coerceTextFieldValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (value === null || value === undefined) return '';
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '';
+    return coerceTextFieldValue(value[0]);
+  }
+
+  if (value && typeof value === 'object') {
+    const rec = value as Record<string, unknown>;
+    return coerceTextFieldValue(rec.value ?? rec.text ?? rec.name ?? '');
+  }
+
+  return String(value);
+}
+
 // Helper function to get JWT token for Baserow API
 async function getJWTToken(): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
@@ -239,6 +259,46 @@ export async function PATCH(
         if (typeof optId === 'number') {
           body[HAS_TEXT_FIELD_KEY] = optId;
         }
+      }
+    }
+
+    // If sentence text (field_6890) actually changes, invalidate generated TTS (field_6891).
+    if (Object.prototype.hasOwnProperty.call(body, SENTENCE_FIELD_KEY)) {
+      const currentSceneRes = await fetch(
+        `${baserowUrl}/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `JWT ${token}`,
+          },
+          cache: 'no-store',
+        },
+      );
+
+      if (!currentSceneRes.ok) {
+        const errorText = await currentSceneRes.text().catch(() => '');
+        console.error(
+          `Failed to fetch existing scene ${sceneId} before update:`,
+          errorText,
+        );
+        return NextResponse.json(
+          {
+            error: `Failed to fetch existing scene before update: ${currentSceneRes.status} ${errorText}`,
+          },
+          { status: currentSceneRes.status },
+        );
+      }
+
+      const currentScene = (await currentSceneRes
+        .json()
+        .catch(() => null)) as Record<string, unknown> | null;
+      const previousSentence = coerceTextFieldValue(
+        currentScene?.[SENTENCE_FIELD_KEY],
+      );
+      const requestedSentence = coerceTextFieldValue(body[SENTENCE_FIELD_KEY]);
+
+      if (requestedSentence !== previousSentence) {
+        body[TTS_AUDIO_FIELD_KEY] = '';
       }
     }
 

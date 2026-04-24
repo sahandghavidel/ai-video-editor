@@ -644,7 +644,9 @@ export default function SceneCard({
     setRevertingId(sceneId);
     // Optimistic update
     const optimisticData = data.map((scene) =>
-      scene.id === sceneId ? { ...scene, field_6890: originalSentence } : scene,
+      scene.id === sceneId
+        ? { ...scene, field_6890: originalSentence, field_6891: '' }
+        : scene,
     );
     onDataUpdate?.(optimisticData);
     try {
@@ -1666,13 +1668,19 @@ export default function SceneCard({
           // IMPORTANT: `onDataUpdate` in the page overwrites the store, so it must
           // receive the full dataset, not the currently displayed (filtered) subset.
           const currentStoreData = useAppStore.getState().data;
+          const nextSentence = fullText.trim();
           const optimisticStoreData = currentStoreData.map((scene) =>
             scene.id === sceneId
               ? {
                   ...scene,
                   field_6910: captionsUrl,
-                  ...(updateSentence && fullText.trim()
-                    ? { field_6890: fullText.trim() }
+                  ...(updateSentence && nextSentence
+                    ? { field_6890: nextSentence }
+                    : {}),
+                  ...(updateSentence &&
+                  nextSentence &&
+                  String(scene.field_6890 ?? '') !== nextSentence
+                    ? { field_6891: '' }
                     : {}),
                 }
               : scene,
@@ -1825,7 +1833,7 @@ export default function SceneCard({
     // Optimistic update - immediately update the UI
     const optimisticData = data.map((scene) => {
       if (scene.id === sceneId) {
-        return { ...scene, field_6890: editingText };
+        return { ...scene, field_6890: editingText, field_6891: '' };
       }
       return scene;
     });
@@ -1878,7 +1886,7 @@ export default function SceneCard({
     // Optimistic update - immediately update the UI
     const optimisticData = data.map((scene) => {
       if (scene.id === sceneId) {
-        return { ...scene, field_6890: editingText };
+        return { ...scene, field_6890: editingText, field_6891: '' };
       }
       return scene;
     });
@@ -1925,7 +1933,7 @@ export default function SceneCard({
         // Optimistic update: clear only field_6890 (the editable sentence)
         const optimisticData = data.map((scene) => {
           if (scene.id === sceneId) {
-            return { ...scene, field_6890: '' };
+            return { ...scene, field_6890: '', field_6891: '' };
           }
           return scene;
         });
@@ -3371,7 +3379,13 @@ export default function SceneCard({
       // Update the local data optimistically
       const updatedData = dataRef.current.map((scene) => {
         if (scene.id === sceneId) {
-          return { ...scene, field_6890: improvedSentence };
+          const sentenceChanged =
+            String(scene.field_6890 ?? '') !== improvedSentence;
+          return {
+            ...scene,
+            field_6890: improvedSentence,
+            ...(sentenceChanged ? { field_6891: '' } : {}),
+          };
         }
         return scene;
       });

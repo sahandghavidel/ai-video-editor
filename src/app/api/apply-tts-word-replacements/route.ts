@@ -193,7 +193,10 @@ async function patchSceneSentence(
         'Content-Type': 'application/json',
         Authorization: `JWT ${token}`,
       },
-      body: JSON.stringify({ field_6890: sentence }),
+      body: JSON.stringify({
+        field_6890: sentence,
+        field_6891: '',
+      }),
     },
   );
 
