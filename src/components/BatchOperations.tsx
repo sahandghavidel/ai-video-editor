@@ -13,6 +13,7 @@ import {
 } from '@/utils/batchOperations';
 import {
   getFixTtsEligibleScenes,
+  isSceneFlaggedForFixTts,
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
 import { playSuccessSound } from '@/utils/soundManager';
@@ -200,39 +201,8 @@ export default function BatchOperations({
 
   const isSceneFlagged = (scene: unknown): boolean => {
     if (!scene || typeof scene !== 'object') return false;
-    const rec = scene as Record<string, unknown>;
-    const raw =
-      (scene as { field_7096?: unknown }).field_7096 ?? rec['field_7096'];
-    if (raw === true) return true;
-    if (!raw) return false;
 
-    if (Array.isArray(raw)) {
-      return raw.some((item) => {
-        if (!item || typeof item !== 'object') return false;
-        const obj = item as Record<string, unknown>;
-        const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-        if (value === true) return true;
-        if (typeof value === 'string') {
-          return value.trim().toLowerCase() === 'true';
-        }
-        return false;
-      });
-    }
-
-    if (typeof raw === 'string') {
-      return raw.trim().toLowerCase() === 'true';
-    }
-
-    if (typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-      if (value === true) return true;
-      if (typeof value === 'string') {
-        return value.trim().toLowerCase() === 'true';
-      }
-    }
-
-    return false;
+    return isSceneFlaggedForFixTts(scene as BaserowRow);
   };
 
   // Load settings on component mount
@@ -1187,24 +1157,34 @@ export default function BatchOperations({
         return;
       }
 
-      for (const scene of scenesToFix) {
-        setTranscribingScene(scene.id);
-        try {
-          const sceneWithVoiceOverride = withSceneVoiceOverride(
-            scene,
-            voiceOverride,
-          );
+      const runFixPass = async (
+        scenes: BaserowRow[],
+        passLabel: string,
+      ): Promise<void> => {
+        for (const scene of scenes) {
+          setTranscribingScene(scene.id);
+          try {
+            const sceneWithVoiceOverride = withSceneVoiceOverride(
+              scene,
+              voiceOverride,
+            );
 
-          await handleAutoFixMismatch(scene.id, sceneWithVoiceOverride);
-        } catch (error) {
-          console.error(`Fix TTS failed for scene ${scene.id}:`, error);
-        } finally {
-          setTranscribingScene(null);
+            await handleAutoFixMismatch(scene.id, sceneWithVoiceOverride);
+          } catch (error) {
+            console.error(
+              `Fix TTS failed for scene ${scene.id} (${passLabel}):`,
+              error,
+            );
+          } finally {
+            setTranscribingScene(null);
+          }
+
+          // Small delay between scenes to be gentle on the backend.
+          await new Promise((r) => setTimeout(r, 500));
         }
+      };
 
-        // Small delay between scenes to be gentle on the backend.
-        await new Promise((r) => setTimeout(r, 500));
-      }
+      await runFixPass(scenesToFix, 'initial');
 
       onRefresh?.();
     } finally {

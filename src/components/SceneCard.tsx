@@ -10,6 +10,7 @@ import {
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
+import { parseFixTtsStatus } from '@/utils/fixTtsBatch';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
@@ -419,39 +420,8 @@ export default function SceneCard({
         // Compute filtered and sorted data locally to avoid dependency issues
         let filtered = data;
 
-        const isSceneFlagged = (scene: Record<string, unknown>): boolean => {
-          const raw = scene.field_7096 ?? scene['field_7096'];
-          if (raw === true) return true;
-          if (!raw) return false;
-
-          if (Array.isArray(raw)) {
-            return raw.some((item) => {
-              if (!item || typeof item !== 'object') return false;
-              const obj = item as Record<string, unknown>;
-              const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-              if (value === true) return true;
-              if (typeof value === 'string') {
-                return value.trim().toLowerCase() === 'true';
-              }
-              return false;
-            });
-          }
-
-          if (typeof raw === 'string') {
-            return raw.trim().toLowerCase() === 'true';
-          }
-
-          if (typeof raw === 'object') {
-            const obj = raw as Record<string, unknown>;
-            const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-            if (value === true) return true;
-            if (typeof value === 'string') {
-              return value.trim().toLowerCase() === 'true';
-            }
-          }
-
-          return false;
-        };
+        const isSceneFlagged = (scene: Record<string, unknown>): boolean =>
+          parseFixTtsStatus(scene.field_7096 ?? scene['field_7096']) === 'true';
 
         // Filter by flagged scenes
         if (showOnlyFlagged) {
@@ -2867,6 +2837,36 @@ export default function SceneCard({
     [fetchCaptionsWordsFromUrl, sleep],
   );
 
+  const markSceneFixTtsConfirmed = useCallback(async (sceneId: number) => {
+    try {
+      const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_7096: 'confirmed' }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`${res.status} ${t}`.trim());
+      }
+
+      setAutoFixMismatchStatus((prev) => ({
+        ...prev,
+        [sceneId]: 'Marked as confirmed. Fix TTS batch will skip this scene.',
+      }));
+      refreshDataRef.current?.();
+    } catch (error) {
+      console.error(`Failed to set confirmed for scene ${sceneId}:`, error);
+      setAutoFixMismatchStatus((prev) => ({
+        ...prev,
+        [sceneId]:
+          error instanceof Error
+            ? `Failed to mark confirmed: ${error.message}`
+            : 'Failed to mark confirmed',
+      }));
+    }
+  }, []);
+
   const handleAutoFixMismatch = useCallback(
     async (sceneId: number, sceneData?: BaserowRow) => {
       if (autoFixingMismatchSceneId !== null) return;
@@ -2881,39 +2881,24 @@ export default function SceneCard({
       try {
         const maxAttempts = 2;
 
-        const setFlaggedTrue = async () => {
-          try {
-            const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ field_7096: 'true' }),
-            });
-            if (!res.ok) {
-              const t = await res.text().catch(() => '');
-              console.warn(
-                `Failed to set Flagged=true for scene ${sceneId}: ${res.status} ${t}`,
-              );
-            }
-          } catch (e) {
-            console.warn(`Failed to set Flagged=true for scene ${sceneId}:`, e);
-          }
-        };
+        const updateFixTtsStatus = async (status: 'true' | null) => {
+          const statusLabel =
+            status === null ? 'clear Flagged' : `set Flagged=${status}`;
 
-        const clearFlagged = async () => {
           try {
             const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ field_7096: null }),
+              body: JSON.stringify({ field_7096: status }),
             });
             if (!res.ok) {
               const t = await res.text().catch(() => '');
               console.warn(
-                `Failed to clear Flagged for scene ${sceneId}: ${res.status} ${t}`,
+                `Failed to ${statusLabel} for scene ${sceneId}: ${res.status} ${t}`,
               );
             }
           } catch (e) {
-            console.warn(`Failed to clear Flagged for scene ${sceneId}:`, e);
+            console.warn(`Failed to ${statusLabel} for scene ${sceneId}:`, e);
           }
         };
 
@@ -2927,6 +2912,17 @@ export default function SceneCard({
           string,
           unknown
         > | null;
+        const initialFixTtsStatus = parseFixTtsStatus(
+          initialFromApi?.['field_7096'] ?? initialScene?.field_7096,
+        );
+        if (initialFixTtsStatus === 'confirmed') {
+          setStatus('Confirmed — skipping Fix TTS (no TTS/transcribe).');
+          return;
+        }
+
+        const setFlaggedTrue = async () => updateFixTtsStatus('true');
+        const clearFlagged = async () => updateFixTtsStatus(null);
+
         const desiredText = String(
           (initialFromApi?.field_6890 as string) ??
             initialScene?.field_6890 ??
@@ -4298,39 +4294,8 @@ export default function SceneCard({
   const filteredAndSortedData = React.useMemo(() => {
     let filtered = data;
 
-    const isSceneFlagged = (scene: Record<string, unknown>): boolean => {
-      const raw = scene.field_7096 ?? scene['field_7096'];
-      if (raw === true) return true;
-      if (!raw) return false;
-
-      if (Array.isArray(raw)) {
-        return raw.some((item) => {
-          if (!item || typeof item !== 'object') return false;
-          const obj = item as Record<string, unknown>;
-          const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-          if (value === true) return true;
-          if (typeof value === 'string') {
-            return value.trim().toLowerCase() === 'true';
-          }
-          return false;
-        });
-      }
-
-      if (typeof raw === 'string') {
-        return raw.trim().toLowerCase() === 'true';
-      }
-
-      if (typeof raw === 'object') {
-        const obj = raw as Record<string, unknown>;
-        const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-        if (value === true) return true;
-        if (typeof value === 'string') {
-          return value.trim().toLowerCase() === 'true';
-        }
-      }
-
-      return false;
-    };
+    const isSceneFlagged = (scene: Record<string, unknown>): boolean =>
+      parseFixTtsStatus(scene.field_7096 ?? scene['field_7096']) === 'true';
 
     // Filter by flagged scenes
     if (showOnlyFlagged) {
@@ -6033,6 +5998,11 @@ export default function SceneCard({
                               scene as BaserowRow,
                             );
                           }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void markSceneFixTtsConfirmed(scene.id);
+                          }}
                           aria-label={
                             autoFixingMismatchSceneId === scene.id
                               ? 'Fix mismatch (running)'
@@ -6050,7 +6020,7 @@ export default function SceneCard({
                           title={
                             autoFixMismatchStatus[scene.id]
                               ? `Fix mismatch: ${autoFixMismatchStatus[scene.id]}`
-                              : 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries)'
+                              : 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries). Right-click to mark scene as confirmed (batch Fix TTS will skip it).'
                           }
                         >
                           {autoFixingMismatchSceneId === scene.id ? (

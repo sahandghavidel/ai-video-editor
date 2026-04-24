@@ -58,6 +58,7 @@ import {
 import {
   extractLinkedVideoId as extractLinkedVideoIdFromField,
   getFixTtsEligibleScenes,
+  isSceneFlaggedForFixTts,
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
@@ -4019,30 +4020,42 @@ export default function OriginalVideosList({
         return;
       }
 
-      for (const scene of scenesToFix) {
-        const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
-        if (videoId && !isNaN(videoId)) {
-          setCurrentProcessingVideoId(videoId);
+      const runFixPass = async (
+        scenes: BaserowRow[],
+        passLabel: string,
+      ): Promise<void> => {
+        for (const scene of scenes) {
+          const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
+          if (videoId && !isNaN(videoId)) {
+            setCurrentProcessingVideoId(videoId);
+          }
+
+          try {
+            const sceneWithVoiceOverride = withSceneVoiceOverride(
+              scene,
+              videoId && !isNaN(videoId)
+                ? ttsVoiceByVideoId.get(videoId)
+                : null,
+            );
+
+            await sceneHandlers.handleAutoFixMismatch(
+              scene.id,
+              sceneWithVoiceOverride,
+            );
+          } catch (error) {
+            // Continue with other scenes; don't fail the whole batch.
+            console.error(
+              `Fix TTS failed for scene ${scene.id} (${passLabel}):`,
+              error,
+            );
+          }
+
+          // Small delay to avoid overwhelming the backend
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
+      };
 
-        try {
-          const sceneWithVoiceOverride = withSceneVoiceOverride(
-            scene,
-            videoId && !isNaN(videoId) ? ttsVoiceByVideoId.get(videoId) : null,
-          );
-
-          await sceneHandlers.handleAutoFixMismatch(
-            scene.id,
-            sceneWithVoiceOverride,
-          );
-        } catch (error) {
-          // Continue with other scenes; don't fail the whole batch.
-          console.error(`Fix TTS failed for scene ${scene.id}:`, error);
-        }
-
-        // Small delay to avoid overwhelming the backend
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+      await runFixPass(scenesToFix, 'initial');
 
       if (refreshScenesData) {
         refreshScenesData();
@@ -4349,39 +4362,8 @@ export default function OriginalVideosList({
 
   const isSceneFlagged = (scene: unknown): boolean => {
     if (!scene || typeof scene !== 'object') return false;
-    const rec = scene as Record<string, unknown>;
-    const raw =
-      (scene as { field_7096?: unknown }).field_7096 ?? rec['field_7096'];
-    if (raw === true) return true;
-    if (!raw) return false;
 
-    if (Array.isArray(raw)) {
-      return raw.some((item) => {
-        if (!item || typeof item !== 'object') return false;
-        const obj = item as Record<string, unknown>;
-        const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-        if (value === true) return true;
-        if (typeof value === 'string') {
-          return value.trim().toLowerCase() === 'true';
-        }
-        return false;
-      });
-    }
-
-    if (typeof raw === 'string') {
-      return raw.trim().toLowerCase() === 'true';
-    }
-
-    if (typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      const value = obj.value ?? obj.name ?? obj.text ?? obj.title;
-      if (value === true) return true;
-      if (typeof value === 'string') {
-        return value.trim().toLowerCase() === 'true';
-      }
-    }
-
-    return false;
+    return isSceneFlaggedForFixTts(scene as BaserowRow);
   };
 
   const sceneAlreadyAppliedOutput = (scene: BaserowRow): boolean => {

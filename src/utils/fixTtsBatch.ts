@@ -1,5 +1,59 @@
 import { BaserowRow } from '@/lib/baserow-actions';
 
+export type FixTtsStatus = 'true' | 'confirmed' | null;
+
+const normalizeFixTtsStatus = (raw: unknown): FixTtsStatus => {
+  if (raw === true) {
+    return 'true';
+  }
+
+  if (typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === 'true' || normalized === 'confirmed') {
+      return normalized;
+    }
+
+    return null;
+  }
+
+  if (raw && typeof raw === 'object') {
+    const rec = raw as Record<string, unknown>;
+    return normalizeFixTtsStatus(
+      rec.value ?? rec.name ?? rec.text ?? rec.title,
+    );
+  }
+
+  return null;
+};
+
+export const parseFixTtsStatus = (raw: unknown): FixTtsStatus => {
+  if (Array.isArray(raw)) {
+    let sawTrue = false;
+    for (const item of raw) {
+      const parsed = normalizeFixTtsStatus(item);
+      if (parsed === 'confirmed') {
+        return 'confirmed';
+      }
+      if (parsed === 'true') {
+        sawTrue = true;
+      }
+    }
+
+    return sawTrue ? 'true' : null;
+  }
+
+  return normalizeFixTtsStatus(raw);
+};
+
+export const getSceneFixTtsStatus = (scene: BaserowRow): FixTtsStatus =>
+  parseFixTtsStatus(scene['field_7096']);
+
+export const isSceneFlaggedForFixTts = (scene: BaserowRow): boolean =>
+  getSceneFixTtsStatus(scene) === 'true';
+
+export const isSceneConfirmedForFixTts = (scene: BaserowRow): boolean =>
+  getSceneFixTtsStatus(scene) === 'confirmed';
+
 export const extractLinkedVideoId = (value: unknown): number | null => {
   if (typeof value === 'number') {
     return value;
@@ -51,7 +105,10 @@ export const isFixTtsEligibleScene = (scene: BaserowRow): boolean => {
 
 export const getFixTtsEligibleScenes = (scenes: BaserowRow[]): BaserowRow[] => {
   return [...scenes]
-    .filter(isFixTtsEligibleScene)
+    .filter(
+      (scene) =>
+        isFixTtsEligibleScene(scene) && !isSceneConfirmedForFixTts(scene),
+    )
     .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
 };
 
