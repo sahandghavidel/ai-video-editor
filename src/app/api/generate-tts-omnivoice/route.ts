@@ -250,6 +250,23 @@ function formatMs(value: unknown): string {
   return Number.isFinite(n) ? n.toFixed(1) : 'n/a';
 }
 
+const OMNIVOICE_QUOTE_CHAR_REGEX = /["“”„‟«»＂]/g;
+
+function stripOmniVoiceQuoteChars(text: string): {
+  sanitizedText: string;
+  removedQuoteCount: number;
+} {
+  const matches = text.match(OMNIVOICE_QUOTE_CHAR_REGEX);
+  const removedQuoteCount = matches ? matches.length : 0;
+
+  const sanitizedText = text
+    .replace(OMNIVOICE_QUOTE_CHAR_REGEX, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return { sanitizedText, removedQuoteCount };
+}
+
 function getWorkerScriptVersion(scriptPath: string): string {
   try {
     const stat = fs.statSync(scriptPath);
@@ -578,17 +595,34 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as RequestBody;
-    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    const rawText = typeof body.text === 'string' ? body.text.trim() : '';
 
     const hasSceneId = hasIdValue(body.sceneId);
     const hasVideoId = hasIdValue(body.videoId);
 
-    if (!text || (!hasSceneId && !hasVideoId)) {
+    if (!rawText || (!hasSceneId && !hasVideoId)) {
       return NextResponse.json(
         { error: 'Text and (sceneId or videoId) are required' },
         { status: 400 },
       );
     }
+
+    const { sanitizedText: text, removedQuoteCount } =
+      stripOmniVoiceQuoteChars(rawText);
+
+    if (!text) {
+      return NextResponse.json(
+        {
+          error:
+            'Text is empty after removing quote characters for OmniVoice TTS.',
+        },
+        { status: 400 },
+      );
+    }
+
+    console.info(
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
+    );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
 
@@ -742,6 +776,7 @@ export async function POST(request: NextRequest) {
         numStep,
         speed,
         language,
+        removedQuoteCount,
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
         pythonSource,
         sampleRate: runResult.sampleRate,
