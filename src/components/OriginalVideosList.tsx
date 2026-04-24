@@ -4002,7 +4002,8 @@ export default function OriginalVideosList({
         return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
       });
 
-      // Fix only scenes that have final video + text (auto-fix will bootstrap transcription if missing).
+      // Fix only scenes that have final video + text
+      // (auto-fix will bootstrap TTS + sync + transcription when missing).
       const scenesToFix = getFixTtsEligibleScenes(scenesForProcessingVideos);
 
       console.log(`Processing videos: ${processingVideos.length}`);

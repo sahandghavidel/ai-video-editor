@@ -94,6 +94,28 @@ export const extractLinkedVideoId = (value: unknown): number | null => {
   return null;
 };
 
+const hasNonEmptyTextLikeValue = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => hasNonEmptyTextLikeValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    const rec = value as Record<string, unknown>;
+    return hasNonEmptyTextLikeValue(
+      rec.url ?? rec.value ?? rec.name ?? rec.text ?? rec.title,
+    );
+  }
+
+  return false;
+};
+
+export const hasSceneTtsAudioForFixTts = (scene: BaserowRow): boolean =>
+  hasNonEmptyTextLikeValue(scene['field_6891']);
+
 export const isFixTtsEligibleScene = (scene: BaserowRow): boolean => {
   const hasFinalVideo =
     typeof scene['field_6886'] === 'string' &&

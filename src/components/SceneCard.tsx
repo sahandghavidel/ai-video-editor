@@ -2920,6 +2920,10 @@ export default function SceneCard({
           return;
         }
 
+        const hasExistingTtsAudio =
+          Boolean(getStringField(initialFromApi, 'field_6891')) ||
+          Boolean(getStringField(initialScene as unknown, 'field_6891'));
+
         const setFlaggedTrue = async () => updateFixTtsStatus('true');
         const clearFlagged = async () => updateFixTtsStatus(null);
 
@@ -2961,25 +2965,88 @@ export default function SceneCard({
           return;
         }
 
-        // Bootstrap transcription if missing.
-        setStatus('Checking transcription...');
         let words: CaptionsWord[] | null = null;
-        let captionsUrl = getStringField(initialFromApi, 'field_6910');
-        if (captionsUrl) {
-          words = await waitForCaptionsWordsFromUrl(captionsUrl, {
-            maxRetries: 6,
-            delayMs: 350,
+
+        if (!hasExistingTtsAudio) {
+          setStatus(
+            'Missing TTS audio (field_6891) — generating TTS, syncing, and transcribing...',
+          );
+
+          const beforeTtsScene = (await getSceneById(sceneId)) as Record<
+            string,
+            unknown
+          > | null;
+          const prevAudioUrl = getStringField(beforeTtsScene, 'field_6891');
+
+          await handleTTSProduce(sceneId, desiredText, initialScene, {
+            throwOnError: true,
           });
-        }
-        if (!words) {
-          setStatus('No captions yet — transcribing final video...');
+
+          const afterTtsScene =
+            (await waitForSceneWhere(
+              sceneId,
+              (s) => {
+                const next = getStringField(s, 'field_6891');
+                return Boolean(next) && next !== prevAudioUrl;
+              },
+              { maxRetries: 20, delayMs: 250 },
+            )) || ((await getSceneById(sceneId)) as Record<string, unknown>);
+
+          const audioUrl = getStringField(afterTtsScene, 'field_6891');
+          const baseVideoUrlNow = getStringField(afterTtsScene, 'field_6888');
+          if (!audioUrl.trim()) {
+            throw new Error('Missing TTS audio URL (field_6891).');
+          }
+          if (!(baseVideoUrlNow || baseVideoUrl).trim()) {
+            throw new Error('Missing original clip URL (field_6888).');
+          }
+
+          setStatus('Missing TTS audio (field_6891) — syncing video...');
+          const beforeSyncScene = (await getSceneById(sceneId)) as Record<
+            string,
+            unknown
+          > | null;
+          const prevFinalUrl = getStringField(beforeSyncScene, 'field_6886');
+          await handleVideoGenerate(
+            sceneId,
+            (baseVideoUrlNow || baseVideoUrl).trim(),
+            audioUrl,
+            (afterTtsScene as unknown) ?? undefined,
+            0,
+            'none',
+            { throwOnError: true },
+          );
+
+          const afterSyncScene =
+            (await waitForSceneWhere(
+              sceneId,
+              (s) => {
+                const next = getStringField(s, 'field_6886');
+                if (!next) return false;
+                return next !== prevFinalUrl || !prevFinalUrl;
+              },
+              { maxRetries: 30, delayMs: 400 },
+            )) || ((await getSceneById(sceneId)) as Record<string, unknown>);
+
+          const finalUrlNow = getStringField(afterSyncScene, 'field_6886');
+          if (!finalUrlNow) {
+            throw new Error('Final video URL not available after sync.');
+          }
+
+          setStatus(
+            'Missing TTS audio (field_6891) — transcribing new video...',
+          );
           const sceneForTranscribe =
             (await waitForSceneWhere(
               sceneId,
-              (s) => Boolean(getStringField(s, 'field_6886')),
-              { maxRetries: 10, delayMs: 300 },
-            )) || (initialFromApi as Record<string, unknown> | null);
+              (s) => getStringField(s, 'field_6886') === finalUrlNow,
+              { maxRetries: 10, delayMs: 250 },
+            )) || afterSyncScene;
 
+          const prevCaptionsUrl = getStringField(
+            sceneForTranscribe,
+            'field_6910',
+          );
           await handleTranscribeScene(
             sceneId,
             (sceneForTranscribe as unknown) ?? initialScene,
@@ -2990,17 +3057,70 @@ export default function SceneCard({
             { throwOnError: true },
           );
 
-          const sceneWithCaptions = await waitForSceneWhere(
+          const sceneWithNewCaptions = await waitForSceneWhere(
             sceneId,
-            (s) => Boolean(getStringField(s, 'field_6910')),
-            { maxRetries: 20, delayMs: 400 },
+            (s) => {
+              const next = getStringField(s, 'field_6910');
+              return Boolean(next) && next !== prevCaptionsUrl;
+            },
+            { maxRetries: 30, delayMs: 350 },
           );
-          captionsUrl = getStringField(sceneWithCaptions, 'field_6910');
+
+          const newCaptionsUrl =
+            getStringField(sceneWithNewCaptions, 'field_6910') ||
+            getStringField(
+              (await getSceneById(sceneId)) as Record<string, unknown>,
+              'field_6910',
+            );
+          if (newCaptionsUrl) {
+            words = await waitForCaptionsWordsFromUrl(newCaptionsUrl, {
+              maxRetries: 30,
+              delayMs: 350,
+            });
+          }
+        }
+
+        // Bootstrap transcription if missing.
+        if (!words) {
+          setStatus('Checking transcription...');
+          let captionsUrl = getStringField(initialFromApi, 'field_6910');
           if (captionsUrl) {
             words = await waitForCaptionsWordsFromUrl(captionsUrl, {
-              maxRetries: 20,
-              delayMs: 400,
+              maxRetries: 6,
+              delayMs: 350,
             });
+          }
+          if (!words) {
+            setStatus('No captions yet — transcribing final video...');
+            const sceneForTranscribe =
+              (await waitForSceneWhere(
+                sceneId,
+                (s) => Boolean(getStringField(s, 'field_6886')),
+                { maxRetries: 10, delayMs: 300 },
+              )) || (initialFromApi as Record<string, unknown> | null);
+
+            await handleTranscribeScene(
+              sceneId,
+              (sceneForTranscribe as unknown) ?? initialScene,
+              'final',
+              true,
+              true,
+              false,
+              { throwOnError: true },
+            );
+
+            const sceneWithCaptions = await waitForSceneWhere(
+              sceneId,
+              (s) => Boolean(getStringField(s, 'field_6910')),
+              { maxRetries: 20, delayMs: 400 },
+            );
+            captionsUrl = getStringField(sceneWithCaptions, 'field_6910');
+            if (captionsUrl) {
+              words = await waitForCaptionsWordsFromUrl(captionsUrl, {
+                maxRetries: 20,
+                delayMs: 400,
+              });
+            }
           }
         }
 
