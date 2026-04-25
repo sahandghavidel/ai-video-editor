@@ -334,7 +334,8 @@ async function loadWordReplacementsFromApi(
   }
 }
 
-const OMNIVOICE_QUOTE_CHAR_REGEX = /["“”„‟«»＂]/g;
+// Strip quote-like chars and backticks before synthesis.
+const OMNIVOICE_QUOTE_CHAR_REGEX = /[`"“”„‟«»＂]/g;
 
 function stripOmniVoiceQuoteChars(text: string): {
   sanitizedText: string;
@@ -704,7 +705,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Text is empty after removing quote characters for OmniVoice TTS.',
+            'Text is empty after removing quote/backtick characters for OmniVoice TTS.',
         },
         { status: 400 },
       );
