@@ -2560,6 +2560,124 @@ export default function SceneCard({
       .trim();
   }, []);
 
+  const tokenizeSpeechForMismatchReason = useCallback((s: string): string[] => {
+    const normalized = String(s || '')
+      .toLowerCase()
+      .replace(/[’']/g, '')
+      .replace(/[^a-z0-9.\s]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized) return [];
+
+    const rawTokens = normalized.split(' ').filter(Boolean);
+    const expandedTokens: string[] = [];
+
+    for (const t of rawTokens) {
+      const token = t.replace(/^\.+|\.+$/g, '');
+      if (!token) continue;
+
+      // Keep decimals as a single token.
+      if (/^\d+\.\d+$/.test(token)) {
+        expandedTokens.push(token);
+        continue;
+      }
+
+      // Expand dotted words like "next.js" to ["next", "js"].
+      if (token.includes('.')) {
+        const parts = token
+          .split('.')
+          .map((p) => p.trim())
+          .filter(Boolean);
+        expandedTokens.push(...parts);
+        continue;
+      }
+
+      expandedTokens.push(token);
+    }
+
+    return expandedTokens;
+  }, []);
+
+  const buildMismatchReasonForTooltip = useCallback(
+    (expectedRaw: string, transcriptRaw: string): string => {
+      const expectedText = String(expectedRaw || '').trim();
+      const transcriptText = String(transcriptRaw || '').trim();
+      if (!expectedText && !transcriptText) {
+        return 'Reason unavailable (both texts are empty).';
+      }
+
+      const expectedTokens = tokenizeSpeechForMismatchReason(expectedText);
+      const transcriptTokens = tokenizeSpeechForMismatchReason(transcriptText);
+
+      const toCountMap = (tokens: string[]) => {
+        const m = new Map<string, number>();
+        for (const token of tokens) {
+          m.set(token, (m.get(token) ?? 0) + 1);
+        }
+        return m;
+      };
+
+      const expectedMap = toCountMap(expectedTokens);
+      const transcriptMap = toCountMap(transcriptTokens);
+
+      const diffTokens = (
+        base: Map<string, number>,
+        other: Map<string, number>,
+      ): string[] => {
+        const out: string[] = [];
+        for (const [token, baseCount] of base.entries()) {
+          const delta = baseCount - (other.get(token) ?? 0);
+          for (let i = 0; i < delta; i += 1) {
+            out.push(token);
+          }
+        }
+        return out;
+      };
+
+      const expectedOnly = diffTokens(expectedMap, transcriptMap);
+      const transcriptOnly = diffTokens(transcriptMap, expectedMap);
+
+      const summarize = (tokens: string[]): string => {
+        if (tokens.length === 0) return 'none';
+        const maxItems = 6;
+        const shown = tokens.slice(0, maxItems).join(', ');
+        const more = tokens.length - maxItems;
+        return more > 0 ? `${shown} (+${more} more)` : shown;
+      };
+
+      if (expectedOnly.length === 0 && transcriptOnly.length === 0) {
+        const expectedCompact = compactSpeechTextForCompare(expectedText);
+        const transcriptCompact = compactSpeechTextForCompare(transcriptText);
+        if (expectedCompact !== transcriptCompact) {
+          return 'Same words found, but order/joining still differs.';
+        }
+        return 'Mismatch remained after compare pipeline checks.';
+      }
+
+      return `Expected-only words: ${summarize(expectedOnly)} | Transcript-only words: ${summarize(transcriptOnly)}`;
+    },
+    [compactSpeechTextForCompare, tokenizeSpeechForMismatchReason],
+  );
+
+  const getStoredMismatchReason = useCallback((scene: BaserowRow): string => {
+    const raw = scene['field_7106'];
+
+    if (typeof raw === 'string') {
+      return raw.trim();
+    }
+
+    if (raw && typeof raw === 'object') {
+      const rec = raw as Record<string, unknown>;
+      const candidate = rec.value ?? rec.text ?? rec.name ?? rec.title;
+      if (typeof candidate === 'string') {
+        return candidate.trim();
+      }
+    }
+
+    return '';
+  }, []);
+
   const loadTtsComparisonAliases = useCallback(async (): Promise<
     TtsComparisonAliasEntry[]
   > => {
@@ -2873,7 +2991,7 @@ export default function SceneCard({
       const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field_7096: 'confirmed' }),
+        body: JSON.stringify({ field_7096: 'confirmed', field_7106: '' }),
       });
 
       if (!res.ok) {
@@ -2920,22 +3038,51 @@ export default function SceneCard({
             ? Math.max(1, Math.min(10, Math.floor(requestedMaxAttempts)))
             : 2;
 
-        const updateFixTtsStatus = async (status: 'true' | null) => {
+        const updateFixTtsStatus = async (
+          status: 'true' | null,
+          mismatchReason?: string | null,
+        ) => {
           const statusLabel =
             status === null ? 'clear Flagged' : `set Flagged=${status}`;
+          const normalizedReason =
+            mismatchReason === undefined
+              ? undefined
+              : String(mismatchReason || '')
+                  .trim()
+                  .slice(0, 1000);
+
+          const payload: Record<string, unknown> = { field_7096: status };
+          if (normalizedReason !== undefined) {
+            payload.field_7106 = normalizedReason;
+          }
 
           try {
             const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ field_7096: status }),
+              body: JSON.stringify(payload),
             });
             if (!res.ok) {
               const t = await res.text().catch(() => '');
               console.warn(
                 `Failed to ${statusLabel} for scene ${sceneId}: ${res.status} ${t}`,
               );
+              return;
             }
+
+            const updatedData = dataRef.current.map((s) =>
+              s.id === sceneId
+                ? {
+                    ...s,
+                    field_7096: status,
+                    ...(normalizedReason !== undefined
+                      ? { field_7106: normalizedReason }
+                      : {}),
+                  }
+                : s,
+            );
+            dataRef.current = updatedData;
+            onDataUpdateRef.current?.(updatedData);
           } catch (e) {
             console.warn(`Failed to ${statusLabel} for scene ${sceneId}:`, e);
           }
@@ -2963,8 +3110,9 @@ export default function SceneCard({
           Boolean(getStringField(initialFromApi, 'field_6891')) ||
           Boolean(getStringField(initialScene as unknown, 'field_6891'));
 
-        const setFlaggedTrue = async () => updateFixTtsStatus('true');
-        const clearFlagged = async () => updateFixTtsStatus(null);
+        const setFlaggedTrue = async (mismatchReason: string) =>
+          updateFixTtsStatus('true', mismatchReason);
+        const clearFlagged = async () => updateFixTtsStatus(null, '');
 
         const desiredText = String(
           (initialFromApi?.field_6890 as string) ??
@@ -3171,6 +3319,7 @@ export default function SceneCard({
             .trim();
 
         const transcriptText0 = toTranscriptText(words);
+        let lastTranscriptText = transcriptText0;
         const b0 = normalizeSpeechTextForCompare(transcriptText0);
         if (
           isSpeechMatchForAutoFix(
@@ -3311,6 +3460,7 @@ export default function SceneCard({
             delayMs: 350,
           });
           const transcriptText2 = toTranscriptText(newWords);
+          lastTranscriptText = transcriptText2;
           const b2 = normalizeSpeechTextForCompare(transcriptText2);
           if (
             isSpeechMatchForAutoFix(
@@ -3328,10 +3478,16 @@ export default function SceneCard({
           }
         }
 
-        setStatus(`Still mismatched after ${maxAttempts} attempts — flagging.`);
-        await setFlaggedTrue();
+        const mismatchReason = buildMismatchReasonForTooltip(
+          desiredText,
+          lastTranscriptText,
+        );
         setStatus(
-          `Still mismatched after ${maxAttempts} attempts. (Flagged=true)`,
+          `Still mismatched after ${maxAttempts} attempts — flagging. ${mismatchReason}`,
+        );
+        await setFlaggedTrue(mismatchReason);
+        setStatus(
+          `Still mismatched after ${maxAttempts} attempts. (Flagged=true) ${mismatchReason}`,
         );
         refreshDataRef.current?.();
       } catch (err) {
@@ -3353,6 +3509,7 @@ export default function SceneCard({
       buildAliasCanonicalizationRules,
       isSpeechMatchForAutoFix,
       loadTtsComparisonAliases,
+      buildMismatchReasonForTooltip,
       normalizeSpeechTextForCompare,
       sleep,
       waitForCaptionsWordsFromUrl,
@@ -6223,7 +6380,16 @@ export default function SceneCard({
                           title={
                             autoFixMismatchStatus[scene.id]
                               ? `Fix mismatch: ${autoFixMismatchStatus[scene.id]}`
-                              : 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries). Right-click to mark scene as confirmed (batch Fix TTS will skip it).'
+                              : (() => {
+                                  const storedReason = getStoredMismatchReason(
+                                    scene as BaserowRow,
+                                  );
+                                  if (storedReason) {
+                                    return `Fix mismatch (saved reason): ${storedReason}`;
+                                  }
+
+                                  return 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries). Right-click to mark scene as confirmed (batch Fix TTS will skip it).';
+                                })()
                           }
                         >
                           {autoFixingMismatchSceneId === scene.id ? (
