@@ -2644,10 +2644,32 @@ export default function SceneCard({
 
   const isSpeechMatchForAutoFix = useCallback(
     (
+      expectedRaw: string,
+      transcriptRaw: string,
       expectedNormalized: string,
       transcriptNormalized: string,
       aliasRules: AliasCanonicalRule[],
     ): boolean => {
+      const expectedRawText = String(expectedRaw || '').trim();
+      const transcriptRawText = String(transcriptRaw || '').trim();
+
+      // 0) compact RAW match fallback first (ignore spaces + punctuation only).
+      // This catches cases like "base 64" vs "base64" before normalization
+      // drops standalone numeric tokens.
+      if (expectedRawText && transcriptRawText) {
+        const expectedRawCompact = compactSpeechTextForCompare(expectedRawText);
+        const transcriptRawCompact =
+          compactSpeechTextForCompare(transcriptRawText);
+
+        if (
+          expectedRawCompact &&
+          transcriptRawCompact &&
+          expectedRawCompact === transcriptRawCompact
+        ) {
+          return true;
+        }
+      }
+
       const expected = String(expectedNormalized || '').trim();
       const transcript = String(transcriptNormalized || '').trim();
       if (!expected || !transcript) return false;
@@ -3148,8 +3170,17 @@ export default function SceneCard({
             .join(' ')
             .trim();
 
-        const b0 = normalizeSpeechTextForCompare(toTranscriptText(words));
-        if (isSpeechMatchForAutoFix(a, b0, aliasRules)) {
+        const transcriptText0 = toTranscriptText(words);
+        const b0 = normalizeSpeechTextForCompare(transcriptText0);
+        if (
+          isSpeechMatchForAutoFix(
+            desiredText,
+            transcriptText0,
+            a,
+            b0,
+            aliasRules,
+          )
+        ) {
           await clearFlagged();
           setStatus('Match — nothing to do.');
           refreshDataRef.current?.();
@@ -3279,8 +3310,17 @@ export default function SceneCard({
             maxRetries: 30,
             delayMs: 350,
           });
-          const b2 = normalizeSpeechTextForCompare(toTranscriptText(newWords));
-          if (isSpeechMatchForAutoFix(a, b2, aliasRules)) {
+          const transcriptText2 = toTranscriptText(newWords);
+          const b2 = normalizeSpeechTextForCompare(transcriptText2);
+          if (
+            isSpeechMatchForAutoFix(
+              desiredText,
+              transcriptText2,
+              a,
+              b2,
+              aliasRules,
+            )
+          ) {
             await clearFlagged();
             setStatus(`Fixed — match after ${attempt}/${maxAttempts}.`);
             refreshDataRef.current?.();
