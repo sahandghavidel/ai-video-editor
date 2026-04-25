@@ -2517,10 +2517,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-indigo-900'>AI Improve</h3>
               </div>
-              <p className='text-sm text-indigo-700 mb-4 leading-relaxed'>
-                Enhance all sentences using AI with{' '}
-                {modelSelection.selectedModel || 'default model'}
-              </p>
               <button
                 onClick={onImproveAllSentences}
                 disabled={
@@ -2647,9 +2643,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-purple-900'>Generate TTS</h3>
               </div>
-              <p className='text-sm text-purple-700 mb-4 leading-relaxed'>
-                Create audio from text for all scenes missing TTS audio
-              </p>
               <button
                 onClick={onGenerateAllTTS}
                 disabled={
@@ -2785,10 +2778,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-yellow-900'>Subtitles</h3>
               </div>
-              <p className='text-sm text-yellow-800 mb-4 leading-relaxed'>
-                Burn in subtitle highlight (grey sentence + highlighted current
-                word) for all scenes
-              </p>
               <button
                 onClick={onGenerateAllSubtitles}
                 disabled={!selectedOriginalVideo.id || generatingAllSubtitles}
@@ -2824,10 +2813,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-pink-900'>Images</h3>
               </div>
-              <p className='text-sm text-pink-800 mb-4 leading-relaxed'>
-                Generate and save “Image for Scene” for scenes that don’t have
-                one. Skips scenes whose final video URL includes “subtitle”.
-              </p>
               <button
                 onClick={onGenerateAllSceneImages}
                 disabled={!selectedOriginalVideo.id || generatingAllSceneImages}
@@ -2864,12 +2849,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-sky-900'>Scene Videos</h3>
               </div>
-              <p className='text-sm text-sky-800 mb-4 leading-relaxed'>
-                Generate and save “Video for Scene” (7098) from “Image for
-                Scene” (7094). Always skips scenes with missing images or an
-                existing scene video. Dynamic filters come from Global Settings
-                (duration range → text check).
-              </p>
               <button
                 onClick={onGenerateAllSceneVideos}
                 disabled={generatingAllSceneVideos}
@@ -2906,12 +2885,6 @@ export default function BatchOperations({
                   Enhance Videos
                 </h3>
               </div>
-              <p className='text-sm text-violet-800 mb-4 leading-relaxed'>
-                Enhance “Video for Scene” (7098) for all scenes that have a
-                scene video and do not yet look enhanced. Uses the same
-                endpoint/skip behavior as the modal “Enhance” button (409 =
-                already enhanced).
-              </p>
               <button
                 onClick={onEnhanceAllSceneVideos}
                 disabled={enhancingAllSceneVideos}
@@ -2946,11 +2919,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-fuchsia-900'>Upscale</h3>
               </div>
-              <p className='text-sm text-fuchsia-800 mb-4 leading-relaxed'>
-                Upscale all scenes that already have “Image for Scene” (7094)
-                and do NOT yet have an “Upscaled Image” (7095). Skips scenes
-                with upscaled images.
-              </p>
               <button
                 onClick={onUpscaleAllSceneImages}
                 disabled={upscalingAllSceneImages}
@@ -2985,11 +2953,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-rose-900'>Apply Image</h3>
               </div>
-              <p className='text-sm text-rose-800 mb-4 leading-relaxed'>
-                Apply “Upscaled Image for Scene” (7095) over the current final
-                video (6886) for all scenes that have an upscaled image. Skips
-                scenes that are already applied.
-              </p>
               <button
                 onClick={onApplyUpscaledImagesAll}
                 disabled={applyingAllUpscaledImages}
@@ -3024,12 +2987,6 @@ export default function BatchOperations({
                 </div>
                 <h3 className='font-semibold text-indigo-900'>Apply Video</h3>
               </div>
-              <p className='text-sm text-indigo-800 mb-4 leading-relaxed'>
-                Apply “Video for Scene” (7098) on top of the current final video
-                (6886) for all scenes where the scene video looks enhanced
-                (filename contains “_enhanced_”). Skips scenes that are already
-                applied.
-              </p>
               <button
                 onClick={onApplyEnhancedVideosAll}
                 disabled={applyingAllEnhancedVideos}
@@ -3166,23 +3123,6 @@ export default function BatchOperations({
                   Combine Long-Text Pairs
                 </h3>
               </div>
-              <p className='text-sm text-violet-800 mb-4 leading-relaxed'>
-                Find consecutive scene pairs where both have a non-empty
-                sentence and char count is at least the subtitle Max chars
-                limit. This uses the same subtitle setting rule (charCount &gt;=
-                maxChars means subtitle is skipped). Greedy left-to-right — each
-                scene used at most once.
-              </p>
-              <p className='text-xs text-violet-700 mb-3'>
-                Skipping first{' '}
-                <span className='font-semibold'>
-                  {Math.max(
-                    0,
-                    Math.floor(combineScenesSettings.skipFirstScenes),
-                  )}
-                </span>{' '}
-                ordered scene(s) from Global Settings.
-              </p>
               <button
                 onClick={handleCombineNoSubtitlePairs}
                 disabled={combiningNoSubtitlePairs}
@@ -3212,9 +3152,6 @@ export default function BatchOperations({
                   Merge Scenes of a Single Video
                 </h3>
               </div>
-              <p className='text-sm text-orange-700 mb-4 leading-relaxed'>
-                Combine all processed videos into one final video file
-              </p>
               <button
                 onClick={onConcatenateAllVideos}
                 disabled={batchOperations.concatenatingVideos}
