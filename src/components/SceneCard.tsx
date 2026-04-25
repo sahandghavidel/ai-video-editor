@@ -4448,11 +4448,31 @@ export default function SceneCard({
     [setConvertingToCFRVideo],
   );
 
-  // Expose handler functions to parent component (only once on mount)
+  // Keep auto-fix handler reference live without forcing parent state churn.
+  const handleAutoFixMismatchRef = useRef(handleAutoFixMismatch);
+
+  useEffect(() => {
+    handleAutoFixMismatchRef.current = handleAutoFixMismatch;
+  }, [handleAutoFixMismatch]);
+
+  const handleAutoFixMismatchFromRef = useCallback(
+    (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      options?: { maxAttempts?: number },
+    ) => {
+      return handleAutoFixMismatchRef.current(sceneId, sceneData, options);
+    },
+    [],
+  );
+
+  // Expose handler functions to parent component.
+  // IMPORTANT: register once to avoid parent/child render loops.
+  // `handleAutoFixMismatch` stays fresh via the ref proxy above.
   useEffect(() => {
     if (onHandlersReady) {
       onHandlersReady({
-        handleAutoFixMismatch,
+        handleAutoFixMismatch: handleAutoFixMismatchFromRef,
         handleSentenceImprovement,
         handleTTSProduce,
         handleVideoGenerate,
