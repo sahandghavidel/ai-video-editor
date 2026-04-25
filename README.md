@@ -21,6 +21,11 @@ A comprehensive Next.js application for automated video content creation with in
 - **Auto-Generate Videos**: Automatically synchronize videos after TTS creation
 - **Smart Workflow**: Chain TTS → Video → Production pipeline seamlessly
 
+## 📚 Internal Documentation
+
+- [Batch Operations Guide](docs/Batch-Operations-Guide.md) - How batch actions are structured and how to add new ones (including Telegram completion notifications)
+- [FFmpeg Fonts (macOS)](docs/FFMPEG-Fonts.md) - Deterministic `drawtext` font usage and local font inventory
+
 ## 🏗️ Architecture Overview
 
 ### Production Pipeline
