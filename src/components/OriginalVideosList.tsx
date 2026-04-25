@@ -616,6 +616,26 @@ export default function OriginalVideosList({
     return hex.toUpperCase();
   };
 
+  const notifyBatchOperationCompleted = async (operationName: string) => {
+    const name = String(operationName || '').trim();
+    if (!name) return;
+
+    const result = await sendTelegramNotification(
+      `✅ Batch operation completed: ${name}`,
+    );
+
+    if (!result.success) {
+      console.warn(
+        `[Telegram] Failed to send completion notification for "${name}": ${result.error || 'Unknown error'}`,
+      );
+    }
+  };
+
+  const playSuccessAndNotifyBatchCompletion = async (operationName: string) => {
+    playSuccessSound();
+    await notifyBatchOperationCompleted(operationName);
+  };
+
   const handleGenerateVideoFromTtsAudio = async (
     video: BaserowRow,
     options?: {
@@ -750,7 +770,7 @@ export default function OriginalVideosList({
         await fetchOriginalVideos(true);
       }
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('TTS Video');
       }
     } catch (err) {
       console.error('Error in TTS→Video batch:', err);
@@ -998,7 +1018,7 @@ export default function OriginalVideosList({
       }
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('TTS Script');
       }
     } catch (err) {
       setError(
@@ -1932,7 +1952,7 @@ export default function OriginalVideosList({
 
       // Play success sound for batch transcription completion (if enabled)
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Transcribe All');
       }
     } catch (error) {
       console.error('Error in batch transcription:', error);
@@ -2138,7 +2158,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Transcribe Final All');
       }
     } catch (error) {
       console.error('Error in batch FINAL video transcription:', error);
@@ -2244,7 +2264,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Desc All');
       }
     } catch (error) {
       console.error('Error generating YouTube descriptions in batch:', error);
@@ -2373,7 +2393,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Keywords All');
       }
     } catch (error) {
       console.error('Error generating YouTube keywords in batch:', error);
@@ -2502,7 +2522,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Titles All');
       }
     } catch (error) {
       console.error('Error generating YouTube titles in batch:', error);
@@ -2616,7 +2636,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Timestamps All');
       }
     } catch (error) {
       console.error('Error generating YouTube timestamps in batch:', error);
@@ -2741,7 +2761,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Script From Title');
       }
     } catch (error) {
       console.error('Error generating scripts from titles in batch:', error);
@@ -2847,7 +2867,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Thumbs All');
       }
     } catch (error) {
       console.error('Error generating thumbnails in batch:', error);
@@ -3489,6 +3509,10 @@ export default function OriginalVideosList({
       // Refresh the original videos list to show any updates
       await handleRefresh();
 
+      if (playSound) {
+        await notifyBatchOperationCompleted('Improve All');
+      }
+
       // Note: Success sound is already played in the batch operation utility
     } catch (error) {
       console.error('Error improving all videos scenes:', error);
@@ -3598,6 +3622,10 @@ export default function OriginalVideosList({
       // Refresh the original videos list to show any updates
       await handleRefresh();
 
+      if (playSound) {
+        await notifyBatchOperationCompleted('TTS All');
+      }
+
       // Note: Success sound is already played in the batch operation utility
     } catch (error) {
       console.error('Error generating TTS for all videos scenes:', error);
@@ -3701,6 +3729,10 @@ export default function OriginalVideosList({
 
       console.log('Batch video generation completed for all videos');
 
+      if (playSound) {
+        await notifyBatchOperationCompleted('Sync All');
+      }
+
       // Note: Success sound and refresh are already handled in the batch operation utility
     } catch (error) {
       console.error('Error generating videos for all scenes:', error);
@@ -3795,6 +3827,10 @@ export default function OriginalVideosList({
       );
 
       console.log('Batch speed up completed for all videos');
+
+      if (playSound) {
+        await notifyBatchOperationCompleted('Speed Up All');
+      }
 
       // Note: Success sound and refresh are already handled in the batch operation utility
     } catch (error) {
@@ -3935,7 +3971,7 @@ export default function OriginalVideosList({
       }
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Delete Empty');
       }
     } catch (error) {
       console.error('Error deleting empty scenes for all videos:', error);
@@ -4064,7 +4100,7 @@ export default function OriginalVideosList({
       }
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Fix TTS');
       }
     } catch (error) {
       console.error('Error fixing TTS for scenes in Processing videos:', error);
@@ -4158,7 +4194,9 @@ export default function OriginalVideosList({
       const freshScenesData = await getBaserowData();
 
       if (!freshScenesData || freshScenesData.length === 0) {
-        if (playSound) playSuccessSound();
+        if (playSound) {
+          await playSuccessAndNotifyBatchCompletion('Prompt Scenes');
+        }
         return;
       }
 
@@ -4194,7 +4232,9 @@ export default function OriginalVideosList({
       });
 
       if (scenesToPrompt.length === 0) {
-        if (playSound) playSuccessSound();
+        if (playSound) {
+          await playSuccessAndNotifyBatchCompletion('Prompt Scenes');
+        }
         return;
       }
 
@@ -4251,7 +4291,7 @@ export default function OriginalVideosList({
       }
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Prompt Scenes');
       }
     } catch (error) {
       console.error('Prompt scenes (Processing) failed:', error);
@@ -4687,7 +4727,7 @@ export default function OriginalVideosList({
       await handleRefresh();
       if (refreshScenesData) refreshScenesData();
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Combine Pairs');
       }
     } catch (error) {
       console.error(
@@ -5287,7 +5327,7 @@ export default function OriginalVideosList({
 
       // Play success sound (if enabled)
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Silence Opt All');
       }
     } catch (error) {
       console.error('Error in batch silence optimization:', error);
@@ -5453,7 +5493,7 @@ export default function OriginalVideosList({
 
       // Play success sound (if enabled)
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Normalize All');
       }
     } catch (error) {
       console.error('Error in batch audio normalization:', error);
@@ -5599,7 +5639,7 @@ export default function OriginalVideosList({
 
       // Play success sound (if enabled)
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('CFR All');
       }
     } catch (error) {
       console.error('Error in batch CFR conversion:', error);
@@ -5753,7 +5793,7 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       // Play success sound
-      playSuccessSound();
+      await playSuccessAndNotifyBatchCompletion('CFR Final All');
     } catch (error) {
       console.error('Error in batch CFR conversion for final videos:', error);
 
@@ -5875,7 +5915,7 @@ export default function OriginalVideosList({
       }
 
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Merge Scenes');
       }
     } catch (error) {
       console.error('Error merging scenes for Processing videos:', error);
@@ -6060,7 +6100,7 @@ export default function OriginalVideosList({
       }, 100);
 
       // Play success sound
-      playSuccessSound();
+      await playSuccessAndNotifyBatchCompletion('Merge Final');
     } catch (error) {
       console.error('Error merging final videos:', error);
 
@@ -6201,7 +6241,7 @@ export default function OriginalVideosList({
       console.log('Generated timestamps:', timestampText);
 
       // Play success sound
-      playSuccessSound();
+      await playSuccessAndNotifyBatchCompletion('Timestamps');
     } catch (error) {
       console.error('Error generating timestamps:', error);
 
@@ -6282,7 +6322,7 @@ export default function OriginalVideosList({
 
       // Play success sound (if enabled)
       if (playSound) {
-        playSuccessSound();
+        await playSuccessAndNotifyBatchCompletion('Gen Clips All');
       }
     } catch (error) {
       console.error('Error in batch clip generation:', error);
@@ -8971,7 +9011,9 @@ export default function OriginalVideosList({
                             await handleGenerateSubtitlesForProcessingVideos();
                             await handleRefresh();
                             if (refreshScenesData) refreshScenesData();
-                            playSuccessSound();
+                            await playSuccessAndNotifyBatchCompletion(
+                              'Subtitles',
+                            );
                           } catch (error) {
                             console.error(
                               'Batch subtitles (Processing scenes) failed:',
@@ -9026,7 +9068,7 @@ export default function OriginalVideosList({
                             await handleGenerateSceneImagesForProcessingVideos();
                             await handleRefresh();
                             if (refreshScenesData) refreshScenesData();
-                            playSuccessSound();
+                            await playSuccessAndNotifyBatchCompletion('Images');
                           } catch (error) {
                             console.error(
                               'Batch scene images (Processing scenes) failed:',
@@ -9081,7 +9123,9 @@ export default function OriginalVideosList({
                             await handleUpscaleSceneImagesForProcessingVideos();
                             await handleRefresh();
                             if (refreshScenesData) refreshScenesData();
-                            playSuccessSound();
+                            await playSuccessAndNotifyBatchCompletion(
+                              'Upscale',
+                            );
                           } catch (error) {
                             console.error(
                               'Batch upscale images (Processing scenes) failed:',
@@ -9136,7 +9180,9 @@ export default function OriginalVideosList({
                             await handleGenerateSceneVideosForProcessingVideos();
                             await handleRefresh();
                             if (refreshScenesData) refreshScenesData();
-                            playSuccessSound();
+                            await playSuccessAndNotifyBatchCompletion(
+                              'Scene Videos',
+                            );
                           } catch (error) {
                             console.error(
                               'Batch scene videos (Processing scenes) failed:',
@@ -9191,7 +9237,9 @@ export default function OriginalVideosList({
                             await handleEnhanceSceneVideosForProcessingVideos();
                             await handleRefresh();
                             if (refreshScenesData) refreshScenesData();
-                            playSuccessSound();
+                            await playSuccessAndNotifyBatchCompletion(
+                              'Enhance Videos',
+                            );
                           } catch (error) {
                             console.error(
                               'Batch enhance videos (Processing scenes) failed:',
@@ -9246,7 +9294,9 @@ export default function OriginalVideosList({
                             await handleApplyEnhancedVideosForProcessingVideos();
                             await handleRefresh();
                             if (refreshScenesData) refreshScenesData();
-                            playSuccessSound();
+                            await playSuccessAndNotifyBatchCompletion(
+                              'Apply Video',
+                            );
                           } catch (error) {
                             console.error(
                               'Batch apply enhanced videos (Processing scenes) failed:',
@@ -9301,7 +9351,9 @@ export default function OriginalVideosList({
                             await handleApplyUpscaledImagesForProcessingVideos();
                             await handleRefresh();
                             if (refreshScenesData) refreshScenesData();
-                            playSuccessSound();
+                            await playSuccessAndNotifyBatchCompletion(
+                              'Apply Image',
+                            );
                           } catch (error) {
                             console.error(
                               'Batch apply upscaled images (Processing scenes) failed:',
