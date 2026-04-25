@@ -42,7 +42,7 @@ import MergedVideoDisplay from './MergedVideoDisplay';
 import FinalVideoTable from './FinalVideoTable';
 import PipelineConfig from './PipelineConfig';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
-import { sendTelegramNotification } from '@/utils/telegram';
+import { sendTelegramNotification } from '@/utils/notifications/telegram';
 import {
   formatSceneHasTextField,
   isHasTextRecordFreshForImage,

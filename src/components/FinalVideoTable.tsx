@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Video, ExternalLink, Check, Mic, Sparkles, Clock } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { playSuccessSound } from '@/utils/soundManager';
-import { sendTelegramNotification } from '@/utils/telegram';
+import { sendTelegramNotification } from '@/utils/notifications/telegram';
 
 interface VideoData {
   finalVideoUrl?: string;
