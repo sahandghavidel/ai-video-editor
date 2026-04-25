@@ -51,6 +51,7 @@ interface SceneCardProps {
     handleAutoFixMismatch: (
       sceneId: number,
       sceneData?: BaserowRow,
+      options?: { maxAttempts?: number },
     ) => Promise<void>;
     handleSentenceImprovement: (
       sceneId: number,
@@ -2876,7 +2877,11 @@ export default function SceneCard({
   }, []);
 
   const handleAutoFixMismatch = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      options?: { maxAttempts?: number },
+    ) => {
       if (autoFixingMismatchSceneId !== null) return;
 
       setAutoFixingMismatchSceneId(sceneId);
@@ -2887,7 +2892,11 @@ export default function SceneCard({
       };
 
       try {
-        const maxAttempts = 2;
+        const requestedMaxAttempts = Number(options?.maxAttempts);
+        const maxAttempts =
+          Number.isFinite(requestedMaxAttempts) && requestedMaxAttempts > 0
+            ? Math.max(1, Math.min(10, Math.floor(requestedMaxAttempts)))
+            : 2;
 
         const updateFixTtsStatus = async (status: 'true' | null) => {
           const statusLabel =

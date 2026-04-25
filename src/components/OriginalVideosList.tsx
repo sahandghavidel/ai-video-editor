@@ -92,6 +92,7 @@ interface SceneHandlers {
   handleAutoFixMismatch: (
     sceneId: number,
     sceneData?: BaserowRow,
+    options?: { maxAttempts?: number },
   ) => Promise<void>;
   handleSentenceImprovement: (
     sceneId: number,

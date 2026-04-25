@@ -42,6 +42,7 @@ export default function Home() {
     handleAutoFixMismatch: (
       sceneId: number,
       sceneData?: BaserowRow,
+      options?: { maxAttempts?: number },
     ) => Promise<void>;
     handleSentenceImprovement: (
       sceneId: number,
@@ -116,6 +117,7 @@ export default function Home() {
       handleAutoFixMismatch: (
         sceneId: number,
         sceneData?: BaserowRow,
+        options?: { maxAttempts?: number },
       ) => Promise<void>;
       handleSentenceImprovement: (
         sceneId: number,

@@ -16,6 +16,8 @@ import {
   isSceneFlaggedForFixTts,
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
+import { fetchFlaggedScenesForVideo } from '@/features/fix-tts-flagged/fetchFlaggedScenesForVideo';
+import { FixFlaggedOnlyButton } from '@/components/fix-tts/FixFlaggedOnlyButton';
 import { playSuccessSound } from '@/utils/soundManager';
 import {
   formatSceneHasTextField,
@@ -52,6 +54,7 @@ interface BatchOperationsProps {
   handleAutoFixMismatch: (
     sceneId: number,
     sceneData?: BaserowRow,
+    options?: { maxAttempts?: number },
   ) => Promise<void>;
   handleSentenceImprovement: (
     sceneId: number,
@@ -188,6 +191,10 @@ export default function BatchOperations({
     applyingCurrentVideoWordReplacements,
     setApplyingCurrentVideoWordReplacements,
   ] = useState(false);
+  const [fixingOnlyFlaggedScenes, setFixingOnlyFlaggedScenes] = useState(false);
+  const [fixingOnlyFlaggedSceneId, setFixingOnlyFlaggedSceneId] = useState<
+    number | null
+  >(null);
 
   const [combiningNoSubtitlePairs, setCombiningNoSubtitlePairs] =
     useState(false);
@@ -1189,6 +1196,71 @@ export default function BatchOperations({
       onRefresh?.();
     } finally {
       completeBatchOperation('transcribingAllFinalScenes');
+      playSuccessSound();
+    }
+  };
+
+  const onFixOnlyFlaggedFinalTTS = async () => {
+    // Separate flagged-only flow: fetch once for all scenes in selected video,
+    // filter flagged=true server-side, then process only those scene IDs.
+    if (!selectedOriginalVideo.id) return;
+
+    const selectedVideoId =
+      typeof selectedOriginalVideo.id === 'number'
+        ? selectedOriginalVideo.id
+        : parseInt(String(selectedOriginalVideo.id), 10);
+
+    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) {
+      return;
+    }
+
+    const voiceOverride =
+      typeof selectedOriginalVideo.ttsVoiceReference === 'string' &&
+      selectedOriginalVideo.ttsVoiceReference.trim().length > 0
+        ? selectedOriginalVideo.ttsVoiceReference.trim()
+        : null;
+
+    setFixingOnlyFlaggedScenes(true);
+    setFixingOnlyFlaggedSceneId(null);
+
+    try {
+      const flaggedScenes = await fetchFlaggedScenesForVideo(selectedVideoId);
+
+      if (flaggedScenes.length === 0) {
+        console.log(
+          `No flagged scenes found for video ${selectedVideoId} (flagged=true).`,
+        );
+        return;
+      }
+
+      for (const scene of flaggedScenes) {
+        setFixingOnlyFlaggedSceneId(scene.id);
+
+        try {
+          const sceneWithVoiceOverride = withSceneVoiceOverride(
+            scene,
+            voiceOverride,
+          );
+
+          await handleAutoFixMismatch(scene.id, sceneWithVoiceOverride, {
+            maxAttempts: 1,
+          });
+        } catch (error) {
+          console.error(
+            `Fix flagged-only TTS failed for scene ${scene.id}:`,
+            error,
+          );
+        }
+
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      onRefresh?.();
+    } catch (error) {
+      console.error('Fix flagged-only TTS failed:', error);
+    } finally {
+      setFixingOnlyFlaggedScenes(false);
+      setFixingOnlyFlaggedSceneId(null);
       playSuccessSound();
     }
   };
@@ -2659,6 +2731,19 @@ export default function BatchOperations({
                         : 'Fix All'}
                   </span>
                 </button>
+
+                <FixFlaggedOnlyButton
+                  onClick={onFixOnlyFlaggedFinalTTS}
+                  disabled={
+                    !selectedOriginalVideo.id ||
+                    fixingOnlyFlaggedScenes ||
+                    batchOperations.transcribingAllFinalScenes ||
+                    sceneLoading.transcribingScene !== null
+                  }
+                  hasSelectedVideo={Boolean(selectedOriginalVideo.id)}
+                  isRunning={fixingOnlyFlaggedScenes}
+                  currentSceneId={fixingOnlyFlaggedSceneId}
+                />
               </div>
               {/* Removed extra description text to keep the section concise */}
               <button
