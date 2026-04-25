@@ -44,7 +44,6 @@ import {
   Save,
   Upload,
   Trash2,
-  GitMerge,
 } from 'lucide-react';
 
 interface BatchOperationsProps {
@@ -3024,7 +3023,7 @@ export default function BatchOperations({
                   Subtitles • Speed Up • Combine • Merge
                 </span>
               </div>
-              <div className='grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-3'>
+              <div className='grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3'>
                 {/* Subtitle Generation */}
                 <div className='bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-3 border border-yellow-200'>
                   <div className='flex items-center gap-2 mb-3'>
@@ -3058,6 +3057,24 @@ export default function BatchOperations({
                           ? `Scene #${generatingSubtitleSceneId}`
                           : 'Processing...'
                         : 'Generate All'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={handleCombineNoSubtitlePairs}
+                    disabled={combiningNoSubtitlePairs}
+                    className='w-full h-10 mt-2 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title='Combine consecutive pairs based on subtitle character-limit settings'
+                  >
+                    {combiningNoSubtitlePairs && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {combiningNoSubtitlePairs
+                        ? combiningNoSubtitleSceneId !== null
+                          ? `Scene #${combiningNoSubtitleSceneId}`
+                          : 'Processing...'
+                        : 'Combine Pairs'}
                     </span>
                   </button>
                 </div>
@@ -3161,35 +3178,6 @@ export default function BatchOperations({
                           ? `Deleting #${deletingEmptySceneId}`
                           : 'Deleting...'
                         : 'Delete Empty'}
-                    </span>
-                  </button>
-                </div>
-
-                {/* Combine Pairs (Subtitle Settings Based) */}
-                <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-3 border border-violet-200'>
-                  <div className='flex items-center gap-2 mb-3'>
-                    <div className='p-2 bg-violet-500 rounded-lg'>
-                      <GitMerge className='w-4 h-4 text-white' />
-                    </div>
-                    <h3 className='font-semibold text-violet-900'>
-                      Combine Long-Text Pairs
-                    </h3>
-                  </div>
-                  <button
-                    onClick={handleCombineNoSubtitlePairs}
-                    disabled={combiningNoSubtitlePairs}
-                    className='w-full h-10 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                    title='Combine consecutive pairs based on subtitle character-limit settings'
-                  >
-                    {combiningNoSubtitlePairs && (
-                      <Loader2 className='w-4 h-4 animate-spin' />
-                    )}
-                    <span className='font-medium'>
-                      {combiningNoSubtitlePairs
-                        ? combiningNoSubtitleSceneId !== null
-                          ? `Scene #${combiningNoSubtitleSceneId}`
-                          : 'Processing...'
-                        : 'Combine Pairs'}
                     </span>
                   </button>
                 </div>
