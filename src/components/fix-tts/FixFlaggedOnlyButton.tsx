@@ -8,6 +8,7 @@ interface FixFlaggedOnlyButtonProps {
   hasSelectedVideo: boolean;
   isRunning: boolean;
   currentSceneId: number | null;
+  className?: string;
 }
 
 export function FixFlaggedOnlyButton({
@@ -16,12 +17,13 @@ export function FixFlaggedOnlyButton({
   hasSelectedVideo,
   isRunning,
   currentSceneId,
+  className = '',
 }: FixFlaggedOnlyButtonProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className='mt-3 w-full h-12 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+      className={`mt-3 w-full h-10 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed ${className}`}
       title={
         !hasSelectedVideo
           ? 'Select an original video first'

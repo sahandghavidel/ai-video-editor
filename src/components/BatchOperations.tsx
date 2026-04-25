@@ -2507,667 +2507,721 @@ export default function BatchOperations({
             </div>
           )}
 
-          {/* Operation Cards Grid */}
-          <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4'>
-            {/* AI Improve All */}
-            <div className='bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-indigo-500 rounded-lg'>
-                  <Sparkles className='w-4 h-4 text-white' />
-                </div>
-                <h3 className='font-semibold text-indigo-900'>AI Improve</h3>
+          {/* Workflow Sections */}
+          <div className='grid grid-cols-1 xl:grid-cols-2 gap-6'>
+            {/* Create */}
+            <section className='xl:order-1'>
+              <div className='mb-3 flex items-center gap-2'>
+                <h3 className='text-lg font-semibold text-slate-900'>Create</h3>
+                <span className='text-xs font-medium text-slate-500'>
+                  Improve • TTS • Sync
+                </span>
               </div>
-              <button
-                onClick={onImproveAllSentences}
-                disabled={
-                  batchOperations.improvingAll ||
-                  sceneLoading.improvingSentence !== null
-                }
-                className='w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  batchOperations.improvingAll
-                    ? 'Improving all sentences with AI...'
-                    : sceneLoading.improvingSentence !== null
-                      ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
-                      : 'Improve all sentences with AI'
-                }
-              >
-                {(batchOperations.improvingAll ||
-                  sceneLoading.improvingSentence !== null) && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {batchOperations.improvingAll
-                    ? sceneLoading.improvingSentence !== null
-                      ? `Scene #${sceneLoading.improvingSentence}`
-                      : 'Processing...'
-                    : sceneLoading.improvingSentence !== null
-                      ? `Busy (#${sceneLoading.improvingSentence})`
-                      : 'Improve All'}
-                </span>
-              </button>
-
-              <button
-                onClick={onPromptAllScenes}
-                disabled={
-                  promptingAllScenes ||
-                  fixingLanguageTenScenes ||
-                  batchOperations.improvingAll ||
-                  sceneLoading.improvingSentence !== null
-                }
-                className='mt-3 w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  promptingAllScenes
-                    ? promptingSceneId
-                      ? `Generating prompt for scene ${promptingSceneId}`
-                      : 'Generating prompts for all scenes...'
-                    : 'Generate and save prompts for all non-empty scenes'
-                }
-              >
-                {promptingAllScenes && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {promptingAllScenes
-                    ? promptingSceneId
-                      ? `Prompting #${promptingSceneId}`
-                      : 'Processing...'
-                    : 'Prompt All'}
-                </span>
-              </button>
-
-              <button
-                onClick={onFixLanguageTenScenes}
-                disabled={
-                  fixingLanguageTenScenes ||
-                  promptingAllScenes ||
-                  batchOperations.improvingAll ||
-                  sceneLoading.improvingSentence !== null
-                }
-                className='mt-3 w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  fixingLanguageTenScenes
-                    ? fixingLanguageSceneId
-                      ? `Fixing language for scene ${fixingLanguageSceneId}`
-                      : 'Fixing language in 10-scene batches...'
-                    : 'Fix language for all eligible scenes in 10-scene batches'
-                }
-              >
-                {fixingLanguageTenScenes && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {fixingLanguageTenScenes
-                    ? fixingLanguageSceneId
-                      ? `Fixing #${fixingLanguageSceneId}`
-                      : 'Processing...'
-                    : 'Fix Language All'}
-                </span>
-              </button>
-
-              <button
-                onClick={onApplyWordReplacementsCurrentVideo}
-                disabled={
-                  !selectedOriginalVideo.id ||
-                  applyingCurrentVideoWordReplacements ||
-                  fixingLanguageTenScenes ||
-                  promptingAllScenes ||
-                  batchOperations.improvingAll ||
-                  sceneLoading.improvingSentence !== null
-                }
-                className='mt-3 w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  !selectedOriginalVideo.id
-                    ? 'Select an original video first'
-                    : applyingCurrentVideoWordReplacements
-                      ? 'Applying saved word replacements to scenes of current video...'
-                      : `Apply saved word replacements to scenes of selected video #${selectedOriginalVideo.id}`
-                }
-              >
-                {applyingCurrentVideoWordReplacements && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {applyingCurrentVideoWordReplacements
-                    ? 'Applying...'
-                    : 'Apply Word Fixes'}
-                </span>
-              </button>
-            </div>
-
-            {/* Generate TTS */}
-            <div className='bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-purple-500 rounded-lg'>
-                  <Mic className='w-4 h-4 text-white' />
-                </div>
-                <h3 className='font-semibold text-purple-900'>Generate TTS</h3>
-              </div>
-              <button
-                onClick={onGenerateAllTTS}
-                disabled={
-                  batchOperations.generatingAllTTS ||
-                  sceneLoading.producingTTS !== null
-                }
-                className='w-full h-12 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  batchOperations.generatingAllTTS
-                    ? 'Generating TTS for all scenes...'
-                    : sceneLoading.producingTTS !== null
-                      ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
-                      : 'Generate TTS for all scenes'
-                }
-              >
-                {(batchOperations.generatingAllTTS ||
-                  sceneLoading.producingTTS !== null) && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {batchOperations.generatingAllTTS
-                    ? sceneLoading.producingTTS !== null
-                      ? `Scene #${sceneLoading.producingTTS}`
-                      : 'Processing...'
-                    : sceneLoading.producingTTS !== null
-                      ? `Busy (#${sceneLoading.producingTTS})`
-                      : 'Generate All'}
-                </span>
-              </button>
-            </div>
-
-            {/* Generate Videos */}
-            <div className='bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-4 border border-teal-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-teal-500 rounded-lg'>
-                  <Film className='w-4 h-4 text-white' />
-                </div>
-                <h3 className='font-semibold text-teal-900'>Sync Videos</h3>
-              </div>
-
-              {/* Transcribe Final Scenes */}
-              <div className='bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200'>
-                <div className='flex items-center gap-2 mb-3'>
-                  <div className='p-2 bg-emerald-500 rounded-lg'>
-                    <Wand2 className='w-4 h-4 text-white' />
+              <div className='grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3'>
+                {/* AI Improve All */}
+                <div className='bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 border border-indigo-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-indigo-500 rounded-lg'>
+                      <Sparkles className='w-4 h-4 text-white' />
+                    </div>
+                    <h3 className='font-semibold text-indigo-900'>
+                      AI Improve
+                    </h3>
                   </div>
-                  <h3 className='font-semibold text-emerald-900'>Fix TTS</h3>
-                </div>
-                {/* Removed extra description text to keep UI concise */}
-                <button
-                  onClick={onFixAllFinalTTS}
-                  disabled={
-                    !selectedOriginalVideo.id ||
-                    batchOperations.transcribingAllFinalScenes ||
-                    sceneLoading.transcribingScene !== null
-                  }
-                  className='w-full h-12 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                  title={
-                    !selectedOriginalVideo.id
-                      ? 'Select an original video first'
-                      : batchOperations.transcribingAllFinalScenes
-                        ? 'Fixing TTS for all scenes (TTS → sync → retranscribe)...'
-                        : sceneLoading.transcribingScene !== null
-                          ? `Fixing scene ${sceneLoading.transcribingScene}`
-                          : 'Fix TTS mismatches for all scenes'
-                  }
-                >
-                  {(batchOperations.transcribingAllFinalScenes ||
-                    sceneLoading.transcribingScene !== null) && (
-                    <Loader2 className='w-4 h-4 animate-spin' />
-                  )}
-                  <span className='font-medium'>
-                    {batchOperations.transcribingAllFinalScenes
-                      ? sceneLoading.transcribingScene !== null
-                        ? `Scene #${sceneLoading.transcribingScene}`
-                        : 'Processing...'
-                      : sceneLoading.transcribingScene !== null
-                        ? `Busy (#${sceneLoading.transcribingScene})`
-                        : 'Fix All'}
-                  </span>
-                </button>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                    <button
+                      onClick={onImproveAllSentences}
+                      disabled={
+                        batchOperations.improvingAll ||
+                        sceneLoading.improvingSentence !== null
+                      }
+                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      title={
+                        batchOperations.improvingAll
+                          ? 'Improving all sentences with AI...'
+                          : sceneLoading.improvingSentence !== null
+                            ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
+                            : 'Improve all sentences with AI'
+                      }
+                    >
+                      {(batchOperations.improvingAll ||
+                        sceneLoading.improvingSentence !== null) && (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      )}
+                      <span className='font-medium'>
+                        {batchOperations.improvingAll
+                          ? sceneLoading.improvingSentence !== null
+                            ? `Scene #${sceneLoading.improvingSentence}`
+                            : 'Processing...'
+                          : sceneLoading.improvingSentence !== null
+                            ? `Busy (#${sceneLoading.improvingSentence})`
+                            : 'Improve All'}
+                      </span>
+                    </button>
 
-                <FixFlaggedOnlyButton
-                  onClick={onFixOnlyFlaggedFinalTTS}
-                  disabled={
-                    !selectedOriginalVideo.id ||
-                    fixingOnlyFlaggedScenes ||
-                    batchOperations.transcribingAllFinalScenes ||
-                    sceneLoading.transcribingScene !== null
-                  }
-                  hasSelectedVideo={Boolean(selectedOriginalVideo.id)}
-                  isRunning={fixingOnlyFlaggedScenes}
-                  currentSceneId={fixingOnlyFlaggedSceneId}
-                />
+                    <button
+                      onClick={onPromptAllScenes}
+                      disabled={
+                        promptingAllScenes ||
+                        fixingLanguageTenScenes ||
+                        batchOperations.improvingAll ||
+                        sceneLoading.improvingSentence !== null
+                      }
+                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      title={
+                        promptingAllScenes
+                          ? promptingSceneId
+                            ? `Generating prompt for scene ${promptingSceneId}`
+                            : 'Generating prompts for all scenes...'
+                          : 'Generate and save prompts for all non-empty scenes'
+                      }
+                    >
+                      {promptingAllScenes && (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      )}
+                      <span className='font-medium'>
+                        {promptingAllScenes
+                          ? promptingSceneId
+                            ? `Prompting #${promptingSceneId}`
+                            : 'Processing...'
+                          : 'Prompt All'}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={onFixLanguageTenScenes}
+                      disabled={
+                        fixingLanguageTenScenes ||
+                        promptingAllScenes ||
+                        batchOperations.improvingAll ||
+                        sceneLoading.improvingSentence !== null
+                      }
+                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      title={
+                        fixingLanguageTenScenes
+                          ? fixingLanguageSceneId
+                            ? `Fixing language for scene ${fixingLanguageSceneId}`
+                            : 'Fixing language in 10-scene batches...'
+                          : 'Fix language for all eligible scenes in 10-scene batches'
+                      }
+                    >
+                      {fixingLanguageTenScenes && (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      )}
+                      <span className='font-medium'>
+                        {fixingLanguageTenScenes
+                          ? fixingLanguageSceneId
+                            ? `Fixing #${fixingLanguageSceneId}`
+                            : 'Processing...'
+                          : 'Fix Language All'}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={onApplyWordReplacementsCurrentVideo}
+                      disabled={
+                        !selectedOriginalVideo.id ||
+                        applyingCurrentVideoWordReplacements ||
+                        fixingLanguageTenScenes ||
+                        promptingAllScenes ||
+                        batchOperations.improvingAll ||
+                        sceneLoading.improvingSentence !== null
+                      }
+                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      title={
+                        !selectedOriginalVideo.id
+                          ? 'Select an original video first'
+                          : applyingCurrentVideoWordReplacements
+                            ? 'Applying saved word replacements to scenes of current video...'
+                            : `Apply saved word replacements to scenes of selected video #${selectedOriginalVideo.id}`
+                      }
+                    >
+                      {applyingCurrentVideoWordReplacements && (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      )}
+                      <span className='font-medium'>
+                        {applyingCurrentVideoWordReplacements
+                          ? 'Applying...'
+                          : 'Apply Word Fixes'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Generate TTS */}
+                <div className='bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 border border-purple-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-purple-500 rounded-lg'>
+                      <Mic className='w-4 h-4 text-white' />
+                    </div>
+                    <h3 className='font-semibold text-purple-900'>
+                      Generate TTS
+                    </h3>
+                  </div>
+                  <button
+                    onClick={onGenerateAllTTS}
+                    disabled={
+                      batchOperations.generatingAllTTS ||
+                      sceneLoading.producingTTS !== null
+                    }
+                    className='w-full h-10 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      batchOperations.generatingAllTTS
+                        ? 'Generating TTS for all scenes...'
+                        : sceneLoading.producingTTS !== null
+                          ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
+                          : 'Generate TTS for all scenes'
+                    }
+                  >
+                    {(batchOperations.generatingAllTTS ||
+                      sceneLoading.producingTTS !== null) && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {batchOperations.generatingAllTTS
+                        ? sceneLoading.producingTTS !== null
+                          ? `Scene #${sceneLoading.producingTTS}`
+                          : 'Processing...'
+                        : sceneLoading.producingTTS !== null
+                          ? `Busy (#${sceneLoading.producingTTS})`
+                          : 'Generate All'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Generate Videos */}
+                <div className='bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-3 border border-teal-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-teal-500 rounded-lg'>
+                      <Film className='w-4 h-4 text-white' />
+                    </div>
+                    <h3 className='font-semibold text-teal-900'>Sync Videos</h3>
+                  </div>
+
+                  {/* Transcribe Final Scenes */}
+                  <div className='bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-3 border border-emerald-200'>
+                    <div className='flex items-center gap-2 mb-3'>
+                      <div className='p-2 bg-emerald-500 rounded-lg'>
+                        <Wand2 className='w-4 h-4 text-white' />
+                      </div>
+                      <h3 className='font-semibold text-emerald-900'>
+                        Fix TTS
+                      </h3>
+                    </div>
+                    <div className='grid grid-cols-2 gap-2'>
+                      <button
+                        onClick={onFixAllFinalTTS}
+                        disabled={
+                          !selectedOriginalVideo.id ||
+                          batchOperations.transcribingAllFinalScenes ||
+                          sceneLoading.transcribingScene !== null
+                        }
+                        className='w-full h-10 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                        title={
+                          !selectedOriginalVideo.id
+                            ? 'Select an original video first'
+                            : batchOperations.transcribingAllFinalScenes
+                              ? 'Fixing TTS for all scenes (TTS → sync → retranscribe)...'
+                              : sceneLoading.transcribingScene !== null
+                                ? `Fixing scene ${sceneLoading.transcribingScene}`
+                                : 'Fix TTS mismatches for all scenes'
+                        }
+                      >
+                        {(batchOperations.transcribingAllFinalScenes ||
+                          sceneLoading.transcribingScene !== null) && (
+                          <Loader2 className='w-4 h-4 animate-spin' />
+                        )}
+                        <span className='font-medium'>
+                          {batchOperations.transcribingAllFinalScenes
+                            ? sceneLoading.transcribingScene !== null
+                              ? `Scene #${sceneLoading.transcribingScene}`
+                              : 'Processing...'
+                            : sceneLoading.transcribingScene !== null
+                              ? `Busy (#${sceneLoading.transcribingScene})`
+                              : 'Fix All'}
+                        </span>
+                      </button>
+
+                      <FixFlaggedOnlyButton
+                        onClick={onFixOnlyFlaggedFinalTTS}
+                        disabled={
+                          !selectedOriginalVideo.id ||
+                          fixingOnlyFlaggedScenes ||
+                          batchOperations.transcribingAllFinalScenes ||
+                          sceneLoading.transcribingScene !== null
+                        }
+                        hasSelectedVideo={Boolean(selectedOriginalVideo.id)}
+                        isRunning={fixingOnlyFlaggedScenes}
+                        currentSceneId={fixingOnlyFlaggedSceneId}
+                        className='mt-0'
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={onGenerateAllVideos}
+                    disabled={
+                      batchOperations.generatingAllVideos ||
+                      sceneLoading.generatingVideo !== null
+                    }
+                    className='mt-2 w-full h-10 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      batchOperations.generatingAllVideos
+                        ? 'Generate videos for all scenes with TTS audio...'
+                        : sceneLoading.generatingVideo !== null
+                          ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
+                          : 'Generate synchronized videos'
+                    }
+                  >
+                    {(batchOperations.generatingAllVideos ||
+                      sceneLoading.generatingVideo !== null) && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {batchOperations.generatingAllVideos
+                        ? sceneLoading.generatingVideo !== null
+                          ? `Scene #${sceneLoading.generatingVideo}`
+                          : 'Processing...'
+                        : sceneLoading.generatingVideo !== null
+                          ? `Busy (#${sceneLoading.generatingVideo})`
+                          : 'Sync All'}
+                    </span>
+                  </button>
+                </div>
               </div>
-              {/* Removed extra description text to keep the section concise */}
-              <button
-                onClick={onGenerateAllVideos}
-                disabled={
-                  batchOperations.generatingAllVideos ||
-                  sceneLoading.generatingVideo !== null
-                }
-                className='w-full h-12 bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  batchOperations.generatingAllVideos
-                    ? 'Generate videos for all scenes with TTS audio...'
-                    : sceneLoading.generatingVideo !== null
-                      ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
-                      : 'Generate synchronized videos'
-                }
-              >
-                {(batchOperations.generatingAllVideos ||
-                  sceneLoading.generatingVideo !== null) && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {batchOperations.generatingAllVideos
-                    ? sceneLoading.generatingVideo !== null
-                      ? `Scene #${sceneLoading.generatingVideo}`
-                      : 'Processing...'
-                    : sceneLoading.generatingVideo !== null
-                      ? `Busy (#${sceneLoading.generatingVideo})`
-                      : 'Sync All'}
-                </span>
-              </button>
-            </div>
+            </section>
 
-            {/* Subtitle Generation */}
-            <div className='bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border border-yellow-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-yellow-500 rounded-lg'>
-                  <Type className='w-4 h-4 text-white' />
-                </div>
-                <h3 className='font-semibold text-yellow-900'>Subtitles</h3>
-              </div>
-              <button
-                onClick={onGenerateAllSubtitles}
-                disabled={!selectedOriginalVideo.id || generatingAllSubtitles}
-                className='w-full h-12 bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  !selectedOriginalVideo.id
-                    ? 'Select an original video first'
-                    : generatingAllSubtitles
-                      ? generatingSubtitleSceneId
-                        ? `Generating subtitles for scene ${generatingSubtitleSceneId}`
-                        : 'Generating subtitles for all scenes...'
-                      : 'Generate subtitles for all scenes'
-                }
-              >
-                {generatingAllSubtitles && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {generatingAllSubtitles
-                    ? generatingSubtitleSceneId
-                      ? `Scene #${generatingSubtitleSceneId}`
-                      : 'Processing...'
-                    : 'Generate All'}
-                </span>
-              </button>
-            </div>
-
-            {/* Scene Image Generation */}
-            <div className='bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-4 border border-pink-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-pink-500 rounded-lg'>
-                  <ImageIcon className='w-4 h-4 text-white' />
-                </div>
-                <h3 className='font-semibold text-pink-900'>Images</h3>
-              </div>
-              <button
-                onClick={onGenerateAllSceneImages}
-                disabled={!selectedOriginalVideo.id || generatingAllSceneImages}
-                className='w-full h-12 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  !selectedOriginalVideo.id
-                    ? 'Select an original video first'
-                    : generatingAllSceneImages
-                      ? generatingImageSceneId
-                        ? `Generating image for scene ${generatingImageSceneId}`
-                        : 'Generating images for all scenes...'
-                      : 'Generate images for all scenes'
-                }
-              >
-                {generatingAllSceneImages && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {generatingAllSceneImages
-                    ? generatingImageSceneId
-                      ? `Scene #${generatingImageSceneId}`
-                      : 'Processing...'
-                    : 'Generate All'}
-                </span>
-              </button>
-            </div>
-
-            {/* Generate Scene Videos (Image→Video) */}
-            <div className='bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg p-4 border border-sky-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-sky-500 rounded-lg flex items-center gap-1'>
-                  <Film className='w-4 h-4 text-white' />
-                  <span className='text-white text-xs font-bold'>I2V</span>
-                </div>
-                <h3 className='font-semibold text-sky-900'>Scene Videos</h3>
-              </div>
-              <button
-                onClick={onGenerateAllSceneVideos}
-                disabled={generatingAllSceneVideos}
-                className='w-full h-12 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  generatingAllSceneVideos
-                    ? generatingSceneVideoId
-                      ? `Generating scene video for scene ${generatingSceneVideoId}`
-                      : 'Generating scene videos for all scenes...'
-                    : 'Generate scene videos for all eligible scenes'
-                }
-              >
-                {generatingAllSceneVideos && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {generatingAllSceneVideos
-                    ? generatingSceneVideoId
-                      ? `Scene #${generatingSceneVideoId}`
-                      : 'Processing...'
-                    : 'Generate All'}
-                </span>
-              </button>
-            </div>
-
-            {/* Enhance / Upscale Scene Videos (REAL-Video-Enhancer) */}
-            <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-violet-500 rounded-lg flex items-center gap-1'>
-                  <Wand2 className='w-4 h-4 text-white' />
-                  <span className='text-white text-xs font-bold'>RVE</span>
-                </div>
-                <h3 className='font-semibold text-violet-900'>
-                  Enhance Videos
+            {/* Enhance */}
+            <section className='xl:col-span-2 xl:order-3'>
+              <div className='mb-3 flex items-center gap-2'>
+                <h3 className='text-lg font-semibold text-slate-900'>
+                  Enhance
                 </h3>
-              </div>
-              <button
-                onClick={onEnhanceAllSceneVideos}
-                disabled={enhancingAllSceneVideos}
-                className='w-full h-12 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  enhancingAllSceneVideos
-                    ? enhancingSceneVideoId
-                      ? `Enhancing scene video for scene ${enhancingSceneVideoId}`
-                      : 'Enhancing scene videos for all scenes...'
-                    : 'Enhance scene videos for all eligible scenes'
-                }
-              >
-                {enhancingAllSceneVideos && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {enhancingAllSceneVideos
-                    ? enhancingSceneVideoId
-                      ? `Scene #${enhancingSceneVideoId}`
-                      : 'Processing...'
-                    : 'Enhance All'}
+                <span className='text-xs font-medium text-slate-500'>
+                  Images • Scene Videos • Upscale • Apply
                 </span>
-              </button>
-            </div>
-
-            {/* Upscale Scene Images (3x) */}
-            <div className='bg-gradient-to-br from-fuchsia-50 to-fuchsia-100 rounded-lg p-4 border border-fuchsia-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-fuchsia-500 rounded-lg flex items-center gap-1'>
-                  <ImageIcon className='w-4 h-4 text-white' />
-                  <span className='text-white text-xs font-bold'>3x</span>
+              </div>
+              <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3'>
+                {/* Scene Image Generation */}
+                <div className='bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-3 border border-pink-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-pink-500 rounded-lg'>
+                      <ImageIcon className='w-4 h-4 text-white' />
+                    </div>
+                    <h3 className='font-semibold text-pink-900'>Images</h3>
+                  </div>
+                  <button
+                    onClick={onGenerateAllSceneImages}
+                    disabled={
+                      !selectedOriginalVideo.id || generatingAllSceneImages
+                    }
+                    className='w-full h-10 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : generatingAllSceneImages
+                          ? generatingImageSceneId
+                            ? `Generating image for scene ${generatingImageSceneId}`
+                            : 'Generating images for all scenes...'
+                          : 'Generate images for all scenes'
+                    }
+                  >
+                    {generatingAllSceneImages && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {generatingAllSceneImages
+                        ? generatingImageSceneId
+                          ? `Scene #${generatingImageSceneId}`
+                          : 'Processing...'
+                        : 'Generate All'}
+                    </span>
+                  </button>
                 </div>
-                <h3 className='font-semibold text-fuchsia-900'>Upscale</h3>
-              </div>
-              <button
-                onClick={onUpscaleAllSceneImages}
-                disabled={upscalingAllSceneImages}
-                className='w-full h-12 bg-fuchsia-500 hover:bg-fuchsia-600 disabled:bg-fuchsia-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  upscalingAllSceneImages
-                    ? upscalingSceneImageId
-                      ? `Upscaling image for scene ${upscalingSceneImageId}`
-                      : 'Upscaling images for all scenes...'
-                    : 'Upscale images for all scenes (3x)'
-                }
-              >
-                {upscalingAllSceneImages && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {upscalingAllSceneImages
-                    ? upscalingSceneImageId
-                      ? `Scene #${upscalingSceneImageId}`
-                      : 'Processing...'
-                    : 'Upscale All'}
-                </span>
-              </button>
-            </div>
 
-            {/* Apply Upscaled Images */}
-            <div className='bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg p-4 border border-rose-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-rose-500 rounded-lg flex items-center gap-1'>
-                  <Save className='w-4 h-4 text-white' />
-                  <span className='text-white text-xs font-bold'>IMG</span>
+                {/* Generate Scene Videos (Image→Video) */}
+                <div className='bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg p-3 border border-sky-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-sky-500 rounded-lg flex items-center gap-1'>
+                      <Film className='w-4 h-4 text-white' />
+                      <span className='text-white text-xs font-bold'>I2V</span>
+                    </div>
+                    <h3 className='font-semibold text-sky-900'>Scene Videos</h3>
+                  </div>
+                  <button
+                    onClick={onGenerateAllSceneVideos}
+                    disabled={generatingAllSceneVideos}
+                    className='w-full h-10 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      generatingAllSceneVideos
+                        ? generatingSceneVideoId
+                          ? `Generating scene video for scene ${generatingSceneVideoId}`
+                          : 'Generating scene videos for all scenes...'
+                        : 'Generate scene videos for all eligible scenes'
+                    }
+                  >
+                    {generatingAllSceneVideos && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {generatingAllSceneVideos
+                        ? generatingSceneVideoId
+                          ? `Scene #${generatingSceneVideoId}`
+                          : 'Processing...'
+                        : 'Generate All'}
+                    </span>
+                  </button>
                 </div>
-                <h3 className='font-semibold text-rose-900'>Apply Image</h3>
-              </div>
-              <button
-                onClick={onApplyUpscaledImagesAll}
-                disabled={applyingAllUpscaledImages}
-                className='w-full h-12 bg-rose-500 hover:bg-rose-600 disabled:bg-rose-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  applyingAllUpscaledImages
-                    ? applyingUpscaledImageSceneId
-                      ? `Applying upscaled image for scene ${applyingUpscaledImageSceneId}`
-                      : 'Applying upscaled images for all scenes...'
-                    : 'Apply upscaled images for all scenes'
-                }
-              >
-                {applyingAllUpscaledImages && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {applyingAllUpscaledImages
-                    ? applyingUpscaledImageSceneId
-                      ? `Scene #${applyingUpscaledImageSceneId}`
-                      : 'Processing...'
-                    : 'Apply All'}
-                </span>
-              </button>
-            </div>
 
-            {/* Apply Enhanced Videos */}
-            <div className='bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-indigo-500 rounded-lg flex items-center gap-1'>
-                  <Film className='w-4 h-4 text-white' />
-                  <span className='text-white text-xs font-bold'>VID</span>
+                {/* Enhance / Upscale Scene Videos (REAL-Video-Enhancer) */}
+                <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-3 border border-violet-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-violet-500 rounded-lg flex items-center gap-1'>
+                      <Wand2 className='w-4 h-4 text-white' />
+                      <span className='text-white text-xs font-bold'>RVE</span>
+                    </div>
+                    <h3 className='font-semibold text-violet-900'>
+                      Enhance Videos
+                    </h3>
+                  </div>
+                  <button
+                    onClick={onEnhanceAllSceneVideos}
+                    disabled={enhancingAllSceneVideos}
+                    className='w-full h-10 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      enhancingAllSceneVideos
+                        ? enhancingSceneVideoId
+                          ? `Enhancing scene video for scene ${enhancingSceneVideoId}`
+                          : 'Enhancing scene videos for all scenes...'
+                        : 'Enhance scene videos for all eligible scenes'
+                    }
+                  >
+                    {enhancingAllSceneVideos && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {enhancingAllSceneVideos
+                        ? enhancingSceneVideoId
+                          ? `Scene #${enhancingSceneVideoId}`
+                          : 'Processing...'
+                        : 'Enhance All'}
+                    </span>
+                  </button>
                 </div>
-                <h3 className='font-semibold text-indigo-900'>Apply Video</h3>
-              </div>
-              <button
-                onClick={onApplyEnhancedVideosAll}
-                disabled={applyingAllEnhancedVideos}
-                className='w-full h-12 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={
-                  applyingAllEnhancedVideos
-                    ? applyingEnhancedVideoSceneId
-                      ? `Applying enhanced video for scene ${applyingEnhancedVideoSceneId}`
-                      : 'Applying enhanced videos for all scenes...'
-                    : 'Apply enhanced videos for all scenes'
-                }
-              >
-                {applyingAllEnhancedVideos && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {applyingAllEnhancedVideos
-                    ? applyingEnhancedVideoSceneId
-                      ? `Scene #${applyingEnhancedVideoSceneId}`
-                      : 'Processing...'
-                    : 'Apply All'}
-                </span>
-              </button>
-            </div>
 
-            {/* Speed Up Videos */}
-            <div className='bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-blue-500 rounded-lg flex items-center gap-1'>
-                  {videoSettings.muteAudio ? (
-                    <VolumeX className='w-4 h-4 text-white' />
-                  ) : (
-                    <Volume2 className='w-4 h-4 text-white' />
-                  )}
-                  <span className='text-white text-xs font-bold'>
-                    {videoSettings.selectedSpeed}x
-                  </span>
+                {/* Upscale Scene Images (3x) */}
+                <div className='bg-gradient-to-br from-fuchsia-50 to-fuchsia-100 rounded-lg p-3 border border-fuchsia-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-fuchsia-500 rounded-lg flex items-center gap-1'>
+                      <ImageIcon className='w-4 h-4 text-white' />
+                      <span className='text-white text-xs font-bold'>3x</span>
+                    </div>
+                    <h3 className='font-semibold text-fuchsia-900'>Upscale</h3>
+                  </div>
+                  <button
+                    onClick={onUpscaleAllSceneImages}
+                    disabled={upscalingAllSceneImages}
+                    className='w-full h-10 bg-fuchsia-500 hover:bg-fuchsia-600 disabled:bg-fuchsia-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      upscalingAllSceneImages
+                        ? upscalingSceneImageId
+                          ? `Upscaling image for scene ${upscalingSceneImageId}`
+                          : 'Upscaling images for all scenes...'
+                        : 'Upscale images for all scenes (3x)'
+                    }
+                  >
+                    {upscalingAllSceneImages && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {upscalingAllSceneImages
+                        ? upscalingSceneImageId
+                          ? `Scene #${upscalingSceneImageId}`
+                          : 'Processing...'
+                        : 'Upscale All'}
+                    </span>
+                  </button>
                 </div>
-                <h3 className='font-semibold text-blue-900'>Speed Up</h3>
-              </div>
-              <div className='flex items-center gap-2 mb-3'>
-                <button
-                  onClick={() =>
-                    updateVideoSettings({ muteAudio: !videoSettings.muteAudio })
-                  }
-                  className='flex items-center gap-1 px-2 py-1 bg-blue-200 hover:bg-blue-300 text-blue-800 text-xs font-medium rounded transition-colors'
-                  title={`Click to ${
-                    videoSettings.muteAudio ? 'enable' : 'mute'
-                  } audio`}
-                >
-                  {videoSettings.muteAudio ? (
-                    <VolumeX className='w-3 h-3' />
-                  ) : (
-                    <Volume2 className='w-3 h-3' />
-                  )}
-                  {videoSettings.muteAudio ? 'Muted' : 'Audio'}
-                </button>
-                <button
-                  onClick={cycleSpeed}
-                  className='px-2 py-1 bg-blue-200 hover:bg-blue-300 text-blue-800 text-xs font-bold rounded transition-colors'
-                  title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
-                >
-                  {videoSettings.selectedSpeed}x
-                </button>
-                <button
-                  onClick={cycleSpeedUpMode}
-                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                    videoSettings.speedUpMode === 'all'
-                      ? 'bg-blue-200 hover:bg-blue-300 text-blue-800'
-                      : 'bg-blue-500 text-white'
-                  }`}
-                  title={`Currently: ${getSpeedUpModeTooltip()}. Click to cycle through modes.`}
-                >
-                  {getSpeedUpModeDisplay()}
-                </button>
-              </div>
-              <button
-                onClick={onSpeedUpAllVideos}
-                disabled={
-                  batchOperations.speedingUpAllVideos ||
-                  sceneLoading.speedingUpVideo !== null
-                }
-                className='w-full h-12 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title={`Speed up ${getSpeedUpModeTooltip().toLowerCase()} ${
-                  videoSettings.selectedSpeed
-                }x and ${videoSettings.muteAudio ? 'mute' : 'keep'} audio`}
-              >
-                {(batchOperations.speedingUpAllVideos ||
-                  sceneLoading.speedingUpVideo !== null) && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {batchOperations.speedingUpAllVideos
-                    ? sceneLoading.speedingUpVideo !== null
-                      ? `Scene #${sceneLoading.speedingUpVideo}`
-                      : 'Processing...'
-                    : sceneLoading.speedingUpVideo !== null
-                      ? `Busy (#${sceneLoading.speedingUpVideo})`
-                      : getSpeedUpButtonText()}
-                </span>
-              </button>
 
-              <button
-                onClick={handleDeleteEmptyScenes}
-                disabled={
-                  deletingEmptyScenes ||
-                  batchOperations.speedingUpAllVideos ||
-                  sceneLoading.speedingUpVideo !== null
-                }
-                className='w-full h-12 mt-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title='Delete empty scenes (both sentence + original are blank)'
-              >
-                {deletingEmptyScenes && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <Trash2 className='w-4 h-4' />
-                <span className='font-medium'>
-                  {deletingEmptyScenes
-                    ? deletingEmptySceneId
-                      ? `Deleting #${deletingEmptySceneId}`
-                      : 'Deleting...'
-                    : 'Delete Empty'}
-                </span>
-              </button>
-            </div>
-
-            {/* Combine Pairs (Subtitle Settings Based) */}
-            <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-violet-500 rounded-lg'>
-                  <GitMerge className='w-4 h-4 text-white' />
+                {/* Apply Upscaled Images */}
+                <div className='bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg p-3 border border-rose-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-rose-500 rounded-lg flex items-center gap-1'>
+                      <Save className='w-4 h-4 text-white' />
+                      <span className='text-white text-xs font-bold'>IMG</span>
+                    </div>
+                    <h3 className='font-semibold text-rose-900'>Apply Image</h3>
+                  </div>
+                  <button
+                    onClick={onApplyUpscaledImagesAll}
+                    disabled={applyingAllUpscaledImages}
+                    className='w-full h-10 bg-rose-500 hover:bg-rose-600 disabled:bg-rose-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      applyingAllUpscaledImages
+                        ? applyingUpscaledImageSceneId
+                          ? `Applying upscaled image for scene ${applyingUpscaledImageSceneId}`
+                          : 'Applying upscaled images for all scenes...'
+                        : 'Apply upscaled images for all scenes'
+                    }
+                  >
+                    {applyingAllUpscaledImages && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {applyingAllUpscaledImages
+                        ? applyingUpscaledImageSceneId
+                          ? `Scene #${applyingUpscaledImageSceneId}`
+                          : 'Processing...'
+                        : 'Apply All'}
+                    </span>
+                  </button>
                 </div>
-                <h3 className='font-semibold text-violet-900'>
-                  Combine Long-Text Pairs
+
+                {/* Apply Enhanced Videos */}
+                <div className='bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 border border-indigo-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-indigo-500 rounded-lg flex items-center gap-1'>
+                      <Film className='w-4 h-4 text-white' />
+                      <span className='text-white text-xs font-bold'>VID</span>
+                    </div>
+                    <h3 className='font-semibold text-indigo-900'>
+                      Apply Video
+                    </h3>
+                  </div>
+                  <button
+                    onClick={onApplyEnhancedVideosAll}
+                    disabled={applyingAllEnhancedVideos}
+                    className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      applyingAllEnhancedVideos
+                        ? applyingEnhancedVideoSceneId
+                          ? `Applying enhanced video for scene ${applyingEnhancedVideoSceneId}`
+                          : 'Applying enhanced videos for all scenes...'
+                        : 'Apply enhanced videos for all scenes'
+                    }
+                  >
+                    {applyingAllEnhancedVideos && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {applyingAllEnhancedVideos
+                        ? applyingEnhancedVideoSceneId
+                          ? `Scene #${applyingEnhancedVideoSceneId}`
+                          : 'Processing...'
+                        : 'Apply All'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* Finalize */}
+            <section className='xl:order-2'>
+              <div className='mb-3 flex items-center gap-2'>
+                <h3 className='text-lg font-semibold text-slate-900'>
+                  Finalize
                 </h3>
-              </div>
-              <button
-                onClick={handleCombineNoSubtitlePairs}
-                disabled={combiningNoSubtitlePairs}
-                className='w-full h-12 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title='Combine consecutive pairs based on subtitle character-limit settings'
-              >
-                {combiningNoSubtitlePairs && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {combiningNoSubtitlePairs
-                    ? combiningNoSubtitleSceneId !== null
-                      ? `Scene #${combiningNoSubtitleSceneId}`
-                      : 'Processing...'
-                    : 'Combine Pairs'}
+                <span className='text-xs font-medium text-slate-500'>
+                  Subtitles • Speed Up • Combine • Merge
                 </span>
-              </button>
-            </div>
-
-            {/* Concatenate Videos */}
-            <div className='bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200'>
-              <div className='flex items-center gap-2 mb-3'>
-                <div className='p-2 bg-orange-500 rounded-lg'>
-                  <Film className='w-4 h-4 text-white' />
+              </div>
+              <div className='grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-3'>
+                {/* Subtitle Generation */}
+                <div className='bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-3 border border-yellow-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-yellow-500 rounded-lg'>
+                      <Type className='w-4 h-4 text-white' />
+                    </div>
+                    <h3 className='font-semibold text-yellow-900'>Subtitles</h3>
+                  </div>
+                  <button
+                    onClick={onGenerateAllSubtitles}
+                    disabled={
+                      !selectedOriginalVideo.id || generatingAllSubtitles
+                    }
+                    className='w-full h-10 bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : generatingAllSubtitles
+                          ? generatingSubtitleSceneId
+                            ? `Generating subtitles for scene ${generatingSubtitleSceneId}`
+                            : 'Generating subtitles for all scenes...'
+                          : 'Generate subtitles for all scenes'
+                    }
+                  >
+                    {generatingAllSubtitles && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {generatingAllSubtitles
+                        ? generatingSubtitleSceneId
+                          ? `Scene #${generatingSubtitleSceneId}`
+                          : 'Processing...'
+                        : 'Generate All'}
+                    </span>
+                  </button>
                 </div>
-                <h3 className='font-semibold text-orange-900'>
-                  Merge Scenes of a Single Video
-                </h3>
+
+                {/* Speed Up Videos */}
+                <div className='bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-blue-500 rounded-lg flex items-center gap-1'>
+                      {videoSettings.muteAudio ? (
+                        <VolumeX className='w-4 h-4 text-white' />
+                      ) : (
+                        <Volume2 className='w-4 h-4 text-white' />
+                      )}
+                      <span className='text-white text-xs font-bold'>
+                        {videoSettings.selectedSpeed}x
+                      </span>
+                    </div>
+                    <h3 className='font-semibold text-blue-900'>Speed Up</h3>
+                  </div>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <button
+                      onClick={() =>
+                        updateVideoSettings({
+                          muteAudio: !videoSettings.muteAudio,
+                        })
+                      }
+                      className='flex items-center gap-1 px-2 py-1 bg-blue-200 hover:bg-blue-300 text-blue-800 text-xs font-medium rounded transition-colors'
+                      title={`Click to ${
+                        videoSettings.muteAudio ? 'enable' : 'mute'
+                      } audio`}
+                    >
+                      {videoSettings.muteAudio ? (
+                        <VolumeX className='w-3 h-3' />
+                      ) : (
+                        <Volume2 className='w-3 h-3' />
+                      )}
+                      {videoSettings.muteAudio ? 'Muted' : 'Audio'}
+                    </button>
+                    <button
+                      onClick={cycleSpeed}
+                      className='px-2 py-1 bg-blue-200 hover:bg-blue-300 text-blue-800 text-xs font-bold rounded transition-colors'
+                      title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
+                    >
+                      {videoSettings.selectedSpeed}x
+                    </button>
+                    <button
+                      onClick={cycleSpeedUpMode}
+                      className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                        videoSettings.speedUpMode === 'all'
+                          ? 'bg-blue-200 hover:bg-blue-300 text-blue-800'
+                          : 'bg-blue-500 text-white'
+                      }`}
+                      title={`Currently: ${getSpeedUpModeTooltip()}. Click to cycle through modes.`}
+                    >
+                      {getSpeedUpModeDisplay()}
+                    </button>
+                  </div>
+                  <button
+                    onClick={onSpeedUpAllVideos}
+                    disabled={
+                      batchOperations.speedingUpAllVideos ||
+                      sceneLoading.speedingUpVideo !== null
+                    }
+                    className='w-full h-10 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={`Speed up ${getSpeedUpModeTooltip().toLowerCase()} ${
+                      videoSettings.selectedSpeed
+                    }x and ${videoSettings.muteAudio ? 'mute' : 'keep'} audio`}
+                  >
+                    {(batchOperations.speedingUpAllVideos ||
+                      sceneLoading.speedingUpVideo !== null) && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {batchOperations.speedingUpAllVideos
+                        ? sceneLoading.speedingUpVideo !== null
+                          ? `Scene #${sceneLoading.speedingUpVideo}`
+                          : 'Processing...'
+                        : sceneLoading.speedingUpVideo !== null
+                          ? `Busy (#${sceneLoading.speedingUpVideo})`
+                          : getSpeedUpButtonText()}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={handleDeleteEmptyScenes}
+                    disabled={
+                      deletingEmptyScenes ||
+                      batchOperations.speedingUpAllVideos ||
+                      sceneLoading.speedingUpVideo !== null
+                    }
+                    className='w-full h-10 mt-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title='Delete empty scenes (both sentence + original are blank)'
+                  >
+                    {deletingEmptyScenes && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <Trash2 className='w-4 h-4' />
+                    <span className='font-medium'>
+                      {deletingEmptyScenes
+                        ? deletingEmptySceneId
+                          ? `Deleting #${deletingEmptySceneId}`
+                          : 'Deleting...'
+                        : 'Delete Empty'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Combine Pairs (Subtitle Settings Based) */}
+                <div className='bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-3 border border-violet-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-violet-500 rounded-lg'>
+                      <GitMerge className='w-4 h-4 text-white' />
+                    </div>
+                    <h3 className='font-semibold text-violet-900'>
+                      Combine Long-Text Pairs
+                    </h3>
+                  </div>
+                  <button
+                    onClick={handleCombineNoSubtitlePairs}
+                    disabled={combiningNoSubtitlePairs}
+                    className='w-full h-10 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title='Combine consecutive pairs based on subtitle character-limit settings'
+                  >
+                    {combiningNoSubtitlePairs && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {combiningNoSubtitlePairs
+                        ? combiningNoSubtitleSceneId !== null
+                          ? `Scene #${combiningNoSubtitleSceneId}`
+                          : 'Processing...'
+                        : 'Combine Pairs'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Concatenate Videos */}
+                <div className='bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 border border-orange-200'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <div className='p-2 bg-orange-500 rounded-lg'>
+                      <Film className='w-4 h-4 text-white' />
+                    </div>
+                    <h3 className='font-semibold text-orange-900'>
+                      Merge Scenes of a Single Video
+                    </h3>
+                  </div>
+                  <button
+                    onClick={onConcatenateAllVideos}
+                    disabled={batchOperations.concatenatingVideos}
+                    className='w-full h-10 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title='Concatenate all videos into one final video'
+                  >
+                    {batchOperations.concatenatingVideos && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {batchOperations.concatenatingVideos
+                        ? 'Merging...'
+                        : 'Merge All Scenes'}
+                    </span>
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={onConcatenateAllVideos}
-                disabled={batchOperations.concatenatingVideos}
-                className='w-full h-12 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                title='Concatenate all videos into one final video'
-              >
-                {batchOperations.concatenatingVideos && (
-                  <Loader2 className='w-4 h-4 animate-spin' />
-                )}
-                <span className='font-medium'>
-                  {batchOperations.concatenatingVideos
-                    ? 'Merging...'
-                    : 'Merge All Scenes'}
-                </span>
-              </button>
-            </div>
+            </section>
           </div>
         </div>
       )}
