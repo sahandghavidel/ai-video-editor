@@ -86,7 +86,7 @@ type BaserowField =
     }>
   | null
   | undefined;
-import { Sparkles, Mic2 } from 'lucide-react';
+import { Sparkles, Mic2, Wand2 } from 'lucide-react';
 
 interface SceneHandlers {
   handleAutoFixMismatch: (
@@ -258,6 +258,9 @@ export default function OriginalVideosList({
     transcribingProcessingScenesAllVideos,
     setTranscribingProcessingScenesAllVideos,
   ] = useState(false);
+  const [fixTtsBatchMode, setFixTtsBatchMode] = useState<
+    'all' | 'flagged' | null
+  >(null);
   const [
     promptingProcessingScenesAllVideos,
     setPromptingProcessingScenesAllVideos,
@@ -3991,6 +3994,108 @@ export default function OriginalVideosList({
     }
   };
 
+  const runFixTtsForProcessingScenesAllVideos = async (options: {
+    flaggedOnly: boolean;
+  }): Promise<boolean> => {
+    const { flaggedOnly } = options;
+
+    if (!sceneHandlers?.handleAutoFixMismatch) {
+      throw new Error(
+        'Fix TTS handler not ready. Select a video first so scene actions initialize.',
+      );
+    }
+
+    // Fetch fresh original videos and scenes
+    const freshVideosData = await getOriginalVideosData();
+    const freshScenesData = await getBaserowData();
+
+    if (!freshScenesData || freshScenesData.length === 0) {
+      console.log('No scenes found to transcribe');
+      return false;
+    }
+
+    // Filter videos by Processing status
+    const processingVideos = freshVideosData.filter((video) => {
+      const status = extractFieldValue(video.field_6864);
+      return status === 'Processing';
+    });
+
+    const ttsVoiceByVideoId = new Map<number, string>();
+    for (const video of processingVideos) {
+      const voiceRef = getVideoTtsVoiceReference(video);
+      if (voiceRef) {
+        ttsVoiceByVideoId.set(video.id, voiceRef);
+      }
+    }
+
+    const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+
+    // Filter scenes for Processing videos
+    const scenesForProcessingVideos = freshScenesData.filter((scene) => {
+      const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
+      return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
+    });
+
+    // Base eligibility: final video + text and not already confirmed
+    const eligibleScenesToFix = getFixTtsEligibleScenes(
+      scenesForProcessingVideos,
+    );
+
+    const scenesToFix = flaggedOnly
+      ? eligibleScenesToFix.filter((scene) => isSceneFlaggedForFixTts(scene))
+      : eligibleScenesToFix;
+
+    console.log(`Processing videos: ${processingVideos.length}`);
+    console.log(
+      `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`,
+    );
+    console.log(
+      flaggedOnly
+        ? `Flagged scenes to Fix TTS (final video + text): ${scenesToFix.length}`
+        : `Scenes to Fix TTS (final video + text): ${scenesToFix.length}`,
+    );
+
+    if (scenesToFix.length === 0) {
+      console.log(
+        flaggedOnly
+          ? 'No flagged Processing scenes found that are eligible for Fix TTS (need final video + text)'
+          : 'No Processing scenes found that are eligible for Fix TTS (need final video + text)',
+      );
+      return false;
+    }
+
+    for (const scene of scenesToFix) {
+      const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
+      if (videoId && !isNaN(videoId)) {
+        setCurrentProcessingVideoId(videoId);
+      }
+
+      try {
+        const sceneWithVoiceOverride = withSceneVoiceOverride(
+          scene,
+          videoId && !isNaN(videoId) ? ttsVoiceByVideoId.get(videoId) : null,
+        );
+
+        await sceneHandlers.handleAutoFixMismatch(
+          scene.id,
+          sceneWithVoiceOverride,
+          flaggedOnly ? { maxAttempts: 1 } : undefined,
+        );
+      } catch (error) {
+        // Continue with other scenes; don't fail the whole batch.
+        console.error(
+          `${flaggedOnly ? 'Fix flagged-only TTS' : 'Fix TTS'} failed for scene ${scene.id}:`,
+          error,
+        );
+      }
+
+      // Small delay to avoid overwhelming the backend
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    return true;
+  };
+
   // Fix TTS for Scenes in All Videos (Processing only)
   // Uses the robust per-scene auto-fix handler (TTS -> sync -> transcribe -> compare, retry up to N).
   const handleTranscribeProcessingScenesAllVideos = async (
@@ -4000,106 +4105,18 @@ export default function OriginalVideosList({
 
     try {
       setError(null);
+      setFixTtsBatchMode('all');
       setTranscribingProcessingScenesAllVideos(true);
 
-      if (!sceneHandlers?.handleAutoFixMismatch) {
-        throw new Error(
-          'Fix TTS handler not ready. Select a video first so scene actions initialize.',
-        );
-      }
-
-      // Fetch fresh original videos and scenes
-      const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
-
-      if (!freshScenesData || freshScenesData.length === 0) {
-        console.log('No scenes found to transcribe');
-        return;
-      }
-
-      // Filter videos by Processing status
-      const processingVideos = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
+      const didProcess = await runFixTtsForProcessingScenesAllVideos({
+        flaggedOnly: false,
       });
 
-      const ttsVoiceByVideoId = new Map<number, string>();
-      for (const video of processingVideos) {
-        const voiceRef = getVideoTtsVoiceReference(video);
-        if (voiceRef) {
-          ttsVoiceByVideoId.set(video.id, voiceRef);
-        }
-      }
-
-      const processingVideoIds = new Set(processingVideos.map((v) => v.id));
-
-      // Filter scenes for Processing videos
-      const scenesForProcessingVideos = freshScenesData.filter((scene) => {
-        const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
-        return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
-      });
-
-      // Fix only scenes that have final video + text
-      // (auto-fix will bootstrap TTS + sync + transcription when missing).
-      const scenesToFix = getFixTtsEligibleScenes(scenesForProcessingVideos);
-
-      console.log(`Processing videos: ${processingVideos.length}`);
-      console.log(
-        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`,
-      );
-      console.log(
-        `Scenes to Fix TTS (final video + text): ${scenesToFix.length}`,
-      );
-
-      if (scenesToFix.length === 0) {
-        console.log(
-          'No Processing scenes found that are eligible for Fix TTS (need final video + text)',
-        );
-        return;
-      }
-
-      const runFixPass = async (
-        scenes: BaserowRow[],
-        passLabel: string,
-      ): Promise<void> => {
-        for (const scene of scenes) {
-          const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
-          if (videoId && !isNaN(videoId)) {
-            setCurrentProcessingVideoId(videoId);
-          }
-
-          try {
-            const sceneWithVoiceOverride = withSceneVoiceOverride(
-              scene,
-              videoId && !isNaN(videoId)
-                ? ttsVoiceByVideoId.get(videoId)
-                : null,
-            );
-
-            await sceneHandlers.handleAutoFixMismatch(
-              scene.id,
-              sceneWithVoiceOverride,
-            );
-          } catch (error) {
-            // Continue with other scenes; don't fail the whole batch.
-            console.error(
-              `Fix TTS failed for scene ${scene.id} (${passLabel}):`,
-              error,
-            );
-          }
-
-          // Small delay to avoid overwhelming the backend
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-      };
-
-      await runFixPass(scenesToFix, 'initial');
-
-      if (refreshScenesData) {
+      if (didProcess && refreshScenesData) {
         refreshScenesData();
       }
 
-      if (playSound) {
+      if (didProcess && playSound) {
         await playSuccessAndNotifyBatchCompletion('Fix TTS');
       }
     } catch (error) {
@@ -4115,6 +4132,51 @@ export default function OriginalVideosList({
         }`,
       );
     } finally {
+      setFixTtsBatchMode(null);
+      setTranscribingProcessingScenesAllVideos(false);
+      setCurrentProcessingVideoId(null);
+    }
+  };
+
+  // Fix only flagged scenes in Processing videos.
+  const handleTranscribeFlaggedProcessingScenesAllVideos = async (
+    playSound = true,
+  ) => {
+    if (transcribingProcessingScenesAllVideos) return;
+
+    try {
+      setError(null);
+      setFixTtsBatchMode('flagged');
+      setTranscribingProcessingScenesAllVideos(true);
+
+      const didProcess = await runFixTtsForProcessingScenesAllVideos({
+        flaggedOnly: true,
+      });
+
+      if (didProcess && refreshScenesData) {
+        refreshScenesData();
+      }
+
+      if (didProcess && playSound) {
+        await playSuccessAndNotifyBatchCompletion('Fix Flagged');
+      }
+    } catch (error) {
+      console.error(
+        'Error fixing flagged TTS for scenes in Processing videos:',
+        error,
+      );
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to Fix flagged TTS for Processing scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setFixTtsBatchMode(null);
       setTranscribingProcessingScenesAllVideos(false);
       setCurrentProcessingVideoId(null);
     }
@@ -7811,7 +7873,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({38} actions)</span>
+                <span className='text-xs text-gray-500'>({39} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -8893,7 +8955,9 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         transcribingProcessingScenesAllVideos
-                          ? 'Fixing TTS for scenes in Processing videos...'
+                          ? fixTtsBatchMode === 'flagged'
+                            ? 'Fix Flagged is running...'
+                            : 'Fixing TTS for scenes in Processing videos...'
                           : !sceneHandlers?.handleAutoFixMismatch
                             ? 'Select a video first so Fix TTS handlers initialize'
                             : 'Fix TTS by retrying TTS + sync + transcribe until it matches scene text'
@@ -8910,8 +8974,58 @@ export default function OriginalVideosList({
                         {transcribingProcessingScenesAllVideos
                           ? currentProcessingVideoId !== null
                             ? `V${currentProcessingVideoId}`
-                            : 'Processing...'
+                            : fixTtsBatchMode === 'flagged'
+                              ? 'Busy...'
+                              : 'Processing...'
                           : 'Fix TTS'}
+                      </span>
+                    </button>
+
+                    {/* Fix Flagged (Processing) Button */}
+                    <button
+                      onClick={() =>
+                        handleTranscribeFlaggedProcessingScenesAllVideos()
+                      }
+                      disabled={
+                        transcribingProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos ||
+                        !sceneHandlers?.handleAutoFixMismatch ||
+                        uploading ||
+                        reordering ||
+                        transcribing !== null ||
+                        transcribingAll ||
+                        generatingScenes !== null ||
+                        generatingScenesAll ||
+                        mergingFinalVideos ||
+                        batchOperations.convertingAllFinalToCFR ||
+                        sceneLoading.convertingFinalToCFRVideo !== null
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        transcribingProcessingScenesAllVideos &&
+                        fixTtsBatchMode === 'flagged'
+                          ? 'Fixing flagged scenes for Processing videos...'
+                          : !sceneHandlers?.handleAutoFixMismatch
+                            ? 'Select a video first so Fix TTS handlers initialize'
+                            : 'Fix only scenes where Flagged (7096) is true in videos with Processing status'
+                      }
+                    >
+                      <Wand2
+                        className={`w-4 h-4 ${
+                          transcribingProcessingScenesAllVideos &&
+                          fixTtsBatchMode === 'flagged'
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {transcribingProcessingScenesAllVideos &&
+                        fixTtsBatchMode === 'flagged'
+                          ? currentProcessingVideoId !== null
+                            ? `V${currentProcessingVideoId}`
+                            : 'Processing...'
+                          : 'Fix Flagged'}
                       </span>
                     </button>
 

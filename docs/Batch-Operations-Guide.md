@@ -117,6 +117,7 @@ Existing completion names include:
 - `Speed Up All`
 - `Delete Empty`
 - `Fix TTS`
+- `Fix Flagged`
 - `Prompt Scenes`
 - `Combine Pairs`
 - `Silence Opt All`
