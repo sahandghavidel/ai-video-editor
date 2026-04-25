@@ -35,12 +35,19 @@ interface RequestBody {
   };
 }
 
+type PreparedWordReplacement = {
+  word: string;
+  replacement: string;
+  pattern: RegExp;
+};
+
 const OMNIVOICE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const OMNIVOICE_JOB_TIMEOUT_MS = Math.max(
   0,
   Number(process.env.OMNIVOICE_JOB_TIMEOUT_MS || 0) || 0,
 );
 const OMNIVOICE_WORKER_PROTOCOL_VERSION = '2';
+const WORD_CHAR_CLASS = 'A-Za-z0-9_';
 
 type WorkerJobResult = {
   sampleRate: number;
@@ -248,6 +255,83 @@ function resolveDeviceMap(value: unknown): OmniVoiceDeviceMap {
 function formatMs(value: unknown): string {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(1) : 'n/a';
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function prepareWordReplacements(entries: unknown): PreparedWordReplacement[] {
+  if (!Array.isArray(entries)) return [];
+
+  const prepared: PreparedWordReplacement[] = [];
+
+  for (const rawEntry of entries) {
+    if (!rawEntry || typeof rawEntry !== 'object') continue;
+
+    const entry = rawEntry as Record<string, unknown>;
+    const word = typeof entry.word === 'string' ? entry.word : '';
+    const replacement =
+      typeof entry.replacement === 'string' ? entry.replacement : '';
+
+    if (!word.trim() || !replacement.trim()) continue;
+
+    prepared.push({
+      word,
+      replacement,
+      pattern: new RegExp(
+        `(^|[^${WORD_CHAR_CLASS}])(${escapeRegExp(word)})(?=$|[^${WORD_CHAR_CLASS}])`,
+        'g',
+      ),
+    });
+  }
+
+  return prepared;
+}
+
+function applyWordReplacements(
+  text: string,
+  replacements: PreparedWordReplacement[],
+): { text: string; substitutions: number } {
+  let updated = text;
+  let substitutions = 0;
+
+  for (const replacement of replacements) {
+    updated = updated.replace(replacement.pattern, (_match, prefix: string) => {
+      substitutions += 1;
+      return `${prefix}${replacement.replacement}`;
+    });
+  }
+
+  return { text: updated, substitutions };
+}
+
+async function loadWordReplacementsFromApi(
+  request: NextRequest,
+): Promise<PreparedWordReplacement[]> {
+  try {
+    const replacementsUrl = new URL('/api/tts-word-replacements', request.url);
+    const response = await fetch(replacementsUrl.toString(), {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.warn(
+        `[OmniVoice] Failed to load TTS replacements: ${response.status} ${errorText}`,
+      );
+      return [];
+    }
+
+    const payload = (await response.json().catch(() => null)) as {
+      entries?: unknown;
+    } | null;
+    return prepareWordReplacements(payload?.entries);
+  } catch (error) {
+    console.warn('[OmniVoice] Failed to fetch TTS replacements:', error);
+    return [];
+  }
 }
 
 const OMNIVOICE_QUOTE_CHAR_REGEX = /["“”„‟«»＂]/g;
@@ -607,8 +691,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const replacements = await loadWordReplacementsFromApi(request);
+    const {
+      text: textWithReplacements,
+      substitutions: replacementSubstitutions,
+    } = applyWordReplacements(rawText, replacements);
+
     const { sanitizedText: text, removedQuoteCount } =
-      stripOmniVoiceQuoteChars(rawText);
+      stripOmniVoiceQuoteChars(textWithReplacements);
 
     if (!text) {
       return NextResponse.json(
@@ -621,7 +711,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -777,6 +867,8 @@ export async function POST(request: NextRequest) {
         speed,
         language,
         removedQuoteCount,
+        wordReplacementsApplied: replacementSubstitutions,
+        wordReplacementsConfigured: replacements.length,
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
         pythonSource,
         sampleRate: runResult.sampleRate,
