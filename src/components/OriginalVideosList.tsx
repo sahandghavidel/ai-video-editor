@@ -4116,8 +4116,12 @@ export default function OriginalVideosList({
         refreshScenesData();
       }
 
-      if (didProcess && playSound) {
-        await playSuccessAndNotifyBatchCompletion('Fix TTS');
+      if (playSound) {
+        if (didProcess) {
+          await playSuccessAndNotifyBatchCompletion('Fix TTS');
+        } else {
+          await notifyBatchOperationCompleted('Fix TTS (no eligible scenes)');
+        }
       }
     } catch (error) {
       console.error('Error fixing TTS for scenes in Processing videos:', error);
@@ -4157,8 +4161,14 @@ export default function OriginalVideosList({
         refreshScenesData();
       }
 
-      if (didProcess && playSound) {
-        await playSuccessAndNotifyBatchCompletion('Fix Flagged');
+      if (playSound) {
+        if (didProcess) {
+          await playSuccessAndNotifyBatchCompletion('Fix Flagged');
+        } else {
+          await notifyBatchOperationCompleted(
+            'Fix Flagged (no eligible scenes)',
+          );
+        }
       }
     } catch (error) {
       console.error(
