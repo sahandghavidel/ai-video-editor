@@ -7,11 +7,41 @@ import { useState } from 'react';
 export default function PipelineConfig() {
   const {
     pipelineConfig,
+    pipelineTemplates,
     togglePipelineStep,
     resetPipelineConfig,
     updatePipelineConfig,
+    savePipelineTemplate,
+    applyPipelineTemplate,
   } = useAppStore();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateNameError, setTemplateNameError] = useState('');
+
+  const openSaveTemplateModal = () => {
+    setTemplateName('');
+    setTemplateNameError('');
+    setIsSaveTemplateModalOpen(true);
+  };
+
+  const closeSaveTemplateModal = () => {
+    setTemplateName('');
+    setTemplateNameError('');
+    setIsSaveTemplateModalOpen(false);
+  };
+
+  const handleSaveTemplate = () => {
+    const trimmedName = templateName.trim();
+
+    if (!trimmedName) {
+      setTemplateNameError('Please enter a template name.');
+      return;
+    }
+
+    savePipelineTemplate(trimmedName);
+    closeSaveTemplateModal();
+  };
 
   const steps = [
     {
@@ -224,16 +254,35 @@ export default function PipelineConfig() {
       {/* Expanded Content */}
       {isExpanded && (
         <div className='px-6 py-4 bg-gray-50 border-t border-gray-200'>
-          <div className='flex items-center justify-between mb-4'>
+          <div className='flex flex-col gap-3 mb-4 lg:flex-row lg:items-center lg:justify-between'>
             <p className='text-sm text-gray-600'>
               Select which steps to include in the Full Pipeline execution
             </p>
-            <button
-              onClick={resetPipelineConfig}
-              className='text-sm text-purple-600 hover:text-purple-700 font-medium'
-            >
-              Reset to Default
-            </button>
+            <div className='flex flex-wrap items-center gap-2'>
+              <button
+                onClick={openSaveTemplateModal}
+                className='text-sm px-3 py-1.5 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 font-medium transition-colors'
+              >
+                Save Template
+              </button>
+              <button
+                onClick={resetPipelineConfig}
+                className='text-sm px-3 py-1.5 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 font-medium transition-colors'
+              >
+                Reset to Default
+              </button>
+
+              {pipelineTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => applyPipelineTemplate(template.id)}
+                  className='text-xs sm:text-sm px-3 py-1.5 rounded-full border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 font-medium transition-colors'
+                  title={`Apply template: ${template.name}`}
+                >
+                  {template.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Pipeline Steps Grid */}
@@ -481,6 +530,74 @@ export default function PipelineConfig() {
                 ⚠️ Warning: No steps are selected. The Full Pipeline button will
                 not perform any operations.
               </p>
+            </div>
+          )}
+
+          {/* Save Template Modal */}
+          {isSaveTemplateModalOpen && (
+            <div
+              className='fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4'
+              onClick={closeSaveTemplateModal}
+            >
+              <div
+                className='w-full max-w-md bg-white rounded-xl shadow-xl border border-gray-200 p-5'
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className='text-base font-semibold text-gray-900'>
+                  Save Pipeline Template
+                </h3>
+                <p className='text-sm text-gray-600 mt-1'>
+                  Name this template to reuse the current pipeline selection.
+                </p>
+
+                <input
+                  type='text'
+                  value={templateName}
+                  onChange={(e) => {
+                    setTemplateName(e.target.value);
+                    if (templateNameError) setTemplateNameError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSaveTemplate();
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      closeSaveTemplateModal();
+                    }
+                  }}
+                  placeholder='e.g. YouTube Full Auto'
+                  autoFocus
+                  className='mt-4 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500'
+                />
+
+                {templateNameError && (
+                  <p className='mt-2 text-xs text-red-600'>
+                    {templateNameError}
+                  </p>
+                )}
+
+                <p className='mt-2 text-xs text-gray-500'>
+                  Tip: using an existing name updates that template.
+                </p>
+
+                <div className='mt-5 flex items-center justify-end gap-2'>
+                  <button
+                    onClick={closeSaveTemplateModal}
+                    className='px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50'
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveTemplate}
+                    className='px-3 py-1.5 text-sm rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed'
+                    disabled={!templateName.trim()}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

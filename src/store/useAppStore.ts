@@ -228,6 +228,14 @@ export interface PipelineConfig {
   generateThumbnails: boolean;
 }
 
+export interface PipelineTemplate {
+  id: string;
+  name: string;
+  config: PipelineConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Helper type: only the boolean-valued keys of PipelineConfig (for togglePipelineStep)
 export type BooleanPipelineStepKey = {
   [K in keyof PipelineConfig]: PipelineConfig[K] extends boolean ? K : never;
@@ -300,6 +308,7 @@ interface AppState {
 
   // Pipeline Configuration
   pipelineConfig: PipelineConfig;
+  pipelineTemplates: PipelineTemplate[];
 
   // Silence Speed Rate
   silenceSpeedRate: number;
@@ -421,6 +430,8 @@ interface AppState {
   updatePipelineConfig: (updates: Partial<PipelineConfig>) => void;
   togglePipelineStep: (step: BooleanPipelineStepKey) => void;
   resetPipelineConfig: () => void;
+  savePipelineTemplate: (name: string) => void;
+  applyPipelineTemplate: (templateId: string) => void;
 
   // Silence Speed Rate Actions
   setSilenceSpeedRate: (rate: number) => void;
@@ -639,6 +650,8 @@ const defaultPipelineConfig: PipelineConfig = {
   generateThumbnails: false,
 };
 
+const defaultPipelineTemplates: PipelineTemplate[] = [];
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   data: [],
@@ -689,6 +702,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Pipeline Configuration
   pipelineConfig: defaultPipelineConfig,
+  pipelineTemplates: defaultPipelineTemplates,
 
   // Silence Speed Rate
   silenceSpeedRate: 4, // Default to 4x speed
@@ -1367,6 +1381,66 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { pipelineConfig: defaultPipelineConfig };
     }),
 
+  savePipelineTemplate: (name) =>
+    set((state) => {
+      const trimmedName = String(name || '').trim();
+      if (!trimmedName) return {};
+
+      const normalizedName = trimmedName.toLowerCase();
+      const nowIso = new Date().toISOString();
+
+      const existingTemplate = state.pipelineTemplates.find(
+        (template) => template.name.trim().toLowerCase() === normalizedName,
+      );
+
+      const nextTemplate: PipelineTemplate = existingTemplate
+        ? {
+            ...existingTemplate,
+            name: trimmedName,
+            config: { ...state.pipelineConfig },
+            updatedAt: nowIso,
+          }
+        : {
+            id:
+              typeof crypto !== 'undefined' &&
+              typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : `pipeline-template-${Date.now()}`,
+            name: trimmedName,
+            config: { ...state.pipelineConfig },
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          };
+
+      const nextTemplates = existingTemplate
+        ? state.pipelineTemplates.map((template) =>
+            template.id === existingTemplate.id ? nextTemplate : template,
+          )
+        : [...state.pipelineTemplates, nextTemplate];
+
+      localStorage.setItem('pipelineTemplates', JSON.stringify(nextTemplates));
+
+      return { pipelineTemplates: nextTemplates };
+    }),
+
+  applyPipelineTemplate: (templateId) =>
+    set((state) => {
+      const template = state.pipelineTemplates.find(
+        (item) => item.id === templateId,
+      );
+
+      if (!template) return {};
+
+      const nextConfig = {
+        ...defaultPipelineConfig,
+        ...template.config,
+      };
+
+      localStorage.setItem('pipelineConfig', JSON.stringify(nextConfig));
+
+      return { pipelineConfig: nextConfig };
+    }),
+
   // Silence Speed Rate Actions
   setSilenceSpeedRate: (rate) =>
     set(() => {
@@ -1514,6 +1588,74 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedPipelineConfig) {
         const config = JSON.parse(savedPipelineConfig);
         set({ pipelineConfig: { ...defaultPipelineConfig, ...config } });
+      }
+
+      const savedPipelineTemplates = localStorage.getItem('pipelineTemplates');
+      if (savedPipelineTemplates) {
+        try {
+          const parsed = JSON.parse(savedPipelineTemplates) as unknown;
+          const nowIso = new Date().toISOString();
+
+          if (Array.isArray(parsed)) {
+            const normalizedTemplates = parsed
+              .map((item, index) => {
+                if (!item || typeof item !== 'object') return null;
+
+                const template = item as {
+                  id?: unknown;
+                  name?: unknown;
+                  config?: unknown;
+                  createdAt?: unknown;
+                  updatedAt?: unknown;
+                };
+
+                const name =
+                  typeof template.name === 'string' ? template.name.trim() : '';
+
+                if (!name) return null;
+
+                const id =
+                  typeof template.id === 'string' && template.id.trim()
+                    ? template.id
+                    : `pipeline-template-${index + 1}`;
+
+                const createdAt =
+                  typeof template.createdAt === 'string' &&
+                  template.createdAt.trim()
+                    ? template.createdAt
+                    : nowIso;
+
+                const updatedAt =
+                  typeof template.updatedAt === 'string' &&
+                  template.updatedAt.trim()
+                    ? template.updatedAt
+                    : createdAt;
+
+                const config =
+                  template.config && typeof template.config === 'object'
+                    ? {
+                        ...defaultPipelineConfig,
+                        ...(template.config as Partial<PipelineConfig>),
+                      }
+                    : { ...defaultPipelineConfig };
+
+                return {
+                  id,
+                  name,
+                  config,
+                  createdAt,
+                  updatedAt,
+                } satisfies PipelineTemplate;
+              })
+              .filter(
+                (template): template is PipelineTemplate => template !== null,
+              );
+
+            set({ pipelineTemplates: normalizedTemplates });
+          }
+        } catch (e) {
+          console.error('Failed to parse pipelineTemplates:', e);
+        }
       }
 
       // Load silenceSpeedRate from localStorage
@@ -1769,6 +1911,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       localStorage.removeItem('video-editor-settings');
       localStorage.removeItem('pipelineConfig');
+      localStorage.removeItem('pipelineTemplates');
       localStorage.removeItem('subtitleGenerationSettings');
       localStorage.removeItem('combineScenesSettings');
       localStorage.removeItem('sceneVideoGenerationSettings');
@@ -1786,6 +1929,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         selectedOriginalVideo: defaultSelectedOriginalVideo,
         pipelineConfig: defaultPipelineConfig,
+        pipelineTemplates: defaultPipelineTemplates,
       });
       console.log('Settings cleared from localStorage');
     } catch (error) {
