@@ -64,31 +64,32 @@ The order below is the actual execution order in code.
 9. `deleteEmpty` → `handleDeleteEmptyScenesAllVideos(false)`
 10. `generateClips` → `handleGenerateClipsAll(false)`
 11. `speedUp` → `handleSpeedUpAllVideos(false)`
-12. `improve` → `handleImproveAllVideosScenes(false)`
-13. `generateTTS` → `handleGenerateAllTTSForAllVideos(false)`
-14. `sync` → `handleGenerateAllVideosForAllScenes(false)`
-15. `transcribeScenesAfterSync` (Fix TTS) → `handleTranscribeProcessingScenesAllVideos(false)`
-16. `promptScenesAfterTranscribe` → `handlePromptProcessingScenesAllVideos(false)`
+12. `fixLanguageAll` → `handleFixLanguageProcessingScenesAllVideos(false)`
+13. `improve` → `handleImproveAllVideosScenes(false)`
+14. `generateTTS` → `handleGenerateAllTTSForAllVideos(false)`
+15. `sync` → `handleGenerateAllVideosForAllScenes(false)`
+16. `transcribeScenesAfterSync` (Fix TTS) → `handleTranscribeProcessingScenesAllVideos(false)`
+17. `promptScenesAfterTranscribe` → `handlePromptProcessingScenesAllVideos(false)`
 
 ### Scene post-processing block (opt-in by default)
 
-17. `generateSubtitles` → `handleGenerateSubtitlesForProcessingVideos()`
-18. `generateSceneImages` → `handleGenerateSceneImagesForProcessingVideos()`
-19. `upscaleSceneImages` → `handleUpscaleSceneImagesForProcessingVideos()`
-20. `generateSceneVideos` → `handleGenerateSceneVideosForProcessingVideos()`
-21. `enhanceSceneVideos` → `handleEnhanceSceneVideosForProcessingVideos()`
-22. `applyEnhancedVideos` → `handleApplyEnhancedVideosForProcessingVideos()`
-23. `applyUpscaledImages` → `handleApplyUpscaledImagesForProcessingVideos()`
+18. `generateSubtitles` → `handleGenerateSubtitlesForProcessingVideos()`
+19. `generateSceneImages` → `handleGenerateSceneImagesForProcessingVideos()`
+20. `upscaleSceneImages` → `handleUpscaleSceneImagesForProcessingVideos()`
+21. `generateSceneVideos` → `handleGenerateSceneVideosForProcessingVideos()`
+22. `enhanceSceneVideos` → `handleEnhanceSceneVideosForProcessingVideos()`
+23. `applyEnhancedVideos` → `handleApplyEnhancedVideosForProcessingVideos()`
+24. `applyUpscaledImages` → `handleApplyUpscaledImagesForProcessingVideos()`
 
 ### Final tail block (opt-in by default)
 
-24. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
-25. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
-26. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
-27. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
-28. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
-29. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
-30. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
+25. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
+26. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
+27. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
+28. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
+29. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
+30. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
+31. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
 
 ---
 
@@ -200,9 +201,8 @@ Current state:
 - Exists as a batch button in the all-videos panel
 - Operation name used for completion: `Fix Language All`
 - It processes eligible Processing scenes in batches via `/api/fix-language-scenes`
-- It is **not currently pipeline-toggleable** in `PipelineConfig`
-
-If you want it in pipeline later, follow Section 4 and decide placement (likely after `promptScenesAfterTranscribe` or after `improve`, depending on desired text workflow).
+- It **is pipeline-toggleable** via `pipelineConfig.fixLanguageAll`
+- In full pipeline order, it runs **after** `speedUp` and **before** `improve`
 
 ---
 

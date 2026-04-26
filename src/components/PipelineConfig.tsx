@@ -56,6 +56,11 @@ export default function PipelineConfig() {
       color: 'text-cyan-500',
     },
     { key: 'speedUp' as const, label: 'Speed Up', color: 'text-yellow-500' },
+    {
+      key: 'fixLanguageAll' as const,
+      label: 'Fix Language All',
+      color: 'text-emerald-500',
+    },
     { key: 'improve' as const, label: 'Improve', color: 'text-pink-500' },
     {
       key: 'generateTTS' as const,

@@ -204,6 +204,7 @@ export interface PipelineConfig {
   deleteEmpty: boolean;
   generateClips: boolean;
   speedUp: boolean;
+  fixLanguageAll: boolean;
   improve: boolean;
   generateTTS: boolean;
   sync: boolean;
@@ -615,6 +616,7 @@ const defaultPipelineConfig: PipelineConfig = {
   deleteEmpty: true,
   generateClips: true,
   speedUp: true,
+  fixLanguageAll: true,
   improve: true,
   generateTTS: true,
   sync: true,

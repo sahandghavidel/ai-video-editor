@@ -6794,7 +6794,7 @@ export default function OriginalVideosList({
   };
 
   // Run Full Pipeline:
-  // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
+  // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
   // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails
   const handleRunFullPipeline = async () => {
@@ -7252,7 +7252,45 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Speed Up (disabled in config)');
       }
 
-      // Step 5: Improve All
+      // Step: Fix Language All (Processing scenes only)
+      if (pipelineConfig.fixLanguageAll) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Fixing language for Processing scenes...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Fixing language for Processing scenes`,
+        );
+        try {
+          await handleFixLanguageProcessingScenesAllVideos(false);
+          console.log(`✓ Step ${stepNumber} Complete: Fix language finished`);
+
+          console.log('Refreshing data after fix language...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Fix language error`,
+            error,
+          );
+          throw new Error(
+            `Fix language failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Fix Language All (disabled in config)');
+      }
+
+      // Step: Improve All
       if (pipelineConfig.improve) {
         stepNumber++;
         setPipelineStep(`Step ${stepNumber}: Improving all scenes...`);
