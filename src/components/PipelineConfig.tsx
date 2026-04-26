@@ -291,12 +291,7 @@ export default function PipelineConfig({
               >
                 Save Template
               </button>
-              <button
-                onClick={resetPipelineConfig}
-                className='text-sm px-3 py-1.5 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 font-medium transition-colors'
-              >
-                Reset to Default
-              </button>
+       
 
               {pipelineTemplates.map((template) => (
                 <button
