@@ -6798,7 +6798,7 @@ export default function OriginalVideosList({
   };
 
   // Run Full Pipeline:
-  // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
+  // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
   // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails
   const handleRunFullPipeline = async () => {
@@ -6820,7 +6820,44 @@ export default function OriginalVideosList({
 
       let stepNumber = 0;
 
-      // Step 1: TTS Script (Processing only, from video Script)
+      // Step: Script From Title (Processing only, where script is empty and title exists)
+      if (pipelineConfig.scriptFromTitle) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Generating scripts from titles for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Generating scripts from titles for Processing videos`,
+        );
+        try {
+          await handleGenerateScriptsFromTitlesAll(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Script-from-title generation finished`,
+          );
+
+          console.log('Refreshing data after script-from-title generation...');
+          await handleRefresh();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Script-from-title generation error`,
+            error,
+          );
+          throw new Error(
+            `Script from title generation failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Script From Title (disabled in config)');
+      }
+
+      // Step: TTS Script (Processing only, from video Script)
       if (pipelineConfig.ttsScript) {
         stepNumber++;
         setPipelineStep(
@@ -8354,7 +8391,7 @@ export default function OriginalVideosList({
                   ? 'Scene handlers not ready. Please wait...'
                   : runningFullPipeline
                     ? pipelineStep
-                    : 'Run full pipeline: TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
+                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
               }
             />
           </div>
@@ -10176,7 +10213,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                             ? pipelineStep
-                            : 'Run full pipeline: TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
+                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
                       }
                     >
                       <Workflow

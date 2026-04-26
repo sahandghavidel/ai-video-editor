@@ -186,6 +186,7 @@ export interface ClipGenerationState {
 
 // Pipeline configuration state interface
 export interface PipelineConfig {
+  scriptFromTitle: boolean;
   ttsScript: boolean;
   ttsVideo: boolean;
   normalizeAudio: boolean;
@@ -610,6 +611,7 @@ const defaultClipGeneration: ClipGenerationState = {
 // Keep existing pipeline behavior by enabling the original steps by default.
 // New, heavier scene-level steps are opt-in.
 const defaultPipelineConfig: PipelineConfig = {
+  scriptFromTitle: true,
   ttsScript: true,
   ttsVideo: true,
   normalizeAudio: true,

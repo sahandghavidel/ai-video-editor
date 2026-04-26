@@ -58,6 +58,11 @@ export default function PipelineConfig({
 
   const steps = [
     {
+      key: 'scriptFromTitle' as const,
+      label: 'Script From Title',
+      color: 'text-amber-500',
+    },
+    {
       key: 'ttsScript' as const,
       label: 'TTS Script',
       color: 'text-orange-500',
@@ -312,8 +317,8 @@ export default function PipelineConfig({
 
           {/* Pipeline Steps Grid */}
           <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3'>
-            {/* Steps 1–7: ttsScript → generateScenes */}
-            {steps.slice(0, 7).map((step, index) => {
+            {/* Steps 1–8: scriptFromTitle → generateScenes */}
+            {steps.slice(0, 8).map((step, index) => {
               const isEnabled = pipelineConfig[step.key];
               return (
                 <button
@@ -366,7 +371,7 @@ export default function PipelineConfig({
               );
             })}
 
-            {/* Steps 8–11: Combine Pairs A/B/C/D with toggle + skip value */}
+            {/* Steps 9–12: Combine Pairs A/B/C/D with toggle + skip value */}
             {combinePasses.map((pass, i) => {
               const isEnabled = pipelineConfig[pass.enabledKey];
               const val = pipelineConfig[pass.skipKey];
@@ -420,14 +425,14 @@ export default function PipelineConfig({
                         : 'bg-gray-200 text-gray-500'
                     }`}
                   >
-                    {8 + i}
+                    {9 + i}
                   </span>
                 </div>
               );
             })}
 
-            {/* Steps 12+: deleteEmpty onwards */}
-            {steps.slice(7).map((step, index) => {
+            {/* Steps 13+: deleteEmpty onwards */}
+            {steps.slice(8).map((step, index) => {
               const isEnabled = pipelineConfig[step.key];
               return (
                 <button
@@ -474,7 +479,7 @@ export default function PipelineConfig({
                     }
                   `}
                   >
-                    {12 + index}
+                    {13 + index}
                   </span>
                 </button>
               );
@@ -489,6 +494,7 @@ export default function PipelineConfig({
             <div className='flex flex-wrap items-center gap-2'>
               {(() => {
                 const beforeCombineKeys = [
+                  'scriptFromTitle',
                   'ttsScript',
                   'ttsVideo',
                   'normalizeAudio',
