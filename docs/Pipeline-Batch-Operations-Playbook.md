@@ -84,12 +84,13 @@ The order below is the actual execution order in code.
 ### Final tail block (opt-in by default)
 
 25. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
-26. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
-27. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
-28. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
-29. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
-30. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
-31. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
+26. `convertFinalToCFR` → `handleConvertFinalToCFRAll(false)`
+27. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
+28. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
+29. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
+30. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
+31. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
+32. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
 
 ---
 

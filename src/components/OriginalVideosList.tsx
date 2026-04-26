@@ -6113,7 +6113,7 @@ export default function OriginalVideosList({
   };
 
   // Convert All Final Merged Videos to CFR
-  const handleConvertFinalToCFRAll = async () => {
+  const handleConvertFinalToCFRAll = async (playSound = true) => {
     try {
       setError(null);
       setConvertingFinalToCFRVideo(null);
@@ -6245,12 +6245,16 @@ export default function OriginalVideosList({
       await handleRefresh();
 
       // Play success sound
-      await playSuccessAndNotifyBatchCompletion('CFR Final All');
+      if (playSound) {
+        await playSuccessAndNotifyBatchCompletion('CFR Final All');
+      }
     } catch (error) {
       console.error('Error in batch CFR conversion for final videos:', error);
 
       // Play error sound
-      playErrorSound();
+      if (playSound) {
+        playErrorSound();
+      }
 
       setError(
         `Failed to convert final videos to CFR: ${
@@ -6796,7 +6800,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline:
   // TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
-  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails
+  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -7750,7 +7754,45 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Merge Scenes (disabled)');
       }
 
-      // Transcribe Final All MUST run after Merge Scenes
+      // CFR Final All MUST run after Merge Scenes
+      if (pipelineConfig.convertFinalToCFR) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Converting all final merged videos to CFR...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Converting all final merged videos to CFR`,
+        );
+        try {
+          await handleConvertFinalToCFRAll(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Final merged videos CFR conversion finished`,
+          );
+
+          console.log('Refreshing data after final CFR conversion...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+
+          console.log('Waiting 20 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Wait complete, proceeding to next step');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: CFR Final All error`,
+            error,
+          );
+          throw new Error(
+            `CFR Final All failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: CFR Final All (disabled)');
+      }
+
+      // Transcribe Final All MUST run after Merge Scenes (and optional CFR Final All)
       if (pipelineConfig.transcribeFinalAll) {
         stepNumber++;
         setPipelineStep(

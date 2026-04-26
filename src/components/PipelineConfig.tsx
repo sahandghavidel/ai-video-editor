@@ -23,7 +23,6 @@ export default function PipelineConfig({
     pipelineConfig,
     pipelineTemplates,
     togglePipelineStep,
-    resetPipelineConfig,
     updatePipelineConfig,
     savePipelineTemplate,
     applyPipelineTemplate,
@@ -163,6 +162,11 @@ export default function PipelineConfig({
       key: 'mergeScenes' as const,
       label: 'Merge Scenes',
       color: 'text-orange-500',
+    },
+    {
+      key: 'convertFinalToCFR' as const,
+      label: 'CFR Final All',
+      color: 'text-pink-500',
     },
     {
       key: 'transcribeFinalAll' as const,
