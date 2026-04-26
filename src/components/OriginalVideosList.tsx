@@ -265,6 +265,12 @@ export default function OriginalVideosList({
     promptingProcessingScenesAllVideos,
     setPromptingProcessingScenesAllVideos,
   ] = useState(false);
+  const [
+    fixingLanguageProcessingScenesAllVideos,
+    setFixingLanguageProcessingScenesAllVideos,
+  ] = useState(false);
+  const [fixingLanguageProcessingSceneId, setFixingLanguageProcessingSceneId] =
+    useState<number | null>(null);
   const [generatingAllVideos, setGeneratingAllVideos] = useState(false);
   const [generatingClipsAll, setGeneratingClipsAll] = useState(false);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
@@ -4374,6 +4380,380 @@ export default function OriginalVideosList({
     }
   };
 
+  // Fix Language for All Videos (Processing only)
+  const handleFixLanguageProcessingScenesAllVideos = async (
+    playSound = true,
+  ) => {
+    const runId = `fixlang-all-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const logPrefix = `[FixLanguage All][${runId}]`;
+    const startedAt = Date.now();
+    const batchSize = 30;
+    const normalizeTextForComparison = (value: string) =>
+      String(value).replace(/\s+/g, ' ').trim();
+
+    if (fixingLanguageProcessingScenesAllVideos) {
+      console.info(
+        `${logPrefix} Ignored click: another run is already active.`,
+      );
+      return;
+    }
+
+    if (!modelSelection.selectedModel) {
+      console.warn(`${logPrefix} Aborted: no model selected.`);
+      return;
+    }
+
+    setError(null);
+    setFixingLanguageProcessingScenesAllVideos(true);
+    setFixingLanguageProcessingSceneId(null);
+
+    try {
+      const freshVideosData = await getOriginalVideosData();
+      const freshScenesData = await getBaserowData();
+
+      const processingVideos = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+      const processingVideoOrderById = new Map<number, number>(
+        processingVideos.map((video) => [
+          video.id,
+          Number(video.field_6902) || video.id,
+        ]),
+      );
+
+      type CandidateScene = {
+        scene: BaserowRow;
+        sceneId: number;
+        videoId: number;
+        text: string;
+      };
+
+      const candidateScenes = (freshScenesData || [])
+        .map((scene) => {
+          const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
+          if (!videoId || isNaN(videoId) || !processingVideoIds.has(videoId)) {
+            return null;
+          }
+
+          const sentence = String(scene['field_6890'] ?? '').trim();
+          const original = String(
+            scene['field_6901'] ?? scene['field_6900'] ?? '',
+          ).trim();
+          const fixedSentenceConfirmation = String(
+            scene['field_7105'] ?? '',
+          ).trim();
+          const alreadyFixed = Boolean(fixedSentenceConfirmation);
+          const text = sentence || original;
+
+          if (!text || alreadyFixed) {
+            return null;
+          }
+
+          return {
+            scene,
+            sceneId: scene.id,
+            videoId,
+            text,
+          } satisfies CandidateScene;
+        })
+        .filter((item): item is CandidateScene => item !== null)
+        .sort((a, b) => {
+          const videoOrderA = processingVideoOrderById.get(a.videoId) ?? 0;
+          const videoOrderB = processingVideoOrderById.get(b.videoId) ?? 0;
+          if (videoOrderA !== videoOrderB) return videoOrderA - videoOrderB;
+
+          const orderA = Number(a.scene.order) || 0;
+          const orderB = Number(b.scene.order) || 0;
+          if (orderA !== orderB) return orderA - orderB;
+
+          return a.scene.id - b.scene.id;
+        });
+
+      if (candidateScenes.length === 0) {
+        if (playSound) {
+          await notifyBatchOperationCompleted(
+            'Fix Language All (no eligible scenes)',
+          );
+        }
+        return;
+      }
+
+      const totalBatches = Math.ceil(candidateScenes.length / batchSize);
+      let updatedScenesCount = 0;
+      const failedBatches: Array<{
+        batchNumber: number;
+        sceneIds: number[];
+        error: string;
+      }> = [];
+
+      console.info(`${logPrefix} Run started.`, {
+        selectedModel: modelSelection.selectedModel,
+        processingVideos: processingVideos.length,
+        totalEligibleScenes: candidateScenes.length,
+        totalBatches,
+      });
+
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+        const batchNumber = batchIndex + 1;
+        const selectedBatch = candidateScenes.slice(
+          batchIndex * batchSize,
+          (batchIndex + 1) * batchSize,
+        );
+
+        const expectedSceneIds = selectedBatch.map((item) => item.sceneId);
+        const expectedSceneIdSet = new Set(expectedSceneIds);
+        const expectedTextBySceneId = new Map<number, string>(
+          selectedBatch.map((item) => [item.sceneId, item.text]),
+        );
+        const selectedBatchBySceneId = new Map<number, CandidateScene>(
+          selectedBatch.map((item) => [item.sceneId, item]),
+        );
+
+        try {
+          const res = await fetch('/api/fix-language-scenes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: modelSelection.selectedModel,
+              scenes: selectedBatch.map((item) => ({
+                sceneId: item.sceneId,
+                text: item.text,
+              })),
+            }),
+          });
+
+          let apiRequestId: string | null = null;
+
+          if (!res.ok) {
+            let message = `Language fix failed: ${res.status}`;
+            try {
+              const json = (await res.json().catch(() => null)) as {
+                error?: unknown;
+                requestId?: unknown;
+              } | null;
+
+              apiRequestId =
+                typeof json?.requestId === 'string' ? json.requestId : null;
+
+              if (typeof json?.error === 'string' && json.error.trim()) {
+                message = json.error;
+              }
+            } catch {
+              const t = await res.text().catch(() => '');
+              if (t) {
+                message = `${message} ${t}`;
+              }
+            }
+
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} failed (apiRequestId=${apiRequestId ?? 'n/a'}): ${message}`,
+            );
+          }
+
+          const payload = (await res.json().catch(() => null)) as {
+            sentences?: unknown;
+            requestId?: unknown;
+          } | null;
+
+          apiRequestId =
+            typeof payload?.requestId === 'string' ? payload.requestId : null;
+
+          if (!Array.isArray(payload?.sentences)) {
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} response is missing "sentences" array.`,
+            );
+          }
+
+          if (payload.sentences.length !== selectedBatch.length) {
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} must return exactly ${selectedBatch.length} sentences, received ${payload.sentences.length}.`,
+            );
+          }
+
+          const normalizedSentences = payload.sentences.map((item, index) => {
+            if (!item || typeof item !== 'object') {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} has invalid response item at index ${index}.`,
+              );
+            }
+
+            const sceneId = Number((item as { sceneId?: unknown }).sceneId);
+            const sourceTextRaw = (item as { sourceText?: unknown }).sourceText;
+            const fixedSentenceRaw = (item as { fixedSentence?: unknown })
+              .fixedSentence;
+
+            const sourceText =
+              typeof sourceTextRaw === 'string' ? sourceTextRaw.trim() : '';
+            const fixedSentence =
+              typeof fixedSentenceRaw === 'string'
+                ? fixedSentenceRaw.trim()
+                : '';
+
+            if (!Number.isFinite(sceneId) || sceneId <= 0) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} has invalid sceneId at response index ${index}.`,
+              );
+            }
+
+            if (!expectedSceneIdSet.has(sceneId)) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned unexpected sceneId ${sceneId}.`,
+              );
+            }
+
+            if (!fixedSentence) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned empty fixed sentence for scene ${sceneId}.`,
+              );
+            }
+
+            if (!sourceText) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned empty sourceText for scene ${sceneId}.`,
+              );
+            }
+
+            const expectedText = expectedTextBySceneId.get(sceneId) || '';
+            const expectedNormalized = normalizeTextForComparison(expectedText);
+            const returnedNormalized = normalizeTextForComparison(sourceText);
+
+            if (!expectedText || expectedNormalized !== returnedNormalized) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} sourceText mismatch for scene ${sceneId}.`,
+              );
+            }
+
+            return { sceneId, sourceText, fixedSentence };
+          });
+
+          const seenIds = new Set<number>();
+          for (const item of normalizedSentences) {
+            if (seenIds.has(item.sceneId)) {
+              throw new Error(
+                `Batch ${batchNumber}/${totalBatches} returned duplicate sceneId: ${item.sceneId}.`,
+              );
+            }
+            seenIds.add(item.sceneId);
+          }
+
+          const missingIds = expectedSceneIds.filter((id) => !seenIds.has(id));
+          if (missingIds.length > 0) {
+            throw new Error(
+              `Batch ${batchNumber}/${totalBatches} response is missing scene IDs: ${missingIds.join(', ')}.`,
+            );
+          }
+
+          for (const item of normalizedSentences) {
+            const sceneMeta = selectedBatchBySceneId.get(item.sceneId);
+            setFixingLanguageProcessingSceneId(item.sceneId);
+
+            if (sceneMeta?.videoId && !isNaN(sceneMeta.videoId)) {
+              setCurrentProcessingVideoId(sceneMeta.videoId);
+            }
+
+            const patchRes = await fetch(
+              `/api/baserow/scenes/${item.sceneId}`,
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  field_7105: item.fixedSentence,
+                  field_6890: item.fixedSentence,
+                }),
+              },
+            );
+
+            if (!patchRes.ok) {
+              const t = await patchRes.text().catch(() => '');
+              throw new Error(
+                `Failed to save fixed sentence for scene ${item.sceneId}: ${patchRes.status} ${t}`,
+              );
+            }
+
+            updatedScenesCount += 1;
+            await new Promise((resolve) => setTimeout(resolve, 150));
+          }
+
+          console.info(
+            `${logPrefix} Batch ${batchNumber}/${totalBatches} completed successfully.`,
+            {
+              apiRequestId,
+              updatedInBatch: normalizedSentences.length,
+              totalUpdatedSoFar: updatedScenesCount,
+            },
+          );
+        } catch (batchError) {
+          const errorMessage =
+            batchError instanceof Error
+              ? batchError.message
+              : String(batchError);
+
+          failedBatches.push({
+            batchNumber,
+            sceneIds: expectedSceneIds,
+            error: errorMessage,
+          });
+
+          console.error(
+            `${logPrefix} Batch ${batchNumber}/${totalBatches} failed. Continuing with next batch.`,
+            {
+              error: errorMessage,
+              sceneIds: expectedSceneIds,
+            },
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      await handleRefresh();
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
+
+      if (playSound) {
+        await playSuccessAndNotifyBatchCompletion('Fix Language All');
+      }
+
+      if (failedBatches.length > 0) {
+        console.warn(`${logPrefix} Run completed with failed batches.`, {
+          failedBatchCount: failedBatches.length,
+          failedBatches,
+        });
+      }
+
+      console.info(`${logPrefix} Run completed.`, {
+        totalEligibleScenes: candidateScenes.length,
+        updatedScenesCount,
+        failedBatchCount: failedBatches.length,
+        durationMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      console.error(`${logPrefix} Run failed.`, error);
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to fix language for Processing scenes: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setFixingLanguageProcessingScenesAllVideos(false);
+      setFixingLanguageProcessingSceneId(null);
+      setCurrentProcessingVideoId(null);
+
+      console.info(`${logPrefix} Run finished.`, {
+        durationMs: Date.now() - startedAt,
+      });
+    }
+  };
+
   // ------------------------------
   // Scene-level batch ops (Processing-only) for pipeline integration
   // ------------------------------
@@ -7883,7 +8263,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({39} actions)</span>
+                <span className='text-xs text-gray-500'>({40} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -8948,6 +9328,7 @@ export default function OriginalVideosList({
                         handleTranscribeProcessingScenesAllVideos()
                       }
                       disabled={
+                        fixingLanguageProcessingScenesAllVideos ||
                         transcribingProcessingScenesAllVideos ||
                         promptingProcessingScenesAllVideos ||
                         deletingEmptyScenesAllVideos ||
@@ -8997,6 +9378,7 @@ export default function OriginalVideosList({
                         handleTranscribeFlaggedProcessingScenesAllVideos()
                       }
                       disabled={
+                        fixingLanguageProcessingScenesAllVideos ||
                         transcribingProcessingScenesAllVideos ||
                         promptingProcessingScenesAllVideos ||
                         deletingEmptyScenesAllVideos ||
@@ -9039,10 +9421,61 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
+                    {/* Fix Language All (Processing) Button */}
+                    <button
+                      onClick={() =>
+                        handleFixLanguageProcessingScenesAllVideos()
+                      }
+                      disabled={
+                        fixingLanguageProcessingScenesAllVideos ||
+                        promptingProcessingScenesAllVideos ||
+                        transcribingProcessingScenesAllVideos ||
+                        deletingEmptyScenesAllVideos ||
+                        !modelSelection.selectedModel ||
+                        uploading ||
+                        reordering ||
+                        transcribing !== null ||
+                        transcribingAll ||
+                        generatingScenes !== null ||
+                        generatingScenesAll ||
+                        mergingFinalVideos ||
+                        batchOperations.convertingAllFinalToCFR ||
+                        sceneLoading.convertingFinalToCFRVideo !== null
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        fixingLanguageProcessingScenesAllVideos
+                          ? fixingLanguageProcessingSceneId !== null
+                            ? `Fixing language for scene ${fixingLanguageProcessingSceneId}...`
+                            : 'Fixing language for scenes in Processing videos...'
+                          : !modelSelection.selectedModel
+                            ? 'Select an AI model first'
+                            : 'Fix language for non-empty scenes in videos with Processing status (batched)'
+                      }
+                    >
+                      <Sparkles
+                        className={`w-4 h-4 ${
+                          fixingLanguageProcessingScenesAllVideos
+                            ? 'animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {fixingLanguageProcessingScenesAllVideos
+                          ? currentProcessingVideoId !== null
+                            ? `V${currentProcessingVideoId}`
+                            : fixingLanguageProcessingSceneId !== null
+                              ? `S${fixingLanguageProcessingSceneId}`
+                              : 'Processing...'
+                          : 'Fix Language All'}
+                      </span>
+                    </button>
+
                     {/* Prompt Scenes (Processing) Button */}
                     <button
                       onClick={() => handlePromptProcessingScenesAllVideos()}
                       disabled={
+                        fixingLanguageProcessingScenesAllVideos ||
                         promptingProcessingScenesAllVideos ||
                         transcribingProcessingScenesAllVideos ||
                         deletingEmptyScenesAllVideos ||
@@ -9087,6 +9520,7 @@ export default function OriginalVideosList({
                         )
                       }
                       disabled={
+                        fixingLanguageProcessingScenesAllVideos ||
                         combiningLongTextPairsAllVideos ||
                         promptingProcessingScenesAllVideos ||
                         transcribingProcessingScenesAllVideos ||
