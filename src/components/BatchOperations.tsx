@@ -2527,14 +2527,14 @@ export default function BatchOperations({
                       AI Improve
                     </h3>
                   </div>
-                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                  <div className='grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2'>
                     <button
                       onClick={onImproveAllSentences}
                       disabled={
                         batchOperations.improvingAll ||
                         sceneLoading.improvingSentence !== null
                       }
-                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      className='w-full min-h-[44px] px-2 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center text-center leading-tight gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                       title={
                         batchOperations.improvingAll
                           ? 'Improving all sentences with AI...'
@@ -2547,7 +2547,7 @@ export default function BatchOperations({
                         sceneLoading.improvingSentence !== null) && (
                         <Loader2 className='w-4 h-4 animate-spin' />
                       )}
-                      <span className='font-medium'>
+                      <span className='font-medium text-center leading-tight whitespace-normal break-words'>
                         {batchOperations.improvingAll
                           ? sceneLoading.improvingSentence !== null
                             ? `Scene #${sceneLoading.improvingSentence}`
@@ -2566,7 +2566,7 @@ export default function BatchOperations({
                         batchOperations.improvingAll ||
                         sceneLoading.improvingSentence !== null
                       }
-                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      className='w-full min-h-[44px] px-2 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center text-center leading-tight gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                       title={
                         promptingAllScenes
                           ? promptingSceneId
@@ -2578,7 +2578,7 @@ export default function BatchOperations({
                       {promptingAllScenes && (
                         <Loader2 className='w-4 h-4 animate-spin' />
                       )}
-                      <span className='font-medium'>
+                      <span className='font-medium text-center leading-tight whitespace-normal break-words'>
                         {promptingAllScenes
                           ? promptingSceneId
                             ? `Prompting #${promptingSceneId}`
@@ -2595,7 +2595,7 @@ export default function BatchOperations({
                         batchOperations.improvingAll ||
                         sceneLoading.improvingSentence !== null
                       }
-                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      className='w-full min-h-[44px] px-2 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center text-center leading-tight gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                       title={
                         fixingLanguageTenScenes
                           ? fixingLanguageSceneId
@@ -2607,7 +2607,7 @@ export default function BatchOperations({
                       {fixingLanguageTenScenes && (
                         <Loader2 className='w-4 h-4 animate-spin' />
                       )}
-                      <span className='font-medium'>
+                      <span className='font-medium text-center leading-tight whitespace-normal break-words'>
                         {fixingLanguageTenScenes
                           ? fixingLanguageSceneId
                             ? `Fixing #${fixingLanguageSceneId}`
@@ -2626,7 +2626,7 @@ export default function BatchOperations({
                         batchOperations.improvingAll ||
                         sceneLoading.improvingSentence !== null
                       }
-                      className='w-full h-10 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      className='w-full min-h-[44px] px-2 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center text-center leading-tight gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                       title={
                         !selectedOriginalVideo.id
                           ? 'Select an original video first'
@@ -2638,7 +2638,7 @@ export default function BatchOperations({
                       {applyingCurrentVideoWordReplacements && (
                         <Loader2 className='w-4 h-4 animate-spin' />
                       )}
-                      <span className='font-medium'>
+                      <span className='font-medium text-center leading-tight whitespace-normal break-words'>
                         {applyingCurrentVideoWordReplacements
                           ? 'Applying...'
                           : 'Apply Word Fixes'}
