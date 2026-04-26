@@ -1,10 +1,24 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { CheckCircle2, Circle, Settings2 } from 'lucide-react';
+import { CheckCircle2, Circle, Settings2, Workflow } from 'lucide-react';
 import { useState } from 'react';
 
-export default function PipelineConfig() {
+interface PipelineConfigProps {
+  onRunFullPipeline?: () => void;
+  isRunFullPipelineDisabled?: boolean;
+  isRunningFullPipeline?: boolean;
+  runFullPipelineLabel?: string;
+  runFullPipelineTitle?: string;
+}
+
+export default function PipelineConfig({
+  onRunFullPipeline,
+  isRunFullPipelineDisabled = false,
+  isRunningFullPipeline = false,
+  runFullPipelineLabel = 'Full Pipeline',
+  runFullPipelineTitle = 'Run full pipeline',
+}: PipelineConfigProps) {
   const {
     pipelineConfig,
     pipelineTemplates,
@@ -256,9 +270,21 @@ export default function PipelineConfig() {
         <div className='px-6 py-4 bg-gray-50 border-t border-gray-200'>
           <div className='flex flex-col gap-3 mb-4 lg:flex-row lg:items-center lg:justify-between'>
             <p className='text-sm text-gray-600'>
-              Select which steps to include in the Full Pipeline execution
+              Select Pipelines
             </p>
             <div className='flex flex-wrap items-center gap-2'>
+              <button
+                onClick={onRunFullPipeline}
+                disabled={isRunFullPipelineDisabled || !onRunFullPipeline}
+                className='inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-sm font-semibold transition-colors disabled:cursor-not-allowed'
+                title={runFullPipelineTitle}
+              >
+                <Workflow
+                  className={`w-4 h-4 ${isRunningFullPipeline ? 'animate-pulse' : ''}`}
+                />
+                <span className='truncate'>{runFullPipelineLabel}</span>
+              </button>
+
               <button
                 onClick={openSaveTemplateModal}
                 className='text-sm px-3 py-1.5 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 font-medium transition-colors'

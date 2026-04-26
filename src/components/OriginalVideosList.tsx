@@ -8284,7 +8284,37 @@ export default function OriginalVideosList({
         <div>
           {/* Pipeline Configuration */}
           <div className='mb-6'>
-            <PipelineConfig />
+            <PipelineConfig
+              onRunFullPipeline={handleRunFullPipeline}
+              isRunFullPipelineDisabled={
+                runningFullPipeline ||
+                transcribing !== null ||
+                transcribingAll ||
+                generatingScenes !== null ||
+                generatingScenesAll ||
+                improvingAllVideosScenes ||
+                generatingAllTTSForAllVideos ||
+                speedingUpAllVideos ||
+                generatingAllVideos ||
+                generatingClipsAll ||
+                !sceneHandlers ||
+                uploading ||
+                reordering
+              }
+              isRunningFullPipeline={runningFullPipeline}
+              runFullPipelineLabel={
+                runningFullPipeline
+                  ? pipelineStep.split('...')[0] || 'Processing...'
+                  : 'Full Pipeline'
+              }
+              runFullPipelineTitle={
+                !sceneHandlers
+                  ? 'Scene handlers not ready. Please wait...'
+                  : runningFullPipeline
+                    ? pipelineStep
+                    : 'Run full pipeline: TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
+              }
+            />
           </div>
 
           {/* Batch Operations - Collapsible */}
@@ -10104,7 +10134,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                             ? pipelineStep
-                            : 'Run full pipeline: TTS Script → Normalize → CFR → Silence → Transcribe → Scenes → Delete Empty → Clips → Speed Up → Improve → TTS → Sync'
+                            : 'Run full pipeline: TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
                       }
                     >
                       <Workflow
