@@ -186,6 +186,10 @@ export default function SceneCard({
   const [showOnlyNotEmptyText, setShowOnlyNotEmptyText] =
     useState<boolean>(false);
   const [showOnlyFlagged, setShowOnlyFlagged] = useState<boolean>(false);
+  const [showShortWithNeighbors, setShowShortWithNeighbors] =
+    useState<boolean>(false);
+  const [shortTextCharLimitInput, setShortTextCharLimitInput] =
+    useState<string>('10');
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null,
   );
@@ -466,8 +470,31 @@ export default function SceneCard({
           });
         }
 
+        // Filter by short sentence text and include one previous/next scene for context.
+        if (showShortWithNeighbors) {
+          const parsedLimit = parseInt(shortTextCharLimitInput, 10);
+          const charLimit =
+            Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 10;
+          const includeIndexes = new Set<number>();
+
+          filtered.forEach((scene, index) => {
+            const sentence = String(
+              scene['field_6890'] || scene.field_6890 || '',
+            ).trim();
+            const charCount = sentence.length;
+
+            if (charCount > 0 && charCount < charLimit) {
+              includeIndexes.add(index);
+              if (index > 0) includeIndexes.add(index - 1);
+              if (index < filtered.length - 1) includeIndexes.add(index + 1);
+            }
+          });
+
+          filtered = filtered.filter((_, index) => includeIndexes.has(index));
+        }
+
         // Sort by duration
-        if (sortByDuration) {
+        if (!showShortWithNeighbors && sortByDuration) {
           filtered = [...filtered].sort((a, b) => {
             const durationA = Number(a.field_6884) || 0;
             const durationB = Number(b.field_6884) || 0;
@@ -480,7 +507,7 @@ export default function SceneCard({
         }
 
         // Sort by last modified
-        if (sortByLastModified) {
+        if (!showShortWithNeighbors && sortByLastModified) {
           filtered = [...filtered].sort((a, b) => {
             const getLastModified = (scene: Record<string, unknown>) => {
               const lastModified = scene.field_6905 || scene['field_6905'];
@@ -617,6 +644,8 @@ export default function SceneCard({
     showOnlyNotEmptyText,
     sortByDuration,
     sortByLastModified,
+    showShortWithNeighbors,
+    shortTextCharLimitInput,
     showRecentlyModifiedTTS,
     ttsWordReplacementsModalOpen,
   ]);
@@ -4704,8 +4733,31 @@ export default function SceneCard({
       });
     }
 
+    // Filter by short sentence text and include one previous/next scene for context.
+    if (showShortWithNeighbors) {
+      const parsedLimit = parseInt(shortTextCharLimitInput, 10);
+      const charLimit =
+        Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 10;
+      const includeIndexes = new Set<number>();
+
+      filtered.forEach((scene, index) => {
+        const sentence = String(
+          scene['field_6890'] || scene.field_6890 || '',
+        ).trim();
+        const charCount = sentence.length;
+
+        if (charCount > 0 && charCount < charLimit) {
+          includeIndexes.add(index);
+          if (index > 0) includeIndexes.add(index - 1);
+          if (index < filtered.length - 1) includeIndexes.add(index + 1);
+        }
+      });
+
+      filtered = filtered.filter((_, index) => includeIndexes.has(index));
+    }
+
     // Sort by duration
-    if (sortByDuration) {
+    if (!showShortWithNeighbors && sortByDuration) {
       filtered = [...filtered].sort((a, b) => {
         const durationA = Number(a.field_6884) || 0;
         const durationB = Number(b.field_6884) || 0;
@@ -4719,7 +4771,7 @@ export default function SceneCard({
     }
 
     // Sort by last modified
-    if (sortByLastModified) {
+    if (!showShortWithNeighbors && sortByLastModified) {
       filtered = [...filtered].sort((a, b) => {
         const getLastModified = (scene: Record<string, unknown>) => {
           const lastModified = scene.field_6905 || scene['field_6905'];
@@ -4761,6 +4813,8 @@ export default function SceneCard({
     showOnlyFlagged,
     showOnlyEmptyText,
     showOnlyNotEmptyText,
+    showShortWithNeighbors,
+    shortTextCharLimitInput,
     sortByDuration,
     sortByLastModified,
     showRecentlyModifiedTTS,
@@ -4873,6 +4927,34 @@ export default function SceneCard({
 
               {/* Filter Buttons */}
               <div className='flex flex-wrap items-center gap-2'>
+                <div className='flex items-center gap-1'>
+                  <input
+                    type='number'
+                    min={1}
+                    step={1}
+                    value={shortTextCharLimitInput}
+                    onChange={(e) => {
+                      const sanitized = e.target.value.replace(/[^0-9]/g, '');
+                      setShortTextCharLimitInput(sanitized);
+                    }}
+                    className='w-16 px-2 py-1 text-xs rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                    title='Maximum character count used by Short ±1 filter'
+                    aria-label='Short text max characters'
+                  />
+                  <button
+                    onClick={() =>
+                      setShowShortWithNeighbors(!showShortWithNeighbors)
+                    }
+                    className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                      showShortWithNeighbors
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                    title='Show scenes with sentence length less than input, plus one previous and one next scene (normal order)'
+                  >
+                    {showShortWithNeighbors ? '✓ ' : ''}Short ±1
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowOnlyFlagged(!showOnlyFlagged)}
                   className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
