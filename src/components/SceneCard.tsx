@@ -2486,99 +2486,151 @@ export default function SceneCard({
     [setGeneratingVideo],
   );
 
-  const normalizeSpeechTextForCompare = useCallback((s: string) => {
-    // NOTE: This normalization is intentionally tuned for *mismatch detection*.
-    // Requirements:
-    // - Ignore integer tokens up to 3 digits (0–999) because ASR/TTS often varies there.
-    // - Keep decimal numbers important (e.g., 3.5 should NOT be ignored).
-    // - Also ignore "zero".."nine" word tokens to avoid false mismatches like "four" vs "4".
-    //
-    // Implementation detail: keep '.' during cleanup so we can preserve decimals,
-    // then strip leading/trailing dots per-token.
-    const normalized = String(s || '')
-      .toLowerCase()
-      .replace(/[’']/g, '')
-      .replace(/[^a-z0-9.\s]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+  const replaceStandaloneDotOrPeriodWithSymbol = useCallback((text: string) => {
+    return String(text || '').replace(/\b(?:dot|period)\b/gi, '.');
+  }, []);
 
-    if (!normalized) return '';
+  const canonicalizePunctuationTokenForCompare = useCallback(
+    (token: string) => {
+      const normalized = String(token || '')
+        .trim()
+        .toLowerCase();
+      if (!normalized) return '';
 
-    const integerNumberWordsUpTo999 = new Set([
-      // 0-9
-      'zero',
-      'one',
-      'two',
-      'three',
-      'four',
-      'five',
-      'six',
-      'seven',
-      'eight',
-      'nine',
-      // 10-19
-      'ten',
-      'eleven',
-      'twelve',
-      'thirteen',
-      'fourteen',
-      'fifteen',
-      'sixteen',
-      'seventeen',
-      'eighteen',
-      'nineteen',
-      // tens
-      'twenty',
-      'thirty',
-      'forty',
-      'fifty',
-      'sixty',
-      'seventy',
-      'eighty',
-      'ninety',
-      // hundreds
-      'hundred',
-    ]);
+      // Standalone punctuation markers are non-semantic for Fix TTS compare.
+      if (
+        normalized === '.' ||
+        normalized === 'dot' ||
+        normalized === 'period'
+      ) {
+        return '';
+      }
 
-    const rawTokens = normalized.split(' ').filter(Boolean);
+      return normalized;
+    },
+    [],
+  );
 
-    // Expand dotted word tokens like "next.js" into ["next", "js"], but keep true decimals like "3.5".
-    const expandedTokens: string[] = [];
-    for (const t of rawTokens) {
-      const token = t.replace(/^\.+|\.+$/g, '');
-      if (!token) continue;
+  const expandSpeechTokenForCompare = useCallback(
+    (rawTokenInput: string): string[] => {
+      const rawToken = String(rawTokenInput || '')
+        .trim()
+        .toLowerCase();
+      if (!rawToken) return [];
 
-      // Preserve decimals (digits dot digits).
+      // ASR may emit punctuation token "." directly.
+      if (rawToken === '.') {
+        return [];
+      }
+
+      const token = rawToken.replace(/^\.+|\.+$/g, '');
+      if (!token) return [];
+
+      // Spoken punctuation markers should not influence mismatch checks.
+      if (token === 'dot' || token === 'period') {
+        return [];
+      }
+
+      // Preserve decimals as numeric tokens.
       if (/^\d+\.\d+$/.test(token)) {
-        expandedTokens.push(token);
-        continue;
+        return [token];
       }
 
       if (token.includes('.')) {
         const parts = token
           .split('.')
-          .map((p) => p.trim())
+          .map((p) => canonicalizePunctuationTokenForCompare(p))
           .filter(Boolean);
-        expandedTokens.push(...parts);
-        continue;
+        return parts;
       }
 
-      expandedTokens.push(token);
-    }
+      const canonical = canonicalizePunctuationTokenForCompare(token);
+      return canonical ? [canonical] : [];
+    },
+    [canonicalizePunctuationTokenForCompare],
+  );
 
-    return expandedTokens
-      .filter((token) => {
-        // Drop integer-only tokens up to 3 digits ("4", "09", "10", "123").
-        // Keep decimals like "3.5" important.
-        if (/^\d{1,3}$/.test(token)) return false;
-        // Drop common English integer number words (up to 999).
-        // This avoids false mismatches like "ten" vs "10".
-        if (integerNumberWordsUpTo999.has(token)) return false;
-        return true;
-      })
-      .join(' ')
-      .trim();
-  }, []);
+  const normalizeSpeechTextForCompare = useCallback(
+    (s: string) => {
+      // NOTE: This normalization is intentionally tuned for *mismatch detection*.
+      // Requirements:
+      // - Ignore integer tokens up to 3 digits (0–999) because ASR/TTS often varies there.
+      // - Keep decimal numbers important (e.g., 3.5 should NOT be ignored).
+      // - Also ignore "zero".."nine" word tokens to avoid false mismatches like "four" vs "4".
+      //
+      // Implementation detail: keep '.' during cleanup so we can preserve decimals,
+      // then strip leading/trailing dots per-token.
+      const normalized = replaceStandaloneDotOrPeriodWithSymbol(String(s || ''))
+        .toLowerCase()
+        .replace(/[’']/g, '')
+        .replace(/[^a-z0-9.\s]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!normalized) return '';
+
+      const integerNumberWordsUpTo999 = new Set([
+        // 0-9
+        'zero',
+        'one',
+        'two',
+        'three',
+        'four',
+        'five',
+        'six',
+        'seven',
+        'eight',
+        'nine',
+        // 10-19
+        'ten',
+        'eleven',
+        'twelve',
+        'thirteen',
+        'fourteen',
+        'fifteen',
+        'sixteen',
+        'seventeen',
+        'eighteen',
+        'nineteen',
+        // tens
+        'twenty',
+        'thirty',
+        'forty',
+        'fifty',
+        'sixty',
+        'seventy',
+        'eighty',
+        'ninety',
+        // hundreds
+        'hundred',
+      ]);
+
+      const rawTokens = normalized.split(' ').filter(Boolean);
+
+      // Expand tokens for robust compare:
+      // - "dot" / "period" are first rewritten to "." and then ignored as standalone punctuation markers
+      // - "next.js" => "next js"
+      // - keep true decimals like "3.5"
+      const expandedTokens: string[] = [];
+      for (const t of rawTokens) {
+        expandedTokens.push(...expandSpeechTokenForCompare(t));
+      }
+
+      return expandedTokens
+        .filter((token) => {
+          // Drop integer-only tokens up to 3 digits ("4", "09", "10", "123").
+          // Keep decimals like "3.5" important.
+          if (/^\d{1,3}$/.test(token)) return false;
+          // Drop common English integer number words (up to 999).
+          // This avoids false mismatches like "ten" vs "10".
+          if (integerNumberWordsUpTo999.has(token)) return false;
+          return true;
+        })
+        .join(' ')
+        .trim();
+    },
+    [expandSpeechTokenForCompare, replaceStandaloneDotOrPeriodWithSymbol],
+  );
 
   const compactSpeechTextForCompare = useCallback((s: string) => {
     // Compact form comparison requested by user:
@@ -2589,44 +2641,28 @@ export default function SceneCard({
       .trim();
   }, []);
 
-  const tokenizeSpeechForMismatchReason = useCallback((s: string): string[] => {
-    const normalized = String(s || '')
-      .toLowerCase()
-      .replace(/[’']/g, '')
-      .replace(/[^a-z0-9.\s]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+  const tokenizeSpeechForMismatchReason = useCallback(
+    (s: string): string[] => {
+      const normalized = replaceStandaloneDotOrPeriodWithSymbol(String(s || ''))
+        .toLowerCase()
+        .replace(/[’']/g, '')
+        .replace(/[^a-z0-9.\s]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    if (!normalized) return [];
+      if (!normalized) return [];
 
-    const rawTokens = normalized.split(' ').filter(Boolean);
-    const expandedTokens: string[] = [];
+      const rawTokens = normalized.split(' ').filter(Boolean);
+      const expandedTokens: string[] = [];
 
-    for (const t of rawTokens) {
-      const token = t.replace(/^\.+|\.+$/g, '');
-      if (!token) continue;
-
-      // Keep decimals as a single token.
-      if (/^\d+\.\d+$/.test(token)) {
-        expandedTokens.push(token);
-        continue;
+      for (const t of rawTokens) {
+        expandedTokens.push(...expandSpeechTokenForCompare(t));
       }
 
-      // Expand dotted words like "next.js" to ["next", "js"].
-      if (token.includes('.')) {
-        const parts = token
-          .split('.')
-          .map((p) => p.trim())
-          .filter(Boolean);
-        expandedTokens.push(...parts);
-        continue;
-      }
-
-      expandedTokens.push(token);
-    }
-
-    return expandedTokens;
-  }, []);
+      return expandedTokens;
+    },
+    [expandSpeechTokenForCompare, replaceStandaloneDotOrPeriodWithSymbol],
+  );
 
   const buildMismatchReasonForTooltip = useCallback(
     (expectedRaw: string, transcriptRaw: string): string => {
@@ -2797,8 +2833,12 @@ export default function SceneCard({
       transcriptNormalized: string,
       aliasRules: AliasCanonicalRule[],
     ): boolean => {
-      const expectedRawText = String(expectedRaw || '').trim();
-      const transcriptRawText = String(transcriptRaw || '').trim();
+      const expectedRawText = replaceStandaloneDotOrPeriodWithSymbol(
+        String(expectedRaw || '').trim(),
+      );
+      const transcriptRawText = replaceStandaloneDotOrPeriodWithSymbol(
+        String(transcriptRaw || '').trim(),
+      );
 
       // 0) compact RAW match fallback first (ignore spaces + punctuation only).
       // This catches cases like "base 64" vs "base64" before normalization
@@ -2817,8 +2857,12 @@ export default function SceneCard({
         }
       }
 
-      const expected = String(expectedNormalized || '').trim();
-      const transcript = String(transcriptNormalized || '').trim();
+      const expected = replaceStandaloneDotOrPeriodWithSymbol(
+        String(expectedNormalized || '').trim(),
+      );
+      const transcript = replaceStandaloneDotOrPeriodWithSymbol(
+        String(transcriptNormalized || '').trim(),
+      );
       if (!expected || !transcript) return false;
 
       // 1) exact normalized match first (fast + safe)
@@ -2862,7 +2906,11 @@ export default function SceneCard({
         expectedAliasedCompact === transcriptAliasedCompact,
       );
     },
-    [applyAliasCanonicalization, compactSpeechTextForCompare],
+    [
+      applyAliasCanonicalization,
+      compactSpeechTextForCompare,
+      replaceStandaloneDotOrPeriodWithSymbol,
+    ],
   );
 
   const withCacheBustSafe = useCallback((url: string) => {
