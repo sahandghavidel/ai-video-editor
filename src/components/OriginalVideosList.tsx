@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
 import {
   BaserowRow,
   getOriginalVideosData,
@@ -36,6 +42,7 @@ import {
   Film,
   FastForward,
   GitMerge,
+  MoreHorizontal,
 } from 'lucide-react';
 import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
@@ -132,6 +139,11 @@ interface OriginalVideosListProps {
   refreshScenesData?: () => void;
 }
 
+const VIDEO_TABLE_VIEWPORT_HEIGHT_PX = 520;
+const VIDEO_TABLE_VIRTUALIZATION_THRESHOLD = 120;
+const VIDEO_TABLE_ROW_HEIGHT_PX = 56;
+const VIDEO_TABLE_OVERSCAN_ROWS = 8;
+
 export default function OriginalVideosList({
   sceneHandlers,
   refreshScenesData,
@@ -174,6 +186,10 @@ export default function OriginalVideosList({
   const [updatingBulkStatus, setUpdatingBulkStatus] = useState(false);
   const [draggedRow, setDraggedRow] = useState<number | null>(null);
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
+  const [tableScrollTop, setTableScrollTop] = useState(0);
+  const [openActionsMenuVideoId, setOpenActionsMenuVideoId] = useState<
+    number | null
+  >(null);
   const [reordering, setReordering] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [clearingFinalMergedVideoId, setClearingFinalMergedVideoId] = useState<
@@ -327,6 +343,7 @@ export default function OriginalVideosList({
     setMergedVideo,
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Global state
   const {
@@ -371,6 +388,32 @@ export default function OriginalVideosList({
     // Load settings from localStorage on mount
     loadSettingsFromLocalStorage();
   }, [loadSettingsFromLocalStorage]);
+
+  useEffect(() => {
+    if (openActionsMenuVideoId === null) return;
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (actionMenuRef.current && !actionMenuRef.current.contains(target)) {
+        setOpenActionsMenuVideoId(null);
+      }
+    };
+
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenActionsMenuVideoId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    document.addEventListener('keydown', handleDocumentKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+      document.removeEventListener('keydown', handleDocumentKeyDown);
+    };
+  }, [openActionsMenuVideoId]);
 
   useEffect(() => {
     if (!isScriptUploadModalOpen) return;
@@ -445,7 +488,7 @@ export default function OriginalVideosList({
   }, []);
 
   // Helper function to extract value from Baserow field
-  const extractFieldValue = (field: unknown): string => {
+  const extractFieldValue = useCallback((field: unknown): string => {
     const f = field as BaserowField;
     if (!f) return '';
 
@@ -499,77 +542,78 @@ export default function OriginalVideosList({
     }
 
     return String(f);
-  };
+  }, []);
 
   // Helper function to extract and format scenes
-  const extractScenes = (
-    field: unknown,
-  ): { count: number; scenes: string[] } => {
-    const f = field as BaserowField;
-    if (!f) return { count: 0, scenes: [] };
+  const extractScenes = useCallback(
+    (field: unknown): { count: number; scenes: string[] } => {
+      const f = field as BaserowField;
+      if (!f) return { count: 0, scenes: [] };
 
-    let sceneList: string[] = [];
+      let sceneList: string[] = [];
 
-    // If it's already a string with comma-separated values
-    if (typeof f === 'string') {
-      sceneList = f
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    }
-    // If it's an array
-    else if (Array.isArray(f)) {
-      sceneList = f
-        .map((item) => {
-          if (typeof item === 'object' && item !== null) {
-            const obj = item as {
-              value?: unknown;
-              name?: string;
-              text?: string;
-              title?: string;
-            };
-            return (
-              String(obj.value) ||
-              obj.name ||
-              obj.text ||
-              obj.title ||
-              String(item)
-            );
-          }
-          return String(item);
-        })
-        .filter((s) => s.length > 0);
-    }
-    // If it's an object, try to extract meaningful value
-    else if (typeof f === 'object' && f !== null) {
-      const obj = f as {
-        value?: unknown;
-        name?: string;
-        text?: string;
-        title?: string;
-      };
-      const value =
-        String(obj.value) ||
-        obj.name ||
-        obj.text ||
-        obj.title ||
-        JSON.stringify(f);
-      sceneList = String(value)
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    } else {
-      sceneList = String(f)
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    }
+      // If it's already a string with comma-separated values
+      if (typeof f === 'string') {
+        sceneList = f
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+      }
+      // If it's an array
+      else if (Array.isArray(f)) {
+        sceneList = f
+          .map((item) => {
+            if (typeof item === 'object' && item !== null) {
+              const obj = item as {
+                value?: unknown;
+                name?: string;
+                text?: string;
+                title?: string;
+              };
+              return (
+                String(obj.value) ||
+                obj.name ||
+                obj.text ||
+                obj.title ||
+                String(item)
+              );
+            }
+            return String(item);
+          })
+          .filter((s) => s.length > 0);
+      }
+      // If it's an object, try to extract meaningful value
+      else if (typeof f === 'object' && f !== null) {
+        const obj = f as {
+          value?: unknown;
+          name?: string;
+          text?: string;
+          title?: string;
+        };
+        const value =
+          String(obj.value) ||
+          obj.name ||
+          obj.text ||
+          obj.title ||
+          JSON.stringify(f);
+        sceneList = String(value)
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+      } else {
+        sceneList = String(f)
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+      }
 
-    return { count: sceneList.length, scenes: sceneList };
-  };
+      return { count: sceneList.length, scenes: sceneList };
+    },
+    [],
+  );
 
   // Helper function to extract URL from field
-  const extractUrl = (field: unknown): string | null => {
+  const extractUrl = useCallback((field: unknown): string | null => {
     const f = field as BaserowField;
     if (!f) return null;
 
@@ -599,7 +643,7 @@ export default function OriginalVideosList({
     }
 
     return null;
-  };
+  }, []);
 
   const parseDimension = (
     input: string,
@@ -801,7 +845,7 @@ export default function OriginalVideosList({
   };
 
   // Helper function to check if video has scenes
-  const hasScenes = (video: BaserowRow): boolean => {
+  const hasScenes = useCallback((video: BaserowRow): boolean => {
     const scenesField = video.field_6866; // Scenes field
     if (!scenesField) return false;
 
@@ -821,7 +865,7 @@ export default function OriginalVideosList({
     }
 
     return false;
-  };
+  }, []);
 
   const handleFileUpload = async (file: File) => {
     if (!file.type.startsWith('video/')) {
@@ -1156,6 +1200,28 @@ export default function OriginalVideosList({
     return selectedOriginalVideo.id === videoId;
   };
 
+  const isInteractiveRowElement = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(
+      target.closest(
+        'a, button, input, select, textarea, summary, [role="button"], [role="menuitem"]',
+      ),
+    );
+  };
+
+  const handleRowKeyDown = (
+    event: React.KeyboardEvent<HTMLTableRowElement>,
+    video: BaserowRow,
+  ) => {
+    if (isInteractiveRowElement(event.target)) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+
+    event.preventDefault();
+    if (!draggedRow) {
+      handleRowClick(video);
+    }
+  };
+
   const fetchOriginalVideos = async (isRefresh = false) => {
     try {
       if (isRefresh) {
@@ -1218,6 +1284,8 @@ export default function OriginalVideosList({
       latestVoiceRef,
     );
   }, [
+    extractFieldValue,
+    extractUrl,
     originalVideos,
     selectedOriginalVideo.id,
     selectedOriginalVideo.sceneIds,
@@ -1261,6 +1329,68 @@ export default function OriginalVideosList({
     ? originalVideos.find((video) => video.id === selectedOriginalVideo.id) ||
       null
     : null;
+
+  const memoizedVideoTableRows = useMemo(
+    () =>
+      originalVideos.map((video, absoluteIndex) => ({
+        video,
+        absoluteIndex,
+        titleValue: extractFieldValue(video.field_6852),
+        statusValue: extractFieldValue(video.field_6864),
+        videoUploadedUrl: extractUrl(video.field_6881),
+        finalMergedVideoUrl: extractUrl(video.field_6858),
+        captionsUrl: extractUrl(video.field_6861),
+        ttsAudioUrl: extractUrl(video.field_6859),
+        normalizedVideoUrl: extractUrl(video.field_6903),
+        cfrVideoUrl: extractUrl(video.field_6908),
+        silenceOptimizedVideoUrl: extractUrl(video.field_6907),
+        hasSceneRows: hasScenes(video),
+      })),
+    [originalVideos, extractFieldValue, extractUrl, hasScenes],
+  );
+
+  const shouldVirtualizeVideoTable =
+    memoizedVideoTableRows.length >= VIDEO_TABLE_VIRTUALIZATION_THRESHOLD &&
+    editingTitle === null &&
+    draggedRow === null &&
+    dragOverRow === null &&
+    openActionsMenuVideoId === null;
+
+  const visibleVideoTableRows = useMemo(() => {
+    if (!shouldVirtualizeVideoTable) {
+      return {
+        rows: memoizedVideoTableRows,
+        topSpacerHeight: 0,
+        bottomSpacerHeight: 0,
+      };
+    }
+
+    const visibleRowsCount = Math.ceil(
+      VIDEO_TABLE_VIEWPORT_HEIGHT_PX / VIDEO_TABLE_ROW_HEIGHT_PX,
+    );
+    const startIndex = Math.max(
+      0,
+      Math.floor(tableScrollTop / VIDEO_TABLE_ROW_HEIGHT_PX) -
+        VIDEO_TABLE_OVERSCAN_ROWS,
+    );
+    const endIndex = Math.min(
+      memoizedVideoTableRows.length,
+      startIndex + visibleRowsCount + VIDEO_TABLE_OVERSCAN_ROWS * 2,
+    );
+
+    return {
+      rows: memoizedVideoTableRows.slice(startIndex, endIndex),
+      topSpacerHeight: startIndex * VIDEO_TABLE_ROW_HEIGHT_PX,
+      bottomSpacerHeight:
+        (memoizedVideoTableRows.length - endIndex) * VIDEO_TABLE_ROW_HEIGHT_PX,
+    };
+  }, [memoizedVideoTableRows, shouldVirtualizeVideoTable, tableScrollTop]);
+
+  useEffect(() => {
+    if (!shouldVirtualizeVideoTable && tableScrollTop !== 0) {
+      setTableScrollTop(0);
+    }
+  }, [shouldVirtualizeVideoTable, tableScrollTop]);
 
   const toggleSelectedVideoDetailsSection = (
     section: keyof typeof selectedVideoDetailsExpanded,
@@ -10415,39 +10545,148 @@ export default function OriginalVideosList({
             ) : (
               <div className='overflow-x-auto'>
                 {/* Fixed height scrollable container for the table body */}
-                <div className='h-[520px] overflow-y-auto'>
+                <div
+                  className='h-[520px] overflow-y-auto'
+                  onScroll={(e) => {
+                    if (!shouldVirtualizeVideoTable) return;
+                    setTableScrollTop(e.currentTarget.scrollTop);
+                  }}
+                >
                   <table className='w-full text-xs'>
                     <thead className='bg-white'>
                       <tr className='border-b border-gray-200'>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 w-8 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 w-8 z-10'
+                        >
                           {/* Drag handle column */}
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 w-12 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 w-12 z-10'
+                        >
                           Select
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'
+                        >
                           ID
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'
+                        >
                           Title
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'
+                        >
                           Status
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'
+                        >
                           Video URL
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'
+                        >
                           Final Video
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
+                        <th
+                          scope='col'
+                          className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'
+                        >
                           Actions
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {originalVideos.map((video, index) => {
+                      {visibleVideoTableRows.topSpacerHeight > 0 && (
+                        <tr aria-hidden='true'>
+                          <td
+                            colSpan={8}
+                            className='p-0 border-0'
+                            style={{
+                              height: `${visibleVideoTableRows.topSpacerHeight}px`,
+                            }}
+                          />
+                        </tr>
+                      )}
+
+                      {visibleVideoTableRows.rows.map((row) => {
+                        const video = row.video;
+                        const index = row.absoluteIndex;
                         const isSelected = isRowSelected(video.id);
+                        const titleValue = row.titleValue;
+                        const statusValue = row.statusValue || 'Pending';
+                        const videoUrl = row.videoUploadedUrl;
+                        const finalVideoUrl = row.finalMergedVideoUrl;
+                        const captionsUrl = row.captionsUrl;
+                        const ttsAudioUrl = row.ttsAudioUrl;
+                        const normalizedVideoUrl = row.normalizedVideoUrl;
+                        const cfrVideoUrl = row.cfrVideoUrl;
+                        const silenceOptimizedVideoUrl =
+                          row.silenceOptimizedVideoUrl;
+                        const videoHasScenes = row.hasSceneRows;
+                        const hasScriptText =
+                          typeof video.field_6854 === 'string' &&
+                          video.field_6854.trim().length > 0;
+                        const hasCaptionsOrScript =
+                          Boolean(captionsUrl) || hasScriptText;
+
+                        const transcribeDisabled =
+                          transcribing !== null ||
+                          transcribingAll ||
+                          !videoUrl ||
+                          Boolean(captionsUrl);
+
+                        const ttsScriptDisabled =
+                          generatingTtsFromScripts ||
+                          generatingScriptTtsForVideo !== null ||
+                          !hasScriptText ||
+                          Boolean(ttsAudioUrl);
+
+                        const ttsVideoDisabled =
+                          generatingVideoFromTtsAudioAll ||
+                          generatingVideoFromTtsAudioForVideo !== null ||
+                          !ttsAudioUrl ||
+                          Boolean(videoUrl);
+
+                        const scenesDisabled =
+                          generatingScenes !== null ||
+                          generatingScenesAll ||
+                          !hasCaptionsOrScript ||
+                          videoHasScenes;
+
+                        const clipsDisabled =
+                          clipGeneration.generatingClips !== null ||
+                          !videoHasScenes;
+
+                        const normalizeDisabled =
+                          normalizing !== null ||
+                          sceneLoading.normalizingAudioVideo !== null ||
+                          !videoUrl ||
+                          Boolean(normalizedVideoUrl);
+
+                        const convertToCfrDisabled =
+                          convertingToCFR !== null ||
+                          sceneLoading.convertingToCFRVideo !== null ||
+                          !videoUrl ||
+                          Boolean(cfrVideoUrl);
+
+                        const optimizeSilenceDisabled =
+                          optimizingSilence !== null ||
+                          sceneLoading.optimizingSilenceVideo !== null ||
+                          !videoUrl ||
+                          Boolean(silenceOptimizedVideoUrl);
+
+                        const isActionsMenuOpen =
+                          openActionsMenuVideoId === video.id;
                         return (
                           <tr
                             key={video.id}
@@ -10458,6 +10697,9 @@ export default function OriginalVideosList({
                             onDragEnd={handleRowDragEnd}
                             onDrop={(e) => handleRowDrop(e, video.id)}
                             onClick={() => !draggedRow && handleRowClick(video)}
+                            onKeyDown={(e) => handleRowKeyDown(e, video)}
+                            tabIndex={0}
+                            aria-selected={isSelected}
                             className={`border-b border-gray-100 text-xs transition-all duration-200 ${
                               draggedRow === video.id
                                 ? 'opacity-50 cursor-grabbing'
@@ -10557,10 +10799,7 @@ export default function OriginalVideosList({
                                   className='group flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1 -mx-2 -my-1'
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const currentTitle = extractFieldValue(
-                                      video.field_6852,
-                                    );
-                                    startTitleEdit(video.id, currentTitle);
+                                    startTitleEdit(video.id, titleValue);
                                   }}
                                 >
                                   <span
@@ -10570,8 +10809,7 @@ export default function OriginalVideosList({
                                         : 'text-gray-900'
                                     }`}
                                   >
-                                    {extractFieldValue(video.field_6852) ||
-                                      'Click to add title'}
+                                    {titleValue || 'Click to add title'}
                                   </span>
                                   <Edit3 className='w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity' />
                                 </div>
@@ -10593,10 +10831,7 @@ export default function OriginalVideosList({
                                   </div>
                                 ) : (
                                   <select
-                                    value={
-                                      extractFieldValue(video.field_6864) ||
-                                      'Pending'
-                                    }
+                                    value={statusValue}
                                     onChange={(e) =>
                                       handleStatusChange(
                                         video.id,
@@ -10605,12 +10840,9 @@ export default function OriginalVideosList({
                                       )
                                     }
                                     className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
-                                      extractFieldValue(video.field_6864) ===
-                                      'Done'
+                                      statusValue === 'Done'
                                         ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200 focus:ring-green-500'
-                                        : extractFieldValue(
-                                              video.field_6864,
-                                            ) === 'Processing'
+                                        : statusValue === 'Processing'
                                           ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 focus:ring-blue-500'
                                           : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200 focus:ring-gray-500'
                                     }`}
@@ -10628,27 +10860,22 @@ export default function OriginalVideosList({
 
                             {/* Video Uploaded URL (6881) */}
                             <td className='py-3 px-4'>
-                              {(() => {
-                                const videoUrl = extractUrl(video.field_6881);
-                                return videoUrl ? (
-                                  <a
-                                    href={videoUrl}
-                                    target='_blank'
-                                    rel='noopener noreferrer'
-                                    className='inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline'
-                                  >
-                                    <Video className='w-4 h-4' />
-                                    <span className='truncate max-w-32'>
-                                      Video
-                                    </span>
-                                    <ExternalLink className='w-3 h-3' />
-                                  </a>
-                                ) : (
-                                  <span className='text-gray-400'>
-                                    No video
+                              {videoUrl ? (
+                                <a
+                                  href={videoUrl}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  className='inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline'
+                                >
+                                  <Video className='w-4 h-4' />
+                                  <span className='truncate max-w-32'>
+                                    Video
                                   </span>
-                                );
-                              })()}
+                                  <ExternalLink className='w-3 h-3' />
+                                </a>
+                              ) : (
+                                <span className='text-gray-400'>No video</span>
+                              )}
                             </td>
 
                             {/* Final Merged Video URL (6858) */}
@@ -10663,9 +10890,6 @@ export default function OriginalVideosList({
                               title='Right click to remove Final Merged Video URL (6858) from database.'
                             >
                               {(() => {
-                                const finalVideoUrl = extractUrl(
-                                  video.field_6858,
-                                );
                                 const isClearingFinalVideo =
                                   clearingFinalMergedVideoId === video.id;
                                 const isCFR =
@@ -10710,13 +10934,15 @@ export default function OriginalVideosList({
 
                             {/* Actions */}
                             <td className='py-3 px-4'>
-                              <div className='flex items-center gap-2'>
+                              <div
+                                className='relative flex items-center gap-1'
+                                onClick={(e) => e.stopPropagation()}
+                                ref={isActionsMenuOpen ? actionMenuRef : null}
+                              >
+                                {/* Primary actions */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const videoUrl = extractUrl(
-                                      video.field_6881,
-                                    );
                                     if (videoUrl) {
                                       handleTranscribeVideo(video.id, videoUrl);
                                     } else {
@@ -10725,12 +10951,8 @@ export default function OriginalVideosList({
                                       );
                                     }
                                   }}
-                                  disabled={
-                                    transcribing !== null ||
-                                    transcribingAll ||
-                                    !extractUrl(video.field_6881) ||
-                                    !!extractUrl(video.field_6861)
-                                  }
+                                  disabled={transcribeDisabled}
+                                  aria-label={`Transcribe video ${video.id}`}
                                   className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                   title={
                                     transcribing !== null
@@ -10739,9 +10961,9 @@ export default function OriginalVideosList({
                                         : 'Another transcription in progress'
                                       : transcribingAll
                                         ? 'Bulk transcription in progress'
-                                        : !extractUrl(video.field_6881)
+                                        : !videoUrl
                                           ? 'No video URL available'
-                                          : !!extractUrl(video.field_6861)
+                                          : captionsUrl
                                             ? 'Video already has captions'
                                             : 'Transcribe video'
                                   }
@@ -10756,110 +10978,19 @@ export default function OriginalVideosList({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleGenerateTtsFromVideoScript(video);
-                                  }}
-                                  disabled={
-                                    generatingTtsFromScripts ||
-                                    generatingScriptTtsForVideo !== null ||
-                                    !(
-                                      typeof video.field_6854 === 'string' &&
-                                      video.field_6854.trim().length > 0
-                                    ) ||
-                                    !!extractUrl(video.field_6859)
-                                  }
-                                  className='p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                                  title={
-                                    generatingTtsFromScripts
-                                      ? 'Batch TTS Script in progress'
-                                      : generatingScriptTtsForVideo !== null
-                                        ? generatingScriptTtsForVideo ===
-                                          video.id
-                                          ? 'Generating TTS...'
-                                          : 'Another TTS generation in progress'
-                                        : !(
-                                              typeof video.field_6854 ===
-                                                'string' &&
-                                              video.field_6854.trim().length > 0
-                                            )
-                                          ? 'No script available'
-                                          : !!extractUrl(video.field_6859)
-                                            ? 'TTS audio already exists'
-                                            : 'Generate TTS from script'
-                                  }
-                                >
-                                  {generatingScriptTtsForVideo === video.id ? (
-                                    <Loader2 className='w-4 h-4 animate-spin' />
-                                  ) : (
-                                    <Mic2 className='w-4 h-4' />
-                                  )}
-                                </button>
-
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleGenerateVideoFromTtsAudio(video);
-                                  }}
-                                  disabled={
-                                    generatingVideoFromTtsAudioAll ||
-                                    generatingVideoFromTtsAudioForVideo !==
-                                      null ||
-                                    !extractUrl(video.field_6859) ||
-                                    !!extractUrl(video.field_6881)
-                                  }
-                                  className='p-2 text-pink-600 hover:text-pink-800 hover:bg-pink-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                                  title={
-                                    generatingVideoFromTtsAudioAll
-                                      ? 'Batch TTS Video in progress'
-                                      : generatingVideoFromTtsAudioForVideo !==
-                                          null
-                                        ? generatingVideoFromTtsAudioForVideo ===
-                                          video.id
-                                          ? 'Generating video from TTS audio...'
-                                          : 'Another video generation in progress'
-                                        : !extractUrl(video.field_6859)
-                                          ? 'No TTS audio available'
-                                          : !!extractUrl(video.field_6881)
-                                            ? 'Video already exists'
-                                            : 'Generate video from TTS audio (30fps)'
-                                  }
-                                >
-                                  {generatingVideoFromTtsAudioForVideo ===
-                                  video.id ? (
-                                    <Loader2 className='w-4 h-4 animate-spin' />
-                                  ) : (
-                                    <Film className='w-4 h-4' />
-                                  )}
-                                </button>
-
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
                                     handleGenerateScenes(video.id);
                                   }}
-                                  disabled={
-                                    generatingScenes !== null ||
-                                    generatingScenesAll ||
-                                    (!extractUrl(video.field_6861) &&
-                                      !(
-                                        typeof video.field_6854 === 'string' &&
-                                        video.field_6854.trim().length > 0
-                                      )) ||
-                                    hasScenes(video)
-                                  }
+                                  disabled={scenesDisabled}
+                                  aria-label={`Generate scenes for video ${video.id}`}
                                   className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                   title={
                                     generatingScenes !== null
                                       ? generatingScenes === video.id
                                         ? 'Generating scenes...'
                                         : 'Another scene generation in progress'
-                                      : !extractUrl(video.field_6861) &&
-                                          !(
-                                            typeof video.field_6854 ===
-                                              'string' &&
-                                            video.field_6854.trim().length > 0
-                                          )
+                                      : !hasCaptionsOrScript
                                         ? 'No captions URL or script available'
-                                        : hasScenes(video)
+                                        : videoHasScenes
                                           ? 'Scenes already generated for this video'
                                           : 'Generate scenes from captions or script'
                                   }
@@ -10876,10 +11007,8 @@ export default function OriginalVideosList({
                                     e.stopPropagation();
                                     handleGenerateClips(video.id);
                                   }}
-                                  disabled={
-                                    clipGeneration.generatingClips !== null ||
-                                    !hasScenes(video)
-                                  }
+                                  disabled={clipsDisabled}
+                                  aria-label={`Generate clips for video ${video.id}`}
                                   className='p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                                   title={
                                     clipGeneration.generatingClips !== null
@@ -10889,7 +11018,7 @@ export default function OriginalVideosList({
                                           ? `Generating clips... Scene ${clipGeneration.clipsProgress.current}/${clipGeneration.clipsProgress.total} (${clipGeneration.clipsProgress.percentage}%)`
                                           : 'Generating clips...'
                                         : 'Another clip generation in progress'
-                                      : !hasScenes(video)
+                                      : !videoHasScenes
                                         ? 'No scenes available - generate scenes first'
                                         : 'Generate video clips for all scenes'
                                   }
@@ -10899,7 +11028,7 @@ export default function OriginalVideosList({
                                     clipGeneration.clipsProgress ? (
                                       <div className='flex items-center space-x-1'>
                                         <Loader2 className='w-4 h-4 animate-spin' />
-                                        <span className='text-xs font-medium'>
+                                        <span className='text-[10px] font-medium'>
                                           {clipGeneration.clipsProgress.current}
                                           /{clipGeneration.clipsProgress.total}
                                         </span>
@@ -10912,153 +11041,177 @@ export default function OriginalVideosList({
                                   )}
                                 </button>
 
+                                {/* Overflow menu trigger */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const videoUrl = extractUrl(
-                                      video.field_6881,
+                                    setOpenActionsMenuVideoId((prev) =>
+                                      prev === video.id ? null : video.id,
                                     );
-                                    if (videoUrl) {
-                                      handleNormalizeVideo(video.id, videoUrl);
-                                    } else {
-                                      setError(
-                                        'No video URL found for normalization',
-                                      );
-                                    }
                                   }}
-                                  disabled={
-                                    normalizing !== null ||
-                                    sceneLoading.normalizingAudioVideo !==
-                                      null ||
-                                    !extractUrl(video.field_6881) ||
-                                    !!extractUrl(video.field_6903) // Already normalized
-                                  }
-                                  className='p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                                  title={
-                                    normalizing !== null ||
-                                    sceneLoading.normalizingAudioVideo !== null
-                                      ? normalizing === video.id ||
-                                        sceneLoading.normalizingAudioVideo ===
-                                          video.id
-                                        ? 'Normalizing audio...'
-                                        : 'Another normalization in progress'
-                                      : !extractUrl(video.field_6881)
-                                        ? 'No video URL available'
-                                        : !!extractUrl(video.field_6903)
-                                          ? 'Video already normalized'
-                                          : 'Normalize audio loudness'
-                                  }
+                                  aria-label={`More actions for video ${video.id}`}
+                                  aria-haspopup='menu'
+                                  aria-expanded={isActionsMenuOpen}
+                                  className='p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full transition-colors'
+                                  title='More actions'
                                 >
-                                  {normalizing === video.id ||
-                                  sceneLoading.normalizingAudioVideo ===
-                                    video.id ? (
-                                    <Loader2 className='w-4 h-4 animate-spin' />
-                                  ) : (
-                                    <Volume2 className='w-4 h-4' />
-                                  )}
+                                  <MoreHorizontal className='w-4 h-4' />
                                 </button>
 
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const videoUrl = extractUrl(
-                                      video.field_6881,
-                                    );
-                                    if (videoUrl) {
-                                      handleConvertToCFR(video.id, videoUrl);
-                                    } else {
-                                      setError(
-                                        'No video URL found for CFR conversion',
-                                      );
-                                    }
-                                  }}
-                                  disabled={
-                                    convertingToCFR !== null ||
-                                    sceneLoading.convertingToCFRVideo !==
-                                      null ||
-                                    !extractUrl(video.field_6881) ||
-                                    !!extractUrl(video.field_6908) // Already converted to CFR
-                                  }
-                                  className='p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                                  title={
-                                    convertingToCFR !== null ||
-                                    sceneLoading.convertingToCFRVideo !== null
-                                      ? convertingToCFR === video.id ||
-                                        sceneLoading.convertingToCFRVideo ===
-                                          video.id
-                                        ? 'Converting to CFR 30fps...'
-                                        : 'Another CFR conversion in progress'
-                                      : !extractUrl(video.field_6881)
-                                        ? 'No video URL available'
-                                        : !!extractUrl(video.field_6908)
-                                          ? 'Video already converted to CFR'
-                                          : 'Convert to Constant Frame Rate (30fps)'
-                                  }
-                                >
-                                  {convertingToCFR === video.id ||
-                                  sceneLoading.convertingToCFRVideo ===
-                                    video.id ? (
-                                    <Loader2 className='w-4 h-4 animate-spin' />
-                                  ) : (
-                                    <Film className='w-4 h-4' />
-                                  )}
-                                </button>
+                                {isActionsMenuOpen && (
+                                  <div
+                                    role='menu'
+                                    className='absolute right-0 top-9 z-20 w-44 rounded-md border border-gray-200 bg-white shadow-lg p-1'
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      role='menuitem'
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionsMenuVideoId(null);
+                                        handleGenerateTtsFromVideoScript(video);
+                                      }}
+                                      disabled={ttsScriptDisabled}
+                                      className='w-full inline-flex items-center gap-2 px-2 py-1.5 text-left text-xs rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                                      title='Generate TTS from script'
+                                    >
+                                      {generatingScriptTtsForVideo ===
+                                      video.id ? (
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                      ) : (
+                                        <Mic2 className='w-3.5 h-3.5 text-orange-600' />
+                                      )}
+                                      TTS Script
+                                    </button>
 
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const videoUrl = extractUrl(
-                                      video.field_6881,
-                                    );
-                                    if (videoUrl) {
-                                      handleOptimizeSilence(video.id, videoUrl);
-                                    } else {
-                                      setError(
-                                        'No video URL found for silence optimization',
-                                      );
-                                    }
-                                  }}
-                                  disabled={
-                                    optimizingSilence !== null ||
-                                    sceneLoading.optimizingSilenceVideo !==
-                                      null ||
-                                    !extractUrl(video.field_6881) ||
-                                    !!extractUrl(video.field_6907) // Already silenced
-                                  }
-                                  className='p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                                  title={
-                                    optimizingSilence !== null
-                                      ? optimizingSilence === video.id
-                                        ? `Optimizing silence (${silenceSpeedRate}x speed ${
-                                            silenceMuted ? '+ mute' : '+ audio'
-                                          })...`
-                                        : 'Another silence optimization in progress'
-                                      : sceneLoading.optimizingSilenceVideo !==
-                                          null
-                                        ? sceneLoading.optimizingSilenceVideo ===
-                                          video.id
-                                          ? 'Optimizing silence in batch mode...'
-                                          : 'Batch silence optimization in progress'
-                                        : !extractUrl(video.field_6881)
-                                          ? 'No video URL available'
-                                          : !!extractUrl(video.field_6907)
-                                            ? 'Video already optimized for silence'
-                                            : `Speed up & mute silent parts (${silenceSpeedRate}x)`
-                                  }
-                                >
-                                  {optimizingSilence === video.id ||
-                                  sceneLoading.optimizingSilenceVideo ===
-                                    video.id ? (
-                                    <Loader2 className='w-4 h-4 animate-spin' />
-                                  ) : (
-                                    <FastForward className='w-4 h-4' />
-                                  )}
-                                </button>
+                                    <button
+                                      role='menuitem'
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionsMenuVideoId(null);
+                                        handleGenerateVideoFromTtsAudio(video);
+                                      }}
+                                      disabled={ttsVideoDisabled}
+                                      className='w-full inline-flex items-center gap-2 px-2 py-1.5 text-left text-xs rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                                      title='Generate video from TTS audio'
+                                    >
+                                      {generatingVideoFromTtsAudioForVideo ===
+                                      video.id ? (
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                      ) : (
+                                        <Film className='w-3.5 h-3.5 text-pink-600' />
+                                      )}
+                                      TTS Video
+                                    </button>
+
+                                    <button
+                                      role='menuitem'
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionsMenuVideoId(null);
+                                        if (videoUrl) {
+                                          handleNormalizeVideo(
+                                            video.id,
+                                            videoUrl,
+                                          );
+                                        } else {
+                                          setError(
+                                            'No video URL found for normalization',
+                                          );
+                                        }
+                                      }}
+                                      disabled={normalizeDisabled}
+                                      className='w-full inline-flex items-center gap-2 px-2 py-1.5 text-left text-xs rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                                      title='Normalize audio loudness'
+                                    >
+                                      {normalizing === video.id ||
+                                      sceneLoading.normalizingAudioVideo ===
+                                        video.id ? (
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                      ) : (
+                                        <Volume2 className='w-3.5 h-3.5 text-orange-600' />
+                                      )}
+                                      Normalize
+                                    </button>
+
+                                    <button
+                                      role='menuitem'
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionsMenuVideoId(null);
+                                        if (videoUrl) {
+                                          handleConvertToCFR(
+                                            video.id,
+                                            videoUrl,
+                                          );
+                                        } else {
+                                          setError(
+                                            'No video URL found for CFR conversion',
+                                          );
+                                        }
+                                      }}
+                                      disabled={convertToCfrDisabled}
+                                      className='w-full inline-flex items-center gap-2 px-2 py-1.5 text-left text-xs rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                                      title='Convert to Constant Frame Rate (30fps)'
+                                    >
+                                      {convertingToCFR === video.id ||
+                                      sceneLoading.convertingToCFRVideo ===
+                                        video.id ? (
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                      ) : (
+                                        <Film className='w-3.5 h-3.5 text-purple-600' />
+                                      )}
+                                      Convert CFR
+                                    </button>
+
+                                    <button
+                                      role='menuitem'
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionsMenuVideoId(null);
+                                        if (videoUrl) {
+                                          handleOptimizeSilence(
+                                            video.id,
+                                            videoUrl,
+                                          );
+                                        } else {
+                                          setError(
+                                            'No video URL found for silence optimization',
+                                          );
+                                        }
+                                      }}
+                                      disabled={optimizeSilenceDisabled}
+                                      className='w-full inline-flex items-center gap-2 px-2 py-1.5 text-left text-xs rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                                      title='Speed up and mute silent parts'
+                                    >
+                                      {optimizingSilence === video.id ||
+                                      sceneLoading.optimizingSilenceVideo ===
+                                        video.id ? (
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                      ) : (
+                                        <FastForward className='w-3.5 h-3.5 text-green-600' />
+                                      )}
+                                      Silence
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
                         );
                       })}
+
+                      {visibleVideoTableRows.bottomSpacerHeight > 0 && (
+                        <tr aria-hidden='true'>
+                          <td
+                            colSpan={8}
+                            className='p-0 border-0'
+                            style={{
+                              height: `${visibleVideoTableRows.bottomSpacerHeight}px`,
+                            }}
+                          />
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                   {/* close overflow-x-auto wrapper */}
