@@ -20,6 +20,38 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { AlertCircle, Video, Loader2, RefreshCw, Settings } from 'lucide-react';
 
+type GlobalSettingsSectionKey =
+  | 'modelSelection'
+  | 'transcription'
+  | 'subtitleGeneration'
+  | 'combineScenes'
+  | 'ttsSettings'
+  | 'sceneVideoGeneration'
+  | 'videoSpeed'
+  | 'silenceSpeed'
+  | 'audioEnhancement'
+  | 'advancedAudio'
+  | 'autoGenerate'
+  | 'deletion';
+
+const defaultGlobalSettingsSectionsExpanded: Record<
+  GlobalSettingsSectionKey,
+  boolean
+> = {
+  modelSelection: false,
+  transcription: false,
+  subtitleGeneration: false,
+  combineScenes: false,
+  ttsSettings: false,
+  sceneVideoGeneration: false,
+  videoSpeed: false,
+  silenceSpeed: false,
+  audioEnhancement: false,
+  advancedAudio: false,
+  autoGenerate: false,
+  deletion: false,
+};
+
 export default function Home() {
   const {
     data,
@@ -33,6 +65,10 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [isGlobalSettingsExpanded, setIsGlobalSettingsExpanded] =
     useState(false); // Global settings collapsed by default
+  const [globalSettingsSectionsExpanded, setGlobalSettingsSectionsExpanded] =
+    useState<Record<GlobalSettingsSectionKey, boolean>>(
+      defaultGlobalSettingsSectionsExpanded,
+    );
 
   // Get filtered data based on selected original video
   const filteredData = getFilteredData();
@@ -76,7 +112,7 @@ export default function Home() {
     ) => Promise<void>;
   } | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setInitialLoading(true);
       const fetchedData = await getBaserowData();
@@ -88,9 +124,9 @@ export default function Home() {
     } finally {
       setInitialLoading(false);
     }
-  };
+  }, [setData, setError]);
 
-  const refreshDataSilently = async () => {
+  const refreshDataSilently = useCallback(async () => {
     setRefreshing(true);
     try {
       const fetchedData = await getBaserowData();
@@ -102,11 +138,11 @@ export default function Home() {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [setData, setError]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    void loadData();
+  }, [loadData]);
 
   const handleDataUpdate = (updatedData: BaserowRow[]) => {
     setData(updatedData);
@@ -156,6 +192,104 @@ export default function Home() {
 
   const refreshData = () => {
     refreshDataSilently();
+  };
+
+  const globalSettingsSections: Array<{
+    key: GlobalSettingsSectionKey;
+    title: string;
+    component: JSX.Element;
+  }> = [
+    {
+      key: 'modelSelection',
+      title: 'AI Models',
+      component: <ModelSelection />,
+    },
+    {
+      key: 'transcription',
+      title: 'Transcription',
+      component: <TranscriptionModelSelection />,
+    },
+    {
+      key: 'subtitleGeneration',
+      title: 'Subtitles',
+      component: <SubtitleGenerationSettings />,
+    },
+    {
+      key: 'combineScenes',
+      title: 'Combine Scenes',
+      component: <CombineScenesSettings />,
+    },
+    {
+      key: 'ttsSettings',
+      title: 'TTS',
+      component: <TTSSettings />,
+    },
+    {
+      key: 'sceneVideoGeneration',
+      title: 'Scene Video Generation',
+      component: <SceneVideoGenerationSettings />,
+    },
+    {
+      key: 'videoSpeed',
+      title: 'Video Speed',
+      component: <VideoSpeedSettings />,
+    },
+    {
+      key: 'silenceSpeed',
+      title: 'Silence Speed',
+      component: <SilenceSpeedSettings />,
+    },
+    {
+      key: 'audioEnhancement',
+      title: 'Audio Enhancement',
+      component: <AudioEnhancementSettings />,
+    },
+    {
+      key: 'advancedAudio',
+      title: 'Advanced Audio',
+      component: <AdvancedAudioSettings />,
+    },
+    {
+      key: 'autoGenerate',
+      title: 'Auto-Generation',
+      component: <AutoGenerateSettings />,
+    },
+    {
+      key: 'deletion',
+      title: 'Deletion',
+      component: <DeletionSettings />,
+    },
+  ];
+
+  const allGlobalSettingsSectionsExpanded = Object.values(
+    globalSettingsSectionsExpanded,
+  ).every(Boolean);
+
+  const toggleGlobalSettingsSection = (key: GlobalSettingsSectionKey) => {
+    setGlobalSettingsSectionsExpanded((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const toggleAllGlobalSettingsSections = () => {
+    const shouldExpandAll = !allGlobalSettingsSectionsExpanded;
+    const nextValue: Record<GlobalSettingsSectionKey, boolean> = {
+      modelSelection: shouldExpandAll,
+      transcription: shouldExpandAll,
+      subtitleGeneration: shouldExpandAll,
+      combineScenes: shouldExpandAll,
+      ttsSettings: shouldExpandAll,
+      sceneVideoGeneration: shouldExpandAll,
+      videoSpeed: shouldExpandAll,
+      silenceSpeed: shouldExpandAll,
+      audioEnhancement: shouldExpandAll,
+      advancedAudio: shouldExpandAll,
+      autoGenerate: shouldExpandAll,
+      deletion: shouldExpandAll,
+    };
+
+    setGlobalSettingsSectionsExpanded(nextValue);
   };
 
   return (
@@ -316,6 +450,22 @@ export default function Home() {
                 {/* Collapsible Settings Content */}
                 {isGlobalSettingsExpanded && (
                   <div className='px-6 pb-6 pt-2'>
+                    <div className='mb-3 flex items-center justify-end'>
+                      <button
+                        onClick={toggleAllGlobalSettingsSections}
+                        className='px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 border border-blue-200 rounded-md transition-colors'
+                        title={
+                          allGlobalSettingsSectionsExpanded
+                            ? 'Collapse all global settings sections'
+                            : 'Expand all global settings sections'
+                        }
+                      >
+                        {allGlobalSettingsSectionsExpanded
+                          ? 'Collapse All Sections'
+                          : 'Expand All Sections'}
+                      </button>
+                    </div>
+
                     <div
                       className='grid gap-3'
                       style={{
@@ -323,18 +473,55 @@ export default function Home() {
                           'repeat(auto-fit, minmax(320px, 1fr))',
                       }}
                     >
-                      <ModelSelection />
-                      <TranscriptionModelSelection />
-                      <SubtitleGenerationSettings />
-                      <CombineScenesSettings />
-                      <TTSSettings />
-                      <SceneVideoGenerationSettings />
-                      <VideoSpeedSettings />
-                      <SilenceSpeedSettings />
-                      <AudioEnhancementSettings />
-                      <AdvancedAudioSettings />
-                      <AutoGenerateSettings />
-                      <DeletionSettings />
+                      {globalSettingsSections.map((section) => {
+                        const isSectionExpanded =
+                          globalSettingsSectionsExpanded[section.key];
+
+                        return (
+                          <div
+                            key={section.key}
+                            className='rounded-xl border border-blue-200 bg-white/70 overflow-hidden'
+                          >
+                            <button
+                              onClick={() =>
+                                toggleGlobalSettingsSection(section.key)
+                              }
+                              className='w-full px-4 py-2.5 flex items-center justify-between hover:bg-blue-50 transition-colors'
+                              title={`${isSectionExpanded ? 'Collapse' : 'Expand'} ${section.title}`}
+                            >
+                              <span className='text-sm font-semibold text-gray-800'>
+                                {section.title}
+                              </span>
+                              <div className='flex items-center gap-2'>
+                                <span className='text-xs text-gray-500'>
+                                  {isSectionExpanded ? 'Hide' : 'Show'}
+                                </span>
+                                <svg
+                                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                                    isSectionExpanded ? 'rotate-180' : ''
+                                  }`}
+                                  fill='none'
+                                  stroke='currentColor'
+                                  viewBox='0 0 24 24'
+                                >
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M19 9l-7 7-7-7'
+                                  />
+                                </svg>
+                              </div>
+                            </button>
+
+                            {isSectionExpanded && (
+                              <div className='px-2 pb-2'>
+                                {section.component}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
