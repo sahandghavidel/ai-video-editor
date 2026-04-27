@@ -399,6 +399,49 @@ function splitCamelCaseForOmniVoice(text: string): {
   return { normalizedText, splitWordCount };
 }
 
+function moveDotBeforeFollowingWordInPlainSegment(segment: string): {
+  text: string;
+  movedDotCount: number;
+} {
+  let movedDotCount = 0;
+
+  const text = segment.replace(
+    /([A-Za-z0-9_])\.(?=[A-Za-z_])/g,
+    (_match, prevChar: string) => {
+      movedDotCount += 1;
+      return `${prevChar} .`;
+    },
+  );
+
+  return { text, movedDotCount };
+}
+
+function normalizeDotSeparatedWordsForOmniVoice(text: string): {
+  normalizedText: string;
+  movedDotCount: number;
+} {
+  const bracketTagRegex = /\[[^\]\r\n]*\]/g;
+  let normalizedText = '';
+  let movedDotCount = 0;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(bracketTagRegex)) {
+    const index = match.index ?? 0;
+    const before = text.slice(lastIndex, index);
+    const converted = moveDotBeforeFollowingWordInPlainSegment(before);
+    normalizedText += converted.text;
+    movedDotCount += converted.movedDotCount;
+    normalizedText += match[0];
+    lastIndex = index + match[0].length;
+  }
+
+  const tail = moveDotBeforeFollowingWordInPlainSegment(text.slice(lastIndex));
+  normalizedText += tail.text;
+  movedDotCount += tail.movedDotCount;
+
+  return { normalizedText, movedDotCount };
+}
+
 function getWorkerScriptVersion(scriptPath: string): string {
   try {
     const stat = fs.statSync(scriptPath);
@@ -748,8 +791,11 @@ export async function POST(request: NextRequest) {
     const { normalizedText: textWithCamelCaseSplit, splitWordCount } =
       splitCamelCaseForOmniVoice(textWithReplacements);
 
+    const { normalizedText: textWithDotSeparatedWords, movedDotCount } =
+      normalizeDotSeparatedWordsForOmniVoice(textWithCamelCaseSplit);
+
     const { sanitizedText: text, removedQuoteCount } = stripOmniVoiceQuoteChars(
-      textWithCamelCaseSplit,
+      textWithDotSeparatedWords,
     );
 
     if (!text) {
@@ -763,7 +809,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} camelCaseWordsSplit=${splitWordCount} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -920,6 +966,7 @@ export async function POST(request: NextRequest) {
         language,
         removedQuoteCount,
         camelCaseWordsSplit: splitWordCount,
+        dotPrefixesMoved: movedDotCount,
         wordReplacementsApplied: replacementSubstitutions,
         wordReplacementsConfigured: replacements.length,
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
