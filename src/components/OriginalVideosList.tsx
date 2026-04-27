@@ -176,6 +176,9 @@ export default function OriginalVideosList({
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [clearingFinalMergedVideoId, setClearingFinalMergedVideoId] = useState<
+    number | null
+  >(null);
   const [transcribing, setTranscribing] = useState<number | null>(null);
   const [transcribingAll, setTranscribingAll] = useState(false);
   const [transcribingFinalAll, setTranscribingFinalAll] = useState(false);
@@ -1503,6 +1506,57 @@ export default function OriginalVideosList({
       // add sound effect
       playSuccessSound();
     }
+  };
+
+  const handleClearFinalMergedVideoUrl = async (video: BaserowRow) => {
+    const finalVideoUrl = extractUrl(video.field_6858);
+    if (!finalVideoUrl) return;
+    if (clearingFinalMergedVideoId !== null) return;
+
+    try {
+      setClearingFinalMergedVideoId(video.id);
+      setError(null);
+
+      // Optimistic UI update so the user sees immediate feedback.
+      setOriginalVideos((prevVideos) =>
+        prevVideos.map((row) =>
+          row.id === video.id ? { ...row, field_6858: '' } : row,
+        ),
+      );
+
+      await updateOriginalVideoRow(video.id, {
+        field_6858: '',
+      });
+
+      await handleRefresh();
+      playSuccessSound();
+    } catch (error) {
+      console.error('Failed to clear Final Merged Video URL (6858):', error);
+      playErrorSound();
+      // Re-sync UI with DB if anything fails.
+      await handleRefresh();
+      setError(
+        `Failed to clear Final Merged Video URL: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setClearingFinalMergedVideoId(null);
+    }
+  };
+
+  const handleFinalMergedVideoContextAction = (
+    event: React.MouseEvent<HTMLElement>,
+    video: BaserowRow,
+  ) => {
+    const isContextMenuEvent = event.type === 'contextmenu';
+    const isRightButtonEvent = event.button === 2 || event.ctrlKey;
+
+    if (!isContextMenuEvent && !isRightButtonEvent) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    void handleClearFinalMergedVideoUrl(video);
   };
 
   // Transcribe video function
@@ -10598,14 +10652,35 @@ export default function OriginalVideosList({
                             </td>
 
                             {/* Final Merged Video URL (6858) */}
-                            <td className='py-3 px-4'>
+                            <td
+                              className='py-3 px-4'
+                              onContextMenu={(e) =>
+                                handleFinalMergedVideoContextAction(e, video)
+                              }
+                              onAuxClick={(e) =>
+                                handleFinalMergedVideoContextAction(e, video)
+                              }
+                              title='Right click to remove Final Merged Video URL (6858) from database.'
+                            >
                               {(() => {
                                 const finalVideoUrl = extractUrl(
                                   video.field_6858,
                                 );
+                                const isClearingFinalVideo =
+                                  clearingFinalMergedVideoId === video.id;
                                 const isCFR =
                                   finalVideoUrl &&
                                   finalVideoUrl.includes('_cfr');
+
+                                if (isClearingFinalVideo) {
+                                  return (
+                                    <span className='inline-flex items-center gap-2 text-gray-500'>
+                                      <Loader2 className='w-4 h-4 animate-spin' />
+                                      Removing...
+                                    </span>
+                                  );
+                                }
+
                                 return finalVideoUrl ? (
                                   <div className='inline-flex items-center gap-2'>
                                     <a
@@ -10613,6 +10688,7 @@ export default function OriginalVideosList({
                                       target='_blank'
                                       rel='noopener noreferrer'
                                       className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
+                                      title='Left click: open final video. Right click: remove Final Merged Video URL (6858) from database.'
                                     >
                                       <Video className='w-4 h-4' />
                                       <span className='truncate max-w-32'>
@@ -11384,11 +11460,24 @@ export default function OriginalVideosList({
                                 }
                                 target='_blank'
                                 rel='noopener noreferrer'
+                                onContextMenu={(e) =>
+                                  handleFinalMergedVideoContextAction(
+                                    e,
+                                    selectedVideo,
+                                  )
+                                }
+                                onAuxClick={(e) =>
+                                  handleFinalMergedVideoContextAction(
+                                    e,
+                                    selectedVideo,
+                                  )
+                                }
                                 className={`rounded px-2 py-1 text-center border text-xs ${
                                   extractUrl(selectedVideo.field_6858)
                                     ? 'text-green-700 border-green-200 bg-green-50 hover:bg-green-100'
                                     : 'text-gray-400 border-gray-200 bg-gray-50 pointer-events-none'
                                 }`}
+                                title='Left click: open final video. Right click: remove Final Merged Video URL (6858) from database.'
                               >
                                 Final Video
                               </a>
