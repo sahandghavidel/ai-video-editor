@@ -10416,31 +10416,31 @@ export default function OriginalVideosList({
               <div className='overflow-x-auto'>
                 {/* Fixed height scrollable container for the table body */}
                 <div className='h-[520px] overflow-y-auto'>
-                  <table className='w-full'>
+                  <table className='w-full text-xs'>
                     <thead className='bg-white'>
                       <tr className='border-b border-gray-200'>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 w-8 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 w-8 z-10'>
                           {/* Drag handle column */}
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 w-12 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 w-12 z-10'>
                           Select
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
                           ID
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
                           Title
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
                           Status
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
                           Video URL
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
                           Final Merged Video
                         </th>
-                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-gray-700 z-10'>
+                        <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
                           Actions
                         </th>
                       </tr>
@@ -10458,7 +10458,7 @@ export default function OriginalVideosList({
                             onDragEnd={handleRowDragEnd}
                             onDrop={(e) => handleRowDrop(e, video.id)}
                             onClick={() => !draggedRow && handleRowClick(video)}
-                            className={`border-b border-gray-100 transition-all duration-200 ${
+                            className={`border-b border-gray-100 text-xs transition-all duration-200 ${
                               draggedRow === video.id
                                 ? 'opacity-50 cursor-grabbing'
                                 : dragOverRow === video.id
@@ -10531,7 +10531,7 @@ export default function OriginalVideosList({
                                         editingTitle.value,
                                       )
                                     }
-                                    className='flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                                    className='flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                                     autoFocus
                                     disabled={editingTitle.saving}
                                   />
@@ -10587,7 +10587,7 @@ export default function OriginalVideosList({
                                 {updatingStatus === video.id ? (
                                   <div className='flex items-center gap-2 px-3 py-1.5'>
                                     <Loader2 className='w-4 h-4 animate-spin text-blue-500' />
-                                    <span className='text-sm text-gray-600'>
+                                    <span className='text-xs text-gray-600'>
                                       Updating...
                                     </span>
                                   </div>
@@ -10604,7 +10604,7 @@ export default function OriginalVideosList({
                                         e,
                                       )
                                     }
-                                    className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
                                       extractFieldValue(video.field_6864) ===
                                       'Done'
                                         ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200 focus:ring-green-500'
@@ -10639,7 +10639,7 @@ export default function OriginalVideosList({
                                   >
                                     <Video className='w-4 h-4' />
                                     <span className='truncate max-w-32'>
-                                      View Video
+                                      Video
                                     </span>
                                     <ExternalLink className='w-3 h-3' />
                                   </a>
