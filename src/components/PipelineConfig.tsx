@@ -276,11 +276,9 @@ export default function PipelineConfig({
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className='px-6 py-4 bg-gray-50 border-t border-gray-200'>
+        <div className='px-5 py-3 bg-gray-50 border-t border-gray-200'>
           <div className='flex flex-col gap-3 mb-4 lg:flex-row lg:items-center lg:justify-between'>
-            <p className='text-sm text-gray-600'>
-              Select Pipelines
-            </p>
+            <p className='text-xs text-gray-600'>Select Pipelines</p>
             <div className='flex flex-wrap items-center gap-2'>
               <button
                 onClick={onRunFullPipeline}
@@ -300,7 +298,6 @@ export default function PipelineConfig({
               >
                 Save Template
               </button>
-       
 
               {pipelineTemplates.map((template) => (
                 <button
@@ -316,7 +313,7 @@ export default function PipelineConfig({
           </div>
 
           {/* Pipeline Steps Grid */}
-          <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3'>
+          <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2'>
             {/* Steps 1–8: scriptFromTitle → generateScenes */}
             {steps.slice(0, 8).map((step, index) => {
               const isEnabled = pipelineConfig[step.key];
@@ -325,7 +322,7 @@ export default function PipelineConfig({
                   key={step.key}
                   onClick={() => togglePipelineStep(step.key)}
                   className={`
-                    relative flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                    relative flex flex-col items-center gap-1.5 p-2.5 rounded-md border-2 transition-all
                     ${
                       isEnabled
                         ? 'border-purple-500 bg-purple-50 shadow-sm'
@@ -337,17 +334,17 @@ export default function PipelineConfig({
                   <div className='relative'>
                     {isEnabled ? (
                       <CheckCircle2
-                        className={`w-6 h-6 ${step.color}`}
+                        className={`w-5 h-5 ${step.color}`}
                         strokeWidth={2.5}
                       />
                     ) : (
-                      <Circle className='w-6 h-6 text-gray-300' />
+                      <Circle className='w-5 h-5 text-gray-300' />
                     )}
                   </div>
 
                   {/* Step Label */}
                   <span
-                    className={`text-sm font-medium text-center ${
+                    className={`text-xs font-medium leading-tight text-center ${
                       isEnabled ? 'text-gray-900' : 'text-gray-500'
                     }`}
                   >
@@ -357,7 +354,7 @@ export default function PipelineConfig({
                   {/* Step Number Badge */}
                   <span
                     className={`
-                    absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                    absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold
                     ${
                       isEnabled
                         ? 'bg-purple-600 text-white'
@@ -378,7 +375,7 @@ export default function PipelineConfig({
               return (
                 <div
                   key={pass.enabledKey}
-                  className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                  className={`relative flex flex-col items-center gap-1.5 p-2.5 rounded-md border-2 transition-all ${
                     isEnabled
                       ? 'border-violet-500 bg-violet-50 shadow-sm'
                       : 'border-gray-200 bg-white'
@@ -391,11 +388,11 @@ export default function PipelineConfig({
                   >
                     {isEnabled ? (
                       <CheckCircle2
-                        className='w-6 h-6 text-violet-500'
+                        className='w-5 h-5 text-violet-500'
                         strokeWidth={2.5}
                       />
                     ) : (
-                      <Circle className='w-6 h-6 text-gray-300' />
+                      <Circle className='w-5 h-5 text-gray-300' />
                     )}
                   </button>
                   <span className='text-xs font-semibold text-violet-600 uppercase tracking-wide'>
@@ -413,13 +410,13 @@ export default function PipelineConfig({
                     }}
                     onClick={(e) => e.stopPropagation()}
                     disabled={!isEnabled}
-                    className='w-full text-center text-sm font-medium border border-violet-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-500'
+                    className='w-full text-center text-xs font-medium border border-violet-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-500'
                   />
-                  <span className='text-sm font-medium text-gray-900 text-center'>
+                  <span className='text-xs font-medium leading-tight text-gray-900 text-center'>
                     Combine {pass.letter}
                   </span>
                   <span
-                    className={`absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                    className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                       isEnabled
                         ? 'bg-violet-600 text-white'
                         : 'bg-gray-200 text-gray-500'
@@ -439,7 +436,7 @@ export default function PipelineConfig({
                   key={step.key}
                   onClick={() => togglePipelineStep(step.key)}
                   className={`
-                    relative flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                    relative flex flex-col items-center gap-1.5 p-2.5 rounded-md border-2 transition-all
                     ${
                       isEnabled
                         ? 'border-purple-500 bg-purple-50 shadow-sm'
@@ -451,17 +448,17 @@ export default function PipelineConfig({
                   <div className='relative'>
                     {isEnabled ? (
                       <CheckCircle2
-                        className={`w-6 h-6 ${step.color}`}
+                        className={`w-5 h-5 ${step.color}`}
                         strokeWidth={2.5}
                       />
                     ) : (
-                      <Circle className='w-6 h-6 text-gray-300' />
+                      <Circle className='w-5 h-5 text-gray-300' />
                     )}
                   </div>
 
                   {/* Step Label */}
                   <span
-                    className={`text-sm font-medium text-center ${
+                    className={`text-xs font-medium leading-tight text-center ${
                       isEnabled ? 'text-gray-900' : 'text-gray-500'
                     }`}
                   >
@@ -471,7 +468,7 @@ export default function PipelineConfig({
                   {/* Step Number Badge */}
                   <span
                     className={`
-                    absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                    absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold
                     ${
                       isEnabled
                         ? 'bg-purple-600 text-white'
