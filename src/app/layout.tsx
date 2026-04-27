@@ -20,10 +20,7 @@ export const metadata: Metadata = {
     'video editor, AI transcription, video processing, YouTube content, video merging, scene generation',
   authors: [{ name: 'Ultimate Video Editor' }],
   icons: {
-    icon: [
-      { url: '/favicon.ico', sizes: 'any' },
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-    ],
+    icon: [{ url: '/favicon.ico', sizes: 'any' }],
     shortcut: '/favicon.ico',
   },
 };
@@ -43,7 +40,6 @@ export default function RootLayout({
     <html lang='en'>
       <head>
         <link rel='icon' href='/favicon.ico?v=1' sizes='any' />
-        <link rel='icon' href='/favicon.svg?v=1' type='image/svg+xml' />
         <link rel='shortcut icon' href='/favicon.ico?v=1' />
         <script
           dangerouslySetInnerHTML={{
