@@ -135,6 +135,7 @@ interface OriginalVideosListProps {
 }
 
 const VIDEO_TABLE_VIEWPORT_HEIGHT_PX = 520;
+const VIDEO_TABLE_VIEWPORT_HALF_HEIGHT_PX = VIDEO_TABLE_VIEWPORT_HEIGHT_PX / 2;
 const VIDEO_TABLE_VIRTUALIZATION_THRESHOLD = 120;
 const VIDEO_TABLE_ROW_HEIGHT_PX = 56;
 const VIDEO_TABLE_OVERSCAN_ROWS = 8;
@@ -188,6 +189,7 @@ export default function OriginalVideosList({
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
   const [bulkStatusChange, setBulkStatusChange] = useState<string>('');
+  const [showProcessingOnly, setShowProcessingOnly] = useState(true);
   const [updatingBulkStatus, setUpdatingBulkStatus] = useState(false);
   const [draggedRow, setDraggedRow] = useState<number | null>(null);
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
@@ -1303,9 +1305,22 @@ export default function OriginalVideosList({
       null
     : null;
 
+  const filteredOriginalVideos = useMemo(() => {
+    if (!showProcessingOnly) return originalVideos;
+
+    return originalVideos.filter((video) => {
+      const status = extractFieldValue(video.field_6864).trim().toLowerCase();
+      return status === 'processing';
+    });
+  }, [showProcessingOnly, originalVideos, extractFieldValue]);
+
+  const videoTableViewportHeightPx = showProcessingOnly
+    ? VIDEO_TABLE_VIEWPORT_HALF_HEIGHT_PX
+    : VIDEO_TABLE_VIEWPORT_HEIGHT_PX;
+
   const memoizedVideoTableRows = useMemo(
     () =>
-      originalVideos.map((video, absoluteIndex) => ({
+      filteredOriginalVideos.map((video, absoluteIndex) => ({
         video,
         absoluteIndex,
         titleValue: extractFieldValue(video.field_6852),
@@ -1319,7 +1334,7 @@ export default function OriginalVideosList({
         silenceOptimizedVideoUrl: extractUrl(video.field_6907),
         hasSceneRows: hasScenes(video),
       })),
-    [originalVideos, extractFieldValue, extractUrl, hasScenes],
+    [filteredOriginalVideos, extractFieldValue, extractUrl, hasScenes],
   );
 
   const shouldVirtualizeVideoTable =
@@ -1339,7 +1354,7 @@ export default function OriginalVideosList({
     }
 
     const visibleRowsCount = Math.ceil(
-      VIDEO_TABLE_VIEWPORT_HEIGHT_PX / VIDEO_TABLE_ROW_HEIGHT_PX,
+      videoTableViewportHeightPx / VIDEO_TABLE_ROW_HEIGHT_PX,
     );
     const startIndex = Math.max(
       0,
@@ -1357,13 +1372,22 @@ export default function OriginalVideosList({
       bottomSpacerHeight:
         (memoizedVideoTableRows.length - endIndex) * VIDEO_TABLE_ROW_HEIGHT_PX,
     };
-  }, [memoizedVideoTableRows, shouldVirtualizeVideoTable, tableScrollTop]);
+  }, [
+    memoizedVideoTableRows,
+    shouldVirtualizeVideoTable,
+    tableScrollTop,
+    videoTableViewportHeightPx,
+  ]);
 
   useEffect(() => {
     if (!shouldVirtualizeVideoTable && tableScrollTop !== 0) {
       setTableScrollTop(0);
     }
   }, [shouldVirtualizeVideoTable, tableScrollTop]);
+
+  useEffect(() => {
+    setTableScrollTop(0);
+  }, [showProcessingOnly]);
 
   const toggleSelectedVideoDetailsSection = (
     section: keyof typeof selectedVideoDetailsExpanded,
@@ -10456,7 +10480,7 @@ export default function OriginalVideosList({
           {/* Bulk Status Change Controls */}
           {originalVideos.length > 0 && (
             <div className='bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6'>
-              <div className='flex items-center gap-4'>
+              <div className='flex flex-wrap items-center gap-4'>
                 <div className='flex items-center gap-2'>
                   <label
                     htmlFor='bulk-status'
@@ -10494,6 +10518,27 @@ export default function OriginalVideosList({
                     </>
                   )}
                 </button>
+
+                <button
+                  onClick={() =>
+                    setShowProcessingOnly((currentValue) => !currentValue)
+                  }
+                  aria-pressed={showProcessingOnly}
+                  className={`px-4 py-2 text-sm font-medium rounded-md border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer ${
+                    showProcessingOnly
+                      ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100 focus:ring-gray-400'
+                  }`}
+                  title={
+                    showProcessingOnly
+                      ? 'Showing only videos with Processing status'
+                      : 'Showing videos of all statuses'
+                  }
+                >
+                  {showProcessingOnly
+                    ? 'Processing Only: ON'
+                    : 'Processing Only: OFF'}
+                </button>
               </div>
             </div>
           )}
@@ -10514,7 +10559,8 @@ export default function OriginalVideosList({
               <div className='overflow-x-auto'>
                 {/* Fixed height scrollable container for the table body */}
                 <div
-                  className='h-[520px] overflow-y-auto'
+                  className='overflow-y-auto'
+                  style={{ height: `${videoTableViewportHeightPx}px` }}
                   onScroll={(e) => {
                     if (!shouldVirtualizeVideoTable) return;
                     setTableScrollTop(e.currentTarget.scrollTop);
