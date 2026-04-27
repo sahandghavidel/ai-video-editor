@@ -29,12 +29,10 @@ import {
   Edit3,
   Save,
   GripVertical,
-  Plus,
   Trash2,
   Subtitles,
   Grid3x3,
   Volume2,
-  Mic,
   Upload,
   FileText,
   Zap,
@@ -44,7 +42,6 @@ import {
   GitMerge,
   MoreHorizontal,
 } from 'lucide-react';
-import TranscriptionModelSelection from './TranscriptionModelSelection';
 import MergedVideoDisplay from './MergedVideoDisplay';
 import FinalVideoTable from './FinalVideoTable';
 import PipelineConfig from './PipelineConfig';
@@ -60,7 +57,6 @@ import {
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
   handleSpeedUpAllVideosForAllScenes,
   handleGenerateAllVideos,
-  handleOptimizeSilenceForAllVideos,
 } from '@/utils/batchOperations';
 import {
   extractLinkedVideoId as extractLinkedVideoIdFromField,
@@ -262,7 +258,7 @@ export default function OriginalVideosList({
   ] = useState(false);
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
-  const [timestampData, setTimestampData] = useState<string>('');
+  const [, setTimestampData] = useState<string>('');
   const [improvingAllVideosScenes, setImprovingAllVideosScenes] =
     useState(false);
   const [currentProcessingVideoId, setCurrentProcessingVideoId] = useState<
@@ -340,7 +336,6 @@ export default function OriginalVideosList({
     setGeneratingClips: setGeneratingClipsGlobal,
     setClipsProgress: setClipsProgressGlobal,
     clearClipGeneration,
-    setMergedVideo,
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -358,7 +353,6 @@ export default function OriginalVideosList({
     deletionSettings,
     subtitleGenerationSettings,
     combineScenesSettings,
-    data: allScenesData,
     modelSelection,
     sceneLoading,
     setImprovingSentence,
@@ -480,7 +474,7 @@ export default function OriginalVideosList({
         } else if (parsedData && parsedData.timestamp) {
           setTimestampData(parsedData.timestamp);
         }
-      } catch (error) {
+      } catch {
         // If parsing fails, treat as old string format
         setTimestampData(savedTimestampData);
       }
@@ -897,8 +891,6 @@ export default function OriginalVideosList({
         throw new Error(errorData.error || 'Upload failed');
       }
 
-      const result = await response.json();
-
       // Refresh the videos list to show the new upload
       await fetchOriginalVideos(true);
 
@@ -1295,34 +1287,6 @@ export default function OriginalVideosList({
 
   const handleRefresh = async () => {
     await fetchOriginalVideos(true);
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-      case 'complete':
-      case 'done':
-        return <CheckCircle className='w-4 h-4 text-green-500' />;
-      case 'processing':
-      case 'in progress':
-        return <Clock className='w-4 h-4 text-yellow-500' />;
-      default:
-        return <AlertCircle className='w-4 h-4 text-gray-400' />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-      case 'complete':
-      case 'done':
-        return 'bg-green-100 text-green-800';
-      case 'processing':
-      case 'in progress':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-gray-100 text-gray-600';
-    }
   };
 
   const selectedVideo = selectedOriginalVideo.id
@@ -3487,7 +3451,7 @@ export default function OriginalVideosList({
   };
 
   // Generate Scenes for all videos
-  const handleGenerateScenesAll = async (playSound = true) => {
+  const handleGenerateScenesAll = async () => {
     try {
       setGeneratingScenesAll(true);
 
@@ -3552,7 +3516,7 @@ export default function OriginalVideosList({
                 }
               }
             }
-          } catch (error) {
+          } catch {
             console.warn(
               `Video ${video.id}: Failed to calculate duration from captions`,
             );
@@ -5883,7 +5847,7 @@ export default function OriginalVideosList({
                 const errorData = await response.json();
                 errorMessage = errorData.error || errorMessage;
                 console.error('API Error:', errorData);
-              } catch (parseError) {
+              } catch {
                 console.error('Could not parse error response');
               }
               throw new Error(errorMessage);
@@ -6035,7 +5999,7 @@ export default function OriginalVideosList({
                 const errorData = await response.json();
                 errorMessage = errorData.error || errorMessage;
                 console.error('API Error:', errorData);
-              } catch (parseError) {
+              } catch {
                 console.error('Could not parse error response');
               }
               throw new Error(errorMessage);
@@ -6202,7 +6166,7 @@ export default function OriginalVideosList({
                 const errorData = await response.json();
                 errorMessage = errorData.error || errorMessage;
                 console.error('API Error:', errorData);
-              } catch (parseError) {
+              } catch {
                 console.error('Could not parse error response');
               }
               throw new Error(errorMessage);
@@ -6349,7 +6313,7 @@ export default function OriginalVideosList({
                 const errorData = await response.json();
                 errorMessage = errorData.error || errorMessage;
                 console.error('API Error:', errorData);
-              } catch (parseError) {
+              } catch {
                 console.error('Could not parse error response');
               }
               throw new Error(errorMessage);
@@ -6707,7 +6671,7 @@ export default function OriginalVideosList({
         if (existingData) {
           try {
             dataObject = JSON.parse(existingData);
-          } catch (parseError) {
+          } catch {
             // If parsing fails, start with empty object
             dataObject = {};
           }
@@ -6860,7 +6824,7 @@ export default function OriginalVideosList({
       if (existingData) {
         try {
           dataObject = JSON.parse(existingData);
-        } catch (parseError) {
+        } catch {
           dataObject = {};
         }
       }
@@ -7266,7 +7230,7 @@ export default function OriginalVideosList({
         );
         console.log(`Step ${stepNumber}: Generating scenes for all videos`);
         try {
-          await handleGenerateScenesAll(false);
+          await handleGenerateScenesAll();
           console.log(
             `✓ Step ${stepNumber} Complete: Scene generation finished`,
           );
@@ -8337,7 +8301,7 @@ export default function OriginalVideosList({
             if (data.completed) {
               console.log('Clip generation completed for video:', videoId);
             }
-          } catch (parseError) {
+          } catch {
             console.warn('Failed to parse SSE data:', line);
           }
         }
@@ -8353,11 +8317,6 @@ export default function OriginalVideosList({
       setError(null);
 
       console.log('Generating clips for video:', videoId);
-
-      // Use EventSource for Server-Sent Events
-      const eventSource = new EventSource('/api/generate-clips', {
-        // Note: EventSource doesn't support POST directly, so we need to use a different approach
-      });
 
       // Alternative: Use fetch with streaming
       const response = await fetch('/api/generate-clips', {
