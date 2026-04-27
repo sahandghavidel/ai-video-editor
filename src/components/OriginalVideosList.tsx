@@ -10438,7 +10438,7 @@ export default function OriginalVideosList({
                           Video URL
                         </th>
                         <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
-                          Final Merged Video
+                          Final Video
                         </th>
                         <th className='sticky top-0 bg-white text-left py-3 px-4 font-semibold text-xs text-gray-700 z-10'>
                           Actions
@@ -10671,6 +10671,9 @@ export default function OriginalVideosList({
                                 const isCFR =
                                   finalVideoUrl &&
                                   finalVideoUrl.includes('_cfr');
+                                const finalVideoToneClass = isCFR
+                                  ? 'text-pink-600 hover:text-pink-800'
+                                  : 'text-green-600 hover:text-green-800';
 
                                 if (isClearingFinalVideo) {
                                   return (
@@ -10687,24 +10690,15 @@ export default function OriginalVideosList({
                                       href={finalVideoUrl}
                                       target='_blank'
                                       rel='noopener noreferrer'
-                                      className='inline-flex items-center gap-1 text-green-600 hover:text-green-800 hover:underline'
+                                      className={`inline-flex items-center gap-1 hover:underline ${finalVideoToneClass}`}
                                       title='Left click: open final video. Right click: remove Final Merged Video URL (6858) from database.'
                                     >
                                       <Video className='w-4 h-4' />
                                       <span className='truncate max-w-32'>
-                                        Final Video
+                                        Final
                                       </span>
                                       <ExternalLink className='w-3 h-3' />
                                     </a>
-                                    {isCFR && (
-                                      <span
-                                        className='inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-pink-100 text-pink-700'
-                                        title='Constant Frame Rate (30fps)'
-                                      >
-                                        <Film className='w-3 h-3' />
-                                        CFR
-                                      </span>
-                                    )}
                                   </div>
                                 ) : (
                                   <span className='text-gray-400'>
