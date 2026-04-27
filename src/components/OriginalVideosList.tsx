@@ -8474,7 +8474,7 @@ export default function OriginalVideosList({
       {/* Header - Clickable to expand/collapse */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className='w-full mb-6 flex items-center justify-between hover:bg-gray-50 -m-6 p-6 rounded-t-xl transition-colors'
+        className='w-full mb-6 flex items-center justify-between hover:bg-gray-50 p-2 rounded-lg transition-colors'
       >
         <div className='flex items-center gap-2'>
           <Video className='w-6 h-6 text-blue-500' />
