@@ -375,7 +375,7 @@ export default function PipelineConfig({
               return (
                 <div
                   key={pass.enabledKey}
-                  className={`relative flex flex-col items-center gap-1.5 p-2.5 rounded-md border-2 transition-all ${
+                  className={`relative flex flex-col items-center justify-between gap-1 p-2 rounded-md border-2 transition-all ${
                     isEnabled
                       ? 'border-violet-500 bg-violet-50 shadow-sm'
                       : 'border-gray-200 bg-white'
@@ -395,26 +395,28 @@ export default function PipelineConfig({
                       <Circle className='w-5 h-5 text-gray-300' />
                     )}
                   </button>
-                  <span className='text-xs font-semibold text-violet-600 uppercase tracking-wide'>
-                    Skip
-                  </span>
-                  <input
-                    type='number'
-                    min={1}
-                    value={val}
-                    onChange={(e) => {
-                      const raw = parseInt(e.target.value, 10);
-                      if (!isNaN(raw) && raw >= 1) {
-                        updatePipelineConfig({ [pass.skipKey]: raw });
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    disabled={!isEnabled}
-                    className='w-full text-center text-xs font-medium border border-violet-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-500'
-                  />
                   <span className='text-xs font-medium leading-tight text-gray-900 text-center'>
                     Combine {pass.letter}
                   </span>
+                  <div className='flex items-center gap-1'>
+                    <span className='text-[10px] font-semibold text-violet-600 uppercase tracking-wide'>
+                      Skip
+                    </span>
+                    <input
+                      type='number'
+                      min={1}
+                      value={val}
+                      onChange={(e) => {
+                        const raw = parseInt(e.target.value, 10);
+                        if (!isNaN(raw) && raw >= 1) {
+                          updatePipelineConfig({ [pass.skipKey]: raw });
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      disabled={!isEnabled}
+                      className='w-14 h-6 text-center text-[11px] font-medium border border-violet-300 rounded px-1 bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500'
+                    />
+                  </div>
                   <span
                     className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                       isEnabled
