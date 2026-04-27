@@ -179,6 +179,7 @@ export default function SceneCard({
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const dropdownRefs = useRef<Record<number, HTMLDivElement>>({});
+  const scrollToFirstSceneButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Use refs to store stable references to props
   const dataRef = useRef(data);
@@ -429,6 +430,21 @@ export default function SceneCard({
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLSelectElement
       ) {
+        return;
+      }
+
+      if (
+        event.key === 'Tab' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+
+        if (!event.repeat) {
+          scrollToFirstSceneButtonRef.current?.click();
+        }
+
         return;
       }
 
@@ -6782,6 +6798,7 @@ export default function SceneCard({
           </button>
 
           <button
+            ref={scrollToFirstSceneButtonRef}
             onClick={() => {
               // Scroll to just above the first scene
               if (filteredAndSortedData.length > 0) {
