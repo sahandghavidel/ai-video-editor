@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import {
   updateBaserowRow,
   updateSceneRow,
@@ -37,8 +38,6 @@ import {
   ImageIcon,
   Wand2,
 } from 'lucide-react';
-import { ImageOverlayModal } from './ImageOverlayModal';
-import { TTSWordReplacementsModal } from './TTSWordReplacementsModal';
 
 // Helper: get original sentence from field_6901
 
@@ -129,6 +128,25 @@ interface SceneCardProps {
     ) => Promise<void>;
   }) => void;
 }
+
+const LazyImageOverlayModal = dynamic(
+  () => import('./ImageOverlayModal').then((mod) => mod.ImageOverlayModal),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
+
+const LazyTTSWordReplacementsModal = dynamic(
+  () =>
+    import('./TTSWordReplacementsModal').then(
+      (mod) => mod.TTSWordReplacementsModal,
+    ),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
 
 export default function SceneCard({
   data,
@@ -6803,34 +6821,38 @@ export default function SceneCard({
       )}
 
       {/* Image Overlay Modal */}
-      <ImageOverlayModal
-        isOpen={imageOverlayModal.isOpen}
-        onClose={() =>
-          setImageOverlayModal((prev) => ({
-            ...prev,
-            isOpen: false,
-          }))
-        }
-        videoUrl={imageOverlayModal.videoUrl || ''}
-        sceneId={imageOverlayModal.sceneId || 0}
-        onApply={handleApplyImageOverlay}
-        onUpdateModalVideoUrl={(newUrl) =>
-          setImageOverlayModal((prev) => ({
-            ...prev,
-            videoUrl: newUrl,
-          }))
-        }
-        isApplying={addingImageOverlay !== null}
-        handleTranscribeScene={handleTranscribeScene}
-      />
+      {imageOverlayModal.isOpen && (
+        <LazyImageOverlayModal
+          isOpen={imageOverlayModal.isOpen}
+          onClose={() =>
+            setImageOverlayModal((prev) => ({
+              ...prev,
+              isOpen: false,
+            }))
+          }
+          videoUrl={imageOverlayModal.videoUrl || ''}
+          sceneId={imageOverlayModal.sceneId || 0}
+          onApply={handleApplyImageOverlay}
+          onUpdateModalVideoUrl={(newUrl) =>
+            setImageOverlayModal((prev) => ({
+              ...prev,
+              videoUrl: newUrl,
+            }))
+          }
+          isApplying={addingImageOverlay !== null}
+          handleTranscribeScene={handleTranscribeScene}
+        />
+      )}
 
-      <TTSWordReplacementsModal
-        isOpen={ttsWordReplacementsModalOpen}
-        onClose={() => setTtsWordReplacementsModalOpen(false)}
-        onApplied={() => {
-          refreshData?.();
-        }}
-      />
+      {ttsWordReplacementsModalOpen && (
+        <LazyTTSWordReplacementsModal
+          isOpen={ttsWordReplacementsModalOpen}
+          onClose={() => setTtsWordReplacementsModalOpen(false)}
+          onApplied={() => {
+            refreshData?.();
+          }}
+        />
+      )}
     </div>
   );
 }

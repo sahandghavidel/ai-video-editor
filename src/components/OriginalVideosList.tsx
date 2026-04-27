@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useCallback,
 } from 'react';
+import dynamic from 'next/dynamic';
 import {
   BaserowRow,
   getOriginalVideosData,
@@ -43,8 +44,6 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import MergedVideoDisplay from './MergedVideoDisplay';
-import FinalVideoTable from './FinalVideoTable';
-import PipelineConfig from './PipelineConfig';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { sendTelegramNotification } from '@/utils/notifications/telegram';
 import {
@@ -139,6 +138,16 @@ const VIDEO_TABLE_VIEWPORT_HEIGHT_PX = 520;
 const VIDEO_TABLE_VIRTUALIZATION_THRESHOLD = 120;
 const VIDEO_TABLE_ROW_HEIGHT_PX = 56;
 const VIDEO_TABLE_OVERSCAN_ROWS = 8;
+
+const LazyPipelineConfig = dynamic(() => import('./PipelineConfig'), {
+  ssr: false,
+  loading: () => null,
+});
+
+const LazyFinalVideoTable = dynamic(() => import('./FinalVideoTable'), {
+  ssr: false,
+  loading: () => null,
+});
 
 export default function OriginalVideosList({
   sceneHandlers,
@@ -8506,7 +8515,7 @@ export default function OriginalVideosList({
         <div>
           {/* Pipeline Configuration */}
           <div className='mb-6'>
-            <PipelineConfig
+            <LazyPipelineConfig
               onRunFullPipeline={handleRunFullPipeline}
               isRunFullPipelineDisabled={
                 runningFullPipeline ||
@@ -11609,7 +11618,7 @@ export default function OriginalVideosList({
                   )}
                 </div>
 
-                <FinalVideoTable />
+                <LazyFinalVideoTable />
               </div>
             )}
           </div>
