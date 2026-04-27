@@ -234,7 +234,7 @@ export default function PipelineConfig({
   const enabledStepsCount = activeSteps.length + enabledCombinePassCount;
 
   return (
-    <div className='bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden'>
+    <div className='pipeline-panel-flat bg-white rounded-lg border border-gray-200 overflow-hidden'>
       {/* Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
@@ -632,6 +632,18 @@ export default function PipelineConfig({
           )}
         </div>
       )}
+
+      <style jsx>{`
+        .pipeline-panel-flat :is(button, [role='button']) {
+          transition: none !important;
+          box-shadow: none !important;
+        }
+
+        .pipeline-panel-flat
+          :is(.shadow-sm, .shadow-md, .shadow-lg, .shadow-xl) {
+          box-shadow: none !important;
+        }
+      `}</style>
     </div>
   );
 }

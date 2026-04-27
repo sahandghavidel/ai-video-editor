@@ -8549,7 +8549,7 @@ export default function OriginalVideosList({
           </div>
 
           {/* Batch Operations - Collapsible */}
-          <div className='bg-gray-50 rounded-lg border border-gray-200 overflow-hidden mb-6'>
+          <div className='batch-ops-panel bg-gray-50 rounded-lg border border-gray-200 overflow-hidden mb-6'>
             {/* Batch Operations Header */}
             <button
               onClick={() =>
@@ -10499,7 +10499,7 @@ export default function OriginalVideosList({
           )}
 
           {/* Videos Table */}
-          <div className='transition-all duration-200 rounded-lg'>
+          <div className='rounded-lg'>
             {originalVideos.length === 0 ? (
               <div className='text-center py-8'>
                 <Video className='w-12 h-12 text-gray-300 mx-auto mb-4' />
@@ -10668,7 +10668,7 @@ export default function OriginalVideosList({
                             onKeyDown={(e) => handleRowKeyDown(e, video)}
                             tabIndex={0}
                             aria-selected={isSelected}
-                            className={`border-b border-gray-100 text-xs transition-all duration-200 ${
+                            className={`border-b border-gray-100 text-xs ${
                               draggedRow === video.id
                                 ? 'opacity-50 cursor-grabbing'
                                 : dragOverRow === video.id
@@ -11626,6 +11626,17 @@ export default function OriginalVideosList({
           {/* Timestamp Display */}
         </div>
       )}
+
+      <style jsx>{`
+        .batch-ops-panel :is(button, [role='button']) {
+          transition: none !important;
+          box-shadow: none !important;
+        }
+
+        .batch-ops-panel :is(.shadow-sm, .shadow-md, .shadow-lg, .shadow-xl) {
+          box-shadow: none !important;
+        }
+      `}</style>
     </div>
   );
 }

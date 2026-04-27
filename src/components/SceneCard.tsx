@@ -5132,7 +5132,7 @@ export default function SceneCard({
             ref={(el) => {
               if (el) sceneCardRefs.current[scene.id] = el;
             }}
-            className='bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200'
+            className='bg-white rounded-lg border border-gray-200 p-6'
           >
             {/* Video Player - Only show when video is playing for this scene */}
             {mediaPlayer.playingVideoId === scene.id && (
