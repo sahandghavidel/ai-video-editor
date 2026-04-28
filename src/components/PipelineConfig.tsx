@@ -203,6 +203,11 @@ export default function PipelineConfig({
       label: 'Thumbnails',
       color: 'text-indigo-500',
     },
+    {
+      key: 'downloadAssetsZipAll' as const,
+      label: 'Download ZIP All',
+      color: 'text-blue-500',
+    },
   ];
 
   const activeSteps = steps.filter((step) => pipelineConfig[step.key]);

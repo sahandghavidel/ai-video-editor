@@ -288,6 +288,7 @@ export default function OriginalVideosList({
     useState<1 | 2 | 3 | null>(null);
   const [downloadingAssetsZipVideoId, setDownloadingAssetsZipVideoId] =
     useState<number | null>(null);
+  const [downloadingAssetsZipAll, setDownloadingAssetsZipAll] = useState(false);
   const [copyingMetadataVideoId, setCopyingMetadataVideoId] = useState<
     number | null
   >(null);
@@ -3291,76 +3292,79 @@ export default function OriginalVideosList({
     }
   };
 
+  const downloadAssetsZipForVideo = async (videoId: number) => {
+    const sanitizeDownloadFileName = (
+      rawName: string,
+      fallbackName: string,
+    ): string => {
+      const normalized = (rawName || '')
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\.+$/g, '');
+
+      return normalized || fallbackName;
+    };
+
+    const response = await fetch('/api/download-video-assets-zip', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ videoId }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(
+        `Failed to create assets ZIP (${response.status}): ${errorText}`,
+      );
+    }
+
+    const blob = await response.blob();
+
+    const disposition =
+      response.headers.get('content-disposition') ||
+      response.headers.get('Content-Disposition') ||
+      '';
+
+    const filenameMatch = disposition.match(
+      /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+    );
+
+    const rawZipName = (filenameMatch?.[1] ||
+      filenameMatch?.[2] ||
+      `video_${videoId}.zip`) as string | undefined;
+
+    let decodedZipName = rawZipName || `video_${videoId}.zip`;
+    try {
+      decodedZipName = decodeURIComponent(decodedZipName);
+    } catch {
+      // If it's not actually URI-encoded, keep the raw value.
+    }
+
+    const zipFileName = sanitizeDownloadFileName(
+      decodedZipName,
+      `video_${videoId}.zip`,
+    );
+
+    const blobUrl = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = blobUrl;
+    anchor.download = zipFileName;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  };
+
   const handleDownloadAssetsZip = async (videoId: number) => {
     try {
       setDownloadingAssetsZipVideoId(videoId);
       setError(null);
 
-      const sanitizeDownloadFileName = (
-        rawName: string,
-        fallbackName: string,
-      ): string => {
-        const normalized = (rawName || '')
-          .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .replace(/\.+$/g, '');
-
-        return normalized || fallbackName;
-      };
-
-      const response = await fetch('/api/download-video-assets-zip', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ videoId }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(
-          `Failed to create assets ZIP (${response.status}): ${errorText}`,
-        );
-      }
-
-      const blob = await response.blob();
-
-      const disposition =
-        response.headers.get('content-disposition') ||
-        response.headers.get('Content-Disposition') ||
-        '';
-
-      const filenameMatch = disposition.match(
-        /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
-      );
-
-      const rawZipName = (filenameMatch?.[1] ||
-        filenameMatch?.[2] ||
-        `video_${videoId}.zip`) as string | undefined;
-
-      let decodedZipName = rawZipName || `video_${videoId}.zip`;
-      try {
-        decodedZipName = decodeURIComponent(decodedZipName);
-      } catch {
-        // If it's not actually URI-encoded, keep the raw value.
-      }
-
-      const zipFileName = sanitizeDownloadFileName(
-        decodedZipName,
-        `video_${videoId}.zip`,
-      );
-
-      const blobUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = zipFileName;
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(blobUrl);
-
+      await downloadAssetsZipForVideo(videoId);
       playSuccessSound();
     } catch (error) {
       console.error(
@@ -3375,6 +3379,69 @@ export default function OriginalVideosList({
       );
     } finally {
       setDownloadingAssetsZipVideoId(null);
+    }
+  };
+
+  const handleDownloadAssetsZipAll = async (
+    playSound = true,
+    throwOnFailure = false,
+  ) => {
+    if (downloadingAssetsZipAll) return;
+
+    try {
+      setDownloadingAssetsZipAll(true);
+      setDownloadingAssetsZipVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+      const videosToProcess =
+        getProcessingVideosForAllVideosOps(freshVideosData);
+
+      if (videosToProcess.length === 0) {
+        console.log('No Processing videos found for assets ZIP download');
+        return;
+      }
+
+      console.log(
+        `Downloading assets ZIP for ${videosToProcess.length} Processing videos...`,
+      );
+
+      for (const video of videosToProcess) {
+        setDownloadingAssetsZipVideoId(video.id);
+
+        try {
+          await downloadAssetsZipForVideo(video.id);
+        } catch (error) {
+          console.error(
+            `Failed to download assets ZIP for video #${video.id}:`,
+            error,
+          );
+          // Continue with the next video.
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+
+      if (playSound) {
+        await playSuccessAndNotifyBatchCompletion('Download ZIP All');
+      }
+    } catch (error) {
+      console.error('Error downloading assets ZIP for all videos:', error);
+      if (playSound) {
+        playErrorSound();
+      }
+      setError(
+        `Failed to download ZIP all: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+
+      if (throwOnFailure) {
+        throw error;
+      }
+    } finally {
+      setDownloadingAssetsZipVideoId(null);
+      setDownloadingAssetsZipAll(false);
     }
   };
 
@@ -7167,7 +7234,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline:
   // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
-  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails
+  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails -> Download ZIP All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -8399,6 +8466,40 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Thumbnails (disabled)');
       }
 
+      // Download ZIP tail step (Processing videos only)
+      if (pipelineConfig.downloadAssetsZipAll) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Downloading assets ZIP files for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Downloading assets ZIP files for Processing videos`,
+        );
+        try {
+          await handleDownloadAssetsZipAll(false, true);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Assets ZIP download finished`,
+          );
+
+          console.log('Refreshing data after assets ZIP download...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Download ZIP All error`,
+            error,
+          );
+          throw new Error(
+            `Download ZIP All failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Download ZIP All (disabled)');
+      }
+
       console.log('========================================');
       console.log('✓ Full Pipeline Complete!');
       console.log(`Total steps executed: ${stepNumber}`);
@@ -8738,6 +8839,8 @@ export default function OriginalVideosList({
                 speedingUpAllVideos ||
                 generatingAllVideos ||
                 generatingClipsAll ||
+                downloadingAssetsZipAll ||
+                downloadingAssetsZipVideoId !== null ||
                 !sceneHandlers ||
                 uploading ||
                 reordering
@@ -8753,7 +8856,7 @@ export default function OriginalVideosList({
                   ? 'Scene handlers not ready. Please wait...'
                   : runningFullPipeline
                     ? pipelineStep
-                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
+                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync → Download ZIP All'
               }
             />
           </div>
@@ -8772,7 +8875,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({40} actions)</span>
+                <span className='text-xs text-gray-500'>({41} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -10496,6 +10599,37 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
+                    {/* Download ZIP All Button */}
+                    <button
+                      onClick={() => handleDownloadAssetsZipAll()}
+                      disabled={
+                        downloadingAssetsZipAll ||
+                        downloadingAssetsZipVideoId !== null ||
+                        runningFullPipeline ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        downloadingAssetsZipAll
+                          ? 'Downloading assets ZIP files for Processing videos...'
+                          : 'Download assets ZIP for all videos with Processing status (includes available assets and text files)'
+                      }
+                    >
+                      <Download
+                        className={`w-4 h-4 ${
+                          downloadingAssetsZipAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {downloadingAssetsZipAll
+                          ? downloadingAssetsZipVideoId !== null
+                            ? `V${downloadingAssetsZipVideoId}`
+                            : 'Processing...'
+                          : 'Download ZIP All'}
+                      </span>
+                    </button>
+
                     {/* Full Pipeline Button */}
                     <button
                       onClick={handleRunFullPipeline}
@@ -10510,6 +10644,8 @@ export default function OriginalVideosList({
                         speedingUpAllVideos ||
                         generatingAllVideos ||
                         generatingClipsAll ||
+                        downloadingAssetsZipAll ||
+                        downloadingAssetsZipVideoId !== null ||
                         !sceneHandlers ||
                         uploading ||
                         reordering
@@ -10525,6 +10661,8 @@ export default function OriginalVideosList({
                         speedingUpAllVideos ||
                         generatingAllVideos ||
                         generatingClipsAll ||
+                        downloadingAssetsZipAll ||
+                        downloadingAssetsZipVideoId !== null ||
                         !sceneHandlers ||
                         uploading ||
                         reordering
@@ -10543,6 +10681,8 @@ export default function OriginalVideosList({
                           !speedingUpAllVideos &&
                           !generatingAllVideos &&
                           !generatingClipsAll &&
+                          !downloadingAssetsZipAll &&
+                          downloadingAssetsZipVideoId === null &&
                           sceneHandlers &&
                           !uploading &&
                           !reordering
@@ -10562,6 +10702,8 @@ export default function OriginalVideosList({
                           !speedingUpAllVideos &&
                           !generatingAllVideos &&
                           !generatingClipsAll &&
+                          !downloadingAssetsZipAll &&
+                          downloadingAssetsZipVideoId === null &&
                           sceneHandlers &&
                           !uploading &&
                           !reordering
@@ -10575,7 +10717,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                             ? pipelineStep
-                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync'
+                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync → Download ZIP All'
                       }
                     >
                       <Workflow

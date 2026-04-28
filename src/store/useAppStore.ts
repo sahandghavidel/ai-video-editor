@@ -230,6 +230,7 @@ export interface PipelineConfig {
   generateYouTubeTitles: boolean;
   generateYouTubeTimestamps: boolean;
   generateThumbnails: boolean;
+  downloadAssetsZipAll: boolean;
 }
 
 export interface PipelineTemplate {
@@ -656,6 +657,7 @@ const defaultPipelineConfig: PipelineConfig = {
   generateYouTubeTitles: false,
   generateYouTubeTimestamps: false,
   generateThumbnails: false,
+  downloadAssetsZipAll: false,
 };
 
 const defaultPipelineTemplates: PipelineTemplate[] = [];
