@@ -204,7 +204,7 @@ export default function SceneCard({
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
   const [showOnlyNotEmptyText, setShowOnlyNotEmptyText] =
     useState<boolean>(false);
-  const [showOnlyFlagged, setShowOnlyFlagged] = useState<boolean>(false);
+  const [showOnlyFlagged, setShowOnlyFlagged] = useState<boolean>(true);
   const [showShortWithNeighbors, setShowShortWithNeighbors] =
     useState<boolean>(false);
   const [shortTextCharLimitInput, setShortTextCharLimitInput] =
@@ -303,6 +303,14 @@ export default function SceneCard({
     selectedOriginalVideo,
     setSelectedOriginalVideo,
   } = useAppStore();
+
+  // Keep Flagged filter active by default whenever a video is selected.
+  // This applies on initial load (including page refresh with restored
+  // selection) and each time the selected video changes.
+  useEffect(() => {
+    if (!selectedOriginalVideo.id) return;
+    setShowOnlyFlagged(true);
+  }, [selectedOriginalVideo.id]);
 
   // Click outside handler for time adjustment and settings dropdowns
   useEffect(() => {
