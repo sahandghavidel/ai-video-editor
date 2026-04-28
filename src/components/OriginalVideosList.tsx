@@ -3483,7 +3483,43 @@ export default function OriginalVideosList({
         throw new Error('No sentences found in field_6890 for this video');
       }
 
+      const sanitizeDownloadFileName = (
+        rawName: string,
+        fallbackName: string,
+      ): string => {
+        const normalized = (rawName || '')
+          .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/\.+$/g, '');
+
+        return normalized || fallbackName;
+      };
+
+      const titleForName = extractFieldValue(video.field_6852);
+      const fallbackBaseName = `video_${video.id}_sentences`;
+      const downloadBaseName = sanitizeDownloadFileName(
+        titleForName
+          ? `video_${video.id}_${titleForName}_sentences`
+          : fallbackBaseName,
+        fallbackBaseName,
+      );
+
       await navigator.clipboard.writeText(sentenceText);
+
+      const blob = new Blob([sentenceText], {
+        type: 'text/plain;charset=utf-8',
+      });
+      const blobUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = `${downloadBaseName}.txt`;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(blobUrl);
+
       playSuccessSound();
     } catch (error) {
       console.error(`Failed to copy sentences for video #${video.id}:`, error);
@@ -11580,12 +11616,12 @@ export default function OriginalVideosList({
                             }
                             disabled={copyingSentencesVideoId !== null}
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Copy all Sentence (6890) lines for this video to clipboard, one sentence per line'
+                            title='Copy all Sentence (6890) lines to clipboard and download as a .txt file, one sentence per line'
                           >
                             {copyingSentencesVideoId === selectedVideo.id ? (
                               <>
                                 <Check className='w-4 h-4' />
-                                Copied
+                                Copied + Downloaded
                               </>
                             ) : (
                               <>
