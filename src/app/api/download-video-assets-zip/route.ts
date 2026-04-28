@@ -5,7 +5,16 @@ type BaserowRow = {
   [key: string]: unknown;
 };
 
+type BaserowSceneRow = {
+  id?: unknown;
+  order?: unknown;
+  field_6890?: unknown;
+  [key: string]: unknown;
+};
+
 const ORIGINAL_VIDEOS_TABLE_ID = 713;
+const SCENES_TABLE_ID = 714;
+const BASEROW_PAGE_SIZE = 200;
 
 function extractUrlFromField(raw: unknown): string {
   if (typeof raw === 'string') return raw.trim();
@@ -63,10 +72,9 @@ async function getJWTToken(): Promise<string> {
 
 async function baserowGetOriginalVideoRow(
   videoId: number,
+  baserowUrl: string,
+  token: string,
 ): Promise<BaserowRow> {
-  const { baserowUrl } = getJWTTokenParams();
-  const token = await getJWTToken();
-
   const res = await fetch(
     `${baserowUrl}/database/rows/table/${ORIGINAL_VIDEOS_TABLE_ID}/${videoId}/`,
     {
@@ -84,6 +92,87 @@ async function baserowGetOriginalVideoRow(
   }
 
   return (await res.json()) as BaserowRow;
+}
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? parseInt(value, 10)
+        : Number.NaN;
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+}
+
+async function baserowGetSceneRowsForVideo(
+  videoId: number,
+  baserowUrl: string,
+  token: string,
+): Promise<BaserowSceneRow[]> {
+  const sceneRows: BaserowSceneRow[] = [];
+  let page = 1;
+
+  while (true) {
+    const res = await fetch(
+      `${baserowUrl}/database/rows/table/${SCENES_TABLE_ID}/?filter__field_6889__equal=${videoId}&size=${BASEROW_PAGE_SIZE}&page=${page}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `JWT ${token}`,
+        },
+        cache: 'no-store',
+      },
+    );
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Baserow scenes GET failed: ${res.status} ${t}`);
+    }
+
+    const payload = (await res.json().catch(() => null)) as {
+      results?: unknown;
+      next?: unknown;
+    } | null;
+
+    const pageRows = Array.isArray(payload?.results)
+      ? (payload.results as BaserowSceneRow[])
+      : [];
+
+    sceneRows.push(...pageRows);
+
+    if (!payload || payload.next === null || payload.next === undefined) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return sceneRows;
+}
+
+function buildSentencesText(sceneRows: BaserowSceneRow[]): string {
+  return sceneRows
+    .slice()
+    .sort((a, b) => {
+      const orderA = Number(a.order);
+      const orderB = Number(b.order);
+
+      if (Number.isFinite(orderA) && Number.isFinite(orderB)) {
+        return orderA - orderB;
+      }
+
+      const idA = parsePositiveInt(a.id) ?? Number.MAX_SAFE_INTEGER;
+      const idB = parsePositiveInt(b.id) ?? Number.MAX_SAFE_INTEGER;
+      return idA - idB;
+    })
+    .map((scene) => String(scene.field_6890 ?? '').trim())
+    .filter((sentence) => sentence.length > 0)
+    .join('\n');
 }
 
 function cleanTitleLine(line: string): string {
@@ -174,11 +263,19 @@ export async function POST(req: Request) {
       return Response.json({ error: 'videoId is required' }, { status: 400 });
     }
 
-    const row = await baserowGetOriginalVideoRow(videoId);
+    const { baserowUrl } = getJWTTokenParams();
+    const token = await getJWTToken();
+
+    const [row, sceneRows] = await Promise.all([
+      baserowGetOriginalVideoRow(videoId, baserowUrl, token),
+      baserowGetSceneRowsForVideo(videoId, baserowUrl, token),
+    ]);
 
     const title = sanitizeFileBaseName(
       pickTitleFromField(row.field_6870, videoId),
     );
+
+    const sentenceText = buildSentencesText(sceneRows);
 
     const thumbnailUrls = [
       extractUrlFromField(row.field_7100),
@@ -216,6 +313,9 @@ export async function POST(req: Request) {
       // User requirement: final video filename must be one of the video titles.
       zip.file(`${title}${finalExt}`, finalAsset.data);
     }
+
+    // Include scene sentences text so ZIP contains the same text export used by Copy Sentences.
+    zip.file('sentences.txt', sentenceText);
 
     const zipBuffer = await zip.generateAsync({
       type: 'uint8array',
