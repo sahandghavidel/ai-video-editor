@@ -333,39 +333,66 @@ export async function POST(req: Request) {
 
     const finalVideoUrl = extractUrlFromField(row.field_6858);
 
-    if (!finalVideoUrl && thumbnailUrls.length === 0) {
-      return Response.json(
-        {
-          error:
-            'No assets found. Need at least one thumbnail or a final video URL.',
-        },
-        { status: 400 },
-      );
-    }
-
     const zip = new JSZip();
+    let addedFileCount = 0;
+    const skippedAssets: string[] = [];
 
     for (let i = 0; i < thumbnailUrls.length; i++) {
       const thumbUrl = thumbnailUrls[i];
-      const asset = await fetchAsset(thumbUrl);
-      const ext = getExtensionFromUrlOrType(thumbUrl, asset.contentType);
-      zip.file(`thumbnail_${i + 1}${ext}`, asset.data);
+      try {
+        const asset = await fetchAsset(thumbUrl);
+        const ext = getExtensionFromUrlOrType(thumbUrl, asset.contentType);
+        zip.file(`thumbnail_${i + 1}${ext}`, asset.data);
+        addedFileCount += 1;
+      } catch (error) {
+        const reason =
+          error instanceof Error ? error.message : 'Unknown thumbnail error';
+        skippedAssets.push(`thumbnail_${i + 1}: ${reason}`);
+      }
     }
 
     if (finalVideoUrl) {
-      const finalAsset = await fetchAsset(finalVideoUrl);
-      const finalExt = getExtensionFromUrlOrType(
-        finalVideoUrl,
-        finalAsset.contentType,
-      );
-      // User requirement: final video filename must be one of the video titles.
-      zip.file(`${title}${finalExt}`, finalAsset.data);
+      try {
+        const finalAsset = await fetchAsset(finalVideoUrl);
+        const finalExt = getExtensionFromUrlOrType(
+          finalVideoUrl,
+          finalAsset.contentType,
+        );
+        // User requirement: final video filename must be one of the video titles.
+        zip.file(`${title}${finalExt}`, finalAsset.data);
+        addedFileCount += 1;
+      } catch (error) {
+        const reason =
+          error instanceof Error ? error.message : 'Unknown final video error';
+        skippedAssets.push(`final_video: ${reason}`);
+      }
     }
 
     // Include scene sentences text so ZIP contains the same text export used by Copy Sentences.
-    zip.file('sentences.txt', sentenceText);
+    if (sentenceText.trim()) {
+      zip.file('sentences.txt', sentenceText);
+      addedFileCount += 1;
+    }
     // Include metadata text so ZIP contains the same text export used by Copy Metadata.
-    zip.file('metadata.txt', metadataText);
+    if (metadataText.trim()) {
+      zip.file('metadata.txt', metadataText);
+      addedFileCount += 1;
+    }
+
+    if (skippedAssets.length > 0) {
+      zip.file(
+        'skipped-assets.txt',
+        `Some assets could not be downloaded and were skipped:\n\n${skippedAssets.join('\n')}`,
+      );
+      addedFileCount += 1;
+    }
+
+    if (addedFileCount === 0) {
+      zip.file(
+        'note.txt',
+        'No downloadable assets were available for this video at this time.',
+      );
+    }
 
     const zipBuffer = await zip.generateAsync({
       type: 'uint8array',
