@@ -140,7 +140,7 @@ const VIDEO_TABLE_VIRTUALIZATION_THRESHOLD = 120;
 const VIDEO_TABLE_ROW_HEIGHT_PX = 56;
 const VIDEO_TABLE_OVERSCAN_ROWS = 8;
 
-const UPLOADED_URL_SKIP_WHITELIST_OPERATIONS = [
+const SKIP_WITH_UPLOADED_URL_OPERATION_WHITELIST = [
   'scriptFromTitle',
   'generateThumbnails',
   'combineLongTextPairs',
@@ -153,12 +153,30 @@ const UPLOADED_URL_SKIP_WHITELIST_OPERATIONS = [
   'applyEnhancedVideos',
 ] as const;
 
-type UploadedUrlSkipWhitelistOperation =
-  (typeof UPLOADED_URL_SKIP_WHITELIST_OPERATIONS)[number];
+const SKIP_WITHOUT_UPLOADED_URL_OPERATION_WHITELIST = [
+  'fixLanguageAll',
+  'improveAll',
+] as const;
 
-const UPLOADED_URL_SKIP_WHITELIST = new Set<UploadedUrlSkipWhitelistOperation>(
-  UPLOADED_URL_SKIP_WHITELIST_OPERATIONS,
-);
+type SkipWithUploadedUrlOperation =
+  (typeof SKIP_WITH_UPLOADED_URL_OPERATION_WHITELIST)[number];
+
+type SkipWithoutUploadedUrlOperation =
+  (typeof SKIP_WITHOUT_UPLOADED_URL_OPERATION_WHITELIST)[number];
+
+type UploadedUrlSkipOperation =
+  | SkipWithUploadedUrlOperation
+  | SkipWithoutUploadedUrlOperation;
+
+const SKIP_WITH_UPLOADED_URL_OPERATION_SET =
+  new Set<SkipWithUploadedUrlOperation>(
+    SKIP_WITH_UPLOADED_URL_OPERATION_WHITELIST,
+  );
+
+const SKIP_WITHOUT_UPLOADED_URL_OPERATION_SET =
+  new Set<SkipWithoutUploadedUrlOperation>(
+    SKIP_WITHOUT_UPLOADED_URL_OPERATION_WHITELIST,
+  );
 
 const LazyPipelineConfig = dynamic(() => import('./PipelineConfig'), {
   ssr: false,
@@ -679,12 +697,22 @@ export default function OriginalVideosList({
   );
 
   const getProcessingVideosForAllVideosOps = useCallback(
-    (videos: BaserowRow[], options?: { operation?: string }): BaserowRow[] => {
+    (
+      videos: BaserowRow[],
+      options?: { operation?: UploadedUrlSkipOperation },
+    ): BaserowRow[] => {
       const operation = options?.operation;
-      const applyUploadedUrlSkipForOperation =
+
+      const shouldSkipVideosWithUploadedUrl =
         typeof operation === 'string' &&
-        UPLOADED_URL_SKIP_WHITELIST.has(
-          operation as UploadedUrlSkipWhitelistOperation,
+        SKIP_WITH_UPLOADED_URL_OPERATION_SET.has(
+          operation as SkipWithUploadedUrlOperation,
+        );
+
+      const shouldSkipVideosWithoutUploadedUrl =
+        typeof operation === 'string' &&
+        SKIP_WITHOUT_UPLOADED_URL_OPERATION_SET.has(
+          operation as SkipWithoutUploadedUrlOperation,
         );
 
       return videos.filter((video) => {
@@ -693,10 +721,20 @@ export default function OriginalVideosList({
           return false;
         }
 
+        const hasUploadedUrl6881 = videoHasUploadedUrl6881(video);
+
         if (
-          applyUploadedUrlSkipForOperation &&
+          shouldSkipVideosWithUploadedUrl &&
           videoSettings.skipVideosWithUploadedUrl6881InAllVideosBatch &&
-          videoHasUploadedUrl6881(video)
+          hasUploadedUrl6881
+        ) {
+          return false;
+        }
+
+        if (
+          shouldSkipVideosWithoutUploadedUrl &&
+          videoSettings.skipVideosWithoutUploadedUrl6881InAllVideosBatch &&
+          !hasUploadedUrl6881
         ) {
           return false;
         }
@@ -708,6 +746,7 @@ export default function OriginalVideosList({
       extractFieldValue,
       videoHasUploadedUrl6881,
       videoSettings.skipVideosWithUploadedUrl6881InAllVideosBatch,
+      videoSettings.skipVideosWithoutUploadedUrl6881InAllVideosBatch,
     ],
   );
 
@@ -3707,8 +3746,10 @@ export default function OriginalVideosList({
       }
 
       // Filter videos by Processing status
-      const videosToProcess =
-        getProcessingVideosForAllVideosOps(freshVideosData);
+      const videosToProcess = getProcessingVideosForAllVideosOps(
+        freshVideosData,
+        { operation: 'improveAll' },
+      );
 
       const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
 
@@ -4644,8 +4685,12 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
       const freshScenesData = await getBaserowData();
 
-      const processingVideos =
-        getProcessingVideosForAllVideosOps(freshVideosData);
+      const processingVideos = getProcessingVideosForAllVideosOps(
+        freshVideosData,
+        {
+          operation: 'fixLanguageAll',
+        },
+      );
 
       const processingVideoIds = new Set(processingVideos.map((v) => v.id));
       const processingVideoOrderById = new Map<number, number>(
@@ -5027,7 +5072,7 @@ export default function OriginalVideosList({
   };
 
   const fetchProcessingScenes = async (options?: {
-    operation?: string;
+    operation?: UploadedUrlSkipOperation;
   }): Promise<{
     processingVideos: BaserowRow[];
     processingVideoIds: Set<number>;

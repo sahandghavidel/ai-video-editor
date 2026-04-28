@@ -123,6 +123,46 @@ export default function AutoGenerateSettings() {
             </div>
           </label>
         </div>
+
+        {/* Skip Videos Without Uploaded URL (6881) in all-videos Processing batch/pipeline */}
+        <div className='relative'>
+          <label className='flex items-start space-x-4 cursor-pointer group'>
+            <div className='relative flex-shrink-0 mt-1'>
+              <input
+                type='checkbox'
+                checked={
+                  videoSettings.skipVideosWithoutUploadedUrl6881InAllVideosBatch
+                }
+                onChange={(e) =>
+                  updateVideoSettings({
+                    skipVideosWithoutUploadedUrl6881InAllVideosBatch:
+                      e.target.checked,
+                  })
+                }
+                className='w-5 h-5 text-amber-600 bg-white border-2 border-gray-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200'
+              />
+            </div>
+            <div className='flex-1 min-w-0'>
+              <div className='flex items-center space-x-2 mb-2'>
+                <div className='p-1.5 bg-amber-100 rounded-lg'>
+                  <Link2 className='w-4 h-4 text-amber-600' />
+                </div>
+                <span className='text-sm font-semibold text-gray-900 group-hover:text-amber-700 transition-colors'>
+                  Skip videos without Uploaded URL (6881)
+                </span>
+                {videoSettings.skipVideosWithoutUploadedUrl6881InAllVideosBatch && (
+                  <div className='px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium'>
+                    Active
+                  </div>
+                )}
+              </div>
+              <p className='text-xs text-gray-500'>
+                Applies to full pipeline + all-videos Processing batch actions
+                only.
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
   );
