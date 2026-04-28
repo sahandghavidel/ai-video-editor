@@ -3408,7 +3408,43 @@ export default function OriginalVideosList({
         throw new Error('No metadata available to copy');
       }
 
+      const sanitizeDownloadFileName = (
+        rawName: string,
+        fallbackName: string,
+      ): string => {
+        const normalized = (rawName || '')
+          .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/\.+$/g, '');
+
+        return normalized || fallbackName;
+      };
+
+      const titleForName = extractFieldValue(video.field_6852);
+      const fallbackBaseName = `video_${video.id}_metadata`;
+      const downloadBaseName = sanitizeDownloadFileName(
+        titleForName
+          ? `video_${video.id}_${titleForName}_metadata`
+          : fallbackBaseName,
+        fallbackBaseName,
+      );
+
       await navigator.clipboard.writeText(metadataText);
+
+      const blob = new Blob([metadataText], {
+        type: 'text/plain;charset=utf-8',
+      });
+      const blobUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = `${downloadBaseName}.txt`;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(blobUrl);
+
       playSuccessSound();
     } catch (error) {
       console.error(`Failed to copy metadata for video #${video.id}:`, error);
@@ -11573,7 +11609,7 @@ export default function OriginalVideosList({
                               generatingThumbnailsAll
                             }
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Download ZIP with all thumbnails, final video, and sentences.txt. The ZIP and final video filenames use one of the generated titles.'
+                            title='Download ZIP with all thumbnails, final video, sentences.txt, and metadata.txt. The ZIP and final video filenames use one of the generated titles.'
                           >
                             {downloadingAssetsZipVideoId ===
                             selectedVideo.id ? (
@@ -11595,12 +11631,12 @@ export default function OriginalVideosList({
                             }
                             disabled={copyingMetadataVideoId !== null}
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Copy titles, description, timestamps, and keywords to clipboard with blank lines between each section'
+                            title='Copy titles, description, timestamps, and keywords to clipboard and download as a .txt file with blank lines between each section'
                           >
                             {copyingMetadataVideoId === selectedVideo.id ? (
                               <>
                                 <Check className='w-4 h-4' />
-                                Copied
+                                Copied + Downloaded
                               </>
                             ) : (
                               <>

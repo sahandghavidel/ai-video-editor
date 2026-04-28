@@ -175,6 +175,53 @@ function buildSentencesText(sceneRows: BaserowSceneRow[]): string {
     .join('\n');
 }
 
+function extractTextFromField(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim();
+
+  if (typeof raw === 'number' || typeof raw === 'boolean') {
+    return String(raw).trim();
+  }
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => extractTextFromField(item))
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const candidate = obj.value ?? obj.name ?? obj.text ?? obj.title;
+    return extractTextFromField(candidate);
+  }
+
+  return '';
+}
+
+function buildMetadataText(row: BaserowRow): string {
+  const titles = extractTextFromField(row.field_6870)
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s*\d+[\).:-]?\s*/, '')
+        .replace(/^\s*[-*•]\s*/, '')
+        .trim(),
+    )
+    .filter(Boolean)
+    .join('\n');
+
+  const description = extractTextFromField(row.field_6869);
+  const timestamps = extractTextFromField(row.field_6873);
+  const keywords = extractTextFromField(row.field_6871);
+  const timestampsSection = timestamps ? `Timestamps:\n${timestamps}` : '';
+
+  return [titles, description, timestampsSection, keywords]
+    .map((section) => section.trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 function cleanTitleLine(line: string): string {
   return line
     .replace(/^\s*\d+\)\s*/, '')
@@ -276,6 +323,7 @@ export async function POST(req: Request) {
     );
 
     const sentenceText = buildSentencesText(sceneRows);
+    const metadataText = buildMetadataText(row);
 
     const thumbnailUrls = [
       extractUrlFromField(row.field_7100),
@@ -316,6 +364,8 @@ export async function POST(req: Request) {
 
     // Include scene sentences text so ZIP contains the same text export used by Copy Sentences.
     zip.file('sentences.txt', sentenceText);
+    // Include metadata text so ZIP contains the same text export used by Copy Metadata.
+    zip.file('metadata.txt', metadataText);
 
     const zipBuffer = await zip.generateAsync({
       type: 'uint8array',
