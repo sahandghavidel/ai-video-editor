@@ -425,6 +425,7 @@ const FinalVideoTable: React.FC = () => {
         body: JSON.stringify({
           transcriptionText: transcriptionText,
           model: modelSelection.selectedModel,
+          descriptionStyle: 'concise_trustworthy_v2',
         }),
       });
 

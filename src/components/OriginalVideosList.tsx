@@ -2465,7 +2465,8 @@ export default function OriginalVideosList({
     }
   };
 
-  // Generate YouTube descriptions for all Processing videos using Script (6854)
+  // Generate YouTube descriptions for all Processing videos using
+  // Final Video Captions URL (6872)
   // and save into YouTube Description (6869)
   const handleGenerateYouTubeDescriptionsAll = async (playSound = true) => {
     if (generatingYouTubeDescriptionsAll) return;
@@ -2477,47 +2478,121 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
 
+      const extractTextFromCaptionsPayload = (payload: unknown): string => {
+        if (typeof payload === 'string') {
+          return payload.trim();
+        }
+
+        if (Array.isArray(payload)) {
+          const parts = payload
+            .map((item) => {
+              if (typeof item === 'string') {
+                return item.trim();
+              }
+
+              if (typeof item === 'object' && item !== null) {
+                const row = item as {
+                  text?: unknown;
+                  word?: unknown;
+                  value?: unknown;
+                };
+
+                if (typeof row.text === 'string') return row.text.trim();
+                if (typeof row.word === 'string') return row.word.trim();
+                if (typeof row.value === 'string') return row.value.trim();
+              }
+
+              return '';
+            })
+            .filter((part) => part.length > 0);
+
+          return parts.join(' ').replace(/\s+/g, ' ').trim();
+        }
+
+        if (typeof payload === 'object' && payload !== null) {
+          const obj = payload as {
+            text?: unknown;
+            segments?: unknown;
+            words?: unknown;
+            data?: unknown;
+          };
+
+          if (typeof obj.text === 'string' && obj.text.trim().length > 0) {
+            return obj.text.trim();
+          }
+
+          const nested = obj.segments ?? obj.words ?? obj.data;
+          if (nested !== undefined) {
+            return extractTextFromCaptionsPayload(nested);
+          }
+        }
+
+        return '';
+      };
+
       const videosToDescribe = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
-        const script =
-          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        const finalCaptionsUrl = extractUrl(video.field_6872);
         const existingDescription =
           typeof video.field_6869 === 'string'
             ? video.field_6869.trim()
             : extractFieldValue(video.field_6869).trim();
 
         return (
-          status === 'Processing' && script.length > 0 && !existingDescription
+          status === 'Processing' &&
+          !!finalCaptionsUrl &&
+          finalCaptionsUrl.trim().length > 0 &&
+          !existingDescription
         );
       });
 
       if (videosToDescribe.length === 0) {
         console.log(
-          'No Processing videos found that need YouTube description generation',
+          'No Processing videos found with Final Video Captions URL that need YouTube description generation',
         );
         return;
       }
 
       console.log(
-        `Generating YouTube descriptions for ${videosToDescribe.length} videos...`,
+        `Generating YouTube descriptions from Final Video Captions URL for ${videosToDescribe.length} videos...`,
       );
 
       for (const video of videosToDescribe) {
-        const script =
-          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
-        if (!script) continue;
+        const finalCaptionsUrl = extractUrl(video.field_6872);
+        if (!finalCaptionsUrl) continue;
 
         setGeneratingDescriptionVideoId(video.id);
 
         try {
+          const captionsResponse = await fetch(finalCaptionsUrl);
+          if (!captionsResponse.ok) {
+            throw new Error(
+              `Failed to fetch final captions (${captionsResponse.status})`,
+            );
+          }
+
+          const captionsPayload = (await captionsResponse
+            .json()
+            .catch(() => null)) as unknown;
+
+          const transcriptionText =
+            extractTextFromCaptionsPayload(captionsPayload);
+
+          if (!transcriptionText) {
+            throw new Error(
+              'Final captions did not contain usable text for description generation',
+            );
+          }
+
           const response = await fetch('/api/generate-description', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              transcriptionText: script,
+              transcriptionText,
               model: modelSelection.selectedModel,
+              descriptionStyle: 'concise_trustworthy_v2',
             }),
           });
 

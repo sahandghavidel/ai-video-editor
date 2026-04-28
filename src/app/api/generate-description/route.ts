@@ -12,41 +12,61 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { transcriptionText, model = 'openai/gpt-4o-mini' } =
-      await request.json();
+    const body = (await request.json().catch(() => null)) as {
+      transcriptionText?: unknown;
+      model?: unknown;
+    } | null;
+
+    const transcriptionText =
+      typeof body?.transcriptionText === 'string'
+        ? body.transcriptionText.trim()
+        : '';
+
+    const model =
+      typeof body?.model === 'string' && body.model.trim().length > 0
+        ? body.model.trim()
+        : 'openai/gpt-4o-mini';
 
     if (!transcriptionText) {
       return NextResponse.json(
         { error: 'Transcription text is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Create a focused prompt for YouTube description generation
-    const prompt = `Write a YouTube description for this video. Use this EXACT format (minimum 3 paragraphs and each paragraph should be at least 5 sentences long and add only 3 hashtags at the end).
+    // Create a concise, trustworthy prompt for YouTube description generation.
+    const prompt = `Write a concise, trustworthy YouTube description based on this transcript.
 
-The description should be:
+Requirements:
 
-• Compelling and informative
-• Under 5000 characters (YouTube's limit)
-• Include relevant keywords for SEO
-• Encourage engagement (likes, comments, subscriptions)
-• Natural and conversational
-• NEVER include timestamps in the description
+- 120 to 220 words total
+- Maximum 2 short paragraphs
+- Clear, natural, and informative tone
+- Summarize what the viewer will learn and why it matters
+- Include key topics naturally for SEO (no keyword stuffing)
+- Add one soft call-to-action sentence at the end
+- Add exactly 2 relevant hashtags on the last line
+- Do NOT include timestamps, emojis, hype language, urgency, promises, or clickbait
+- Do NOT use phrases like "must-watch", "secret", "guaranteed", "act now", or similar
 
-Transcription: ${transcriptionText}
+Transcript: ${transcriptionText}
 
-Return only the description with the specified format, nothing else.`;
+Return only the final description text.`;
 
     const completion = await openai.chat.completions.create({
       model: model,
       messages: [
         {
+          role: 'system',
+          content:
+            'You write clear, honest YouTube descriptions. Avoid clickbait and hype. Return only the final description text.',
+        },
+        {
           role: 'user',
           content: prompt,
         },
       ],
-      temperature: 0.7,
+      temperature: 0.35,
     });
 
     const generatedDescription =
@@ -55,7 +75,7 @@ Return only the description with the specified format, nothing else.`;
     if (!generatedDescription) {
       return NextResponse.json(
         { error: 'Failed to generate description' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -67,7 +87,7 @@ Return only the description with the specified format, nothing else.`;
     console.error('Description generation error:', error);
     return NextResponse.json(
       { error: 'Failed to generate description' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
