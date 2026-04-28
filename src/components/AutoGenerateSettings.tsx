@@ -1,7 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { Mic, Video, Zap } from 'lucide-react';
+import { Link2, Mic, Video, Zap } from 'lucide-react';
 
 export default function AutoGenerateSettings() {
   const { videoSettings, updateVideoSettings } = useAppStore();
@@ -80,6 +80,46 @@ export default function AutoGenerateSettings() {
                   </div>
                 )}
               </div>
+            </div>
+          </label>
+        </div>
+
+        {/* Skip Videos With Uploaded URL (6881) in all-videos Processing batch/pipeline */}
+        <div className='relative'>
+          <label className='flex items-start space-x-4 cursor-pointer group'>
+            <div className='relative flex-shrink-0 mt-1'>
+              <input
+                type='checkbox'
+                checked={
+                  videoSettings.skipVideosWithUploadedUrl6881InAllVideosBatch
+                }
+                onChange={(e) =>
+                  updateVideoSettings({
+                    skipVideosWithUploadedUrl6881InAllVideosBatch:
+                      e.target.checked,
+                  })
+                }
+                className='w-5 h-5 text-emerald-600 bg-white border-2 border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors duration-200'
+              />
+            </div>
+            <div className='flex-1 min-w-0'>
+              <div className='flex items-center space-x-2 mb-2'>
+                <div className='p-1.5 bg-emerald-100 rounded-lg'>
+                  <Link2 className='w-4 h-4 text-emerald-600' />
+                </div>
+                <span className='text-sm font-semibold text-gray-900 group-hover:text-emerald-700 transition-colors'>
+                  Skip videos with Uploaded URL (6881)
+                </span>
+                {videoSettings.skipVideosWithUploadedUrl6881InAllVideosBatch && (
+                  <div className='px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full font-medium'>
+                    Active
+                  </div>
+                )}
+              </div>
+              <p className='text-xs text-gray-500'>
+                Applies to full pipeline + all-videos Processing batch actions
+                only.
+              </p>
             </div>
           </label>
         </div>

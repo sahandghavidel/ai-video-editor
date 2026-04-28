@@ -50,6 +50,7 @@ export interface VideoSettings {
   muteAudio: boolean;
   autoGenerateVideo: boolean;
   autoGenerateTTS: boolean;
+  skipVideosWithUploadedUrl6881InAllVideosBatch: boolean;
   speedUpMode: SpeedUpMode;
   playerSpeed: number;
 }
@@ -499,6 +500,7 @@ const defaultVideoSettings: VideoSettings = {
   muteAudio: true,
   autoGenerateVideo: true,
   autoGenerateTTS: true,
+  skipVideosWithUploadedUrl6881InAllVideosBatch: true,
   speedUpMode: 'all',
   playerSpeed: 2,
 };

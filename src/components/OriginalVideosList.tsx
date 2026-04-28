@@ -140,6 +140,26 @@ const VIDEO_TABLE_VIRTUALIZATION_THRESHOLD = 120;
 const VIDEO_TABLE_ROW_HEIGHT_PX = 56;
 const VIDEO_TABLE_OVERSCAN_ROWS = 8;
 
+const UPLOADED_URL_SKIP_WHITELIST_OPERATIONS = [
+  'scriptFromTitle',
+  'generateThumbnails',
+  'combineLongTextPairs',
+  'generateSubtitles',
+  'generateSceneImages',
+  'upscaleSceneImages',
+  'applyUpscaledImages',
+  'generateSceneVideos',
+  'enhanceSceneVideos',
+  'applyEnhancedVideos',
+] as const;
+
+type UploadedUrlSkipWhitelistOperation =
+  (typeof UPLOADED_URL_SKIP_WHITELIST_OPERATIONS)[number];
+
+const UPLOADED_URL_SKIP_WHITELIST = new Set<UploadedUrlSkipWhitelistOperation>(
+  UPLOADED_URL_SKIP_WHITELIST_OPERATIONS,
+);
+
 const LazyPipelineConfig = dynamic(() => import('./PipelineConfig'), {
   ssr: false,
   loading: () => null,
@@ -649,6 +669,47 @@ export default function OriginalVideosList({
 
     return null;
   }, []);
+
+  const videoHasUploadedUrl6881 = useCallback(
+    (video: BaserowRow): boolean => {
+      const uploadedUrl = extractUrl(video.field_6881);
+      return Boolean(uploadedUrl && uploadedUrl.trim().length > 0);
+    },
+    [extractUrl],
+  );
+
+  const getProcessingVideosForAllVideosOps = useCallback(
+    (videos: BaserowRow[], options?: { operation?: string }): BaserowRow[] => {
+      const operation = options?.operation;
+      const applyUploadedUrlSkipForOperation =
+        typeof operation === 'string' &&
+        UPLOADED_URL_SKIP_WHITELIST.has(
+          operation as UploadedUrlSkipWhitelistOperation,
+        );
+
+      return videos.filter((video) => {
+        const status = extractFieldValue(video.field_6864).trim().toLowerCase();
+        if (status !== 'processing') {
+          return false;
+        }
+
+        if (
+          applyUploadedUrlSkipForOperation &&
+          videoSettings.skipVideosWithUploadedUrl6881InAllVideosBatch &&
+          videoHasUploadedUrl6881(video)
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+    },
+    [
+      extractFieldValue,
+      videoHasUploadedUrl6881,
+      videoSettings.skipVideosWithUploadedUrl6881InAllVideosBatch,
+    ],
+  );
 
   const parseDimension = (
     input: string,
@@ -2862,8 +2923,10 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
 
-      const videosToProcess = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
+      const videosToProcess = getProcessingVideosForAllVideosOps(
+        freshVideosData,
+        { operation: 'scriptFromTitle' },
+      ).filter((video) => {
         const script =
           typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
         const title =
@@ -2871,7 +2934,6 @@ export default function OriginalVideosList({
             ? video.field_6852.trim()
             : extractFieldValue(video.field_6852).trim();
 
-        if (status !== 'Processing') return false;
         if (!title) return false;
         if (script.length > 0) return false;
         if (/\bscript\b/i.test(title)) return false;
@@ -2983,12 +3045,14 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
 
-      const videosToProcess = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
+      const videosToProcess = getProcessingVideosForAllVideosOps(
+        freshVideosData,
+        { operation: 'generateThumbnails' },
+      ).filter((video) => {
         const script =
           typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
 
-        if (status !== 'Processing' || script.length === 0) {
+        if (script.length === 0) {
           return false;
         }
 
@@ -3643,10 +3707,8 @@ export default function OriginalVideosList({
       }
 
       // Filter videos by Processing status
-      const videosToProcess = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const videosToProcess =
+        getProcessingVideosForAllVideosOps(freshVideosData);
 
       const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
 
@@ -3748,10 +3810,8 @@ export default function OriginalVideosList({
       }
 
       // Filter videos by Processing status
-      const videosToProcess = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const videosToProcess =
+        getProcessingVideosForAllVideosOps(freshVideosData);
 
       const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
 
@@ -3861,10 +3921,8 @@ export default function OriginalVideosList({
       }
 
       // Filter videos by Processing status
-      const videosToProcess = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const videosToProcess =
+        getProcessingVideosForAllVideosOps(freshVideosData);
 
       const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
 
@@ -3960,10 +4018,8 @@ export default function OriginalVideosList({
       }
 
       // Filter videos by Processing status
-      const videosToProcess = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const videosToProcess =
+        getProcessingVideosForAllVideosOps(freshVideosData);
 
       const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
 
@@ -4100,10 +4156,8 @@ export default function OriginalVideosList({
       }
 
       // Filter videos by Processing status
-      const processingVideos = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const processingVideos =
+        getProcessingVideosForAllVideosOps(freshVideosData);
 
       const processingVideoIds = new Set(processingVideos.map((v) => v.id));
 
@@ -4460,10 +4514,8 @@ export default function OriginalVideosList({
       }
 
       // Processing-only videos
-      const processingVideos = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const processingVideos =
+        getProcessingVideosForAllVideosOps(freshVideosData);
 
       const processingVideoIds = new Set(processingVideos.map((v) => v.id));
 
@@ -4592,10 +4644,8 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
       const freshScenesData = await getBaserowData();
 
-      const processingVideos = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const processingVideos =
+        getProcessingVideosForAllVideosOps(freshVideosData);
 
       const processingVideoIds = new Set(processingVideos.map((v) => v.id));
       const processingVideoOrderById = new Map<number, number>(
@@ -4976,17 +5026,20 @@ export default function OriginalVideosList({
     return null;
   };
 
-  const fetchProcessingScenes = async (): Promise<{
+  const fetchProcessingScenes = async (options?: {
+    operation?: string;
+  }): Promise<{
+    processingVideos: BaserowRow[];
     processingVideoIds: Set<number>;
     scenesForProcessingVideos: BaserowRow[];
   }> => {
     const freshVideosData = await getOriginalVideosData();
     const freshScenesData = await getBaserowData();
 
-    const processingVideos = freshVideosData.filter((video) => {
-      const status = extractFieldValue(video.field_6864);
-      return status === 'Processing';
-    });
+    const processingVideos = getProcessingVideosForAllVideosOps(
+      freshVideosData,
+      options,
+    );
 
     const processingVideoIds = new Set(processingVideos.map((v) => v.id));
 
@@ -4999,7 +5052,7 @@ export default function OriginalVideosList({
       },
     );
 
-    return { processingVideoIds, scenesForProcessingVideos };
+    return { processingVideos, processingVideoIds, scenesForProcessingVideos };
   };
 
   const extractUrlFromSceneField = (raw: unknown): string => {
@@ -5101,7 +5154,9 @@ export default function OriginalVideosList({
   };
 
   const handleGenerateSubtitlesForProcessingVideos = async () => {
-    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+    const { scenesForProcessingVideos } = await fetchProcessingScenes({
+      operation: 'generateSubtitles',
+    });
 
     const scenesToSubtitle = [...scenesForProcessingVideos]
       .filter((scene) => {
@@ -5258,7 +5313,9 @@ export default function OriginalVideosList({
     setError(null);
 
     try {
-      const { scenesForProcessingVideos } = await fetchProcessingScenes();
+      const { scenesForProcessingVideos } = await fetchProcessingScenes({
+        operation: 'combineLongTextPairs',
+      });
 
       const scenesByVideoId = new Map<number, BaserowRow[]>();
       for (const scene of scenesForProcessingVideos) {
@@ -5426,7 +5483,9 @@ export default function OriginalVideosList({
   };
 
   const handleGenerateSceneImagesForProcessingVideos = async () => {
-    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+    const { scenesForProcessingVideos } = await fetchProcessingScenes({
+      operation: 'generateSceneImages',
+    });
 
     const scenesToImage = [...scenesForProcessingVideos]
       .filter((scene) => {
@@ -5470,7 +5529,9 @@ export default function OriginalVideosList({
   };
 
   const handleUpscaleSceneImagesForProcessingVideos = async () => {
-    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+    const { scenesForProcessingVideos } = await fetchProcessingScenes({
+      operation: 'upscaleSceneImages',
+    });
 
     const scenesToUpscale = [...scenesForProcessingVideos]
       .filter((scene) => {
@@ -5511,7 +5572,9 @@ export default function OriginalVideosList({
   };
 
   const handleApplyUpscaledImagesForProcessingVideos = async () => {
-    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+    const { scenesForProcessingVideos } = await fetchProcessingScenes({
+      operation: 'applyUpscaledImages',
+    });
 
     const scenesToApply = [...scenesForProcessingVideos]
       .filter((scene) => {
@@ -5562,7 +5625,9 @@ export default function OriginalVideosList({
   };
 
   const handleGenerateSceneVideosForProcessingVideos = async () => {
-    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+    const { scenesForProcessingVideos } = await fetchProcessingScenes({
+      operation: 'generateSceneVideos',
+    });
 
     const scenesToGenerate = [...scenesForProcessingVideos]
       .filter((scene) => {
@@ -5697,7 +5762,9 @@ export default function OriginalVideosList({
   };
 
   const handleEnhanceSceneVideosForProcessingVideos = async () => {
-    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+    const { scenesForProcessingVideos } = await fetchProcessingScenes({
+      operation: 'enhanceSceneVideos',
+    });
 
     const scenesToEnhance = [...scenesForProcessingVideos]
       .filter((scene) => {
@@ -5753,7 +5820,9 @@ export default function OriginalVideosList({
   };
 
   const handleApplyEnhancedVideosForProcessingVideos = async () => {
-    const { scenesForProcessingVideos } = await fetchProcessingScenes();
+    const { scenesForProcessingVideos } = await fetchProcessingScenes({
+      operation: 'applyEnhancedVideos',
+    });
 
     const scenesToApply = [...scenesForProcessingVideos]
       .filter((scene) => {
