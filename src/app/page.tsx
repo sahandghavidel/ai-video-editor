@@ -295,22 +295,6 @@ export default function Home() {
   return (
     <div className='min-h-screen bg-gradient-to-br from-gray-50 to-white'>
       <div className='max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8'>
-        <header className='mb-8'>
-          <div className='flex items-center space-x-4 mb-4'>
-            <div className='p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg'>
-              <Video className='w-8 h-8 text-white' />
-            </div>
-            <div>
-              <h1 className='text-3xl font-bold text-gray-900'>
-                Ultimate Video Editor
-              </h1>
-              <p className='mt-2 text-gray-600'>
-                AI-powered video editing with TTS and scene management
-              </p>
-            </div>
-          </div>
-        </header>
-
         {error ? (
           <div className='bg-red-50 border border-red-200 rounded-xl p-6 mb-8 shadow-sm'>
             <div className='flex items-start space-x-4'>
@@ -414,13 +398,9 @@ export default function Home() {
                   <div className='flex items-center gap-3'>
                     <Settings className='w-6 h-6 text-blue-600' />
                     <div className='text-left'>
-                      <h2 className='text-xl font-bold text-gray-900'>
+                      <h2 className='text-lg font-semibold text-gray-900'>
                         Global Settings
                       </h2>
-                      <p className='text-sm text-gray-600'>
-                        AI Models, Transcription, TTS, Video Speed, Silence
-                        Speed & Auto-Generation
-                      </p>
                     </div>
                   </div>
                   <div className='flex items-center gap-2'>

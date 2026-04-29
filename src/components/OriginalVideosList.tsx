@@ -9058,13 +9058,9 @@ export default function OriginalVideosList({
         <div className='flex items-center gap-2'>
           <Video className='w-6 h-6 text-blue-500' />
           <div className='text-left'>
-            <h2 className='text-2xl font-bold text-gray-900'>
+            <h2 className='text-xl font-semibold text-gray-900'>
               Original Videos
             </h2>
-            <p className='text-gray-600 mt-1'>
-              {originalVideos.length} video
-              {originalVideos.length !== 1 ? 's' : ''} in library
-            </p>
           </div>
         </div>
         <div className='flex items-center gap-3'>
