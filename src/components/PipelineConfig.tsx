@@ -26,11 +26,19 @@ export default function PipelineConfig({
     updatePipelineConfig,
     savePipelineTemplate,
     applyPipelineTemplate,
+    deletePipelineTemplate,
+    reorderPipelineTemplate,
   } = useAppStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateNameError, setTemplateNameError] = useState('');
+  const [draggingTemplateId, setDraggingTemplateId] = useState<string | null>(
+    null,
+  );
+  const [dragOverTemplateId, setDragOverTemplateId] = useState<string | null>(
+    null,
+  );
 
   const openSaveTemplateModal = () => {
     setTemplateName('');
@@ -54,6 +62,55 @@ export default function PipelineConfig({
 
     savePipelineTemplate(trimmedName);
     closeSaveTemplateModal();
+  };
+
+  const clearTemplateDragState = () => {
+    setDraggingTemplateId(null);
+    setDragOverTemplateId(null);
+  };
+
+  const handleTemplateContextDelete = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    templateId: string,
+    templateName: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const shouldDelete =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm(`Delete pipeline template "${templateName}"?`);
+
+    if (!shouldDelete) return;
+
+    deletePipelineTemplate(templateId);
+    clearTemplateDragState();
+  };
+
+  const handleTemplateDragOver = (
+    event: React.DragEvent<HTMLButtonElement>,
+    templateId: string,
+  ) => {
+    if (!draggingTemplateId || draggingTemplateId === templateId) return;
+    event.preventDefault();
+
+    if (dragOverTemplateId !== templateId) {
+      setDragOverTemplateId(templateId);
+    }
+  };
+
+  const handleTemplateDrop = (
+    event: React.DragEvent<HTMLButtonElement>,
+    templateId: string,
+  ) => {
+    event.preventDefault();
+
+    if (draggingTemplateId && draggingTemplateId !== templateId) {
+      reorderPipelineTemplate(draggingTemplateId, templateId);
+    }
+
+    clearTemplateDragState();
   };
 
   const steps = [
@@ -315,19 +372,39 @@ export default function PipelineConfig({
 
             {pipelineTemplates.map((template) => {
               const isMatchedTemplate = matchingTemplateIds.has(template.id);
+              const isDragOverTarget =
+                dragOverTemplateId === template.id &&
+                draggingTemplateId !== template.id;
 
               return (
                 <button
                   key={template.id}
+                  draggable
                   onClick={() => applyPipelineTemplate(template.id)}
-                  className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors whitespace-nowrap ${
+                  onContextMenu={(event) =>
+                    handleTemplateContextDelete(
+                      event,
+                      template.id,
+                      template.name,
+                    )
+                  }
+                  onDragStart={() => {
+                    setDraggingTemplateId(template.id);
+                    setDragOverTemplateId(null);
+                  }}
+                  onDragOver={(event) =>
+                    handleTemplateDragOver(event, template.id)
+                  }
+                  onDrop={(event) => handleTemplateDrop(event, template.id)}
+                  onDragEnd={clearTemplateDragState}
+                  className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors whitespace-nowrap cursor-grab active:cursor-grabbing ${
                     isMatchedTemplate
                       ? 'border-purple-600 bg-purple-600 text-white hover:bg-purple-700'
                       : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50'
-                  }`}
+                  } ${isDragOverTarget ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                   title={`Apply template: ${template.name}${
                     isMatchedTemplate ? ' (matches current selection)' : ''
-                  }`}
+                  }. Right-click to delete. Drag to reorder.`}
                 >
                   {template.name}
                 </button>
@@ -364,19 +441,39 @@ export default function PipelineConfig({
 
               {pipelineTemplates.map((template) => {
                 const isMatchedTemplate = matchingTemplateIds.has(template.id);
+                const isDragOverTarget =
+                  dragOverTemplateId === template.id &&
+                  draggingTemplateId !== template.id;
 
                 return (
                   <button
                     key={template.id}
+                    draggable
                     onClick={() => applyPipelineTemplate(template.id)}
-                    className={`text-xs sm:text-sm px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                    onContextMenu={(event) =>
+                      handleTemplateContextDelete(
+                        event,
+                        template.id,
+                        template.name,
+                      )
+                    }
+                    onDragStart={() => {
+                      setDraggingTemplateId(template.id);
+                      setDragOverTemplateId(null);
+                    }}
+                    onDragOver={(event) =>
+                      handleTemplateDragOver(event, template.id)
+                    }
+                    onDrop={(event) => handleTemplateDrop(event, template.id)}
+                    onDragEnd={clearTemplateDragState}
+                    className={`text-xs sm:text-sm px-3 py-1.5 rounded-full border font-medium transition-colors cursor-grab active:cursor-grabbing ${
                       isMatchedTemplate
                         ? 'border-purple-600 bg-purple-600 text-white hover:bg-purple-700'
                         : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50'
-                    }`}
+                    } ${isDragOverTarget ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                     title={`Apply template: ${template.name}${
                       isMatchedTemplate ? ' (matches current selection)' : ''
-                    }`}
+                    }. Right-click to delete. Drag to reorder.`}
                   >
                     {template.name}
                   </button>

@@ -438,6 +438,11 @@ interface AppState {
   resetPipelineConfig: () => void;
   savePipelineTemplate: (name: string) => void;
   applyPipelineTemplate: (templateId: string) => void;
+  deletePipelineTemplate: (templateId: string) => void;
+  reorderPipelineTemplate: (
+    draggedTemplateId: string,
+    targetTemplateId: string,
+  ) => void;
 
   // Silence Speed Rate Actions
   setSilenceSpeedRate: (rate: number) => void;
@@ -1451,6 +1456,55 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.setItem('pipelineConfig', JSON.stringify(nextConfig));
 
       return { pipelineConfig: nextConfig };
+    }),
+
+  deletePipelineTemplate: (templateId) =>
+    set((state) => {
+      if (!templateId) return {};
+
+      const nextTemplates = state.pipelineTemplates.filter(
+        (template) => template.id !== templateId,
+      );
+
+      localStorage.setItem('pipelineTemplates', JSON.stringify(nextTemplates));
+
+      return { pipelineTemplates: nextTemplates };
+    }),
+
+  reorderPipelineTemplate: (draggedTemplateId, targetTemplateId) =>
+    set((state) => {
+      if (
+        !draggedTemplateId ||
+        !targetTemplateId ||
+        draggedTemplateId === targetTemplateId
+      ) {
+        return {};
+      }
+
+      const currentTemplates = state.pipelineTemplates;
+      const fromIndex = currentTemplates.findIndex(
+        (template) => template.id === draggedTemplateId,
+      );
+      const toIndex = currentTemplates.findIndex(
+        (template) => template.id === targetTemplateId,
+      );
+
+      if (fromIndex < 0 || toIndex < 0) {
+        return {};
+      }
+
+      const nextTemplates = [...currentTemplates];
+      const [movedTemplate] = nextTemplates.splice(fromIndex, 1);
+      if (!movedTemplate) {
+        return {};
+      }
+
+      const destinationIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+      nextTemplates.splice(destinationIndex, 0, movedTemplate);
+
+      localStorage.setItem('pipelineTemplates', JSON.stringify(nextTemplates));
+
+      return { pipelineTemplates: nextTemplates };
     }),
 
   // Silence Speed Rate Actions
