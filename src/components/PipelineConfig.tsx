@@ -2,7 +2,7 @@
 
 import { useAppStore } from '@/store/useAppStore';
 import { CheckCircle2, Circle, Settings2, Workflow } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface PipelineConfigProps {
   onRunFullPipeline?: () => void;
@@ -33,6 +33,7 @@ export default function PipelineConfig({
   const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateNameError, setTemplateNameError] = useState('');
+  const [isTemplateReorderMode, setIsTemplateReorderMode] = useState(false);
   const [draggingTemplateId, setDraggingTemplateId] = useState<string | null>(
     null,
   );
@@ -69,6 +70,13 @@ export default function PipelineConfig({
     setDragOverTemplateId(null);
   };
 
+  useEffect(() => {
+    if (!isTemplateReorderMode) {
+      setDraggingTemplateId(null);
+      setDragOverTemplateId(null);
+    }
+  }, [isTemplateReorderMode]);
+
   const handleTemplateContextDelete = (
     event: React.MouseEvent<HTMLButtonElement>,
     templateId: string,
@@ -92,6 +100,7 @@ export default function PipelineConfig({
     event: React.DragEvent<HTMLButtonElement>,
     templateId: string,
   ) => {
+    if (!isTemplateReorderMode) return;
     if (!draggingTemplateId || draggingTemplateId === templateId) return;
     event.preventDefault();
 
@@ -104,6 +113,7 @@ export default function PipelineConfig({
     event: React.DragEvent<HTMLButtonElement>,
     templateId: string,
   ) => {
+    if (!isTemplateReorderMode) return;
     event.preventDefault();
 
     if (draggingTemplateId && draggingTemplateId !== templateId) {
@@ -370,17 +380,39 @@ export default function PipelineConfig({
               <span className='truncate'>Full Pipeline</span>
             </button>
 
+            <button
+              onClick={() =>
+                setIsTemplateReorderMode((currentValue) => !currentValue)
+              }
+              className={`inline-flex items-center justify-center px-2.5 py-1 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
+                isTemplateReorderMode
+                  ? 'border-amber-500 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  : 'border-purple-300 bg-white text-purple-700 hover:bg-purple-50'
+              }`}
+              title={
+                isTemplateReorderMode
+                  ? 'Template reorder mode is ON. Drag template chips to reorder, then turn this OFF for normal fast selection.'
+                  : 'Template reorder mode is OFF. Turn ON to drag and reorder templates.'
+              }
+            >
+              {isTemplateReorderMode ? 'Reorder: ON' : 'Reorder: OFF'}
+            </button>
+
             {pipelineTemplates.map((template) => {
               const isMatchedTemplate = matchingTemplateIds.has(template.id);
               const isDragOverTarget =
+                isTemplateReorderMode &&
                 dragOverTemplateId === template.id &&
                 draggingTemplateId !== template.id;
 
               return (
                 <button
                   key={template.id}
-                  draggable
-                  onClick={() => applyPipelineTemplate(template.id)}
+                  draggable={isTemplateReorderMode}
+                  onClick={() => {
+                    if (isTemplateReorderMode) return;
+                    applyPipelineTemplate(template.id);
+                  }}
                   onContextMenu={(event) =>
                     handleTemplateContextDelete(
                       event,
@@ -389,6 +421,7 @@ export default function PipelineConfig({
                     )
                   }
                   onDragStart={() => {
+                    if (!isTemplateReorderMode) return;
                     setDraggingTemplateId(template.id);
                     setDragOverTemplateId(null);
                   }}
@@ -397,14 +430,22 @@ export default function PipelineConfig({
                   }
                   onDrop={(event) => handleTemplateDrop(event, template.id)}
                   onDragEnd={clearTemplateDragState}
-                  className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors whitespace-nowrap cursor-grab active:cursor-grabbing ${
+                  className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors whitespace-nowrap ${
+                    isTemplateReorderMode
+                      ? 'cursor-grab active:cursor-grabbing'
+                      : 'cursor-pointer'
+                  } ${
                     isMatchedTemplate
                       ? 'border-purple-600 bg-purple-600 text-white hover:bg-purple-700'
                       : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50'
                   } ${isDragOverTarget ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                   title={`Apply template: ${template.name}${
                     isMatchedTemplate ? ' (matches current selection)' : ''
-                  }. Right-click to delete. Drag to reorder.`}
+                  }. Right-click to delete.${
+                    isTemplateReorderMode
+                      ? ' Drag to reorder is enabled.'
+                      : ' Drag to reorder is disabled (toggle Reorder ON to enable).'
+                  }`}
                 >
                   {template.name}
                 </button>
@@ -439,17 +480,39 @@ export default function PipelineConfig({
                 Save Template
               </button>
 
+              <button
+                onClick={() =>
+                  setIsTemplateReorderMode((currentValue) => !currentValue)
+                }
+                className={`text-sm px-3 py-1.5 rounded-md border font-medium transition-colors ${
+                  isTemplateReorderMode
+                    ? 'border-amber-500 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : 'border-purple-300 bg-white text-purple-700 hover:bg-purple-50'
+                }`}
+                title={
+                  isTemplateReorderMode
+                    ? 'Template reorder mode is ON. Drag template chips to reorder, then turn this OFF for normal fast selection.'
+                    : 'Template reorder mode is OFF. Turn ON to drag and reorder templates.'
+                }
+              >
+                {isTemplateReorderMode ? 'Reorder: ON' : 'Reorder: OFF'}
+              </button>
+
               {pipelineTemplates.map((template) => {
                 const isMatchedTemplate = matchingTemplateIds.has(template.id);
                 const isDragOverTarget =
+                  isTemplateReorderMode &&
                   dragOverTemplateId === template.id &&
                   draggingTemplateId !== template.id;
 
                 return (
                   <button
                     key={template.id}
-                    draggable
-                    onClick={() => applyPipelineTemplate(template.id)}
+                    draggable={isTemplateReorderMode}
+                    onClick={() => {
+                      if (isTemplateReorderMode) return;
+                      applyPipelineTemplate(template.id);
+                    }}
                     onContextMenu={(event) =>
                       handleTemplateContextDelete(
                         event,
@@ -458,6 +521,7 @@ export default function PipelineConfig({
                       )
                     }
                     onDragStart={() => {
+                      if (!isTemplateReorderMode) return;
                       setDraggingTemplateId(template.id);
                       setDragOverTemplateId(null);
                     }}
@@ -466,14 +530,22 @@ export default function PipelineConfig({
                     }
                     onDrop={(event) => handleTemplateDrop(event, template.id)}
                     onDragEnd={clearTemplateDragState}
-                    className={`text-xs sm:text-sm px-3 py-1.5 rounded-full border font-medium transition-colors cursor-grab active:cursor-grabbing ${
+                    className={`text-xs sm:text-sm px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                      isTemplateReorderMode
+                        ? 'cursor-grab active:cursor-grabbing'
+                        : 'cursor-pointer'
+                    } ${
                       isMatchedTemplate
                         ? 'border-purple-600 bg-purple-600 text-white hover:bg-purple-700'
                         : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50'
                     } ${isDragOverTarget ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                     title={`Apply template: ${template.name}${
                       isMatchedTemplate ? ' (matches current selection)' : ''
-                    }. Right-click to delete. Drag to reorder.`}
+                    }. Right-click to delete.${
+                      isTemplateReorderMode
+                        ? ' Drag to reorder is enabled.'
+                        : ' Drag to reorder is disabled (toggle Reorder ON to enable).'
+                    }`}
                   >
                     {template.name}
                   </button>
