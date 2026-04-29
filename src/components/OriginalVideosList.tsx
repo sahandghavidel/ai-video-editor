@@ -11010,19 +11010,19 @@ export default function OriginalVideosList({
 
           {/* Selected Video Info */}
           {selectedOriginalVideo.id && (
-            <div className='bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6'>
+            <div className='bg-blue-50 border border-blue-200 rounded-lg p-3 mb-5'>
               <div className='flex items-center justify-between'>
-                <div className='flex items-center gap-3'>
-                  <div className='w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center'>
-                    <Check className='w-6 h-6 text-white' />
+                <div className='flex items-center gap-2'>
+                  <div className='w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center'>
+                    <Check className='w-4 h-4 text-white' />
                   </div>
                   <div>
-                    <h3 className='font-semibold text-blue-900'>
+                    <h3 className='text-sm font-semibold text-blue-900'>
                       Selected Video: #{selectedOriginalVideo.id}
                     </h3>
                   </div>
                 </div>
-                <div className='flex items-center gap-2'>
+                <div className='flex items-center gap-1'>
                   <button
                     onClick={() =>
                       selectedOriginalVideo.id &&
@@ -11033,14 +11033,14 @@ export default function OriginalVideosList({
                       deletingScenesOnly === selectedOriginalVideo.id ||
                       !selectedOriginalVideo.id
                     }
-                    className='text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    className='text-red-600 hover:text-red-800 p-1.5 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                     title='Delete video and all related scenes'
                   >
                     {selectedOriginalVideo.id &&
                     deleting === selectedOriginalVideo.id ? (
-                      <Loader2 className='w-5 h-5 animate-spin' />
+                      <Loader2 className='w-4 h-4 animate-spin' />
                     ) : (
-                      <Trash2 className='w-5 h-5' />
+                      <Trash2 className='w-4 h-4' />
                     )}
                   </button>
                   <button
@@ -11053,14 +11053,14 @@ export default function OriginalVideosList({
                       deletingScenesOnly === selectedOriginalVideo.id ||
                       !selectedOriginalVideo.id
                     }
-                    className='text-orange-600 hover:text-orange-800 p-2 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    className='text-orange-600 hover:text-orange-800 p-1.5 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                     title='Delete only related scenes (keep video in Videos For Edit table 713)'
                   >
                     {selectedOriginalVideo.id &&
                     deletingScenesOnly === selectedOriginalVideo.id ? (
-                      <Loader2 className='w-5 h-5 animate-spin' />
+                      <Loader2 className='w-4 h-4 animate-spin' />
                     ) : (
-                      <Grid3x3 className='w-5 h-5' />
+                      <Grid3x3 className='w-4 h-4' />
                     )}
                   </button>
                   <button
@@ -11068,10 +11068,10 @@ export default function OriginalVideosList({
                       setSelectedOriginalVideo(null);
                       saveSettingsToLocalStorage();
                     }}
-                    className='text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-100 rounded-full transition-colors'
+                    className='text-blue-600 hover:text-blue-800 p-1.5 hover:bg-blue-100 rounded-full transition-colors'
                     title='Clear selection'
                   >
-                    <X className='w-5 h-5' />
+                    <X className='w-4 h-4' />
                   </button>
                 </div>
               </div>
@@ -11080,12 +11080,12 @@ export default function OriginalVideosList({
 
           {/* Bulk Status Change Controls */}
           {originalVideos.length > 0 && (
-            <div className='bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6'>
-              <div className='flex flex-wrap items-center gap-4'>
-                <div className='flex items-center gap-2'>
+            <div className='bg-gray-50 border border-gray-200 rounded-lg p-3 mb-5'>
+              <div className='flex flex-wrap items-center gap-3'>
+                <div className='flex items-center gap-1.5'>
                   <label
                     htmlFor='bulk-status'
-                    className='text-sm font-medium text-gray-700'
+                    className='text-xs font-medium text-gray-700'
                   >
                     Change Status for All Videos:
                   </label>
@@ -11093,7 +11093,7 @@ export default function OriginalVideosList({
                     id='bulk-status'
                     value={bulkStatusChange}
                     onChange={(e) => setBulkStatusChange(e.target.value)}
-                    className='px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                    className='px-2.5 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                     disabled={updatingBulkStatus}
                   >
                     <option value=''>Select Status</option>
@@ -11105,7 +11105,7 @@ export default function OriginalVideosList({
                 <button
                   onClick={handleBulkStatusChange}
                   disabled={!bulkStatusChange || updatingBulkStatus}
-                  className='px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2'
+                  className='px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5'
                 >
                   {updatingBulkStatus ? (
                     <>
@@ -11114,7 +11114,7 @@ export default function OriginalVideosList({
                     </>
                   ) : (
                     <>
-                      <Check className='w-4 h-4' />
+                      <Check className='w-3.5 h-3.5' />
                       Apply to All ({originalVideos.length} videos)
                     </>
                   )}
@@ -11125,7 +11125,7 @@ export default function OriginalVideosList({
                     setShowProcessingOnly((currentValue) => !currentValue)
                   }
                   aria-pressed={showProcessingOnly}
-                  className={`px-4 py-2 text-sm font-medium rounded-md border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer ${
                     showProcessingOnly
                       ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 focus:ring-blue-500'
                       : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100 focus:ring-gray-400'
