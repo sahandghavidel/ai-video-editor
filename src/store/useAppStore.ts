@@ -212,6 +212,7 @@ export interface PipelineConfig {
   generateTTS: boolean;
   sync: boolean;
   transcribeScenesAfterSync: boolean;
+  fixFlaggedAfterFixTTS: boolean;
   promptScenesAfterTranscribe: boolean;
 
   // Scene-level post-processing (batch ops)
@@ -640,6 +641,7 @@ const defaultPipelineConfig: PipelineConfig = {
   generateTTS: true,
   sync: true,
   transcribeScenesAfterSync: true,
+  fixFlaggedAfterFixTTS: true,
   promptScenesAfterTranscribe: true,
 
   generateSubtitles: false,

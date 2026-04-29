@@ -122,6 +122,11 @@ export default function PipelineConfig({
       color: 'text-purple-500',
     },
     {
+      key: 'fixFlaggedAfterFixTTS' as const,
+      label: 'Fix Flagged',
+      color: 'text-emerald-500',
+    },
+    {
       key: 'promptScenesAfterTranscribe' as const,
       label: 'Prompt Scenes',
       color: 'text-indigo-500',

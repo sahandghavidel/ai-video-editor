@@ -7499,7 +7499,7 @@ export default function OriginalVideosList({
   };
 
   // Run Full Pipeline:
-  // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Prompt Scenes (Processing)
+  // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Fix Flagged (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
   // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails -> Download ZIP All
   const handleRunFullPipeline = async () => {
@@ -8163,7 +8163,42 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Fix TTS After Sync (disabled in config)');
       }
 
-      // Step 9: Prompt Scenes (Processing only, after Fix TTS)
+      // Step 9: Fix Flagged (Processing only, after Fix TTS)
+      if (pipelineConfig.fixFlaggedAfterFixTTS) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Fixing flagged scenes for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Fixing flagged scenes for Processing videos`,
+        );
+
+        try {
+          await handleTranscribeFlaggedProcessingScenesAllVideos(false);
+          console.log(`✓ Step ${stepNumber} Complete: Fix Flagged finished`);
+
+          console.log('Refreshing data after Fix Flagged...');
+          await handleRefresh();
+          if (refreshScenesData) {
+            refreshScenesData();
+          }
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Fix Flagged error`,
+            error,
+          );
+          throw new Error(
+            `Fix Flagged failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Fix Flagged (disabled in config)');
+      }
+
+      // Step 10: Prompt Scenes (Processing only, after Fix Flagged)
       if (pipelineConfig.promptScenesAfterTranscribe) {
         stepNumber++;
         setPipelineStep(
@@ -9119,7 +9154,7 @@ export default function OriginalVideosList({
                   ? 'Scene handlers not ready. Please wait...'
                   : runningFullPipeline
                     ? pipelineStep
-                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync → Download ZIP All'
+                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Prompt Scenes → Download ZIP All'
               }
             />
           </div>
@@ -10980,7 +11015,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                             ? pipelineStep
-                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync → Download ZIP All'
+                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Prompt Scenes → Download ZIP All'
                       }
                     >
                       <Workflow
