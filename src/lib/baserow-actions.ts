@@ -16,7 +16,7 @@ async function getJWTToken(forceRefresh = false): Promise<string> {
 
   if (!baserowUrl || !email || !password) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -46,7 +46,7 @@ async function getJWTToken(forceRefresh = false): Promise<string> {
       const errorText = await response.text();
       console.error('Auth failed with response:', errorText);
       throw new Error(
-        `Authentication failed: ${response.status} ${response.statusText} - ${errorText}`
+        `Authentication failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -70,7 +70,7 @@ async function getJWTToken(forceRefresh = false): Promise<string> {
 // Helper function to make API requests with automatic token refresh
 async function makeAuthenticatedRequest(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
   async function requestWithToken(token: string): Promise<Response> {
     const response = await fetch(url, {
@@ -111,7 +111,7 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
 
   if (!baserowUrl || !tableId) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -134,7 +134,7 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
         const errorText = await response.text();
         console.error('Data fetch failed with response:', errorText);
         throw new Error(
-          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
         );
       }
 
@@ -150,7 +150,7 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
       console.log(
         `Fetched page ${page - 1}: ${results.length} rows, Total so far: ${
           allRows.length
-        }`
+        }`,
       );
     }
 
@@ -168,7 +168,7 @@ export async function getOriginalVideosData(): Promise<BaserowRow[]> {
 
   if (!baserowUrl) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -191,10 +191,10 @@ export async function getOriginalVideosData(): Promise<BaserowRow[]> {
         const errorText = await response.text();
         console.error(
           'Original videos data fetch failed with response:',
-          errorText
+          errorText,
         );
         throw new Error(
-          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
         );
       }
 
@@ -210,12 +210,12 @@ export async function getOriginalVideosData(): Promise<BaserowRow[]> {
       console.log(
         `Fetched original videos page ${page - 1}: ${
           results.length
-        } rows, Total so far: ${allRows.length}`
+        } rows, Total so far: ${allRows.length}`,
       );
     }
 
     console.log(
-      `Total original videos fetched from Baserow: ${allRows.length}`
+      `Total original videos fetched from Baserow: ${allRows.length}`,
     );
     return allRows;
   } catch (error) {
@@ -225,14 +225,14 @@ export async function getOriginalVideosData(): Promise<BaserowRow[]> {
 }
 
 export async function createBaserowRow(
-  rowData: Record<string, unknown>
+  rowData: Record<string, unknown>,
 ): Promise<BaserowRow> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const tableId = process.env.BASEROW_TABLE_ID;
 
   if (!baserowUrl || !tableId) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -243,13 +243,13 @@ export async function createBaserowRow(
         method: 'POST',
         body: JSON.stringify(rowData),
         cache: 'no-store',
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -262,14 +262,14 @@ export async function createBaserowRow(
 
 export async function updateBaserowRow(
   rowId: number,
-  rowData: Record<string, unknown>
+  rowData: Record<string, unknown>,
 ): Promise<BaserowRow> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const tableId = process.env.BASEROW_TABLE_ID;
 
   if (!baserowUrl || !tableId) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -280,13 +280,13 @@ export async function updateBaserowRow(
         method: 'PATCH',
         body: JSON.stringify(rowData),
         cache: 'no-store',
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -299,7 +299,7 @@ export async function updateBaserowRow(
 
 export async function updateSceneRow(
   sceneId: number,
-  rowData: Record<string, unknown>
+  rowData: Record<string, unknown>,
 ): Promise<BaserowRow> {
   // Call the API route instead of making direct Baserow calls
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
@@ -314,7 +314,7 @@ export async function updateSceneRow(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+      `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
     );
   }
 
@@ -327,7 +327,7 @@ export async function deleteBaserowRow(rowId: number): Promise<void> {
 
   if (!baserowUrl || !tableId) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -337,13 +337,13 @@ export async function deleteBaserowRow(rowId: number): Promise<void> {
       {
         method: 'DELETE',
         cache: 'no-store',
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
   } catch (error) {
@@ -358,7 +358,7 @@ export async function deleteOriginalVideoRow(rowId: number): Promise<void> {
 
   if (!baserowUrl) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -368,13 +368,13 @@ export async function deleteOriginalVideoRow(rowId: number): Promise<void> {
       {
         method: 'DELETE',
         cache: 'no-store',
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
   } catch (error) {
@@ -444,20 +444,20 @@ function extractUrlFromField(fieldValue: unknown): string | null {
 }
 
 export async function deleteRelatedScenes(
-  originalVideoId: number
+  originalVideoId: number,
 ): Promise<void> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const scenesTableId = process.env.BASEROW_TABLE_ID; // Table 714 for scenes
 
   if (!baserowUrl || !scenesTableId) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
   try {
     console.log(
-      `Starting to delete related scenes for video ${originalVideoId}`
+      `Starting to delete related scenes for video ${originalVideoId}`,
     );
 
     // Use API filtering to get only scenes that belong to this original video
@@ -478,7 +478,7 @@ export async function deleteRelatedScenes(
         const errorText = await response.text();
         console.error('Scenes fetch failed with response:', errorText);
         throw new Error(
-          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
         );
       }
 
@@ -496,13 +496,13 @@ export async function deleteRelatedScenes(
           page - 1
         } for scenes with video ID ${originalVideoId}: ${
           results.length
-        } scenes, Total so far: ${allRelatedScenes.length}`
+        } scenes, Total so far: ${allRelatedScenes.length}`,
       );
     }
 
     console.log(
       `Found ${allRelatedScenes.length} related scenes for video ${originalVideoId}:`,
-      allRelatedScenes.map((s) => s.id)
+      allRelatedScenes.map((s) => s.id),
     );
 
     // Delete each related scene sequentially to avoid rate limiting
@@ -515,7 +515,7 @@ export async function deleteRelatedScenes(
     for (const scene of allRelatedScenes) {
       try {
         console.log(
-          `Attempting to delete scene ${scene.id} and its MinIO files`
+          `Attempting to delete scene ${scene.id} and its MinIO files`,
         );
 
         // Delete all MinIO files associated with this scene
@@ -539,7 +539,7 @@ export async function deleteRelatedScenes(
 
         if (minioUrls.length > 0) {
           console.log(
-            `[SCENE ${scene.id}] Deleting ${minioUrls.length} MinIO files`
+            `[SCENE ${scene.id}] Deleting ${minioUrls.length} MinIO files`,
           );
 
           // Delete all MinIO files (don't wait for all, do sequentially)
@@ -557,7 +557,7 @@ export async function deleteRelatedScenes(
           {
             method: 'DELETE',
             cache: 'no-store',
-          }
+          },
         );
 
         if (!response.ok) {
@@ -567,17 +567,17 @@ export async function deleteRelatedScenes(
           } catch (textError) {
             console.error(
               `Failed to read error response text for scene ${scene.id}:`,
-              textError
+              textError,
             );
           }
           console.error(
-            `Failed to delete scene ${scene.id}: HTTP ${response.status} ${response.statusText} - ${errorText}`
+            `Failed to delete scene ${scene.id}: HTTP ${response.status} ${response.statusText} - ${errorText}`,
           );
           deleteResults.push({
             success: false,
             sceneId: scene.id,
             error: new Error(
-              `HTTP ${response.status} ${response.statusText}: ${errorText}`
+              `HTTP ${response.status} ${response.statusText}: ${errorText}`,
             ),
           });
         } else {
@@ -597,7 +597,7 @@ export async function deleteRelatedScenes(
     const failedDeletes = deleteResults.filter((result) => !result.success);
 
     console.log(
-      `Delete summary: ${successfulDeletes.length} successful, ${failedDeletes.length} failed`
+      `Delete summary: ${successfulDeletes.length} successful, ${failedDeletes.length} failed`,
     );
 
     if (failedDeletes.length > 0) {
@@ -606,10 +606,10 @@ export async function deleteRelatedScenes(
         failedDeletes.map((f) => ({
           sceneId: f.sceneId,
           error: f.error instanceof Error ? f.error.message : String(f.error),
-        }))
+        })),
       );
       throw new Error(
-        `Failed to delete ${failedDeletes.length} out of ${allRelatedScenes.length} scenes`
+        `Failed to delete ${failedDeletes.length} out of ${allRelatedScenes.length} scenes`,
       );
     }
   } catch (error) {
@@ -618,9 +618,27 @@ export async function deleteRelatedScenes(
   }
 }
 
+/**
+ * Delete all scenes related to an original video while keeping
+ * the original video row in table 713 intact.
+ */
+export async function deleteScenesForOriginalVideo(
+  originalVideoId: number,
+): Promise<void> {
+  console.log(
+    `[VIDEO ${originalVideoId}] Starting scene-only deletion (video row will be kept)`,
+  );
+
+  await deleteRelatedScenes(originalVideoId);
+
+  console.log(
+    `[VIDEO ${originalVideoId}] Scene-only deletion finished (video row kept in table 713)`,
+  );
+}
+
 export async function deleteOriginalVideoWithScenes(
   originalVideoId: number,
-  enablePrefixCleanup: boolean = true
+  enablePrefixCleanup: boolean = true,
 ): Promise<void> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const originalVideosTableId = '713';
@@ -629,10 +647,10 @@ export async function deleteOriginalVideoWithScenes(
     // STEP 1: Collect all scene MinIO URLs BEFORE deleting scenes
     // This ensures we capture all files that need deletion
     console.log(
-      `[VIDEO ${originalVideoId}] Collecting all MinIO files from scenes`
+      `[VIDEO ${originalVideoId}] Collecting all MinIO files from scenes`,
     );
     console.log(
-      `[VIDEO ${originalVideoId}] Prefix cleanup enabled: ${enablePrefixCleanup}`
+      `[VIDEO ${originalVideoId}] Prefix cleanup enabled: ${enablePrefixCleanup}`,
     );
 
     const sceneMinioUrls: string[] = [];
@@ -665,14 +683,14 @@ export async function deleteOriginalVideoWithScenes(
       } catch (error) {
         console.warn(
           `[VIDEO ${originalVideoId}] Error fetching scenes page ${page}:`,
-          error
+          error,
         );
         hasMore = false;
       }
     }
 
     console.log(
-      `[VIDEO ${originalVideoId}] Found ${allRelatedScenes.length} scenes to process`
+      `[VIDEO ${originalVideoId}] Found ${allRelatedScenes.length} scenes to process`,
     );
 
     // Collect all MinIO URLs from scenes
@@ -695,12 +713,12 @@ export async function deleteOriginalVideoWithScenes(
     }
 
     console.log(
-      `[VIDEO ${originalVideoId}] Collected ${sceneMinioUrls.length} MinIO URLs from scenes`
+      `[VIDEO ${originalVideoId}] Collected ${sceneMinioUrls.length} MinIO URLs from scenes`,
     );
 
     // STEP 2: Fetch the original video data to collect main video MinIO URLs
     console.log(
-      `[VIDEO ${originalVideoId}] Fetching video data for MinIO cleanup`
+      `[VIDEO ${originalVideoId}] Fetching video data for MinIO cleanup`,
     );
 
     let originalVideo: BaserowRow | null = null;
@@ -712,23 +730,23 @@ export async function deleteOriginalVideoWithScenes(
           {
             method: 'GET',
             cache: 'no-store',
-          }
+          },
         );
 
         if (response.ok) {
           originalVideo = await response.json();
           console.log(
-            `[VIDEO ${originalVideoId}] Successfully fetched video data`
+            `[VIDEO ${originalVideoId}] Successfully fetched video data`,
           );
         } else {
           console.warn(
-            `[VIDEO ${originalVideoId}] Failed to fetch video data: ${response.status}`
+            `[VIDEO ${originalVideoId}] Failed to fetch video data: ${response.status}`,
           );
         }
       } catch (fetchError) {
         console.warn(
           `[VIDEO ${originalVideoId}] Error fetching video data:`,
-          fetchError
+          fetchError,
         );
       }
     }
@@ -742,7 +760,7 @@ export async function deleteOriginalVideoWithScenes(
       if (mergedVideoUrl) {
         videoMinioUrls.push(mergedVideoUrl);
         console.log(
-          `[VIDEO ${originalVideoId}] Found Final Merged Video (6858)`
+          `[VIDEO ${originalVideoId}] Found Final Merged Video (6858)`,
         );
       }
 
@@ -758,7 +776,7 @@ export async function deleteOriginalVideoWithScenes(
       if (uploadedVideoUrl) {
         videoMinioUrls.push(uploadedVideoUrl);
         console.log(
-          `[VIDEO ${originalVideoId}] Found Video Uploaded URL (6881)`
+          `[VIDEO ${originalVideoId}] Found Video Uploaded URL (6881)`,
         );
       }
 
@@ -789,7 +807,7 @@ export async function deleteOriginalVideoWithScenes(
     const uniqueMinioUrls = [...new Set(allMinioUrls)]; // Remove duplicates
 
     console.log(
-      `[VIDEO ${originalVideoId}] Total MinIO files to delete: ${uniqueMinioUrls.length}`
+      `[VIDEO ${originalVideoId}] Total MinIO files to delete: ${uniqueMinioUrls.length}`,
     );
 
     if (uniqueMinioUrls.length > 0) {
@@ -809,26 +827,26 @@ export async function deleteOriginalVideoWithScenes(
           failCount++;
           console.warn(
             `[VIDEO ${originalVideoId}] Failed to delete ${url}:`,
-            error
+            error,
           );
         }
       }
 
       console.log(
-        `[VIDEO ${originalVideoId}] MinIO deletion complete: ${successCount} succeeded, ${failCount} failed`
+        `[VIDEO ${originalVideoId}] MinIO deletion complete: ${successCount} succeeded, ${failCount} failed`,
       );
     }
 
     // STEP 5: Extra safety - Delete by prefix to catch any orphaned files (if enabled)
     if (enablePrefixCleanup) {
       console.log(
-        `[VIDEO ${originalVideoId}] ========================================`
+        `[VIDEO ${originalVideoId}] ========================================`,
       );
       console.log(
-        `[VIDEO ${originalVideoId}] Starting PREFIX-based cleanup for: video_${originalVideoId}_`
+        `[VIDEO ${originalVideoId}] Starting PREFIX-based cleanup for: video_${originalVideoId}_`,
       );
       console.log(
-        `[VIDEO ${originalVideoId}] ========================================`
+        `[VIDEO ${originalVideoId}] ========================================`,
       );
 
       try {
@@ -838,27 +856,27 @@ export async function deleteOriginalVideoWithScenes(
 
         // List all files with the prefix (same as individual deletion - direct to MinIO)
         const listUrl = `${minioHost}/${bucket}/?prefix=${encodeURIComponent(
-          prefix
+          prefix,
         )}&max-keys=1000`;
 
         console.log(
-          `[VIDEO ${originalVideoId}] Listing files from MinIO: ${listUrl}`
+          `[VIDEO ${originalVideoId}] Listing files from MinIO: ${listUrl}`,
         );
 
         const listResponse = await fetch(listUrl, { method: 'GET' });
 
         console.log(
-          `[VIDEO ${originalVideoId}] List response status: ${listResponse.status}`
+          `[VIDEO ${originalVideoId}] List response status: ${listResponse.status}`,
         );
 
         if (!listResponse.ok) {
           console.warn(
-            `[VIDEO ${originalVideoId}] ⚠️  Failed to list files: ${listResponse.status}`
+            `[VIDEO ${originalVideoId}] ⚠️  Failed to list files: ${listResponse.status}`,
           );
         } else {
           const xmlText = await listResponse.text();
           console.log(
-            `[VIDEO ${originalVideoId}] Received XML (${xmlText.length} bytes)`
+            `[VIDEO ${originalVideoId}] Received XML (${xmlText.length} bytes)`,
           );
 
           // Parse XML to extract file keys
@@ -870,7 +888,7 @@ export async function deleteOriginalVideoWithScenes(
           }
 
           console.log(
-            `[VIDEO ${originalVideoId}] Found ${fileKeys.length} files with prefix`
+            `[VIDEO ${originalVideoId}] Found ${fileKeys.length} files with prefix`,
           );
 
           if (fileKeys.length > 0) {
@@ -897,33 +915,33 @@ export async function deleteOriginalVideoWithScenes(
                 prefixFailCount++;
                 console.warn(
                   `[VIDEO ${originalVideoId}] Failed to delete ${key}:`,
-                  error
+                  error,
                 );
               }
             }
 
             console.log(
-              `[VIDEO ${originalVideoId}] ✅ Prefix cleanup complete: ${prefixSuccessCount} deleted, ${prefixFailCount} failed`
+              `[VIDEO ${originalVideoId}] ✅ Prefix cleanup complete: ${prefixSuccessCount} deleted, ${prefixFailCount} failed`,
             );
           } else {
             console.log(
-              `[VIDEO ${originalVideoId}] No additional files found with prefix`
+              `[VIDEO ${originalVideoId}] No additional files found with prefix`,
             );
           }
         }
       } catch (prefixError) {
         console.error(
           `[VIDEO ${originalVideoId}] ❌ EXCEPTION during prefix cleanup:`,
-          prefixError
+          prefixError,
         );
       }
 
       console.log(
-        `[VIDEO ${originalVideoId}] ======================================== END PREFIX CLEANUP`
+        `[VIDEO ${originalVideoId}] ======================================== END PREFIX CLEANUP`,
       );
     } else {
       console.log(
-        `[VIDEO ${originalVideoId}] Prefix cleanup is disabled - skipping STEP 5`
+        `[VIDEO ${originalVideoId}] Prefix cleanup is disabled - skipping STEP 5`,
       );
     }
 
@@ -934,7 +952,7 @@ export async function deleteOriginalVideoWithScenes(
     await deleteOriginalVideoRow(originalVideoId);
 
     console.log(
-      `Successfully deleted original video ${originalVideoId} and all related data from Baserow and MinIO (${uniqueMinioUrls.length} files deleted via fields + prefix cleanup)`
+      `Successfully deleted original video ${originalVideoId} and all related data from Baserow and MinIO (${uniqueMinioUrls.length} files deleted via fields + prefix cleanup)`,
     );
   } catch (error) {
     console.error('Error deleting original video with scenes:', error);
@@ -943,14 +961,14 @@ export async function deleteOriginalVideoWithScenes(
 }
 
 export async function createOriginalVideoRow(
-  rowData: Record<string, unknown>
+  rowData: Record<string, unknown>,
 ): Promise<BaserowRow> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const originalVideosTableId = '713'; // Table 713 for original videos
 
   if (!baserowUrl) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -961,13 +979,13 @@ export async function createOriginalVideoRow(
         method: 'POST',
         body: JSON.stringify(rowData),
         cache: 'no-store',
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -984,7 +1002,7 @@ export async function getOriginalVideoRow(rowId: number): Promise<BaserowRow> {
 
   if (!baserowUrl) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -994,13 +1012,13 @@ export async function getOriginalVideoRow(rowId: number): Promise<BaserowRow> {
       {
         method: 'GET',
         cache: 'no-store',
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -1013,14 +1031,14 @@ export async function getOriginalVideoRow(rowId: number): Promise<BaserowRow> {
 
 export async function updateOriginalVideoRow(
   rowId: number,
-  rowData: Record<string, unknown>
+  rowData: Record<string, unknown>,
 ): Promise<void> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const originalVideosTableId = '713'; // Table 713 for original videos
 
   if (!baserowUrl) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -1031,13 +1049,13 @@ export async function updateOriginalVideoRow(
         method: 'PATCH',
         body: JSON.stringify(rowData),
         cache: 'no-store',
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -1049,14 +1067,14 @@ export async function updateOriginalVideoRow(
 }
 
 export async function getSceneById(
-  sceneId: number
+  sceneId: number,
 ): Promise<BaserowRow | null> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const scenesTableId = '714'; // Scenes table
 
   if (!baserowUrl) {
     throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.'
+      'Missing Baserow configuration. Please check your environment variables.',
     );
   }
 
@@ -1075,7 +1093,7 @@ export async function getSceneById(
       const errorText = await response.text();
       console.error('Scene fetch failed with response:', errorText);
       throw new Error(
-        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`
+        `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 

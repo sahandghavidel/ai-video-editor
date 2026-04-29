@@ -13,6 +13,7 @@ import {
   getOriginalVideosData,
   updateOriginalVideoRow,
   deleteOriginalVideoWithScenes,
+  deleteScenesForOriginalVideo,
   getBaserowData,
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
@@ -237,6 +238,9 @@ export default function OriginalVideosList({
   >(null);
   const [reordering, setReordering] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [deletingScenesOnly, setDeletingScenesOnly] = useState<number | null>(
+    null,
+  );
   const [clearingFinalMergedVideoId, setClearingFinalMergedVideoId] = useState<
     number | null
   >(null);
@@ -1733,6 +1737,45 @@ export default function OriginalVideosList({
       setDeleting(null);
       // add sound effect
       playSuccessSound();
+    }
+  };
+
+  // Delete scenes only function (keep original video row in table 713)
+  const handleDeleteVideoScenesOnly = async (videoId: number) => {
+    setDeletingScenesOnly(videoId);
+
+    let success = false;
+
+    try {
+      setError(null);
+
+      await deleteScenesForOriginalVideo(videoId);
+
+      // Refresh scenes in global store so SceneCard/BatchOperations update.
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
+
+      // Refresh original videos list so scene links/counts update.
+      await fetchOriginalVideos(true);
+
+      success = true;
+      console.log(
+        `Successfully deleted scenes for video ${videoId} and kept video row in table 713`,
+      );
+    } catch (error) {
+      console.error('Failed to delete scenes for video:', error);
+      setError(
+        `Failed to delete scenes for video ${videoId}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+      playErrorSound();
+    } finally {
+      setDeletingScenesOnly(null);
+      if (success) {
+        playSuccessSound();
+      }
     }
   };
 
@@ -11003,6 +11046,7 @@ export default function OriginalVideosList({
                     }
                     disabled={
                       deleting === selectedOriginalVideo.id ||
+                      deletingScenesOnly === selectedOriginalVideo.id ||
                       !selectedOriginalVideo.id
                     }
                     className='text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
@@ -11013,6 +11057,26 @@ export default function OriginalVideosList({
                       <Loader2 className='w-5 h-5 animate-spin' />
                     ) : (
                       <Trash2 className='w-5 h-5' />
+                    )}
+                  </button>
+                  <button
+                    onClick={() =>
+                      selectedOriginalVideo.id &&
+                      handleDeleteVideoScenesOnly(selectedOriginalVideo.id)
+                    }
+                    disabled={
+                      deleting === selectedOriginalVideo.id ||
+                      deletingScenesOnly === selectedOriginalVideo.id ||
+                      !selectedOriginalVideo.id
+                    }
+                    className='text-orange-600 hover:text-orange-800 p-2 hover:bg-orange-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    title='Delete only related scenes (keep video in Videos For Edit table 713)'
+                  >
+                    {selectedOriginalVideo.id &&
+                    deletingScenesOnly === selectedOriginalVideo.id ? (
+                      <Loader2 className='w-5 h-5 animate-spin' />
+                    ) : (
+                      <Grid3x3 className='w-5 h-5' />
                     )}
                   </button>
                   <button
