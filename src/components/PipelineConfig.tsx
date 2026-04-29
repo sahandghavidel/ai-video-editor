@@ -2,7 +2,7 @@
 
 import { useAppStore } from '@/store/useAppStore';
 import { CheckCircle2, Circle, Settings2, Workflow } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 interface PipelineConfigProps {
   onRunFullPipeline?: () => void;
@@ -238,6 +238,20 @@ export default function PipelineConfig({
   ).length;
   const enabledStepsCount = activeSteps.length + enabledCombinePassCount;
 
+  const matchingTemplateIds = useMemo(() => {
+    const configKeys = Object.keys(pipelineConfig) as Array<
+      keyof typeof pipelineConfig
+    >;
+
+    const matchedIds = pipelineTemplates
+      .filter((template) =>
+        configKeys.every((key) => template.config[key] === pipelineConfig[key]),
+      )
+      .map((template) => template.id);
+
+    return new Set(matchedIds);
+  }, [pipelineConfig, pipelineTemplates]);
+
   return (
     <div className='pipeline-panel-flat bg-white rounded-lg border border-gray-200 overflow-hidden'>
       {/* Header */}
@@ -279,12 +293,51 @@ export default function PipelineConfig({
         </div>
       </button>
 
+      {!isExpanded && (
+        <div className='px-6 pb-3'>
+          <div className='flex items-center justify-end gap-2 overflow-x-auto'>
+            <button
+              onClick={onRunFullPipeline}
+              disabled={isRunFullPipelineDisabled || !onRunFullPipeline}
+              className='inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-xs font-semibold transition-colors disabled:cursor-not-allowed whitespace-nowrap'
+              title={runFullPipelineTitle}
+            >
+              <Workflow
+                className={`w-3.5 h-3.5 ${isRunningFullPipeline ? 'animate-pulse' : ''}`}
+              />
+              <span className='truncate'>Full Pipeline</span>
+            </button>
+
+            {pipelineTemplates.map((template) => {
+              const isMatchedTemplate = matchingTemplateIds.has(template.id);
+
+              return (
+                <button
+                  key={template.id}
+                  onClick={() => applyPipelineTemplate(template.id)}
+                  className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors whitespace-nowrap ${
+                    isMatchedTemplate
+                      ? 'border-purple-600 bg-purple-600 text-white hover:bg-purple-700'
+                      : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50'
+                  }`}
+                  title={`Apply template: ${template.name}${
+                    isMatchedTemplate ? ' (matches current selection)' : ''
+                  }`}
+                >
+                  {template.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Expanded Content */}
       {isExpanded && (
         <div className='px-5 py-3 bg-gray-50 border-t border-gray-200'>
           <div className='flex flex-col gap-3 mb-4 lg:flex-row lg:items-center lg:justify-between'>
             <p className='text-xs text-gray-600'>Select Pipelines</p>
-            <div className='flex flex-wrap items-center gap-2'>
+            <div className='flex flex-wrap items-center justify-end gap-2 lg:ml-auto'>
               <button
                 onClick={onRunFullPipeline}
                 disabled={isRunFullPipelineDisabled || !onRunFullPipeline}
@@ -304,16 +357,26 @@ export default function PipelineConfig({
                 Save Template
               </button>
 
-              {pipelineTemplates.map((template) => (
-                <button
-                  key={template.id}
-                  onClick={() => applyPipelineTemplate(template.id)}
-                  className='text-xs sm:text-sm px-3 py-1.5 rounded-full border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 font-medium transition-colors'
-                  title={`Apply template: ${template.name}`}
-                >
-                  {template.name}
-                </button>
-              ))}
+              {pipelineTemplates.map((template) => {
+                const isMatchedTemplate = matchingTemplateIds.has(template.id);
+
+                return (
+                  <button
+                    key={template.id}
+                    onClick={() => applyPipelineTemplate(template.id)}
+                    className={`text-xs sm:text-sm px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                      isMatchedTemplate
+                        ? 'border-purple-600 bg-purple-600 text-white hover:bg-purple-700'
+                        : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50'
+                    }`}
+                    title={`Apply template: ${template.name}${
+                      isMatchedTemplate ? ' (matches current selection)' : ''
+                    }`}
+                  >
+                    {template.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
