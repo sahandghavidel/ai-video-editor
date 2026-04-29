@@ -400,7 +400,6 @@ export default function OriginalVideosList({
     setSelectedOriginalVideo,
     saveSettingsToLocalStorage,
     loadSettingsFromLocalStorage,
-    getFilteredData,
     mergedVideo,
     clearMergedVideo,
     transcriptionSettings,
@@ -11021,17 +11020,6 @@ export default function OriginalVideosList({
                     <h3 className='font-semibold text-blue-900'>
                       Selected Video: #{selectedOriginalVideo.id}
                     </h3>
-                    <p className='text-blue-700 text-sm'>
-                      Status: {selectedOriginalVideo.status} |
-                      {(() => {
-                        const filteredScenes = getFilteredData();
-                        return filteredScenes.length > 0
-                          ? ` ${filteredScenes.length} scene${
-                              filteredScenes.length !== 1 ? 's' : ''
-                            } available for editing`
-                          : ' No scenes found for this video';
-                      })()}
-                    </p>
                   </div>
                 </div>
                 <div className='flex items-center gap-2'>
