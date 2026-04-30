@@ -226,6 +226,7 @@ export interface PipelineConfig {
   mergeScenes: boolean;
   convertFinalToCFR: boolean;
   transcribeFinalAll: boolean;
+  createEnSrt: boolean;
   generateYouTubeDescriptions: boolean;
   generateYouTubeKeywords: boolean;
   generateYouTubeTitles: boolean;
@@ -659,6 +660,7 @@ const defaultPipelineConfig: PipelineConfig = {
   mergeScenes: false,
   convertFinalToCFR: false,
   transcribeFinalAll: false,
+  createEnSrt: false,
   generateYouTubeDescriptions: false,
   generateYouTubeKeywords: false,
   generateYouTubeTitles: false,

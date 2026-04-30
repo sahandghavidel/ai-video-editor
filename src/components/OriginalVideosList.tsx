@@ -250,6 +250,10 @@ export default function OriginalVideosList({
   const [transcribingFinalVideoId, setTranscribingFinalVideoId] = useState<
     number | null
   >(null);
+  const [creatingEnSrtAll, setCreatingEnSrtAll] = useState(false);
+  const [creatingEnSrtVideoId, setCreatingEnSrtVideoId] = useState<
+    number | null
+  >(null);
   const [
     generatingYouTubeDescriptionsAll,
     setGeneratingYouTubeDescriptionsAll,
@@ -2504,6 +2508,113 @@ export default function OriginalVideosList({
     } finally {
       setTranscribingFinalVideoId(null);
       setTranscribingFinalAll(false);
+    }
+  };
+
+  // Create En Srt for all Processing videos:
+  // Step 1: calculate Final Video Duration (7107) for all scenes
+  // Step 2: generate SRT from duration + sentence (6890), upload, save URL to field_6872
+  const handleCreateEnSrtAll = async (playSound = true) => {
+    if (creatingEnSrtAll) return;
+
+    try {
+      setCreatingEnSrtAll(true);
+      setCreatingEnSrtVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+      const freshScenesData = await getBaserowData();
+
+      const processingVideos = freshVideosData.filter((video) => {
+        const status = extractFieldValue(video.field_6864);
+        return status === 'Processing';
+      });
+
+      if (processingVideos.length === 0) {
+        console.log('No Processing videos found for Create En Srt');
+        return;
+      }
+
+      console.log(
+        `Create En Srt: processing ${processingVideos.length} videos...`,
+      );
+
+      for (const video of processingVideos) {
+        setCreatingEnSrtVideoId(video.id);
+
+        // Gather scene IDs for this video
+        const videoScenes = freshScenesData.filter((scene) => {
+          const linkedVideoId = extractLinkedVideoIdFromField(
+            scene['field_6889'],
+          );
+          return linkedVideoId === video.id;
+        });
+
+        const sceneIds = videoScenes
+          .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+          .map((scene) => Number(scene.id))
+          .filter((id) => Number.isFinite(id) && id > 0);
+
+        if (sceneIds.length === 0) {
+          console.log(
+            `Video #${video.id}: no scenes found, skipping En Srt creation.`,
+          );
+          continue;
+        }
+
+        try {
+          // Step 1: calculate durations
+          const durRes = await fetch('/api/calculate-final-video-durations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneIds }),
+          });
+
+          if (!durRes.ok) {
+            const t = await durRes.text().catch(() => '');
+            throw new Error(
+              `Duration calculation failed for video #${video.id}: ${durRes.status} ${t}`,
+            );
+          }
+
+          // Step 2: generate SRT and save URL
+          const srtRes = await fetch('/api/generate-duration-srt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoId: video.id }),
+          });
+
+          if (!srtRes.ok) {
+            const t = await srtRes.text().catch(() => '');
+            throw new Error(
+              `SRT generation failed for video #${video.id}: ${srtRes.status} ${t}`,
+            );
+          }
+
+          console.log(`Create En Srt complete for video #${video.id}`);
+        } catch (error) {
+          console.error(`Create En Srt failed for video #${video.id}:`, error);
+        }
+
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        await playSuccessAndNotifyBatchCompletion('Create En Srt');
+      }
+    } catch (error) {
+      console.error('Create En Srt all failed:', error);
+      playErrorSound();
+      setError(
+        `Failed to create En Srt for all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setCreatingEnSrtVideoId(null);
+      setCreatingEnSrtAll(false);
     }
   };
 
@@ -8442,6 +8553,37 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Transcribe Final All (disabled)');
       }
 
+      if (pipelineConfig.createEnSrt) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Creating En Srt (durations + SRT) for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Creating En Srt for Processing videos`,
+        );
+        try {
+          await handleCreateEnSrtAll(false);
+          console.log(`✓ Step ${stepNumber} Complete: Create En Srt finished`);
+
+          console.log('Refreshing data after Create En Srt...');
+          await handleRefresh();
+          if (refreshScenesData) refreshScenesData();
+          console.log('Data refreshed successfully');
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Create En Srt error`,
+            error,
+          );
+          throw new Error(
+            `Create En Srt failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Create En Srt (disabled)');
+      }
+
       // YouTube metadata tail steps (Processing videos only)
       // Required order: Description -> Keywords -> Titles -> Timestamps -> Thumbnails
       if (pipelineConfig.generateYouTubeDescriptions) {
@@ -9395,6 +9537,38 @@ export default function OriginalVideosList({
                             ? `#${transcribingFinalVideoId}...`
                             : 'Processing...'
                           : 'Transcribe Final All'}
+                      </span>
+                    </button>
+
+                    {/* Create En Srt All Button */}
+                    <button
+                      onClick={() => handleCreateEnSrtAll()}
+                      disabled={
+                        creatingEnSrtAll ||
+                        creatingEnSrtVideoId !== null ||
+                        transcribingFinalAll ||
+                        transcribingFinalVideoId !== null ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-lime-600 hover:bg-lime-700 disabled:bg-lime-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        creatingEnSrtAll
+                          ? 'Creating En Srt: calculating durations then generating SRT for all Processing videos...'
+                          : 'Create En Srt: calculate Final Video Duration then generate SRT and save URL to field_6872'
+                      }
+                    >
+                      <Clock
+                        className={`w-4 h-4 ${
+                          creatingEnSrtAll ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {creatingEnSrtAll
+                          ? creatingEnSrtVideoId !== null
+                            ? `#${creatingEnSrtVideoId}...`
+                            : 'Processing...'
+                          : 'Create En Srt'}
                       </span>
                     </button>
 

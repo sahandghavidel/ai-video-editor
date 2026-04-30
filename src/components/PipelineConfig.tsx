@@ -252,6 +252,11 @@ export default function PipelineConfig({
       color: 'text-purple-500',
     },
     {
+      key: 'createEnSrt' as const,
+      label: 'Create En Srt',
+      color: 'text-lime-600',
+    },
+    {
       key: 'generateYouTubeDescriptions' as const,
       label: 'Description',
       color: 'text-indigo-500',
