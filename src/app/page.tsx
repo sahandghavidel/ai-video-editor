@@ -18,7 +18,7 @@ import SceneVideoGenerationSettings from '@/components/SceneVideoGenerationSetti
 import OriginalVideosList from '@/components/OriginalVideosList';
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { AlertCircle, Video, Loader2, RefreshCw, Settings } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Settings } from 'lucide-react';
 
 type GlobalSettingsSectionKey =
   | 'modelSelection'
@@ -53,14 +53,8 @@ const defaultGlobalSettingsSectionsExpanded: Record<
 };
 
 export default function Home() {
-  const {
-    data,
-    error,
-    setData,
-    setError,
-    getFilteredData,
-    selectedOriginalVideo,
-  } = useAppStore();
+  const { error, setData, setError, getFilteredData, selectedOriginalVideo } =
+    useAppStore();
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isGlobalSettingsExpanded, setIsGlobalSettingsExpanded] =
@@ -514,22 +508,6 @@ export default function Home() {
               refreshScenesData={refreshData}
             />
 
-            {/* No Video Selected Message */}
-            {!initialLoading &&
-              data.length > 0 &&
-              !selectedOriginalVideo.id && (
-                <div className='bg-amber-50 border border-amber-200 rounded-xl p-6 text-center'>
-                  <Video className='w-12 h-12 text-amber-500 mx-auto mb-4' />
-                  <h3 className='text-lg font-semibold text-amber-900 mb-2'>
-                    No Original Video Selected
-                  </h3>
-                  <p className='text-amber-700'>
-                    Please select an original video from the table above to view
-                    and edit its scenes.
-                  </p>
-                </div>
-              )}
-
             {/* Batch Operations - Only show when data is available and handlers are ready */}
             {!initialLoading && displayData.length > 0 && sceneHandlers && (
               <BatchOperations
@@ -547,7 +525,7 @@ export default function Home() {
             )}
 
             {/* Scene Cards - Only show when a video is selected */}
-            {selectedOriginalVideo.id ? (
+            {selectedOriginalVideo.id && (
               <SceneCard
                 data={displayData}
                 refreshData={refreshData}
@@ -555,22 +533,6 @@ export default function Home() {
                 onDataUpdate={handleDataUpdate}
                 onHandlersReady={handleSceneHandlersReady}
               />
-            ) : (
-              !initialLoading &&
-              data.length > 0 && (
-                <div className='bg-gray-50 border border-gray-200 rounded-xl p-8 text-center'>
-                  <div className='text-gray-400 mb-4'>
-                    <Video className='w-16 h-16 mx-auto' />
-                  </div>
-                  <h3 className='text-xl font-semibold text-gray-700 mb-2'>
-                    Ready to Edit Scenes
-                  </h3>
-                  <p className='text-gray-600'>
-                    Select an original video from the table above to start
-                    editing its scenes.
-                  </p>
-                </div>
-              )
             )}
           </div>
         )}
