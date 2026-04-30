@@ -2301,7 +2301,11 @@ export default function SceneCard({
       sceneId: number,
       text: string,
       sceneData?: unknown,
-      opts?: { seedOverride?: number; throwOnError?: boolean },
+      opts?: {
+        seedOverride?: number;
+        aggressiveEdgeTrim?: boolean;
+        throwOnError?: boolean;
+      },
     ) => {
       try {
         setProducingTTS(sceneId);
@@ -2364,6 +2368,7 @@ export default function SceneCard({
             sceneId,
             videoId: videoId || undefined,
             referenceAudioFilename: voiceOverride || undefined,
+            ...(opts?.aggressiveEdgeTrim ? { aggressiveEdgeTrim: true } : {}),
             ttsSettings: ttsPayloadSettings,
           }),
         });
@@ -6022,11 +6027,19 @@ export default function SceneCard({
                           ? crypto.getRandomValues(new Uint32Array(1))[0]
                           : Math.floor(Math.random() * 2 ** 32);
 
+                      const provider =
+                        useAppStore.getState().ttsSettings.provider;
+
                       void handleTTSProduce(
                         scene.id,
                         String(scene['field_6890'] || scene.field_6890 || ''),
                         scene,
-                        { seedOverride: Number(randomSeed) },
+                        {
+                          seedOverride: Number(randomSeed),
+                          ...(provider === 'omnivoice'
+                            ? { aggressiveEdgeTrim: true }
+                            : {}),
+                        },
                       );
                     }}
                     disabled={
