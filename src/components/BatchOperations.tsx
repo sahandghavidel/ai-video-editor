@@ -150,10 +150,8 @@ export default function BatchOperations({
   >(null);
   const [calculatingFinalVideoDurations, setCalculatingFinalVideoDurations] =
     useState(false);
-  const [calculatingDurationSceneId, setCalculatingDurationSceneId] = useState<
-    number | null
-  >(null);
   const [generatingDurationSrt, setGeneratingDurationSrt] = useState(false);
+  const [creatingEnSrt, setCreatingEnSrt] = useState(false);
 
   const [generatingAllSceneImages, setGeneratingAllSceneImages] =
     useState(false);
@@ -2068,9 +2066,12 @@ export default function BatchOperations({
     }
   };
 
-  const onCalculateFinalVideoDurations = async () => {
-    if (calculatingFinalVideoDurations) return;
-    if (!selectedOriginalVideo.id) return;
+  const calculateFinalVideoDurationsBatch = async (
+    options: { refreshOnDone?: boolean; playSoundOnDone?: boolean } = {},
+  ): Promise<boolean> => {
+    const { refreshOnDone = true, playSoundOnDone = true } = options;
+    if (calculatingFinalVideoDurations) return false;
+    if (!selectedOriginalVideo.id) return false;
 
     const sceneIds = [...data]
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
@@ -2078,12 +2079,13 @@ export default function BatchOperations({
       .filter((id) => Number.isFinite(id) && id > 0);
 
     if (sceneIds.length === 0) {
-      playBatchDoneSound();
-      return;
+      if (playSoundOnDone) {
+        playBatchDoneSound();
+      }
+      return true;
     }
 
     setCalculatingFinalVideoDurations(true);
-    setCalculatingDurationSceneId(null);
 
     try {
       const res = await fetch('/api/calculate-final-video-durations', {
@@ -2122,21 +2124,29 @@ export default function BatchOperations({
         });
       }
 
-      onRefresh?.();
-      playBatchDoneSound();
+      if (refreshOnDone) {
+        onRefresh?.();
+      }
+      if (playSoundOnDone) {
+        playBatchDoneSound();
+      }
+      return true;
     } catch (error) {
       console.error('Final duration batch failed:', error);
+      return false;
     } finally {
       setCalculatingFinalVideoDurations(false);
-      setCalculatingDurationSceneId(null);
     }
   };
 
-  const onGenerateDurationSrt = async () => {
-    if (generatingDurationSrt) return;
+  const generateDurationSrtBatch = async (
+    options: { refreshOnDone?: boolean; playSoundOnDone?: boolean } = {},
+  ): Promise<boolean> => {
+    const { refreshOnDone = true, playSoundOnDone = true } = options;
+    if (generatingDurationSrt) return false;
 
     const selectedVideoId = Number(selectedOriginalVideo.id);
-    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) return;
+    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) return false;
 
     setGeneratingDurationSrt(true);
     try {
@@ -2172,12 +2182,49 @@ export default function BatchOperations({
         skippedNoSentence: Number(payload?.skippedNoSentence ?? 0),
       });
 
-      onRefresh?.();
-      playBatchDoneSound();
+      if (refreshOnDone) {
+        onRefresh?.();
+      }
+      if (playSoundOnDone) {
+        playBatchDoneSound();
+      }
+      return true;
     } catch (error) {
       console.error('Generate Duration SRT failed:', error);
+      return false;
     } finally {
       setGeneratingDurationSrt(false);
+    }
+  };
+
+  const onCreateEnSrt = async () => {
+    if (creatingEnSrt) return;
+    if (!selectedOriginalVideo.id) return;
+
+    setCreatingEnSrt(true);
+    try {
+      const durationOk = await calculateFinalVideoDurationsBatch({
+        refreshOnDone: false,
+        playSoundOnDone: false,
+      });
+
+      if (!durationOk) {
+        return;
+      }
+
+      const srtOk = await generateDurationSrtBatch({
+        refreshOnDone: false,
+        playSoundOnDone: false,
+      });
+
+      if (!srtOk) {
+        return;
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setCreatingEnSrt(false);
     }
   };
 
@@ -3193,56 +3240,46 @@ export default function BatchOperations({
                   </button>
 
                   <button
-                    onClick={onCalculateFinalVideoDurations}
+                    onClick={onCreateEnSrt}
                     disabled={
                       !selectedOriginalVideo.id ||
-                      calculatingFinalVideoDurations
-                    }
-                    className='w-full h-10 mt-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                    title={
-                      !selectedOriginalVideo.id
-                        ? 'Select an original video first'
-                        : calculatingFinalVideoDurations
-                          ? calculatingDurationSceneId !== null
-                            ? `Calculating duration for scene ${calculatingDurationSceneId}`
-                            : 'Calculating final video durations...'
-                          : 'Calculate Final Video Duration (7107) from Videos (6886) for all scenes with a final video URL'
-                    }
-                  >
-                    {calculatingFinalVideoDurations && (
-                      <Loader2 className='w-4 h-4 animate-spin' />
-                    )}
-                    {!calculatingFinalVideoDurations && (
-                      <Clock className='w-4 h-4' />
-                    )}
-                    <span className='font-medium'>
-                      {calculatingFinalVideoDurations
-                        ? calculatingDurationSceneId !== null
-                          ? `Scene #${calculatingDurationSceneId}`
-                          : 'Processing...'
-                        : 'Final Duration'}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={onGenerateDurationSrt}
-                    disabled={
-                      !selectedOriginalVideo.id || generatingDurationSrt
+                      creatingEnSrt ||
+                      calculatingFinalVideoDurations ||
+                      generatingDurationSrt
                     }
                     className='w-full h-10 mt-2 bg-lime-600 hover:bg-lime-700 disabled:bg-lime-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                     title={
                       !selectedOriginalVideo.id
                         ? 'Select an original video first'
-                        : generatingDurationSrt
-                          ? 'Generating SRT from scene durations and sentences...'
-                          : 'Generate SRT from scene duration (7107) + sentence (6890), upload, then save URL to Final Video Captions URL (6872)'
+                        : creatingEnSrt ||
+                            calculatingFinalVideoDurations ||
+                            generatingDurationSrt
+                          ? calculatingFinalVideoDurations
+                            ? 'Step 1/2: Calculating final durations...'
+                            : generatingDurationSrt
+                              ? 'Step 2/2: Generating and saving SRT...'
+                              : 'Creating EN SRT...'
+                          : 'Create En Srt: calculate Final Video Duration (7107) first, then generate SRT and save URL to Final Video Captions URL (6872)'
                     }
                   >
-                    {generatingDurationSrt && (
+                    {(creatingEnSrt ||
+                      calculatingFinalVideoDurations ||
+                      generatingDurationSrt) && (
                       <Loader2 className='w-4 h-4 animate-spin' />
                     )}
+                    {!(
+                      creatingEnSrt ||
+                      calculatingFinalVideoDurations ||
+                      generatingDurationSrt
+                    ) && <Clock className='w-4 h-4' />}
                     <span className='font-medium'>
-                      {generatingDurationSrt ? 'Processing...' : 'Create SRT'}
+                      {calculatingFinalVideoDurations
+                        ? 'Final Duration...'
+                        : generatingDurationSrt
+                          ? 'Create SRT...'
+                          : creatingEnSrt
+                            ? 'Processing...'
+                            : 'Create En Srt'}
                     </span>
                   </button>
                 </div>
