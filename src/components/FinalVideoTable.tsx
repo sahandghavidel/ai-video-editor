@@ -3,6 +3,7 @@ import { Video, ExternalLink, Check, Mic, Sparkles, Clock } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { playSuccessSound } from '@/utils/soundManager';
 import { sendTelegramNotification } from '@/utils/notifications/telegram';
+import { extractTextFromCaptionFileContent } from '@/utils/captions-parser';
 
 interface VideoData {
   finalVideoUrl?: string;
@@ -12,11 +13,6 @@ interface VideoData {
   title?: string;
   description?: string;
   tags?: string;
-  [key: string]: unknown;
-}
-
-interface WordObject {
-  word: string;
   [key: string]: unknown;
 }
 
@@ -306,14 +302,8 @@ const FinalVideoTable: React.FC = () => {
         throw new Error('Failed to fetch transcription');
       }
 
-      const transcriptionData = await transcriptionResponse.json();
-
-      // Extract text from word timestamps
-      const transcriptionText = transcriptionData
-        .map((word: WordObject) => word.word)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const captionsRaw = await transcriptionResponse.text();
+      const transcriptionText = extractTextFromCaptionFileContent(captionsRaw);
 
       console.log(
         'Generating title for transcription:',
@@ -402,14 +392,8 @@ const FinalVideoTable: React.FC = () => {
         throw new Error('Failed to fetch transcription');
       }
 
-      const transcriptionData = await transcriptionResponse.json();
-
-      // Extract text from word timestamps
-      const transcriptionText = transcriptionData
-        .map((word: WordObject) => word.word)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const captionsRaw = await transcriptionResponse.text();
+      const transcriptionText = extractTextFromCaptionFileContent(captionsRaw);
 
       console.log(
         'Generating description for transcription:',
@@ -544,14 +528,8 @@ const FinalVideoTable: React.FC = () => {
         throw new Error('Failed to fetch transcription');
       }
 
-      const transcriptionData = await transcriptionResponse.json();
-
-      // Extract text from word timestamps
-      const transcriptionText = transcriptionData
-        .map((word: WordObject) => word.word)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const captionsRaw = await transcriptionResponse.text();
+      const transcriptionText = extractTextFromCaptionFileContent(captionsRaw);
 
       console.log(
         'Generating tags for transcription:',

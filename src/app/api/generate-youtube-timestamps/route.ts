@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { parseCaptionFileTimedData } from '@/utils/captions-parser';
 
 interface WordSegment {
   word: string;
@@ -40,99 +41,6 @@ function formatTimestamp(seconds: number): string {
       .padStart(2, '0')}`;
   }
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
-}
-
-function extractWordSegments(input: unknown): WordSegment[] {
-  let rawSegments: unknown[] = [];
-
-  if (Array.isArray(input)) {
-    rawSegments = input;
-  } else if (input && typeof input === 'object') {
-    const obj = input as {
-      Segments?: unknown;
-      segments?: unknown;
-      words?: unknown;
-    };
-    if (Array.isArray(obj.Segments)) {
-      rawSegments = obj.Segments;
-    } else if (Array.isArray(obj.segments)) {
-      rawSegments = obj.segments;
-    } else if (Array.isArray(obj.words)) {
-      rawSegments = obj.words;
-    }
-  }
-
-  return rawSegments
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const maybe = item as { word?: unknown; start?: unknown; end?: unknown };
-      const word = typeof maybe.word === 'string' ? maybe.word.trim() : '';
-      const start =
-        typeof maybe.start === 'number'
-          ? maybe.start
-          : Number.parseFloat(String(maybe.start ?? ''));
-      const end =
-        typeof maybe.end === 'number'
-          ? maybe.end
-          : Number.parseFloat(String(maybe.end ?? ''));
-
-      if (!word || !Number.isFinite(start) || !Number.isFinite(end)) {
-        return null;
-      }
-
-      return {
-        word,
-        start,
-        end,
-      };
-    })
-    .filter((segment): segment is WordSegment => !!segment)
-    .sort((a, b) => a.start - b.start);
-}
-
-function extractCaptionSegments(input: unknown): CaptionSegment[] {
-  let rawSegments: unknown[] = [];
-
-  if (Array.isArray(input)) {
-    rawSegments = input;
-  } else if (input && typeof input === 'object') {
-    const obj = input as {
-      Segments?: unknown;
-      segments?: unknown;
-    };
-    if (Array.isArray(obj.Segments)) {
-      rawSegments = obj.Segments;
-    } else if (Array.isArray(obj.segments)) {
-      rawSegments = obj.segments;
-    }
-  }
-
-  return rawSegments
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const maybe = item as { text?: unknown; start?: unknown; end?: unknown };
-      const text = typeof maybe.text === 'string' ? maybe.text.trim() : '';
-      const start =
-        typeof maybe.start === 'number'
-          ? maybe.start
-          : Number.parseFloat(String(maybe.start ?? ''));
-      const end =
-        typeof maybe.end === 'number'
-          ? maybe.end
-          : Number.parseFloat(String(maybe.end ?? ''));
-
-      if (!text || !Number.isFinite(start) || !Number.isFinite(end)) {
-        return null;
-      }
-
-      return {
-        text,
-        start,
-        end,
-      };
-    })
-    .filter((segment): segment is CaptionSegment => !!segment)
-    .sort((a, b) => a.start - b.start);
 }
 
 function buildTimedTranscript(words: WordSegment[]): TimedChunk[] {
@@ -207,9 +115,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const captionsJson = (await captionsResponse.json()) as unknown;
-    const words = extractWordSegments(captionsJson);
-    const segments = extractCaptionSegments(captionsJson);
+    const captionsRaw = await captionsResponse.text();
+    const parsed = parseCaptionFileTimedData(captionsRaw);
+    const words = parsed.words as WordSegment[];
+    const segments = parsed.segments as CaptionSegment[];
 
     if (words.length === 0 && segments.length === 0) {
       return NextResponse.json(

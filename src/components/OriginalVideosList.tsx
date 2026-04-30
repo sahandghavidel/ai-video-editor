@@ -2510,6 +2510,50 @@ export default function OriginalVideosList({
   // Generate YouTube descriptions for all Processing videos using
   // Final Video Captions URL (6872)
   // and save into YouTube Description (6869)
+  const buildSceneSentenceTextByVideoId = (scenes: BaserowRow[]) => {
+    const buckets = new Map<
+      number,
+      Array<{ order: number; sentence: string }>
+    >();
+
+    for (const scene of scenes) {
+      const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
+      if (!videoId || !Number.isFinite(videoId) || videoId <= 0) continue;
+
+      const sentence = String(scene['field_6890'] ?? '').trim();
+      if (!sentence) continue;
+
+      const orderRaw = Number(scene.order);
+      const fallbackOrderRaw = Number(scene['field_6896']);
+      const order = Number.isFinite(orderRaw)
+        ? orderRaw
+        : Number.isFinite(fallbackOrderRaw)
+          ? fallbackOrderRaw
+          : 0;
+
+      const list = buckets.get(videoId) ?? [];
+      list.push({ order, sentence });
+      buckets.set(videoId, list);
+    }
+
+    const byVideoId = new Map<number, string>();
+
+    for (const [videoId, rows] of buckets.entries()) {
+      const text = rows
+        .sort((a, b) => a.order - b.order)
+        .map((row) => row.sentence)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (text) {
+        byVideoId.set(videoId, text);
+      }
+    }
+
+    return byVideoId;
+  };
+
   const handleGenerateYouTubeDescriptionsAll = async (playSound = true) => {
     if (generatingYouTubeDescriptionsAll) return;
 
@@ -2519,62 +2563,13 @@ export default function OriginalVideosList({
       setError(null);
 
       const freshVideosData = await getOriginalVideosData();
-
-      const extractTextFromCaptionsPayload = (payload: unknown): string => {
-        if (typeof payload === 'string') {
-          return payload.trim();
-        }
-
-        if (Array.isArray(payload)) {
-          const parts = payload
-            .map((item) => {
-              if (typeof item === 'string') {
-                return item.trim();
-              }
-
-              if (typeof item === 'object' && item !== null) {
-                const row = item as {
-                  text?: unknown;
-                  word?: unknown;
-                  value?: unknown;
-                };
-
-                if (typeof row.text === 'string') return row.text.trim();
-                if (typeof row.word === 'string') return row.word.trim();
-                if (typeof row.value === 'string') return row.value.trim();
-              }
-
-              return '';
-            })
-            .filter((part) => part.length > 0);
-
-          return parts.join(' ').replace(/\s+/g, ' ').trim();
-        }
-
-        if (typeof payload === 'object' && payload !== null) {
-          const obj = payload as {
-            text?: unknown;
-            segments?: unknown;
-            words?: unknown;
-            data?: unknown;
-          };
-
-          if (typeof obj.text === 'string' && obj.text.trim().length > 0) {
-            return obj.text.trim();
-          }
-
-          const nested = obj.segments ?? obj.words ?? obj.data;
-          if (nested !== undefined) {
-            return extractTextFromCaptionsPayload(nested);
-          }
-        }
-
-        return '';
-      };
+      const freshScenesData = await getBaserowData();
+      const sceneTextByVideoId =
+        buildSceneSentenceTextByVideoId(freshScenesData);
 
       const videosToDescribe = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
-        const finalCaptionsUrl = extractUrl(video.field_6872);
+        const sceneText = sceneTextByVideoId.get(video.id) ?? '';
         const existingDescription =
           typeof video.field_6869 === 'string'
             ? video.field_6869.trim()
@@ -2582,47 +2577,31 @@ export default function OriginalVideosList({
 
         return (
           status === 'Processing' &&
-          !!finalCaptionsUrl &&
-          finalCaptionsUrl.trim().length > 0 &&
+          sceneText.length > 0 &&
           !existingDescription
         );
       });
 
       if (videosToDescribe.length === 0) {
         console.log(
-          'No Processing videos found with Final Video Captions URL that need YouTube description generation',
+          'No Processing videos found with scene sentences that need YouTube description generation',
         );
         return;
       }
 
       console.log(
-        `Generating YouTube descriptions from Final Video Captions URL for ${videosToDescribe.length} videos...`,
+        `Generating YouTube descriptions from scene sentences for ${videosToDescribe.length} videos...`,
       );
 
       for (const video of videosToDescribe) {
-        const finalCaptionsUrl = extractUrl(video.field_6872);
-        if (!finalCaptionsUrl) continue;
-
         setGeneratingDescriptionVideoId(video.id);
 
         try {
-          const captionsResponse = await fetch(finalCaptionsUrl);
-          if (!captionsResponse.ok) {
-            throw new Error(
-              `Failed to fetch final captions (${captionsResponse.status})`,
-            );
-          }
-
-          const captionsPayload = (await captionsResponse
-            .json()
-            .catch(() => null)) as unknown;
-
-          const transcriptionText =
-            extractTextFromCaptionsPayload(captionsPayload);
+          const transcriptionText = sceneTextByVideoId.get(video.id) ?? '';
 
           if (!transcriptionText) {
             throw new Error(
-              'Final captions did not contain usable text for description generation',
+              'Scene sentences did not contain usable text for description generation',
             );
           }
 
@@ -2704,112 +2683,45 @@ export default function OriginalVideosList({
       setError(null);
 
       const freshVideosData = await getOriginalVideosData();
-
-      const extractTextFromCaptionsPayload = (payload: unknown): string => {
-        if (typeof payload === 'string') {
-          return payload.trim();
-        }
-
-        if (Array.isArray(payload)) {
-          const parts = payload
-            .map((item) => {
-              if (typeof item === 'string') {
-                return item.trim();
-              }
-
-              if (typeof item === 'object' && item !== null) {
-                const row = item as {
-                  text?: unknown;
-                  word?: unknown;
-                  value?: unknown;
-                };
-
-                if (typeof row.text === 'string') return row.text.trim();
-                if (typeof row.word === 'string') return row.word.trim();
-                if (typeof row.value === 'string') return row.value.trim();
-              }
-
-              return '';
-            })
-            .filter((part) => part.length > 0);
-
-          return parts.join(' ').replace(/\s+/g, ' ').trim();
-        }
-
-        if (typeof payload === 'object' && payload !== null) {
-          const obj = payload as {
-            text?: unknown;
-            segments?: unknown;
-            words?: unknown;
-            data?: unknown;
-          };
-
-          if (typeof obj.text === 'string' && obj.text.trim().length > 0) {
-            return obj.text.trim();
-          }
-
-          const nested = obj.segments ?? obj.words ?? obj.data;
-          if (nested !== undefined) {
-            return extractTextFromCaptionsPayload(nested);
-          }
-        }
-
-        return '';
-      };
+      const freshScenesData = await getBaserowData();
+      const sceneTextByVideoId =
+        buildSceneSentenceTextByVideoId(freshScenesData);
 
       const videosToTag = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
-        const finalCaptionsUrl = extractUrl(video.field_6872);
+        const sceneText = sceneTextByVideoId.get(video.id) ?? '';
         const existingKeywords =
           typeof video.field_6871 === 'string'
             ? video.field_6871.trim()
             : extractFieldValue(video.field_6871).trim();
 
         return (
-          status === 'Processing' &&
-          !!finalCaptionsUrl &&
-          finalCaptionsUrl.trim().length > 0 &&
-          !existingKeywords
+          status === 'Processing' && sceneText.length > 0 && !existingKeywords
         );
       });
 
       if (videosToTag.length === 0) {
         console.log(
-          'No Processing videos found with Final Video Captions URL that need YouTube keyword generation',
+          'No Processing videos found with scene sentences that need YouTube keyword generation',
         );
         return;
       }
 
       console.log(
-        `Generating YouTube keywords from Final Video Captions URL for ${videosToTag.length} videos...`,
+        `Generating YouTube keywords from scene sentences for ${videosToTag.length} videos...`,
       );
 
       let authFailureMessage: string | null = null;
 
       for (const video of videosToTag) {
-        const finalCaptionsUrl = extractUrl(video.field_6872);
-        if (!finalCaptionsUrl) continue;
-
         setGeneratingKeywordVideoId(video.id);
 
         try {
-          const captionsResponse = await fetch(finalCaptionsUrl);
-          if (!captionsResponse.ok) {
-            throw new Error(
-              `Failed to fetch final captions (${captionsResponse.status})`,
-            );
-          }
-
-          const captionsPayload = (await captionsResponse
-            .json()
-            .catch(() => null)) as unknown;
-
-          const transcriptionText =
-            extractTextFromCaptionsPayload(captionsPayload);
+          const transcriptionText = sceneTextByVideoId.get(video.id) ?? '';
 
           if (!transcriptionText) {
             throw new Error(
-              'Final captions did not contain usable text for keyword generation',
+              'Scene sentences did not contain usable text for keyword generation',
             );
           }
 
@@ -2907,110 +2819,43 @@ export default function OriginalVideosList({
       setError(null);
 
       const freshVideosData = await getOriginalVideosData();
-
-      const extractTextFromCaptionsPayload = (payload: unknown): string => {
-        if (typeof payload === 'string') {
-          return payload.trim();
-        }
-
-        if (Array.isArray(payload)) {
-          const parts = payload
-            .map((item) => {
-              if (typeof item === 'string') {
-                return item.trim();
-              }
-
-              if (typeof item === 'object' && item !== null) {
-                const row = item as {
-                  text?: unknown;
-                  word?: unknown;
-                  value?: unknown;
-                };
-
-                if (typeof row.text === 'string') return row.text.trim();
-                if (typeof row.word === 'string') return row.word.trim();
-                if (typeof row.value === 'string') return row.value.trim();
-              }
-
-              return '';
-            })
-            .filter((part) => part.length > 0);
-
-          return parts.join(' ').replace(/\s+/g, ' ').trim();
-        }
-
-        if (typeof payload === 'object' && payload !== null) {
-          const obj = payload as {
-            text?: unknown;
-            segments?: unknown;
-            words?: unknown;
-            data?: unknown;
-          };
-
-          if (typeof obj.text === 'string' && obj.text.trim().length > 0) {
-            return obj.text.trim();
-          }
-
-          const nested = obj.segments ?? obj.words ?? obj.data;
-          if (nested !== undefined) {
-            return extractTextFromCaptionsPayload(nested);
-          }
-        }
-
-        return '';
-      };
+      const freshScenesData = await getBaserowData();
+      const sceneTextByVideoId =
+        buildSceneSentenceTextByVideoId(freshScenesData);
 
       const videosToTitle = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
-        const finalCaptionsUrl = extractUrl(video.field_6872);
+        const sceneText = sceneTextByVideoId.get(video.id) ?? '';
         const existingTitle =
           typeof video.field_6870 === 'string'
             ? video.field_6870.trim()
             : extractFieldValue(video.field_6870).trim();
 
         return (
-          status === 'Processing' &&
-          !!finalCaptionsUrl &&
-          finalCaptionsUrl.trim().length > 0 &&
-          !existingTitle
+          status === 'Processing' && sceneText.length > 0 && !existingTitle
         );
       });
 
       if (videosToTitle.length === 0) {
         console.log(
-          'No Processing videos found with Final Video Captions URL that need YouTube title generation',
+          'No Processing videos found with scene sentences that need YouTube title generation',
         );
         return;
       }
 
       console.log(
-        `Generating YouTube titles from Final Video Captions URL for ${videosToTitle.length} videos...`,
+        `Generating YouTube titles from scene sentences for ${videosToTitle.length} videos...`,
       );
 
       for (const video of videosToTitle) {
-        const finalCaptionsUrl = extractUrl(video.field_6872);
-        if (!finalCaptionsUrl) continue;
-
         setGeneratingTitleVideoId(video.id);
 
         try {
-          const captionsResponse = await fetch(finalCaptionsUrl);
-          if (!captionsResponse.ok) {
-            throw new Error(
-              `Failed to fetch final captions (${captionsResponse.status})`,
-            );
-          }
-
-          const captionsPayload = (await captionsResponse
-            .json()
-            .catch(() => null)) as unknown;
-
-          const transcriptionText =
-            extractTextFromCaptionsPayload(captionsPayload);
+          const transcriptionText = sceneTextByVideoId.get(video.id) ?? '';
 
           if (!transcriptionText) {
             throw new Error(
-              'Final captions did not contain usable text for title generation',
+              'Scene sentences did not contain usable text for title generation',
             );
           }
 
