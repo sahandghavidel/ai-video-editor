@@ -153,6 +153,7 @@ export default function BatchOperations({
   const [calculatingDurationSceneId, setCalculatingDurationSceneId] = useState<
     number | null
   >(null);
+  const [generatingDurationSrt, setGeneratingDurationSrt] = useState(false);
 
   const [generatingAllSceneImages, setGeneratingAllSceneImages] =
     useState(false);
@@ -2131,6 +2132,55 @@ export default function BatchOperations({
     }
   };
 
+  const onGenerateDurationSrt = async () => {
+    if (generatingDurationSrt) return;
+
+    const selectedVideoId = Number(selectedOriginalVideo.id);
+    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) return;
+
+    setGeneratingDurationSrt(true);
+    try {
+      const res = await fetch('/api/generate-duration-srt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: selectedVideoId }),
+      });
+
+      const payload = (await res.json().catch(() => null)) as {
+        error?: unknown;
+        srtUrl?: unknown;
+        includedScenes?: unknown;
+        totalScenes?: unknown;
+        skippedNoDuration?: unknown;
+        skippedNoSentence?: unknown;
+      } | null;
+
+      if (!res.ok) {
+        const message =
+          typeof payload?.error === 'string'
+            ? payload.error
+            : `Failed to generate duration SRT (${res.status})`;
+        throw new Error(message);
+      }
+
+      console.log('Duration SRT generated and saved to field_6872:', {
+        videoId: selectedVideoId,
+        srtUrl: typeof payload?.srtUrl === 'string' ? payload.srtUrl : null,
+        includedScenes: Number(payload?.includedScenes ?? 0),
+        totalScenes: Number(payload?.totalScenes ?? 0),
+        skippedNoDuration: Number(payload?.skippedNoDuration ?? 0),
+        skippedNoSentence: Number(payload?.skippedNoSentence ?? 0),
+      });
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } catch (error) {
+      console.error('Generate Duration SRT failed:', error);
+    } finally {
+      setGeneratingDurationSrt(false);
+    }
+  };
+
   const onSpeedUpAllVideos = () => {
     handleSpeedUpAllVideos(
       data,
@@ -3171,6 +3221,28 @@ export default function BatchOperations({
                           ? `Scene #${calculatingDurationSceneId}`
                           : 'Processing...'
                         : 'Final Duration'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={onGenerateDurationSrt}
+                    disabled={
+                      !selectedOriginalVideo.id || generatingDurationSrt
+                    }
+                    className='w-full h-10 mt-2 bg-lime-600 hover:bg-lime-700 disabled:bg-lime-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : generatingDurationSrt
+                          ? 'Generating SRT from scene durations and sentences...'
+                          : 'Generate SRT from scene duration (7107) + sentence (6890), upload, then save URL to Final Video Captions URL (6872)'
+                    }
+                  >
+                    {generatingDurationSrt && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {generatingDurationSrt ? 'Processing...' : 'Create SRT'}
                     </span>
                   </button>
                 </div>
