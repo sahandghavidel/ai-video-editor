@@ -35,6 +35,7 @@ import {
   Volume2,
   VolumeX,
   Type,
+  Clock,
   Download,
   ExternalLink,
   X,
@@ -145,6 +146,11 @@ export default function BatchOperations({
 
   const [generatingAllSubtitles, setGeneratingAllSubtitles] = useState(false);
   const [generatingSubtitleSceneId, setGeneratingSubtitleSceneId] = useState<
+    number | null
+  >(null);
+  const [calculatingFinalVideoDurations, setCalculatingFinalVideoDurations] =
+    useState(false);
+  const [calculatingDurationSceneId, setCalculatingDurationSceneId] = useState<
     number | null
   >(null);
 
@@ -2061,6 +2067,70 @@ export default function BatchOperations({
     }
   };
 
+  const onCalculateFinalVideoDurations = async () => {
+    if (calculatingFinalVideoDurations) return;
+    if (!selectedOriginalVideo.id) return;
+
+    const sceneIds = [...data]
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      .map((scene) => Number(scene.id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    if (sceneIds.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setCalculatingFinalVideoDurations(true);
+    setCalculatingDurationSceneId(null);
+
+    try {
+      const res = await fetch('/api/calculate-final-video-durations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneIds }),
+      });
+
+      const payload = (await res.json().catch(() => null)) as {
+        error?: unknown;
+        requestedCount?: unknown;
+        updatedCount?: unknown;
+        skippedMissingFinalVideoUrlCount?: unknown;
+        failedCount?: unknown;
+        failures?: unknown;
+      } | null;
+
+      if (!res.ok) {
+        const message =
+          typeof payload?.error === 'string'
+            ? payload.error
+            : `Failed to calculate final durations (${res.status})`;
+        throw new Error(message);
+      }
+
+      const failedCount = Number(payload?.failedCount ?? 0);
+      if (failedCount > 0) {
+        console.warn('Final duration batch completed with failures:', {
+          requestedCount: Number(payload?.requestedCount ?? 0),
+          updatedCount: Number(payload?.updatedCount ?? 0),
+          skippedMissingFinalVideoUrlCount: Number(
+            payload?.skippedMissingFinalVideoUrlCount ?? 0,
+          ),
+          failedCount,
+          failures: Array.isArray(payload?.failures) ? payload?.failures : [],
+        });
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } catch (error) {
+      console.error('Final duration batch failed:', error);
+    } finally {
+      setCalculatingFinalVideoDurations(false);
+      setCalculatingDurationSceneId(null);
+    }
+  };
+
   const onSpeedUpAllVideos = () => {
     handleSpeedUpAllVideos(
       data,
@@ -3069,6 +3139,38 @@ export default function BatchOperations({
                           ? `Scene #${combiningNoSubtitleSceneId}`
                           : 'Processing...'
                         : 'Combine Pairs'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={onCalculateFinalVideoDurations}
+                    disabled={
+                      !selectedOriginalVideo.id ||
+                      calculatingFinalVideoDurations
+                    }
+                    className='w-full h-10 mt-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : calculatingFinalVideoDurations
+                          ? calculatingDurationSceneId !== null
+                            ? `Calculating duration for scene ${calculatingDurationSceneId}`
+                            : 'Calculating final video durations...'
+                          : 'Calculate Final Video Duration (7107) from Videos (6886) for all scenes with a final video URL'
+                    }
+                  >
+                    {calculatingFinalVideoDurations && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    {!calculatingFinalVideoDurations && (
+                      <Clock className='w-4 h-4' />
+                    )}
+                    <span className='font-medium'>
+                      {calculatingFinalVideoDurations
+                        ? calculatingDurationSceneId !== null
+                          ? `Scene #${calculatingDurationSceneId}`
+                          : 'Processing...'
+                        : 'Final Duration'}
                     </span>
                   </button>
                 </div>
