@@ -672,6 +672,51 @@ function stripOmniVoiceQuoteChars(text: string): {
   return { sanitizedText, removedQuoteCount };
 }
 
+function splitHyphenSeparatedWordsInPlainSegment(segment: string): {
+  text: string;
+  hyphenSplitCount: number;
+} {
+  let hyphenSplitCount = 0;
+
+  // Replace hyphen joins only when both sides look like words.
+  // Example: background-size -> background size
+  const text = segment.replace(
+    /([A-Za-z][A-Za-z0-9]*)-(?=[A-Za-z][A-Za-z0-9]*)/g,
+    (_match, leftWord: string) => {
+      hyphenSplitCount += 1;
+      return `${leftWord} `;
+    },
+  );
+
+  return { text, hyphenSplitCount };
+}
+
+function normalizeHyphenSeparatedWordsForOmniVoice(text: string): {
+  normalizedText: string;
+  hyphenSplitCount: number;
+} {
+  const bracketTagRegex = /\[[^\]\r\n]*\]/g;
+  let normalizedText = '';
+  let hyphenSplitCount = 0;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(bracketTagRegex)) {
+    const index = match.index ?? 0;
+    const before = text.slice(lastIndex, index);
+    const converted = splitHyphenSeparatedWordsInPlainSegment(before);
+    normalizedText += converted.text;
+    hyphenSplitCount += converted.hyphenSplitCount;
+    normalizedText += match[0];
+    lastIndex = index + match[0].length;
+  }
+
+  const tail = splitHyphenSeparatedWordsInPlainSegment(text.slice(lastIndex));
+  normalizedText += tail.text;
+  hyphenSplitCount += tail.hyphenSplitCount;
+
+  return { normalizedText, hyphenSplitCount };
+}
+
 function splitCamelCaseInPlainSegment(segment: string): {
   text: string;
   splitWordCount: number;
@@ -1109,8 +1154,11 @@ export async function POST(request: NextRequest) {
       substitutions: replacementSubstitutions,
     } = applyWordReplacements(rawText, replacements);
 
+    const { normalizedText: textWithHyphenWordsSplit, hyphenSplitCount } =
+      normalizeHyphenSeparatedWordsForOmniVoice(textWithReplacements);
+
     const { normalizedText: textWithCamelCaseSplit, splitWordCount } =
-      splitCamelCaseForOmniVoice(textWithReplacements);
+      splitCamelCaseForOmniVoice(textWithHyphenWordsSplit);
 
     const { normalizedText: textWithDotSeparatedWords, movedDotCount } =
       normalizeDotSeparatedWordsForOmniVoice(textWithCamelCaseSplit);
@@ -1130,7 +1178,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} hyphenWordsSplit=${hyphenSplitCount} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -1364,6 +1412,7 @@ export async function POST(request: NextRequest) {
         speed,
         language,
         removedQuoteCount,
+        hyphenWordsSplit: hyphenSplitCount,
         camelCaseWordsSplit: splitWordCount,
         dotPrefixesMoved: movedDotCount,
         wordReplacementsApplied: replacementSubstitutions,
