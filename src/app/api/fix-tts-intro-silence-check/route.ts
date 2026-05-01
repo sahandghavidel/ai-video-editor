@@ -23,7 +23,7 @@ type SilenceMetrics = {
 };
 
 const INTRO_FIX_TTS_SILENCE_THRESHOLD_DB_DEFAULT = clampNumber(
-  toFiniteNumber(process.env.INTRO_FIX_TTS_SILENCE_THRESHOLD_DB, -35),
+  toFiniteNumber(process.env.INTRO_FIX_TTS_SILENCE_THRESHOLD_DB, -25),
   -80,
   -5,
 );
