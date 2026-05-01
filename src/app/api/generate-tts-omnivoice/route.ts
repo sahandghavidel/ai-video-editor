@@ -43,6 +43,7 @@ type PreparedWordReplacement = {
   word: string;
   replacement: string;
   pattern: RegExp;
+  preserveAsSingleToken: boolean;
 };
 
 type EdgeSilenceDetection = {
@@ -603,6 +604,7 @@ function prepareWordReplacements(entries: unknown): PreparedWordReplacement[] {
         `(^|[^${WORD_CHAR_CLASS}])(${escapeRegExp(word)})(?=$|[^${WORD_CHAR_CLASS}])`,
         'g',
       ),
+      preserveAsSingleToken: word.trim() === replacement.trim(),
     });
   }
 
@@ -624,6 +626,70 @@ function applyWordReplacements(
   }
 
   return { text: updated, substitutions };
+}
+
+type NoSplitReplacementProtection = {
+  protectedText: string;
+  placeholderMap: Map<string, string>;
+  protectedEntryCount: number;
+  protectedMatchCount: number;
+};
+
+function protectIdentityReplacementsFromOmniSplitting(
+  text: string,
+  replacements: PreparedWordReplacement[],
+): NoSplitReplacementProtection {
+  const entriesToProtect = replacements.filter(
+    (entry) => entry.preserveAsSingleToken,
+  );
+
+  if (entriesToProtect.length === 0) {
+    return {
+      protectedText: text,
+      placeholderMap: new Map<string, string>(),
+      protectedEntryCount: 0,
+      protectedMatchCount: 0,
+    };
+  }
+
+  let protectedText = text;
+  let protectedMatchCount = 0;
+  let placeholderIndex = 0;
+  const placeholderMap = new Map<string, string>();
+
+  for (const entry of entriesToProtect) {
+    protectedText = protectedText.replace(
+      entry.pattern,
+      (_match, prefix: string) => {
+        const placeholder = `⟦${placeholderIndex}⟧`;
+        placeholderIndex += 1;
+        placeholderMap.set(placeholder, entry.replacement);
+        protectedMatchCount += 1;
+        return `${prefix}${placeholder}`;
+      },
+    );
+  }
+
+  return {
+    protectedText,
+    placeholderMap,
+    protectedEntryCount: entriesToProtect.length,
+    protectedMatchCount,
+  };
+}
+
+function restoreIdentityReplacementTokens(
+  text: string,
+  placeholderMap: Map<string, string>,
+): string {
+  if (placeholderMap.size === 0) return text;
+
+  let restored = text;
+  for (const [placeholder, replacement] of placeholderMap.entries()) {
+    restored = restored.split(placeholder).join(replacement);
+  }
+
+  return restored;
 }
 
 async function loadWordReplacementsFromApi(
@@ -1200,8 +1266,15 @@ export async function POST(request: NextRequest) {
       substitutions: replacementSubstitutions,
     } = applyWordReplacements(rawText, replacements);
 
+    const noSplitProtection = protectIdentityReplacementsFromOmniSplitting(
+      textWithReplacements,
+      replacements,
+    );
+
     const { normalizedText: textWithHyphenWordsSplit, hyphenSplitCount } =
-      normalizeHyphenSeparatedWordsForOmniVoice(textWithReplacements);
+      normalizeHyphenSeparatedWordsForOmniVoice(
+        noSplitProtection.protectedText,
+      );
 
     const {
       normalizedText: textWithParenthesisWordsSplit,
@@ -1214,8 +1287,13 @@ export async function POST(request: NextRequest) {
     const { normalizedText: textWithDotSeparatedWords, movedDotCount } =
       normalizeDotSeparatedWordsForOmniVoice(textWithCamelCaseSplit);
 
-    const { sanitizedText: text, removedQuoteCount } = stripOmniVoiceQuoteChars(
+    const textWithProtectedWordsRestored = restoreIdentityReplacementTokens(
       textWithDotSeparatedWords,
+      noSplitProtection.placeholderMap,
+    );
+
+    const { sanitizedText: text, removedQuoteCount } = stripOmniVoiceQuoteChars(
+      textWithProtectedWordsRestored,
     );
 
     if (!text) {
@@ -1229,7 +1307,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -1469,6 +1547,8 @@ export async function POST(request: NextRequest) {
         dotPrefixesMoved: movedDotCount,
         wordReplacementsApplied: replacementSubstitutions,
         wordReplacementsConfigured: replacements.length,
+        noSplitReplacementEntries: noSplitProtection.protectedEntryCount,
+        noSplitMatchesProtected: noSplitProtection.protectedMatchCount,
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
         pythonSource,
         sampleRate: runResult.sampleRate,
