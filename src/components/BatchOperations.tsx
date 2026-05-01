@@ -1703,6 +1703,7 @@ export default function BatchOperations({
     const buildAllGeneratedAttemptsFailureReason = (
       attempts: IntroAudioAttempt[],
       selectedAttempt: IntroAudioAttempt | null,
+      existingAttempt?: IntroAudioAttempt | null,
       existingCheckSummary?: string | null,
     ): string => {
       const attemptCount = attempts.length;
@@ -1727,11 +1728,28 @@ export default function BatchOperations({
         selectedAttempt?.reason ||
         'No best generated attempt could be selected from failed attempts.';
 
+      const existingLeadSummary =
+        existingAttempt && existingAttempt.audioUrl
+          ? `Existing lead value: ${
+              existingAttempt.leadingSilenceSec !== null
+                ? `${existingAttempt.leadingSilenceSec.toFixed(3)}s`
+                : 'n/a'
+            }.`
+          : existingCheckSummary
+            ? `${existingCheckSummary}.`
+            : null;
+
+      const generatedLeadSummary = `Generated lead values: ${leadsSummary}.`;
+
       if (existingCheckSummary) {
-        return `${existingCheckSummary} | ${selectedSummary} | Generated lead values: ${leadsSummary}.`;
+        return [selectedSummary, existingLeadSummary, generatedLeadSummary]
+          .filter(Boolean)
+          .join(' | ');
       }
 
-      return `${selectedSummary} | Generated lead values: ${leadsSummary}.`;
+      return [selectedSummary, existingLeadSummary, generatedLeadSummary]
+        .filter(Boolean)
+        .join(' | ');
     };
 
     const waitForCaptionsUrl = async (
@@ -1986,7 +2004,22 @@ export default function BatchOperations({
             selectedAudioAttempt === null && generatedAttempts.length > 0;
 
           if (!selectedAudioAttempt) {
-            selectedAudioAttempt = pickBestAudioAttempt(generatedAttempts);
+            const competitionAttempts: IntroAudioAttempt[] = [
+              ...(existingAttempt ? [existingAttempt] : []),
+              ...generatedAttempts,
+            ];
+
+            selectedAudioAttempt = pickBestAudioAttempt(competitionAttempts);
+
+            if (selectedAudioAttempt) {
+              const selectedLead =
+                selectedAudioAttempt.leadingSilenceSec !== null
+                  ? `${selectedAudioAttempt.leadingSilenceSec.toFixed(3)}s`
+                  : 'n/a';
+              console.log(
+                `[Fix Intro QA] scene ${scene.id} selected ${selectedAudioAttempt.source} attempt ${selectedAudioAttempt.attemptNumber} as best failed candidate (lead=${selectedLead}).`,
+              );
+            }
           }
 
           if (!selectedAudioAttempt || !selectedAudioAttempt.audioUrl) {
@@ -2059,6 +2092,7 @@ export default function BatchOperations({
                 ? buildAllGeneratedAttemptsFailureReason(
                     generatedAttempts,
                     selectedAudioAttempt,
+                    existingAttempt,
                     existingCheckSummary,
                   )
                 : selectedAudioAttempt.reason
@@ -2078,6 +2112,18 @@ export default function BatchOperations({
               300,
             );
           } else {
+            const latestForExistingSelection = await fetchFreshScene(scene.id);
+            const latestAudioUrl = extractAudioUrl(
+              latestForExistingSelection?.['field_6891'],
+            );
+
+            if (
+              selectedAudioAttempt.audioUrl &&
+              latestAudioUrl !== selectedAudioAttempt.audioUrl
+            ) {
+              await setSceneAudioUrl(scene.id, selectedAudioAttempt.audioUrl);
+            }
+
             const sceneForSentenceCheck =
               (await fetchFreshScene(scene.id)) || latestBeforeAttempts;
             const existingCaptionsUrl = extractAudioUrl(
@@ -2125,6 +2171,7 @@ export default function BatchOperations({
             const audioReason = buildAllGeneratedAttemptsFailureReason(
               generatedAttempts,
               selectedAudioAttempt,
+              existingAttempt,
               existingCheckSummary,
             );
 
