@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { execFile } from 'node:child_process';
+import { promises as fsp } from 'node:fs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
+
+const execFileAsync = promisify(execFile);
 
 interface RequestBody {
   audioUrl?: unknown;
@@ -10,6 +18,8 @@ interface RequestBody {
   maxLeadingSilenceSec?: unknown;
   maxInternalPauseSec?: unknown;
   maxSilenceRatio?: unknown;
+  preprocessAudioBeforeMeasurement?: unknown;
+  preprocessFilter?: unknown;
 }
 
 type SilenceMetrics = {
@@ -44,6 +54,17 @@ const INTRO_FIX_TTS_MAX_SILENCE_RATIO_DEFAULT = clampNumber(
   1,
 );
 
+const INTRO_FIX_TTS_PRECHECK_FILTER_ENABLED_DEFAULT = toBoolean(
+  process.env.INTRO_FIX_TTS_PRECHECK_FILTER_ENABLED,
+  false,
+);
+
+const INTRO_FIX_TTS_PRECHECK_FILTER_DEFAULT =
+  process.env.INTRO_FIX_TTS_PRECHECK_FILTER?.trim() ||
+  'afftdn=nr=6:nf=-50,adeclick,adeclip,alimiter=limit=0.97';
+
+const INTRO_FIX_TTS_FFMPEG_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+
 function toFiniteNumber(value: unknown, fallback: number): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -54,6 +75,16 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function toBoolean(value: unknown, fallback: boolean): boolean {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
 function roundTo(value: number, digits: number = 3): number {
   if (!Number.isFinite(value)) return 0;
   const factor = 10 ** digits;
@@ -62,6 +93,62 @@ function roundTo(value: number, digits: number = 3): number {
 
 function dbToLinear(db: number): number {
   return Math.pow(10, db / 20);
+}
+
+async function resolveFfmpegBinary(): Promise<string> {
+  const localBinary = path.join(
+    process.cwd(),
+    'REAL-Video-Enhancer',
+    'bin',
+    'ffmpeg',
+  );
+
+  const candidates = [process.env.FFMPEG_PATH, localBinary].filter(
+    (candidate): candidate is string =>
+      typeof candidate === 'string' && candidate.trim().length > 0,
+  );
+
+  for (const candidate of candidates) {
+    try {
+      await fsp.access(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return 'ffmpeg';
+}
+
+async function preprocessAudioForMeasurement(
+  inputBuffer: Buffer,
+  filter: string,
+): Promise<Buffer> {
+  const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'intro-qa-check-'));
+  const inputPath = path.join(tmpDir, 'input.wav');
+  const outputPath = path.join(tmpDir, 'output.wav');
+
+  try {
+    await fsp.writeFile(inputPath, inputBuffer);
+    const ffmpegBinary = await resolveFfmpegBinary();
+
+    await execFileAsync(
+      ffmpegBinary,
+      ['-y', '-i', inputPath, '-af', filter, '-c:a', 'pcm_s16le', outputPath],
+      { maxBuffer: INTRO_FIX_TTS_FFMPEG_MAX_BUFFER_BYTES },
+    );
+
+    const processed = await fsp.readFile(outputPath);
+    if (processed.byteLength === 0) {
+      throw new Error('Pre-measurement filter produced empty audio output');
+    }
+
+    return processed;
+  } finally {
+    await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {
+      // ignore cleanup failures
+    });
+  }
 }
 
 function readFourCc(view: DataView, offset: number): string {
@@ -363,8 +450,40 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await audioResponse.arrayBuffer());
+    const preprocessRequested = toBoolean(
+      body?.preprocessAudioBeforeMeasurement,
+      INTRO_FIX_TTS_PRECHECK_FILTER_ENABLED_DEFAULT,
+    );
+    const preprocessFilter =
+      typeof body?.preprocessFilter === 'string' &&
+      body.preprocessFilter.trim().length > 0
+        ? body.preprocessFilter.trim()
+        : INTRO_FIX_TTS_PRECHECK_FILTER_DEFAULT;
+
+    let analysisBuffer = buffer;
+    let preprocessApplied = false;
+    let preprocessError: string | null = null;
+
+    if (preprocessRequested) {
+      try {
+        analysisBuffer = await preprocessAudioForMeasurement(
+          buffer,
+          preprocessFilter,
+        );
+        preprocessApplied = true;
+      } catch (error) {
+        preprocessError =
+          error instanceof Error
+            ? error.message
+            : 'Unknown pre-measurement filter error';
+        console.warn(
+          `[Fix Intro QA] pre-measurement filter failed; using original audio. error=${preprocessError}`,
+        );
+      }
+    }
+
     const thresholdLinear = dbToLinear(thresholds.thresholdDb);
-    const metrics = analyzeSilenceFromWav(buffer, thresholdLinear);
+    const metrics = analyzeSilenceFromWav(analysisBuffer, thresholdLinear);
 
     if (!metrics) {
       return NextResponse.json(
@@ -422,6 +541,12 @@ export async function POST(request: NextRequest) {
           : null,
       metrics: roundedMetrics,
       thresholds: roundedThresholds,
+      preMeasurementFilter: {
+        requested: preprocessRequested,
+        applied: preprocessApplied,
+        filter: preprocessRequested ? preprocessFilter : null,
+        error: preprocessError,
+      },
     });
   } catch (error) {
     return NextResponse.json(

@@ -1640,6 +1640,7 @@ export default function BatchOperations({
             maxLeadingSilenceSec: 0.3,
             maxInternalPauseSec: 9999,
             maxSilenceRatio: 1,
+            preprocessAudioBeforeMeasurement: true,
           }),
         });
 
