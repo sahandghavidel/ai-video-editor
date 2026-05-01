@@ -1637,7 +1637,7 @@ export default function BatchOperations({
           body: JSON.stringify({
             sceneId,
             audioUrl: normalizedAudioUrl,
-            maxLeadingSilenceSec: 0.3,
+            maxLeadingSilenceSec: 0.4,
             maxInternalPauseSec: 9999,
             maxSilenceRatio: 1,
             preprocessAudioBeforeMeasurement: true,
