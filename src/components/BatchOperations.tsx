@@ -1305,6 +1305,10 @@ export default function BatchOperations({
       reason: string;
       leadingSilenceSec: number | null;
       maxLeadingSilenceSec: number | null;
+      leadingSilenceSecWithFilter: number | null;
+      maxLeadingSilenceSecWithFilter: number | null;
+      leadingSilenceSecWithoutFilter: number | null;
+      maxLeadingSilenceSecWithoutFilter: number | null;
     };
 
     const introScenes = [...data]
@@ -1397,6 +1401,16 @@ export default function BatchOperations({
       }
 
       return null;
+    };
+
+    const formatLeadSeconds = (value: number | null): string => {
+      return value !== null ? `${value.toFixed(3)}s` : 'n/a';
+    };
+
+    const formatAttemptLeadPair = (attempt: IntroAudioAttempt): string => {
+      return `raw=${formatLeadSeconds(
+        attempt.leadingSilenceSecWithoutFilter,
+      )}, filtered=${formatLeadSeconds(attempt.leadingSilenceSecWithFilter)}`;
     };
 
     const normalizeSentenceForCompare = (value: string): string => {
@@ -1529,9 +1543,17 @@ export default function BatchOperations({
       return Math.max(1, Math.floor(Math.random() * maxSeed));
     };
 
-    const markSceneFlagged = async (sceneId: number, reason: string) => {
-      const normalizedReason = String(reason || '')
-        .trim()
+    const markSceneFlagged = async (
+      sceneId: number,
+      reason: string,
+      diagnostics?: string | null,
+    ) => {
+      const normalizedReason = [
+        String(reason || '').trim(),
+        String(diagnostics || '').trim(),
+      ]
+        .filter(Boolean)
+        .join(' | ')
         .slice(0, 1000);
 
       const latest = await fetchFreshScene(sceneId);
@@ -1563,7 +1585,14 @@ export default function BatchOperations({
       }
     };
 
-    const clearSceneFlagged = async (sceneId: number) => {
+    const clearSceneFlagged = async (
+      sceneId: number,
+      diagnostics?: string | null,
+    ) => {
+      const normalizedDiagnostics = String(diagnostics || '')
+        .trim()
+        .slice(0, 1000);
+
       const latest = await fetchFreshScene(sceneId);
       if (latest && parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
         return;
@@ -1575,7 +1604,7 @@ export default function BatchOperations({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             field_7096: null,
-            field_7106: '',
+            field_7106: normalizedDiagnostics,
           }),
         });
 
@@ -1609,6 +1638,29 @@ export default function BatchOperations({
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+    const buildIntroQaDiagnosticsSummary = (
+      existingAttempt: IntroAudioAttempt | null,
+      generatedAttempts: IntroAudioAttempt[],
+    ): string => {
+      const parts: string[] = [];
+
+      if (existingAttempt) {
+        parts.push(
+          `existing(${formatAttemptLeadPair(existingAttempt)}, pass=${existingAttempt.pass})`,
+        );
+      } else {
+        parts.push('existing(raw=n/a, filtered=n/a, pass=n/a)');
+      }
+
+      for (const attempt of generatedAttempts) {
+        parts.push(
+          `gen#${attempt.attemptNumber}(${formatAttemptLeadPair(attempt)}, pass=${attempt.pass})`,
+        );
+      }
+
+      return `Intro QA attempts: ${parts.join('; ')}`;
+    };
+
     const runIntroLeadingSilenceCheck = async (
       sceneId: number,
       audioUrl: string,
@@ -1626,68 +1678,115 @@ export default function BatchOperations({
           reason: `Audio attempt ${attemptNumber} (${source}) failed: missing TTS audio URL.`,
           leadingSilenceSec: null,
           maxLeadingSilenceSec: null,
+          leadingSilenceSecWithFilter: null,
+          maxLeadingSilenceSecWithFilter: null,
+          leadingSilenceSecWithoutFilter: null,
+          maxLeadingSilenceSecWithoutFilter: null,
         };
       }
 
       try {
-        // Middle pauses are intentionally ignored for this flow.
-        const qaRes = await fetch('/api/fix-tts-intro-silence-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sceneId,
-            audioUrl: normalizedAudioUrl,
-            maxLeadingSilenceSec: 0.4,
-            maxInternalPauseSec: 9999,
-            maxSilenceRatio: 1,
-            preprocessAudioBeforeMeasurement: true,
-          }),
-        });
+        type IntroQaMeasurement = {
+          ok: boolean;
+          pass: boolean;
+          leadingSilenceSec: number | null;
+          maxLeadingSilenceSec: number | null;
+          error: string | null;
+        };
 
-        const payload = (await qaRes.json().catch(() => null)) as {
-          pass?: unknown;
-          reason?: unknown;
-          error?: unknown;
-          metrics?: { leadingSilenceSec?: unknown };
-          thresholds?: { maxLeadingSilenceSec?: unknown };
-        } | null;
+        const runMeasurement = async (
+          preprocessAudioBeforeMeasurement: boolean,
+        ): Promise<IntroQaMeasurement> => {
+          const qaRes = await fetch('/api/fix-tts-intro-silence-check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sceneId,
+              audioUrl: normalizedAudioUrl,
+              maxLeadingSilenceSec: 0.4,
+              maxInternalPauseSec: 9999,
+              maxSilenceRatio: 1,
+              preprocessAudioBeforeMeasurement,
+            }),
+          });
 
-        const leadingSilenceSec = toNumberOrNull(
-          payload?.metrics?.leadingSilenceSec,
-        );
-        const maxLeadingSilenceSec = toNumberOrNull(
-          payload?.thresholds?.maxLeadingSilenceSec,
-        );
+          const payload = (await qaRes.json().catch(() => null)) as {
+            pass?: unknown;
+            error?: unknown;
+            metrics?: { leadingSilenceSec?: unknown };
+            thresholds?: { maxLeadingSilenceSec?: unknown };
+          } | null;
 
-        if (!qaRes.ok) {
-          const qaError =
-            typeof payload?.error === 'string' && payload.error.trim()
-              ? payload.error.trim()
-              : `QA endpoint failed (${qaRes.status})`;
+          const leadingSilenceSec = toNumberOrNull(
+            payload?.metrics?.leadingSilenceSec,
+          );
+          const maxLeadingSilenceSec = toNumberOrNull(
+            payload?.thresholds?.maxLeadingSilenceSec,
+          );
+
+          if (!qaRes.ok) {
+            const qaError =
+              typeof payload?.error === 'string' && payload.error.trim()
+                ? payload.error.trim()
+                : `QA endpoint failed (${qaRes.status})`;
+
+            return {
+              ok: false,
+              pass: false,
+              leadingSilenceSec,
+              maxLeadingSilenceSec,
+              error: qaError,
+            };
+          }
+
+          return {
+            ok: true,
+            pass: payload?.pass === true,
+            leadingSilenceSec,
+            maxLeadingSilenceSec,
+            error: null,
+          };
+        };
+
+        const withoutFilter = await runMeasurement(false);
+        const withFilter = await runMeasurement(true);
+
+        const effective = withFilter.ok ? withFilter : withoutFilter;
+
+        if (!effective.ok) {
+          const combinedError = [withFilter.error, withoutFilter.error]
+            .filter((item): item is string => Boolean(item))
+            .join(' | ');
 
           return {
             attemptNumber,
             source,
             audioUrl: normalizedAudioUrl,
             pass: false,
-            reason: `Audio attempt ${attemptNumber} (${source}) failed: ${qaError}`,
-            leadingSilenceSec,
-            maxLeadingSilenceSec,
+            reason: `Audio attempt ${attemptNumber} (${source}) failed: ${combinedError || 'QA checks failed for both filtered and raw measurements.'}`,
+            leadingSilenceSec: null,
+            maxLeadingSilenceSec: null,
+            leadingSilenceSecWithFilter: withFilter.leadingSilenceSec,
+            maxLeadingSilenceSecWithFilter: withFilter.maxLeadingSilenceSec,
+            leadingSilenceSecWithoutFilter: withoutFilter.leadingSilenceSec,
+            maxLeadingSilenceSecWithoutFilter:
+              withoutFilter.maxLeadingSilenceSec,
           };
         }
 
-        const pass = payload?.pass === true;
+        const pass = effective.pass;
+        const maxLeadToDisplay =
+          withFilter.maxLeadingSilenceSec ??
+          withoutFilter.maxLeadingSilenceSec ??
+          effective.maxLeadingSilenceSec;
+
         const reason = pass
-          ? `Audio attempt ${attemptNumber} (${source}) passed beginning silence check.`
-          : `Audio attempt ${attemptNumber} (${source}) failed beginning silence check: lead=${
-              leadingSilenceSec !== null
-                ? `${leadingSilenceSec.toFixed(3)}s`
-                : 'n/a'
-            } (max ${
-              maxLeadingSilenceSec !== null
-                ? `${maxLeadingSilenceSec.toFixed(3)}s`
-                : 'n/a'
-            }).`;
+          ? `Audio attempt ${attemptNumber} (${source}) passed beginning silence check: raw=${formatLeadSeconds(
+              withoutFilter.leadingSilenceSec,
+            )}, filtered=${formatLeadSeconds(withFilter.leadingSilenceSec)} (max ${formatLeadSeconds(maxLeadToDisplay)}).`
+          : `Audio attempt ${attemptNumber} (${source}) failed beginning silence check: raw=${formatLeadSeconds(
+              withoutFilter.leadingSilenceSec,
+            )}, filtered=${formatLeadSeconds(withFilter.leadingSilenceSec)} (max ${formatLeadSeconds(maxLeadToDisplay)}).`;
 
         return {
           attemptNumber,
@@ -1695,8 +1794,12 @@ export default function BatchOperations({
           audioUrl: normalizedAudioUrl,
           pass,
           reason,
-          leadingSilenceSec,
-          maxLeadingSilenceSec,
+          leadingSilenceSec: effective.leadingSilenceSec,
+          maxLeadingSilenceSec: effective.maxLeadingSilenceSec,
+          leadingSilenceSecWithFilter: withFilter.leadingSilenceSec,
+          maxLeadingSilenceSecWithFilter: withFilter.maxLeadingSilenceSec,
+          leadingSilenceSecWithoutFilter: withoutFilter.leadingSilenceSec,
+          maxLeadingSilenceSecWithoutFilter: withoutFilter.maxLeadingSilenceSec,
         };
       } catch (error) {
         return {
@@ -1707,6 +1810,10 @@ export default function BatchOperations({
           reason: `Audio attempt ${attemptNumber} (${source}) QA error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           leadingSilenceSec: null,
           maxLeadingSilenceSec: null,
+          leadingSilenceSecWithFilter: null,
+          maxLeadingSilenceSecWithFilter: null,
+          leadingSilenceSecWithoutFilter: null,
+          maxLeadingSilenceSecWithoutFilter: null,
         };
       }
     };
@@ -1748,11 +1855,7 @@ export default function BatchOperations({
 
       const leadsSummary = attempts
         .map((attempt) => {
-          const lead =
-            attempt.leadingSilenceSec !== null
-              ? `${attempt.leadingSilenceSec.toFixed(3)}s`
-              : 'n/a';
-          return `#${attempt.attemptNumber}=${lead}`;
+          return `#${attempt.attemptNumber}(${formatAttemptLeadPair(attempt)})`;
         })
         .join(', ');
 
@@ -1762,11 +1865,7 @@ export default function BatchOperations({
 
       const existingLeadSummary =
         existingAttempt && existingAttempt.audioUrl
-          ? `Existing lead value: ${
-              existingAttempt.leadingSilenceSec !== null
-                ? `${existingAttempt.leadingSilenceSec.toFixed(3)}s`
-                : 'n/a'
-            }.`
+          ? `Existing lead values: ${formatAttemptLeadPair(existingAttempt)}.`
           : existingCheckSummary
             ? `${existingCheckSummary}.`
             : null;
@@ -1904,6 +2003,7 @@ export default function BatchOperations({
     try {
       for (const scene of scenesToFix) {
         setFixingIntroQaSceneId(scene.id);
+        let introQaDiagnostics: string | null = null;
 
         try {
           const sceneWithVoiceOverride = withSceneVoiceOverride(
@@ -1951,19 +2051,19 @@ export default function BatchOperations({
               'existing',
             );
 
-            const existingLead =
-              existingAttempt.leadingSilenceSec !== null
-                ? `${existingAttempt.leadingSilenceSec.toFixed(3)}s`
-                : 'n/a';
             const existingMax =
-              existingAttempt.maxLeadingSilenceSec !== null
-                ? `${existingAttempt.maxLeadingSilenceSec.toFixed(3)}s`
-                : 'n/a';
+              existingAttempt.maxLeadingSilenceSecWithFilter !== null
+                ? `${existingAttempt.maxLeadingSilenceSecWithFilter.toFixed(3)}s`
+                : existingAttempt.maxLeadingSilenceSecWithoutFilter !== null
+                  ? `${existingAttempt.maxLeadingSilenceSecWithoutFilter.toFixed(3)}s`
+                  : 'n/a';
 
-            existingCheckSummary = `Existing audio lead=${existingLead} (max ${existingMax}) pass=${existingAttempt.pass}`;
+            existingCheckSummary = `Existing audio ${formatAttemptLeadPair(
+              existingAttempt,
+            )} (max ${existingMax}) pass=${existingAttempt.pass}`;
 
             console.log(
-              `[Fix Intro QA] scene ${scene.id} existing audio lead=${existingLead} (max ${existingMax}) pass=${existingAttempt.pass}`,
+              `[Fix Intro QA] scene ${scene.id} existing audio ${formatAttemptLeadPair(existingAttempt)} (max ${existingMax}) pass=${existingAttempt.pass}`,
             );
 
             if (existingAttempt.pass) {
@@ -2035,6 +2135,11 @@ export default function BatchOperations({
           const allGeneratedFailed =
             selectedAudioAttempt === null && generatedAttempts.length > 0;
 
+          introQaDiagnostics = buildIntroQaDiagnosticsSummary(
+            existingAttempt,
+            generatedAttempts,
+          );
+
           if (!selectedAudioAttempt) {
             const competitionAttempts: IntroAudioAttempt[] = [
               ...(existingAttempt ? [existingAttempt] : []),
@@ -2058,6 +2163,7 @@ export default function BatchOperations({
             await markSceneFlagged(
               scene.id,
               'Intro QA failed: could not produce any valid generated TTS audio across attempts.',
+              introQaDiagnostics,
             );
             continue;
           }
@@ -2082,6 +2188,7 @@ export default function BatchOperations({
               await markSceneFlagged(
                 scene.id,
                 `Intro QA failed: missing source video URL (field_6888). ${selectedAudioAttempt.reason}`,
+                introQaDiagnostics,
               );
               continue;
             }
@@ -2134,6 +2241,7 @@ export default function BatchOperations({
               await markSceneFlagged(
                 scene.id,
                 `${audioReason} | Sentence check failed: fresh transcription file was not produced after selected audio sync.`,
+                introQaDiagnostics,
               );
               continue;
             }
@@ -2200,7 +2308,7 @@ export default function BatchOperations({
           );
 
           if (sentenceCheck.pass && !allGeneratedFailed) {
-            await clearSceneFlagged(scene.id);
+            await clearSceneFlagged(scene.id, introQaDiagnostics);
             continue;
           }
 
@@ -2213,11 +2321,12 @@ export default function BatchOperations({
             );
 
             if (sentenceCheck.pass) {
-              await markSceneFlagged(scene.id, audioReason);
+              await markSceneFlagged(scene.id, audioReason, introQaDiagnostics);
             } else {
               await markSceneFlagged(
                 scene.id,
                 `${audioReason} | ${sentenceCheck.reason}`,
+                introQaDiagnostics,
               );
             }
             continue;
@@ -2228,9 +2337,14 @@ export default function BatchOperations({
               await markSceneFlagged(
                 scene.id,
                 `${existingCheckSummary} | ${sentenceCheck.reason}`,
+                introQaDiagnostics,
               );
             } else {
-              await markSceneFlagged(scene.id, sentenceCheck.reason);
+              await markSceneFlagged(
+                scene.id,
+                sentenceCheck.reason,
+                introQaDiagnostics,
+              );
             }
           }
         } catch (error) {
@@ -2238,6 +2352,7 @@ export default function BatchOperations({
           await markSceneFlagged(
             scene.id,
             `Fix Intro QA failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            introQaDiagnostics,
           );
         }
 
