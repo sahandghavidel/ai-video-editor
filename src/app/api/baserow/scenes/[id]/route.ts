@@ -207,6 +207,63 @@ async function getJWTToken(): Promise<string> {
   return data.token;
 }
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const sceneId = parseInt(id, 10);
+    if (!Number.isFinite(sceneId) || sceneId <= 0) {
+      return NextResponse.json({ error: 'Invalid scene ID' }, { status: 400 });
+    }
+
+    const baserowUrl = process.env.BASEROW_API_URL;
+    if (!baserowUrl) {
+      return NextResponse.json(
+        { error: 'Missing Baserow URL' },
+        { status: 500 },
+      );
+    }
+
+    const token = await getJWTToken();
+
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `JWT ${token}`,
+        },
+        cache: 'no-store',
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      return NextResponse.json(
+        {
+          error: `Failed to fetch scene: ${response.status} ${errorText}`,
+        },
+        { status: response.status },
+      );
+    }
+
+    const result = await response.json();
+    return NextResponse.json(result, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching scene:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 },
+    );
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

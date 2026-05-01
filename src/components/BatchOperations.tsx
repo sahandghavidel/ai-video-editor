@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { BaserowRow } from '@/lib/baserow-actions';
+import { BaserowRow, getSceneById } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import {
   handleImproveAllSentences,
@@ -13,11 +13,14 @@ import {
 } from '@/utils/batchOperations';
 import {
   getFixTtsEligibleScenes,
+  hasSceneTtsAudioForFixTts,
   isSceneFlaggedForFixTts,
+  parseFixTtsStatus,
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
 import { fetchFlaggedScenesForVideo } from '@/features/fix-tts-flagged/fetchFlaggedScenesForVideo';
 import { FixFlaggedOnlyButton } from '@/components/fix-tts/FixFlaggedOnlyButton';
+import { FixIntroQaButton } from '@/components/fix-tts/FixIntroQaButton';
 import { playSuccessSound } from '@/utils/soundManager';
 import {
   formatSceneHasTextField,
@@ -84,6 +87,9 @@ interface BatchOperationsProps {
   ) => Promise<void>;
 }
 
+const INTRO_QA_SCENE_LIMIT = 20;
+const INTRO_QA_MAX_AUDIO_ATTEMPTS = 3;
+
 export default function BatchOperations({
   data,
   onRefresh,
@@ -92,6 +98,7 @@ export default function BatchOperations({
   handleSentenceImprovement,
   handleTTSProduce,
   handleVideoGenerate,
+  handleTranscribeScene,
 }: BatchOperationsProps) {
   const {
     batchOperations,
@@ -197,6 +204,10 @@ export default function BatchOperations({
   ] = useState(false);
   const [fixingOnlyFlaggedScenes, setFixingOnlyFlaggedScenes] = useState(false);
   const [fixingOnlyFlaggedSceneId, setFixingOnlyFlaggedSceneId] = useState<
+    number | null
+  >(null);
+  const [fixingIntroQaScenes, setFixingIntroQaScenes] = useState(false);
+  const [fixingIntroQaSceneId, setFixingIntroQaSceneId] = useState<
     number | null
   >(null);
 
@@ -1265,6 +1276,894 @@ export default function BatchOperations({
     } finally {
       setFixingOnlyFlaggedScenes(false);
       setFixingOnlyFlaggedSceneId(null);
+      playSuccessSound();
+    }
+  };
+
+  const onFixIntroQaFinalTTS = async () => {
+    // Intro-only QA flow:
+    // - first 20 scenes only
+    // - ignore confirmed scenes
+    // - check existing TTS first; if pass, do sentence check only
+    // - if existing fails/missing, generate up to 3 audios
+    // - if all generated audios fail, choose the best generated attempt
+    // - sync/transcribe exactly once for selected generated audio, then sentence-check once
+    // - flag with audio reason, and append sentence reason when sentence check fails
+    if (!selectedOriginalVideo.id || fixingIntroQaScenes) return;
+
+    const voiceOverride =
+      typeof selectedOriginalVideo.ttsVoiceReference === 'string' &&
+      selectedOriginalVideo.ttsVoiceReference.trim().length > 0
+        ? selectedOriginalVideo.ttsVoiceReference.trim()
+        : null;
+
+    type IntroAudioAttempt = {
+      attemptNumber: number;
+      source: 'existing' | 'generated';
+      audioUrl: string;
+      pass: boolean;
+      reason: string;
+      leadingSilenceSec: number | null;
+      maxLeadingSilenceSec: number | null;
+    };
+
+    const introScenes = [...data]
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      .slice(0, INTRO_QA_SCENE_LIMIT);
+
+    const scenesToFix = getFixTtsEligibleScenes(introScenes);
+
+    if (scenesToFix.length === 0) {
+      console.log(
+        `No intro scenes (first ${INTRO_QA_SCENE_LIMIT}) with final video + text found to fix.`,
+      );
+      return;
+    }
+
+    const ttsProduceWithOptions = handleTTSProduce as unknown as (
+      sceneId: number,
+      text: string,
+      sceneData?: BaserowRow,
+      opts?: {
+        seedOverride?: number;
+        throwOnError?: boolean;
+      },
+    ) => Promise<void>;
+
+    const videoGenerateWithOptions = handleVideoGenerate as unknown as (
+      sceneId: number,
+      videoUrl: string,
+      audioUrl: string,
+      sceneData?: BaserowRow,
+      zoomLevel?: number,
+      panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom',
+      opts?: { throwOnError?: boolean },
+    ) => Promise<void>;
+
+    const transcribeSceneWithOptions = handleTranscribeScene as unknown as (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      videoType?: 'original' | 'final',
+      skipRefresh?: boolean,
+      skipSound?: boolean,
+      updateSentence?: boolean,
+      opts?: { throwOnError?: boolean },
+    ) => Promise<void>;
+
+    const extractAudioUrl = (raw: unknown): string => {
+      if (typeof raw === 'string') return raw.trim();
+
+      if (Array.isArray(raw)) {
+        for (const item of raw) {
+          const url = extractAudioUrl(item);
+          if (url) return url;
+        }
+        return '';
+      }
+
+      if (raw && typeof raw === 'object') {
+        const obj = raw as Record<string, unknown>;
+        const nestedFile =
+          obj.file && typeof obj.file === 'object'
+            ? (obj.file as Record<string, unknown>)
+            : null;
+
+        const candidates = [
+          obj.url,
+          obj.value,
+          obj.name,
+          obj.text,
+          nestedFile?.url,
+        ];
+
+        for (const candidate of candidates) {
+          if (typeof candidate === 'string' && candidate.trim().length > 0) {
+            return candidate.trim();
+          }
+        }
+      }
+
+      return '';
+    };
+
+    const toNumberOrNull = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      return null;
+    };
+
+    const normalizeSentenceForCompare = (value: string): string => {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[’']/g, '')
+        .replace(/[^a-z0-9\s]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const compactSentenceForCompare = (value: string): string => {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '')
+        .trim();
+    };
+
+    const summarizeTokens = (tokens: string[]): string => {
+      if (tokens.length === 0) return 'none';
+      const maxItems = 8;
+      const shown = tokens.slice(0, maxItems).join(', ');
+      const more = tokens.length - maxItems;
+      return more > 0 ? `${shown} (+${more} more)` : shown;
+    };
+
+    const buildWordLevelMismatchReason = (
+      expectedNormalized: string,
+      transcriptNormalized: string,
+    ): string => {
+      const tokenize = (text: string) =>
+        String(text || '')
+          .split(' ')
+          .map((token) => token.trim())
+          .filter(Boolean);
+
+      const toCountMap = (tokens: string[]) => {
+        const counts = new Map<string, number>();
+        for (const token of tokens) {
+          counts.set(token, (counts.get(token) ?? 0) + 1);
+        }
+        return counts;
+      };
+
+      const diffTokens = (
+        base: Map<string, number>,
+        other: Map<string, number>,
+      ): string[] => {
+        const out: string[] = [];
+        for (const [token, baseCount] of base.entries()) {
+          const delta = baseCount - (other.get(token) ?? 0);
+          for (let i = 0; i < delta; i += 1) {
+            out.push(token);
+          }
+        }
+        return out;
+      };
+
+      const expectedTokens = tokenize(expectedNormalized);
+      const transcriptTokens = tokenize(transcriptNormalized);
+      const expectedMap = toCountMap(expectedTokens);
+      const transcriptMap = toCountMap(transcriptTokens);
+
+      const expectedOnly = diffTokens(expectedMap, transcriptMap);
+      const transcriptOnly = diffTokens(transcriptMap, expectedMap);
+
+      if (expectedOnly.length === 0 && transcriptOnly.length === 0) {
+        return 'Sentence check failed: same words found but order/joining differs.';
+      }
+
+      return `Sentence check failed: expected-only words: ${summarizeTokens(
+        expectedOnly,
+      )} | transcript-only words: ${summarizeTokens(transcriptOnly)}.`;
+    };
+
+    const compareSentencesOnce = (
+      expectedRaw: string,
+      transcriptRaw: string,
+    ): { pass: boolean; reason: string } => {
+      const expected = normalizeSentenceForCompare(expectedRaw);
+      const transcript = normalizeSentenceForCompare(transcriptRaw);
+
+      if (!expected) {
+        return {
+          pass: false,
+          reason: 'Sentence check failed: expected scene text is empty.',
+        };
+      }
+
+      if (!transcript) {
+        return {
+          pass: false,
+          reason: 'Sentence check failed: transcription is empty.',
+        };
+      }
+
+      if (expected === transcript) {
+        return { pass: true, reason: 'Sentence check passed.' };
+      }
+
+      const expectedCompact = compactSentenceForCompare(expected);
+      const transcriptCompact = compactSentenceForCompare(transcript);
+      if (
+        expectedCompact &&
+        transcriptCompact &&
+        expectedCompact === transcriptCompact
+      ) {
+        return { pass: true, reason: 'Sentence check passed (compact match).' };
+      }
+
+      return {
+        pass: false,
+        reason: buildWordLevelMismatchReason(expected, transcript),
+      };
+    };
+
+    const generateRandomSeed = (): number => {
+      const maxSeed = 2_147_483_647;
+      try {
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+          const buf = new Uint32Array(1);
+          crypto.getRandomValues(buf);
+          const raw = Number(buf[0] || 0);
+          return Math.max(1, raw % maxSeed);
+        }
+      } catch {
+        // fallback below
+      }
+
+      return Math.max(1, Math.floor(Math.random() * maxSeed));
+    };
+
+    const markSceneFlagged = async (sceneId: number, reason: string) => {
+      const normalizedReason = String(reason || '')
+        .trim()
+        .slice(0, 1000);
+
+      const latest = await fetchFreshScene(sceneId);
+      if (latest && parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            field_7096: 'true',
+            field_7106: normalizedReason,
+          }),
+        });
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          console.warn(
+            `Failed to mark intro QA flag for scene ${sceneId}: ${res.status} ${t}`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to mark intro QA flag for scene ${sceneId}:`,
+          error,
+        );
+      }
+    };
+
+    const setSceneAudioUrl = async (sceneId: number, audioUrl: string) => {
+      const normalizedAudioUrl = String(audioUrl || '').trim();
+      if (!normalizedAudioUrl) return;
+
+      await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_6891: normalizedAudioUrl }),
+      }).catch(() => {
+        // best effort; sync step below still uses selected URL directly
+      });
+    };
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    const runIntroLeadingSilenceCheck = async (
+      sceneId: number,
+      audioUrl: string,
+      attemptNumber: number,
+      source: 'existing' | 'generated',
+    ): Promise<IntroAudioAttempt> => {
+      const normalizedAudioUrl = String(audioUrl || '').trim();
+
+      if (!normalizedAudioUrl) {
+        return {
+          attemptNumber,
+          source,
+          audioUrl: '',
+          pass: false,
+          reason: `Audio attempt ${attemptNumber} (${source}) failed: missing TTS audio URL.`,
+          leadingSilenceSec: null,
+          maxLeadingSilenceSec: null,
+        };
+      }
+
+      try {
+        // Middle pauses are intentionally ignored for this flow.
+        const qaRes = await fetch('/api/fix-tts-intro-silence-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sceneId,
+            audioUrl: normalizedAudioUrl,
+            maxInternalPauseSec: 9999,
+            maxSilenceRatio: 1,
+          }),
+        });
+
+        const payload = (await qaRes.json().catch(() => null)) as {
+          pass?: unknown;
+          reason?: unknown;
+          error?: unknown;
+          metrics?: { leadingSilenceSec?: unknown };
+          thresholds?: { maxLeadingSilenceSec?: unknown };
+        } | null;
+
+        const leadingSilenceSec = toNumberOrNull(
+          payload?.metrics?.leadingSilenceSec,
+        );
+        const maxLeadingSilenceSec = toNumberOrNull(
+          payload?.thresholds?.maxLeadingSilenceSec,
+        );
+
+        if (!qaRes.ok) {
+          const qaError =
+            typeof payload?.error === 'string' && payload.error.trim()
+              ? payload.error.trim()
+              : `QA endpoint failed (${qaRes.status})`;
+
+          return {
+            attemptNumber,
+            source,
+            audioUrl: normalizedAudioUrl,
+            pass: false,
+            reason: `Audio attempt ${attemptNumber} (${source}) failed: ${qaError}`,
+            leadingSilenceSec,
+            maxLeadingSilenceSec,
+          };
+        }
+
+        const pass = payload?.pass === true;
+        const reason = pass
+          ? `Audio attempt ${attemptNumber} (${source}) passed beginning silence check.`
+          : `Audio attempt ${attemptNumber} (${source}) failed beginning silence check: lead=${
+              leadingSilenceSec !== null
+                ? `${leadingSilenceSec.toFixed(3)}s`
+                : 'n/a'
+            } (max ${
+              maxLeadingSilenceSec !== null
+                ? `${maxLeadingSilenceSec.toFixed(3)}s`
+                : 'n/a'
+            }).`;
+
+        return {
+          attemptNumber,
+          source,
+          audioUrl: normalizedAudioUrl,
+          pass,
+          reason,
+          leadingSilenceSec,
+          maxLeadingSilenceSec,
+        };
+      } catch (error) {
+        return {
+          attemptNumber,
+          source,
+          audioUrl: normalizedAudioUrl,
+          pass: false,
+          reason: `Audio attempt ${attemptNumber} (${source}) QA error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          leadingSilenceSec: null,
+          maxLeadingSilenceSec: null,
+        };
+      }
+    };
+
+    const pickBestAudioAttempt = (
+      attempts: IntroAudioAttempt[],
+    ): IntroAudioAttempt | null => {
+      const attemptsWithAudio = attempts.filter((item) => item.audioUrl);
+      if (attemptsWithAudio.length === 0) return null;
+
+      const ranked = [...attemptsWithAudio].sort((a, b) => {
+        const aLead =
+          a.leadingSilenceSec !== null
+            ? a.leadingSilenceSec
+            : Number.POSITIVE_INFINITY;
+        const bLead =
+          b.leadingSilenceSec !== null
+            ? b.leadingSilenceSec
+            : Number.POSITIVE_INFINITY;
+        return aLead - bLead;
+      });
+
+      return ranked[0] ?? attemptsWithAudio[attemptsWithAudio.length - 1];
+    };
+
+    const buildAllGeneratedAttemptsFailureReason = (
+      attempts: IntroAudioAttempt[],
+      selectedAttempt: IntroAudioAttempt | null,
+      existingCheckSummary?: string | null,
+    ): string => {
+      const attemptCount = attempts.length;
+      if (attemptCount === 0) {
+        if (existingCheckSummary) {
+          return `${existingCheckSummary} | Intro beginning-audio QA failed: no generated attempts were recorded.`;
+        }
+        return 'Intro beginning-audio QA failed: no generated attempts were recorded.';
+      }
+
+      const leadsSummary = attempts
+        .map((attempt) => {
+          const lead =
+            attempt.leadingSilenceSec !== null
+              ? `${attempt.leadingSilenceSec.toFixed(3)}s`
+              : 'n/a';
+          return `#${attempt.attemptNumber}=${lead}`;
+        })
+        .join(', ');
+
+      const selectedSummary =
+        selectedAttempt?.reason ||
+        'No best generated attempt could be selected from failed attempts.';
+
+      if (existingCheckSummary) {
+        return `${existingCheckSummary} | ${selectedSummary} | Generated lead values: ${leadsSummary}.`;
+      }
+
+      return `${selectedSummary} | Generated lead values: ${leadsSummary}.`;
+    };
+
+    const waitForCaptionsUrl = async (
+      sceneId: number,
+      opts?: {
+        previousUrl?: string;
+        requireChanged?: boolean;
+        maxRetries?: number;
+        delayMs?: number;
+      },
+    ): Promise<string> => {
+      const previous = String(opts?.previousUrl || '').trim();
+      const requireChanged = opts?.requireChanged === true;
+      const maxRetries = opts?.maxRetries ?? 20;
+      const delayMs = opts?.delayMs ?? 300;
+
+      for (let i = 0; i < maxRetries; i += 1) {
+        const fresh = await fetchFreshScene(sceneId);
+        const captionsUrl = extractAudioUrl(fresh?.['field_6910']);
+        if (!captionsUrl) {
+          await sleep(delayMs);
+          continue;
+        }
+
+        if (requireChanged && previous && captionsUrl === previous) {
+          await sleep(delayMs);
+          continue;
+        }
+
+        if (captionsUrl) {
+          return captionsUrl;
+        }
+        await sleep(delayMs);
+      }
+
+      return '';
+    };
+
+    const waitForAudioUrlChange = async (
+      sceneId: number,
+      previousAudioUrl?: string,
+      maxRetries = 20,
+      delayMs = 250,
+    ): Promise<string> => {
+      const previous = String(previousAudioUrl || '').trim();
+
+      for (let i = 0; i < maxRetries; i += 1) {
+        const fresh = await fetchFreshScene(sceneId);
+        const audioUrl = extractAudioUrl(fresh?.['field_6891']);
+        if (audioUrl && (!previous || audioUrl !== previous)) {
+          return audioUrl;
+        }
+        await sleep(delayMs);
+      }
+
+      return '';
+    };
+
+    const fetchTranscriptFromCaptions = async (
+      captionsUrl: string,
+    ): Promise<string> => {
+      const normalizedUrl = String(captionsUrl || '').trim();
+      if (!normalizedUrl) return '';
+
+      try {
+        const capRes = await fetch(withCacheBust(normalizedUrl), {
+          cache: 'no-store',
+        });
+        if (!capRes.ok) return '';
+
+        const words = (await capRes.json().catch(() => null)) as unknown;
+        if (!Array.isArray(words)) return '';
+
+        return words
+          .map((word) => {
+            if (!word || typeof word !== 'object') return '';
+            const token = (word as { word?: unknown }).word;
+            return typeof token === 'string' ? token.trim() : '';
+          })
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+      } catch {
+        return '';
+      }
+    };
+
+    const waitForTranscriptFromCaptions = async (
+      captionsUrl: string,
+      maxRetries = 20,
+      delayMs = 300,
+    ): Promise<string> => {
+      const normalizedUrl = String(captionsUrl || '').trim();
+      if (!normalizedUrl) return '';
+
+      for (let i = 0; i < maxRetries; i += 1) {
+        const transcript = await fetchTranscriptFromCaptions(normalizedUrl);
+        if (transcript) return transcript;
+        await sleep(delayMs);
+      }
+
+      return '';
+    };
+
+    const fetchFreshScene = async (
+      sceneId: number,
+    ): Promise<BaserowRow | null> => {
+      try {
+        const row = await getSceneById(sceneId);
+        if (!row || typeof row !== 'object') return null;
+        return row;
+      } catch {
+        return null;
+      }
+    };
+
+    setFixingIntroQaScenes(true);
+    setFixingIntroQaSceneId(null);
+
+    try {
+      for (const scene of scenesToFix) {
+        setFixingIntroQaSceneId(scene.id);
+
+        try {
+          const sceneWithVoiceOverride = withSceneVoiceOverride(
+            scene,
+            voiceOverride,
+          );
+
+          const latestBeforeAttempts =
+            (await fetchFreshScene(scene.id)) || sceneWithVoiceOverride;
+          if (
+            parseFixTtsStatus(latestBeforeAttempts['field_7096']) ===
+            'confirmed'
+          ) {
+            continue;
+          }
+
+          const desiredText = String(
+            latestBeforeAttempts['field_6890'] ??
+              sceneWithVoiceOverride['field_6890'] ??
+              '',
+          ).trim();
+          if (!desiredText) {
+            await markSceneFlagged(
+              scene.id,
+              'Intro QA failed: missing scene text (field_6890).',
+            );
+            continue;
+          }
+
+          const generatedAttempts: IntroAudioAttempt[] = [];
+          let existingAttempt: IntroAudioAttempt | null = null;
+          let selectedAudioAttempt: IntroAudioAttempt | null = null;
+          let existingCheckSummary: string | null = null;
+
+          const hasExistingTtsValue =
+            hasSceneTtsAudioForFixTts(latestBeforeAttempts);
+          const existingAudioUrl = extractAudioUrl(
+            latestBeforeAttempts['field_6891'],
+          );
+          if (existingAudioUrl) {
+            existingAttempt = await runIntroLeadingSilenceCheck(
+              scene.id,
+              existingAudioUrl,
+              1,
+              'existing',
+            );
+
+            const existingLead =
+              existingAttempt.leadingSilenceSec !== null
+                ? `${existingAttempt.leadingSilenceSec.toFixed(3)}s`
+                : 'n/a';
+            const existingMax =
+              existingAttempt.maxLeadingSilenceSec !== null
+                ? `${existingAttempt.maxLeadingSilenceSec.toFixed(3)}s`
+                : 'n/a';
+
+            existingCheckSummary = `Existing audio lead=${existingLead} (max ${existingMax}) pass=${existingAttempt.pass}`;
+
+            console.log(
+              `[Fix Intro QA] scene ${scene.id} existing audio lead=${existingLead} (max ${existingMax}) pass=${existingAttempt.pass}`,
+            );
+
+            if (existingAttempt.pass) {
+              selectedAudioAttempt = existingAttempt;
+            }
+          } else if (hasExistingTtsValue) {
+            existingCheckSummary =
+              'Existing TTS detected in field_6891 but URL was not parseable for intro QA.';
+            console.warn(
+              `[Fix Intro QA] scene ${scene.id} has existing field_6891 data, but no parseable audio URL was extracted.`,
+              latestBeforeAttempts['field_6891'],
+            );
+          } else {
+            existingCheckSummary = 'No existing TTS audio in field_6891.';
+            console.log(
+              `[Fix Intro QA] scene ${scene.id} has no existing TTS audio (field_6891).`,
+            );
+          }
+
+          if (!selectedAudioAttempt) {
+            for (
+              let generatedAttemptNumber = 1;
+              generatedAttemptNumber <= INTRO_QA_MAX_AUDIO_ATTEMPTS;
+              generatedAttemptNumber += 1
+            ) {
+              const beforeGenerate = await fetchFreshScene(scene.id);
+              const previousAudioUrl = extractAudioUrl(
+                beforeGenerate?.['field_6891'],
+              );
+
+              const seed = generateRandomSeed();
+
+              await ttsProduceWithOptions(
+                scene.id,
+                desiredText,
+                sceneWithVoiceOverride,
+                {
+                  seedOverride: seed,
+                  throwOnError: true,
+                },
+              );
+
+              const producedAudioUrl =
+                (await waitForAudioUrlChange(
+                  scene.id,
+                  previousAudioUrl,
+                  20,
+                  250,
+                )) ||
+                extractAudioUrl(
+                  (await fetchFreshScene(scene.id))?.['field_6891'],
+                );
+
+              const checkedGenerated = await runIntroLeadingSilenceCheck(
+                scene.id,
+                producedAudioUrl,
+                generatedAttemptNumber,
+                'generated',
+              );
+              generatedAttempts.push(checkedGenerated);
+
+              if (checkedGenerated.pass) {
+                selectedAudioAttempt = checkedGenerated;
+                break;
+              }
+            }
+          }
+
+          const allGeneratedFailed =
+            selectedAudioAttempt === null && generatedAttempts.length > 0;
+
+          if (!selectedAudioAttempt) {
+            selectedAudioAttempt = pickBestAudioAttempt(generatedAttempts);
+          }
+
+          if (!selectedAudioAttempt || !selectedAudioAttempt.audioUrl) {
+            await markSceneFlagged(
+              scene.id,
+              'Intro QA failed: could not produce any valid generated TTS audio across attempts.',
+            );
+            continue;
+          }
+
+          let transcriptText = '';
+          const selectedIsGenerated =
+            selectedAudioAttempt.source === 'generated';
+
+          if (selectedIsGenerated) {
+            await setSceneAudioUrl(scene.id, selectedAudioAttempt.audioUrl);
+
+            const freshBeforeSync =
+              (await fetchFreshScene(scene.id)) || sceneWithVoiceOverride;
+            const sourceVideoUrl =
+              typeof freshBeforeSync['field_6888'] === 'string'
+                ? String(freshBeforeSync['field_6888']).trim()
+                : typeof sceneWithVoiceOverride['field_6888'] === 'string'
+                  ? String(sceneWithVoiceOverride['field_6888']).trim()
+                  : '';
+
+            if (!sourceVideoUrl) {
+              await markSceneFlagged(
+                scene.id,
+                `Intro QA failed: missing source video URL (field_6888). ${selectedAudioAttempt.reason}`,
+              );
+              continue;
+            }
+
+            await videoGenerateWithOptions(
+              scene.id,
+              sourceVideoUrl,
+              selectedAudioAttempt.audioUrl,
+              freshBeforeSync,
+              0,
+              'none',
+              { throwOnError: true },
+            );
+
+            const sceneForTranscribe =
+              (await fetchFreshScene(scene.id)) || freshBeforeSync;
+            const previousCaptionsUrl = extractAudioUrl(
+              sceneForTranscribe['field_6910'],
+            );
+
+            await transcribeSceneWithOptions(
+              scene.id,
+              sceneForTranscribe,
+              'final',
+              true,
+              true,
+              false,
+              { throwOnError: true },
+            );
+
+            const captionsUrl = await waitForCaptionsUrl(scene.id, {
+              previousUrl: previousCaptionsUrl,
+              requireChanged: Boolean(previousCaptionsUrl),
+              maxRetries: 30,
+              delayMs: 300,
+            });
+
+            if (!captionsUrl) {
+              const audioReason = allGeneratedFailed
+                ? buildAllGeneratedAttemptsFailureReason(
+                    generatedAttempts,
+                    selectedAudioAttempt,
+                    existingCheckSummary,
+                  )
+                : selectedAudioAttempt.reason
+                  ? selectedAudioAttempt.reason
+                  : 'Selected generated intro audio attempt was used for sentence validation.';
+
+              await markSceneFlagged(
+                scene.id,
+                `${audioReason} | Sentence check failed: fresh transcription file was not produced after selected audio sync.`,
+              );
+              continue;
+            }
+
+            transcriptText = await waitForTranscriptFromCaptions(
+              captionsUrl,
+              20,
+              300,
+            );
+          } else {
+            const sceneForSentenceCheck =
+              (await fetchFreshScene(scene.id)) || latestBeforeAttempts;
+            const existingCaptionsUrl = extractAudioUrl(
+              sceneForSentenceCheck['field_6910'],
+            );
+
+            transcriptText = await waitForTranscriptFromCaptions(
+              existingCaptionsUrl,
+              10,
+              250,
+            );
+
+            if (!transcriptText) {
+              await transcribeSceneWithOptions(
+                scene.id,
+                sceneForSentenceCheck,
+                'final',
+                true,
+                true,
+                false,
+                { throwOnError: true },
+              );
+
+              const refreshedCaptionsUrl = await waitForCaptionsUrl(scene.id, {
+                previousUrl: existingCaptionsUrl,
+                requireChanged: Boolean(existingCaptionsUrl),
+                maxRetries: 30,
+                delayMs: 300,
+              });
+
+              transcriptText = await waitForTranscriptFromCaptions(
+                refreshedCaptionsUrl,
+                20,
+                300,
+              );
+            }
+          }
+
+          const sentenceCheck = compareSentencesOnce(
+            desiredText,
+            transcriptText,
+          );
+
+          if (allGeneratedFailed) {
+            const audioReason = buildAllGeneratedAttemptsFailureReason(
+              generatedAttempts,
+              selectedAudioAttempt,
+              existingCheckSummary,
+            );
+
+            if (sentenceCheck.pass) {
+              await markSceneFlagged(scene.id, audioReason);
+            } else {
+              await markSceneFlagged(
+                scene.id,
+                `${audioReason} | ${sentenceCheck.reason}`,
+              );
+            }
+            continue;
+          }
+
+          if (!sentenceCheck.pass) {
+            if (!selectedIsGenerated && existingCheckSummary) {
+              await markSceneFlagged(
+                scene.id,
+                `${existingCheckSummary} | ${sentenceCheck.reason}`,
+              );
+            } else {
+              await markSceneFlagged(scene.id, sentenceCheck.reason);
+            }
+          }
+        } catch (error) {
+          console.error(`Fix Intro QA failed for scene ${scene.id}:`, error);
+          await markSceneFlagged(
+            scene.id,
+            `Fix Intro QA failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      onRefresh?.();
+    } finally {
+      setFixingIntroQaSceneId(null);
+      setFixingIntroQaScenes(false);
       playSuccessSound();
     }
   };
@@ -2873,6 +3772,7 @@ export default function BatchOperations({
                         onClick={onFixAllFinalTTS}
                         disabled={
                           !selectedOriginalVideo.id ||
+                          fixingIntroQaScenes ||
                           batchOperations.transcribingAllFinalScenes ||
                           sceneLoading.transcribingScene !== null
                         }
@@ -2906,6 +3806,7 @@ export default function BatchOperations({
                         onClick={onFixOnlyFlaggedFinalTTS}
                         disabled={
                           !selectedOriginalVideo.id ||
+                          fixingIntroQaScenes ||
                           fixingOnlyFlaggedScenes ||
                           batchOperations.transcribingAllFinalScenes ||
                           sceneLoading.transcribingScene !== null
@@ -2914,6 +3815,22 @@ export default function BatchOperations({
                         isRunning={fixingOnlyFlaggedScenes}
                         currentSceneId={fixingOnlyFlaggedSceneId}
                         className='mt-0'
+                      />
+
+                      <FixIntroQaButton
+                        onClick={onFixIntroQaFinalTTS}
+                        disabled={
+                          !selectedOriginalVideo.id ||
+                          fixingIntroQaScenes ||
+                          fixingOnlyFlaggedScenes ||
+                          batchOperations.transcribingAllFinalScenes ||
+                          sceneLoading.transcribingScene !== null
+                        }
+                        hasSelectedVideo={Boolean(selectedOriginalVideo.id)}
+                        isRunning={fixingIntroQaScenes}
+                        currentSceneId={fixingIntroQaSceneId}
+                        introLimit={INTRO_QA_SCENE_LIMIT}
+                        className='col-span-2 mt-0'
                       />
                     </div>
                   </div>
