@@ -1305,10 +1305,16 @@ export default function BatchOperations({
       reason: string;
       leadingSilenceSec: number | null;
       maxLeadingSilenceSec: number | null;
+      maxInternalPauseSec: number | null;
+      maxAllowedInternalPauseSec: number | null;
       leadingSilenceSecWithFilter: number | null;
       maxLeadingSilenceSecWithFilter: number | null;
       leadingSilenceSecWithoutFilter: number | null;
       maxLeadingSilenceSecWithoutFilter: number | null;
+      maxInternalPauseSecWithFilter: number | null;
+      maxAllowedInternalPauseSecWithFilter: number | null;
+      maxInternalPauseSecWithoutFilter: number | null;
+      maxAllowedInternalPauseSecWithoutFilter: number | null;
     };
 
     const introScenes = [...data]
@@ -1407,10 +1413,16 @@ export default function BatchOperations({
       return value !== null ? `${value.toFixed(3)}s` : 'n/a';
     };
 
-    const formatAttemptLeadPair = (attempt: IntroAudioAttempt): string => {
-      return `raw=${formatLeadSeconds(
-        attempt.leadingSilenceSecWithoutFilter,
-      )}, filtered=${formatLeadSeconds(attempt.leadingSilenceSecWithFilter)}`;
+    const formatAttemptBeginGapPair = (attempt: IntroAudioAttempt): string => {
+      return `raw=${formatLeadSeconds(attempt.leadingSilenceSecWithoutFilter)}, filtered=${formatLeadSeconds(attempt.leadingSilenceSecWithFilter)}`;
+    };
+
+    const formatAttemptMiddleGapPair = (attempt: IntroAudioAttempt): string => {
+      return `raw=${formatLeadSeconds(attempt.maxInternalPauseSecWithoutFilter)}, filtered=${formatLeadSeconds(attempt.maxInternalPauseSecWithFilter)}`;
+    };
+
+    const formatAttemptGapDetails = (attempt: IntroAudioAttempt): string => {
+      return `begin(${formatAttemptBeginGapPair(attempt)}), middle(${formatAttemptMiddleGapPair(attempt)})`;
     };
 
     const normalizeSentenceForCompare = (value: string): string => {
@@ -1646,15 +1658,17 @@ export default function BatchOperations({
 
       if (existingAttempt) {
         parts.push(
-          `existing(${formatAttemptLeadPair(existingAttempt)}, pass=${existingAttempt.pass})`,
+          `existing(${formatAttemptGapDetails(existingAttempt)}, pass=${existingAttempt.pass})`,
         );
       } else {
-        parts.push('existing(raw=n/a, filtered=n/a, pass=n/a)');
+        parts.push(
+          'existing(begin(raw=n/a, filtered=n/a), middle(raw=n/a, filtered=n/a), pass=n/a)',
+        );
       }
 
       for (const attempt of generatedAttempts) {
         parts.push(
-          `gen#${attempt.attemptNumber}(${formatAttemptLeadPair(attempt)}, pass=${attempt.pass})`,
+          `gen#${attempt.attemptNumber}(${formatAttemptGapDetails(attempt)}, pass=${attempt.pass})`,
         );
       }
 
@@ -1678,10 +1692,16 @@ export default function BatchOperations({
           reason: `Audio attempt ${attemptNumber} (${source}) failed: missing TTS audio URL.`,
           leadingSilenceSec: null,
           maxLeadingSilenceSec: null,
+          maxInternalPauseSec: null,
+          maxAllowedInternalPauseSec: null,
           leadingSilenceSecWithFilter: null,
           maxLeadingSilenceSecWithFilter: null,
           leadingSilenceSecWithoutFilter: null,
           maxLeadingSilenceSecWithoutFilter: null,
+          maxInternalPauseSecWithFilter: null,
+          maxAllowedInternalPauseSecWithFilter: null,
+          maxInternalPauseSecWithoutFilter: null,
+          maxAllowedInternalPauseSecWithoutFilter: null,
         };
       }
 
@@ -1691,6 +1711,8 @@ export default function BatchOperations({
           pass: boolean;
           leadingSilenceSec: number | null;
           maxLeadingSilenceSec: number | null;
+          maxInternalPauseSec: number | null;
+          maxAllowedInternalPauseSec: number | null;
           error: string | null;
         };
 
@@ -1704,7 +1726,7 @@ export default function BatchOperations({
               sceneId,
               audioUrl: normalizedAudioUrl,
               maxLeadingSilenceSec: 0.4,
-              maxInternalPauseSec: 9999,
+              maxInternalPauseSec: 0.4,
               maxSilenceRatio: 1,
               preprocessAudioBeforeMeasurement,
             }),
@@ -1713,8 +1735,14 @@ export default function BatchOperations({
           const payload = (await qaRes.json().catch(() => null)) as {
             pass?: unknown;
             error?: unknown;
-            metrics?: { leadingSilenceSec?: unknown };
-            thresholds?: { maxLeadingSilenceSec?: unknown };
+            metrics?: {
+              leadingSilenceSec?: unknown;
+              maxInternalPauseSec?: unknown;
+            };
+            thresholds?: {
+              maxLeadingSilenceSec?: unknown;
+              maxInternalPauseSec?: unknown;
+            };
           } | null;
 
           const leadingSilenceSec = toNumberOrNull(
@@ -1722,6 +1750,12 @@ export default function BatchOperations({
           );
           const maxLeadingSilenceSec = toNumberOrNull(
             payload?.thresholds?.maxLeadingSilenceSec,
+          );
+          const maxInternalPauseSec = toNumberOrNull(
+            payload?.metrics?.maxInternalPauseSec,
+          );
+          const maxAllowedInternalPauseSec = toNumberOrNull(
+            payload?.thresholds?.maxInternalPauseSec,
           );
 
           if (!qaRes.ok) {
@@ -1735,6 +1769,8 @@ export default function BatchOperations({
               pass: false,
               leadingSilenceSec,
               maxLeadingSilenceSec,
+              maxInternalPauseSec,
+              maxAllowedInternalPauseSec,
               error: qaError,
             };
           }
@@ -1744,6 +1780,8 @@ export default function BatchOperations({
             pass: payload?.pass === true,
             leadingSilenceSec,
             maxLeadingSilenceSec,
+            maxInternalPauseSec,
+            maxAllowedInternalPauseSec,
             error: null,
           };
         };
@@ -1766,11 +1804,19 @@ export default function BatchOperations({
             reason: `Audio attempt ${attemptNumber} (${source}) failed: ${combinedError || 'QA checks failed for both filtered and raw measurements.'}`,
             leadingSilenceSec: null,
             maxLeadingSilenceSec: null,
+            maxInternalPauseSec: null,
+            maxAllowedInternalPauseSec: null,
             leadingSilenceSecWithFilter: withFilter.leadingSilenceSec,
             maxLeadingSilenceSecWithFilter: withFilter.maxLeadingSilenceSec,
             leadingSilenceSecWithoutFilter: withoutFilter.leadingSilenceSec,
             maxLeadingSilenceSecWithoutFilter:
               withoutFilter.maxLeadingSilenceSec,
+            maxInternalPauseSecWithFilter: withFilter.maxInternalPauseSec,
+            maxAllowedInternalPauseSecWithFilter:
+              withFilter.maxAllowedInternalPauseSec,
+            maxInternalPauseSecWithoutFilter: withoutFilter.maxInternalPauseSec,
+            maxAllowedInternalPauseSecWithoutFilter:
+              withoutFilter.maxAllowedInternalPauseSec,
           };
         }
 
@@ -1779,14 +1825,25 @@ export default function BatchOperations({
           withFilter.maxLeadingSilenceSec ??
           withoutFilter.maxLeadingSilenceSec ??
           effective.maxLeadingSilenceSec;
+        const maxMiddleToDisplay =
+          withFilter.maxAllowedInternalPauseSec ??
+          withoutFilter.maxAllowedInternalPauseSec ??
+          effective.maxAllowedInternalPauseSec;
+
+        const beginRaw = formatLeadSeconds(withoutFilter.leadingSilenceSec);
+        const beginFiltered = formatLeadSeconds(withFilter.leadingSilenceSec);
+        const middleRaw = formatLeadSeconds(withoutFilter.maxInternalPauseSec);
+        const middleFiltered = formatLeadSeconds(
+          withFilter.maxInternalPauseSec,
+        );
+
+        console.info(
+          `[Fix Intro QA] scene ${sceneId} ${source} attempt ${attemptNumber} checks: begin(raw=${beginRaw}, filtered=${beginFiltered}, max=${formatLeadSeconds(maxLeadToDisplay)}), middle(raw=${middleRaw}, filtered=${middleFiltered}, max=${formatLeadSeconds(maxMiddleToDisplay)}), selected=${withFilter.ok ? 'filtered' : 'raw'}, pass=${pass}`,
+        );
 
         const reason = pass
-          ? `Audio attempt ${attemptNumber} (${source}) passed beginning silence check: raw=${formatLeadSeconds(
-              withoutFilter.leadingSilenceSec,
-            )}, filtered=${formatLeadSeconds(withFilter.leadingSilenceSec)} (max ${formatLeadSeconds(maxLeadToDisplay)}).`
-          : `Audio attempt ${attemptNumber} (${source}) failed beginning silence check: raw=${formatLeadSeconds(
-              withoutFilter.leadingSilenceSec,
-            )}, filtered=${formatLeadSeconds(withFilter.leadingSilenceSec)} (max ${formatLeadSeconds(maxLeadToDisplay)}).`;
+          ? `Audio attempt ${attemptNumber} (${source}) passed intro gap checks: begin(raw=${beginRaw}, filtered=${beginFiltered}, max ${formatLeadSeconds(maxLeadToDisplay)}), middle(raw=${middleRaw}, filtered=${middleFiltered}, max ${formatLeadSeconds(maxMiddleToDisplay)}).`
+          : `Audio attempt ${attemptNumber} (${source}) failed intro gap checks: begin(raw=${beginRaw}, filtered=${beginFiltered}, max ${formatLeadSeconds(maxLeadToDisplay)}), middle(raw=${middleRaw}, filtered=${middleFiltered}, max ${formatLeadSeconds(maxMiddleToDisplay)}).`;
 
         return {
           attemptNumber,
@@ -1796,10 +1853,18 @@ export default function BatchOperations({
           reason,
           leadingSilenceSec: effective.leadingSilenceSec,
           maxLeadingSilenceSec: effective.maxLeadingSilenceSec,
+          maxInternalPauseSec: effective.maxInternalPauseSec,
+          maxAllowedInternalPauseSec: effective.maxAllowedInternalPauseSec,
           leadingSilenceSecWithFilter: withFilter.leadingSilenceSec,
           maxLeadingSilenceSecWithFilter: withFilter.maxLeadingSilenceSec,
           leadingSilenceSecWithoutFilter: withoutFilter.leadingSilenceSec,
           maxLeadingSilenceSecWithoutFilter: withoutFilter.maxLeadingSilenceSec,
+          maxInternalPauseSecWithFilter: withFilter.maxInternalPauseSec,
+          maxAllowedInternalPauseSecWithFilter:
+            withFilter.maxAllowedInternalPauseSec,
+          maxInternalPauseSecWithoutFilter: withoutFilter.maxInternalPauseSec,
+          maxAllowedInternalPauseSecWithoutFilter:
+            withoutFilter.maxAllowedInternalPauseSec,
         };
       } catch (error) {
         return {
@@ -1810,10 +1875,16 @@ export default function BatchOperations({
           reason: `Audio attempt ${attemptNumber} (${source}) QA error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           leadingSilenceSec: null,
           maxLeadingSilenceSec: null,
+          maxInternalPauseSec: null,
+          maxAllowedInternalPauseSec: null,
           leadingSilenceSecWithFilter: null,
           maxLeadingSilenceSecWithFilter: null,
           leadingSilenceSecWithoutFilter: null,
           maxLeadingSilenceSecWithoutFilter: null,
+          maxInternalPauseSecWithFilter: null,
+          maxAllowedInternalPauseSecWithFilter: null,
+          maxInternalPauseSecWithoutFilter: null,
+          maxAllowedInternalPauseSecWithoutFilter: null,
         };
       }
     };
@@ -1824,16 +1895,23 @@ export default function BatchOperations({
       const attemptsWithAudio = attempts.filter((item) => item.audioUrl);
       if (attemptsWithAudio.length === 0) return null;
 
+      const toSafeGap = (value: number | null): number =>
+        value !== null ? value : Number.POSITIVE_INFINITY;
+
       const ranked = [...attemptsWithAudio].sort((a, b) => {
-        const aLead =
-          a.leadingSilenceSec !== null
-            ? a.leadingSilenceSec
-            : Number.POSITIVE_INFINITY;
-        const bLead =
-          b.leadingSilenceSec !== null
-            ? b.leadingSilenceSec
-            : Number.POSITIVE_INFINITY;
-        return aLead - bLead;
+        const aBegin = toSafeGap(a.leadingSilenceSec);
+        const aMiddle = toSafeGap(a.maxInternalPauseSec);
+        const bBegin = toSafeGap(b.leadingSilenceSec);
+        const bMiddle = toSafeGap(b.maxInternalPauseSec);
+
+        const aWorst = Math.max(aBegin, aMiddle);
+        const bWorst = Math.max(bBegin, bMiddle);
+        if (aWorst !== bWorst) return aWorst - bWorst;
+
+        if (aBegin !== bBegin) return aBegin - bBegin;
+        if (aMiddle !== bMiddle) return aMiddle - bMiddle;
+
+        return a.attemptNumber - b.attemptNumber;
       });
 
       return ranked[0] ?? attemptsWithAudio[attemptsWithAudio.length - 1];
@@ -1848,14 +1926,14 @@ export default function BatchOperations({
       const attemptCount = attempts.length;
       if (attemptCount === 0) {
         if (existingCheckSummary) {
-          return `${existingCheckSummary} | Intro beginning-audio QA failed: no generated attempts were recorded.`;
+          return `${existingCheckSummary} | Intro audio QA failed: no generated attempts were recorded.`;
         }
-        return 'Intro beginning-audio QA failed: no generated attempts were recorded.';
+        return 'Intro audio QA failed: no generated attempts were recorded.';
       }
 
-      const leadsSummary = attempts
+      const attemptsSummary = attempts
         .map((attempt) => {
-          return `#${attempt.attemptNumber}(${formatAttemptLeadPair(attempt)})`;
+          return `#${attempt.attemptNumber}(${formatAttemptGapDetails(attempt)})`;
         })
         .join(', ');
 
@@ -1863,22 +1941,22 @@ export default function BatchOperations({
         selectedAttempt?.reason ||
         'No best generated attempt could be selected from failed attempts.';
 
-      const existingLeadSummary =
+      const existingGapSummary =
         existingAttempt && existingAttempt.audioUrl
-          ? `Existing lead values: ${formatAttemptLeadPair(existingAttempt)}.`
+          ? `Existing gap values: ${formatAttemptGapDetails(existingAttempt)}.`
           : existingCheckSummary
             ? `${existingCheckSummary}.`
             : null;
 
-      const generatedLeadSummary = `Generated lead values: ${leadsSummary}.`;
+      const generatedGapSummary = `Generated gap values: ${attemptsSummary}.`;
 
       if (existingCheckSummary) {
-        return [selectedSummary, existingLeadSummary, generatedLeadSummary]
+        return [selectedSummary, existingGapSummary, generatedGapSummary]
           .filter(Boolean)
           .join(' | ');
       }
 
-      return [selectedSummary, existingLeadSummary, generatedLeadSummary]
+      return [selectedSummary, existingGapSummary, generatedGapSummary]
         .filter(Boolean)
         .join(' | ');
     };
@@ -2058,12 +2136,18 @@ export default function BatchOperations({
                   ? `${existingAttempt.maxLeadingSilenceSecWithoutFilter.toFixed(3)}s`
                   : 'n/a';
 
-            existingCheckSummary = `Existing audio ${formatAttemptLeadPair(
-              existingAttempt,
-            )} (max ${existingMax}) pass=${existingAttempt.pass}`;
+            const existingMiddleMax =
+              existingAttempt.maxAllowedInternalPauseSecWithFilter !== null
+                ? `${existingAttempt.maxAllowedInternalPauseSecWithFilter.toFixed(3)}s`
+                : existingAttempt.maxAllowedInternalPauseSecWithoutFilter !==
+                    null
+                  ? `${existingAttempt.maxAllowedInternalPauseSecWithoutFilter.toFixed(3)}s`
+                  : 'n/a';
+
+            existingCheckSummary = `Existing audio ${formatAttemptGapDetails(existingAttempt)} (max begin ${existingMax}, max middle ${existingMiddleMax}) pass=${existingAttempt.pass}`;
 
             console.log(
-              `[Fix Intro QA] scene ${scene.id} existing audio ${formatAttemptLeadPair(existingAttempt)} (max ${existingMax}) pass=${existingAttempt.pass}`,
+              `[Fix Intro QA] scene ${scene.id} existing audio ${formatAttemptGapDetails(existingAttempt)} (max begin ${existingMax}, max middle ${existingMiddleMax}) pass=${existingAttempt.pass}`,
             );
 
             if (existingAttempt.pass) {
@@ -2149,12 +2233,16 @@ export default function BatchOperations({
             selectedAudioAttempt = pickBestAudioAttempt(competitionAttempts);
 
             if (selectedAudioAttempt) {
-              const selectedLead =
+              const selectedBegin =
                 selectedAudioAttempt.leadingSilenceSec !== null
                   ? `${selectedAudioAttempt.leadingSilenceSec.toFixed(3)}s`
                   : 'n/a';
+              const selectedMiddle =
+                selectedAudioAttempt.maxInternalPauseSec !== null
+                  ? `${selectedAudioAttempt.maxInternalPauseSec.toFixed(3)}s`
+                  : 'n/a';
               console.log(
-                `[Fix Intro QA] scene ${scene.id} selected ${selectedAudioAttempt.source} attempt ${selectedAudioAttempt.attemptNumber} as best failed candidate (lead=${selectedLead}).`,
+                `[Fix Intro QA] scene ${scene.id} selected ${selectedAudioAttempt.source} attempt ${selectedAudioAttempt.attemptNumber} as best failed candidate (begin=${selectedBegin}, middle=${selectedMiddle}).`,
               );
             }
           }
