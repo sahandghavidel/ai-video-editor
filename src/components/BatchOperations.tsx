@@ -1563,6 +1563,36 @@ export default function BatchOperations({
       }
     };
 
+    const clearSceneFlagged = async (sceneId: number) => {
+      const latest = await fetchFreshScene(sceneId);
+      if (latest && parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            field_7096: null,
+            field_7106: '',
+          }),
+        });
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          console.warn(
+            `Failed to clear intro QA flag for scene ${sceneId}: ${res.status} ${t}`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to clear intro QA flag for scene ${sceneId}:`,
+          error,
+        );
+      }
+    };
+
     const setSceneAudioUrl = async (sceneId: number, audioUrl: string) => {
       const normalizedAudioUrl = String(audioUrl || '').trim();
       if (!normalizedAudioUrl) return;
@@ -1607,6 +1637,7 @@ export default function BatchOperations({
           body: JSON.stringify({
             sceneId,
             audioUrl: normalizedAudioUrl,
+            maxLeadingSilenceSec: 0.3,
             maxInternalPauseSec: 9999,
             maxSilenceRatio: 1,
           }),
@@ -2166,6 +2197,11 @@ export default function BatchOperations({
             desiredText,
             transcriptText,
           );
+
+          if (sentenceCheck.pass && !allGeneratedFailed) {
+            await clearSceneFlagged(scene.id);
+            continue;
+          }
 
           if (allGeneratedFailed) {
             const audioReason = buildAllGeneratedAttemptsFailureReason(
