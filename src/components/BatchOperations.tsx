@@ -87,7 +87,7 @@ interface BatchOperationsProps {
   ) => Promise<void>;
 }
 
-const INTRO_QA_SCENE_LIMIT = 20;
+const INTRO_QA_SCENE_LIMIT = 10;
 const INTRO_QA_MAX_AUDIO_ATTEMPTS = 3;
 
 export default function BatchOperations({
@@ -1282,7 +1282,9 @@ export default function BatchOperations({
 
   const onFixIntroQaFinalTTS = async () => {
     // Intro-only QA flow:
-    // - first 20 scenes only
+    // - non-empty sentence scenes only (field_6890)
+    // - include the first non-empty sentence scene
+    // - then take the first INTRO_QA_SCENE_LIMIT scenes
     // - ignore confirmed scenes
     // - check existing TTS first; if pass, do sentence check only
     // - if existing fails/missing, generate up to 3 audios
@@ -1319,13 +1321,14 @@ export default function BatchOperations({
 
     const introScenes = [...data]
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      .filter((scene) => String(scene['field_6890'] ?? '').trim().length > 0)
       .slice(0, INTRO_QA_SCENE_LIMIT);
 
     const scenesToFix = getFixTtsEligibleScenes(introScenes);
 
     if (scenesToFix.length === 0) {
       console.log(
-        `No intro scenes (first ${INTRO_QA_SCENE_LIMIT}) with final video + text found to fix.`,
+        `No intro scenes (first ${INTRO_QA_SCENE_LIMIT} non-empty sentence scenes) with final video + text found to fix.`,
       );
       return;
     }
