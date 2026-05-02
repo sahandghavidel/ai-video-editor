@@ -450,6 +450,7 @@ export default function SceneCard({
         event.preventDefault();
 
         if (!event.repeat) {
+          refreshDataRef.current?.();
           scrollToFirstSceneButtonRef.current?.click();
         }
 
