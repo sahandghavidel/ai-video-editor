@@ -706,6 +706,12 @@ export default function SceneCard({
   // State for clearing video
   const [clearingVideoId, setClearingVideoId] = useState<number | null>(null);
 
+  // State for deleting scene
+  const [deletingSceneId, setDeletingSceneId] = useState<number | null>(null);
+  const [leftHoverDeleteSceneId, setLeftHoverDeleteSceneId] = useState<
+    number | null
+  >(null);
+
   // Revert to original sentence handler
   const handleRevertToOriginal = async (sceneId: number) => {
     const currentScene = data.find((scene) => scene.id === sceneId);
@@ -776,6 +782,54 @@ export default function SceneCard({
       console.error('Failed to clear video:', error);
       // Revert optimistic update on error
       onDataUpdate?.(data);
+    }
+  };
+
+  const handleDeleteScene = async (sceneId: number) => {
+    if (deletingSceneId !== null) return;
+
+    const sceneExists = data.some((scene) => scene.id === sceneId);
+    if (!sceneExists) return;
+
+    setDeletingSceneId(sceneId);
+
+    if (mediaPlayer.playingAudioId === sceneId) {
+      handleAudioPause(sceneId);
+    }
+    if (mediaPlayer.playingVideoId === sceneId) {
+      handleVideoStop(sceneId);
+    }
+    if (mediaPlayer.playingProducedVideoId === sceneId) {
+      handleProducedVideoStop(sceneId);
+    }
+
+    const optimisticData = data.filter((scene) => scene.id !== sceneId);
+    onDataUpdate?.(optimisticData);
+    setData(optimisticData);
+
+    try {
+      const response = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(
+          `Failed to delete scene (${response.status}): ${errorText}`,
+        );
+      }
+
+      playSuccessSound();
+      refreshData?.();
+    } catch (error) {
+      console.error('Failed to delete scene:', error);
+      playErrorSound();
+      onDataUpdate?.(data);
+      setData(data);
+      alert('Failed to delete scene. Please try again.');
+    } finally {
+      setDeletingSceneId(null);
+      setLeftHoverDeleteSceneId(null);
     }
   };
 
@@ -5163,8 +5217,53 @@ export default function SceneCard({
             ref={(el) => {
               if (el) sceneCardRefs.current[scene.id] = el;
             }}
-            className='bg-white rounded-lg border border-gray-200 p-6 shadow-md'
+            className='relative group bg-white rounded-lg border border-gray-200 p-6 shadow-md'
+            onMouseMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const relativeX = e.clientX - rect.left;
+              const leftZoneWidth = rect.width * 0.1;
+              const isInLeftZone = relativeX >= 0 && relativeX <= leftZoneWidth;
+
+              if (isInLeftZone) {
+                if (leftHoverDeleteSceneId !== scene.id) {
+                  setLeftHoverDeleteSceneId(scene.id);
+                }
+              } else if (leftHoverDeleteSceneId === scene.id) {
+                setLeftHoverDeleteSceneId(null);
+              }
+            }}
+            onMouseLeave={() => {
+              if (leftHoverDeleteSceneId === scene.id) {
+                setLeftHoverDeleteSceneId(null);
+              }
+            }}
           >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleDeleteScene(scene.id);
+              }}
+              disabled={deletingSceneId !== null}
+              className={`absolute left-3 top-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-red-500/90 text-white shadow-sm transition-all duration-150 ${
+                leftHoverDeleteSceneId === scene.id ||
+                deletingSceneId === scene.id
+                  ? 'opacity-100 pointer-events-auto'
+                  : 'opacity-0 pointer-events-none'
+              } ${
+                deletingSceneId !== null && deletingSceneId !== scene.id
+                  ? 'cursor-not-allowed'
+                  : 'hover:bg-red-600'
+              }`}
+              title='Delete scene'
+              aria-label={`Delete scene ${scene.id}`}
+            >
+              {deletingSceneId === scene.id ? (
+                <Loader2 className='h-3.5 w-3.5 animate-spin' />
+              ) : (
+                <X className='h-3.5 w-3.5' />
+              )}
+            </button>
+
             {/* Video Player - Only show when video is playing for this scene */}
             {mediaPlayer.playingVideoId === scene.id && (
               <div className='mb-4 bg-black rounded-lg overflow-hidden'>
