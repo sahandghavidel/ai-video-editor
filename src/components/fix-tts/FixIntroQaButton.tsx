@@ -9,6 +9,7 @@ interface FixIntroQaButtonProps {
   isRunning: boolean;
   currentSceneId: number | null;
   introLimit?: number;
+  maxAudioAttempts?: number;
   className?: string;
 }
 
@@ -18,7 +19,8 @@ export function FixIntroQaButton({
   hasSelectedVideo,
   isRunning,
   currentSceneId,
-  introLimit = 20,
+  introLimit = 10,
+  maxAudioAttempts = 3,
   className = '',
 }: FixIntroQaButtonProps) {
   return (
@@ -32,8 +34,8 @@ export function FixIntroQaButton({
           : isRunning
             ? currentSceneId !== null
               ? `Fixing intro QA for scene ${currentSceneId}`
-              : `Fixing intro QA for first ${introLimit} scenes...`
-            : `Fix intro scenes with text+silence QA (first ${introLimit} scenes)`
+              : `Fixing intro QA for first ${introLimit} scenes (up to ${maxAudioAttempts} generated audios)...`
+            : `Fix intro scenes with text+silence QA (first ${introLimit} scenes, up to ${maxAudioAttempts} generated audios)`
       }
     >
       {isRunning && <Loader2 className='w-4 h-4 animate-spin' />}
