@@ -6561,7 +6561,7 @@ export default function SceneCard({
                           }
                           className={`inline-flex items-center justify-center w-9 h-7 rounded-full text-xs font-medium transition-colors ${
                             autoFixingMismatchSceneId === scene.id
-                              ? 'bg-gray-100 text-gray-500'
+                              ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80'
                               : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={
@@ -6580,7 +6580,7 @@ export default function SceneCard({
                           }
                         >
                           {autoFixingMismatchSceneId === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
+                            <Wand2 className='h-3 w-3 animate-pulse' />
                           ) : (
                             <Wand2 className='h-3 w-3' />
                           )}
