@@ -11,7 +11,7 @@ import {
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
-import { parseFixTtsStatus } from '@/utils/fixTtsBatch';
+import { extractLinkedVideoId, parseFixTtsStatus } from '@/utils/fixTtsBatch';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
@@ -148,8 +148,34 @@ const LazyTTSWordReplacementsModal = dynamic(
   },
 );
 
+const extractFieldValueAsText = (field: unknown): string => {
+  if (field === null || field === undefined) return '';
+
+  if (typeof field === 'string') return field;
+  if (typeof field === 'number' || typeof field === 'boolean') {
+    return String(field);
+  }
+
+  if (Array.isArray(field)) {
+    for (const item of field) {
+      const value = extractFieldValueAsText(item).trim();
+      if (value) return value;
+    }
+    return '';
+  }
+
+  if (typeof field === 'object') {
+    const record = field as Record<string, unknown>;
+    return extractFieldValueAsText(
+      record.value ?? record.name ?? record.text ?? record.title,
+    );
+  }
+
+  return '';
+};
+
 export default function SceneCard({
-  data,
+  data: selectedVideoData,
   refreshData,
   refreshing = false,
   onDataUpdate,
@@ -175,6 +201,68 @@ export default function SceneCard({
     useState<boolean>(true);
   const [applyTranscribeAfterUpload, setApplyTranscribeAfterUpload] =
     useState<boolean>(true);
+  const [showProcessingScenesAllVideos, setShowProcessingScenesAllVideos] =
+    useState<boolean>(false);
+  const [processingScenesData, setProcessingScenesData] = useState<
+    BaserowRow[]
+  >([]);
+  const [loadingProcessingScenesData, setLoadingProcessingScenesData] =
+    useState<boolean>(false);
+
+  const loadProcessingScenesForAllVideos = useCallback(async () => {
+    setLoadingProcessingScenesData(true);
+
+    try {
+      const { getBaserowData, getOriginalVideosData } =
+        await import('@/lib/baserow-actions');
+
+      const [allScenes, originalVideos] = await Promise.all([
+        getBaserowData(),
+        getOriginalVideosData(),
+      ]);
+
+      const processingVideoIds = new Set<number>(
+        originalVideos
+          .filter((video) => {
+            const status = extractFieldValueAsText(video.field_6864)
+              .trim()
+              .toLowerCase();
+            return status === 'processing';
+          })
+          .map((video) => video.id),
+      );
+
+      const filteredScenes = allScenes.filter((scene) => {
+        const linkedVideoId = extractLinkedVideoId(scene.field_6889);
+        return linkedVideoId !== null && processingVideoIds.has(linkedVideoId);
+      });
+
+      setProcessingScenesData(filteredScenes);
+    } catch (error) {
+      console.error(
+        'Failed to load processing scenes across all videos:',
+        error,
+      );
+      setProcessingScenesData([]);
+    } finally {
+      setLoadingProcessingScenesData(false);
+    }
+  }, []);
+
+  const handleToggleProcessingScenesAllVideos = () => {
+    if (showProcessingScenesAllVideos) {
+      setShowProcessingScenesAllVideos(false);
+      return;
+    }
+
+    setShowProcessingScenesAllVideos(true);
+    void loadProcessingScenesForAllVideos();
+  };
+
+  const data = showProcessingScenesAllVideos
+    ? processingScenesData
+    : selectedVideoData;
+
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
@@ -4978,13 +5066,33 @@ export default function SceneCard({
     showRecentlyModifiedTTS,
   ]);
 
+  if (showProcessingScenesAllVideos && loadingProcessingScenesData) {
+    return (
+      <div className='flex flex-col items-center justify-center min-h-[300px] text-gray-500'>
+        <Loader2 className='w-7 h-7 animate-spin mb-3 text-emerald-600' />
+        <h3 className='text-lg font-semibold mb-1'>
+          Loading Processing scenes
+        </h3>
+        <p className='text-sm text-center'>
+          Fetching scenes from all Processing videos...
+        </p>
+      </div>
+    );
+  }
+
   if (!data || data.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center min-h-[400px] text-gray-500'>
         <div className='text-6xl mb-4'>📋</div>
-        <h3 className='text-xl font-semibold mb-2'>No Data Available</h3>
+        <h3 className='text-xl font-semibold mb-2'>
+          {showProcessingScenesAllVideos
+            ? 'No Processing Scenes Found'
+            : 'No Data Available'}
+        </h3>
         <p className='text-center max-w-md'>
-          No scenes found in your Baserow table. Add some data to get started!
+          {showProcessingScenesAllVideos
+            ? 'No scenes are linked to videos with status Processing.'
+            : 'No scenes found in your Baserow table. Add some data to get started!'}
         </p>
         <div className='mt-6 space-y-2'>
           {refreshData && (
@@ -5197,6 +5305,23 @@ export default function SceneCard({
                   title='Scroll to most recently modified scene'
                 >
                   📍 Recent
+                </button>
+                <button
+                  onClick={handleToggleProcessingScenesAllVideos}
+                  disabled={loadingProcessingScenesData}
+                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
+                    showProcessingScenesAllVideos
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  } ${loadingProcessingScenesData ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  title='Show scenes for all videos where status is Processing'
+                >
+                  {loadingProcessingScenesData ? (
+                    <Loader2 className='w-3 h-3 animate-spin' />
+                  ) : null}
+                  <span>
+                    {showProcessingScenesAllVideos ? '✓ ' : ''}Processing All
+                  </span>
                 </button>
               </div>
             </div>
