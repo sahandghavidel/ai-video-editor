@@ -118,6 +118,7 @@ Existing completion names include:
 - `Delete Empty`
 - `Fix TTS`
 - `Fix Flagged`
+- `Fix Intro QA`
 - `Prompt Scenes`
 - `Combine Pairs`
 - `Silence Opt All`

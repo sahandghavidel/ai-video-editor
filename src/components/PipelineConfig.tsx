@@ -195,6 +195,11 @@ export default function PipelineConfig({
       color: 'text-emerald-500',
     },
     {
+      key: 'fixIntroQaAfterFixFlagged' as const,
+      label: 'Fix Intro QA',
+      color: 'text-cyan-500',
+    },
+    {
       key: 'promptScenesAfterTranscribe' as const,
       label: 'Prompt Scenes',
       color: 'text-indigo-500',

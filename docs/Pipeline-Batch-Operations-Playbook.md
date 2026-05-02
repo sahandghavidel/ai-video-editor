@@ -70,28 +70,30 @@ The order below is the actual execution order in code.
 15. `generateTTS` → `handleGenerateAllTTSForAllVideos(false)`
 16. `sync` → `handleGenerateAllVideosForAllScenes(false)`
 17. `transcribeScenesAfterSync` (Fix TTS) → `handleTranscribeProcessingScenesAllVideos(false)`
-18. `promptScenesAfterTranscribe` → `handlePromptProcessingScenesAllVideos(false)`
+18. `fixFlaggedAfterFixTTS` (Fix Flagged) → `handleTranscribeFlaggedProcessingScenesAllVideos(false)`
+19. `fixIntroQaAfterFixFlagged` (Fix Intro QA) → `handleFixIntroQaProcessingScenesAllVideos(false)`
+20. `promptScenesAfterTranscribe` → `handlePromptProcessingScenesAllVideos(false)`
 
 ### Scene post-processing block (opt-in by default)
 
-19. `generateSubtitles` → `handleGenerateSubtitlesForProcessingVideos()`
-20. `generateSceneImages` → `handleGenerateSceneImagesForProcessingVideos()`
-21. `upscaleSceneImages` → `handleUpscaleSceneImagesForProcessingVideos()`
-22. `generateSceneVideos` → `handleGenerateSceneVideosForProcessingVideos()`
-23. `enhanceSceneVideos` → `handleEnhanceSceneVideosForProcessingVideos()`
-24. `applyEnhancedVideos` → `handleApplyEnhancedVideosForProcessingVideos()`
-25. `applyUpscaledImages` → `handleApplyUpscaledImagesForProcessingVideos()`
+21. `generateSubtitles` → `handleGenerateSubtitlesForProcessingVideos()`
+22. `generateSceneImages` → `handleGenerateSceneImagesForProcessingVideos()`
+23. `upscaleSceneImages` → `handleUpscaleSceneImagesForProcessingVideos()`
+24. `generateSceneVideos` → `handleGenerateSceneVideosForProcessingVideos()`
+25. `enhanceSceneVideos` → `handleEnhanceSceneVideosForProcessingVideos()`
+26. `applyEnhancedVideos` → `handleApplyEnhancedVideosForProcessingVideos()`
+27. `applyUpscaledImages` → `handleApplyUpscaledImagesForProcessingVideos()`
 
 ### Final tail block (opt-in by default)
 
-26. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
-27. `convertFinalToCFR` → `handleConvertFinalToCFRAll(false)`
-28. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
-29. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
-30. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
-31. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
-32. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
-33. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
+28. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
+29. `convertFinalToCFR` → `handleConvertFinalToCFRAll(false)`
+30. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
+31. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
+32. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
+33. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
+34. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
+35. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
 
 ---
 
