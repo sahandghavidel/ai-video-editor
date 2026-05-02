@@ -2359,6 +2359,7 @@ export default function SceneCard({
         seedOverride?: number;
         aggressiveEdgeTrim?: boolean;
         throwOnError?: boolean;
+        skipAutoSyncAfterTtsGeneration?: boolean;
       },
     ) => {
       try {
@@ -2462,7 +2463,10 @@ export default function SceneCard({
         refreshDataRef.current?.();
 
         // Auto-generate video if option is enabled
-        if (videoSettings.autoGenerateVideo) {
+        if (
+          videoSettings.autoGenerateVideo &&
+          !opts?.skipAutoSyncAfterTtsGeneration
+        ) {
           // Use sceneData if provided (from batch operation), otherwise look up in dataRef
           const currentScene =
             (typedSceneData as BaserowRow | undefined) ||
@@ -3347,6 +3351,7 @@ export default function SceneCard({
 
           await handleTTSProduce(sceneId, desiredText, initialScene, {
             throwOnError: true,
+            skipAutoSyncAfterTtsGeneration: true,
           });
 
           const afterTtsScene =
@@ -3543,6 +3548,7 @@ export default function SceneCard({
           await handleTTSProduce(sceneId, desiredText, initialScene, {
             seedOverride: seed,
             throwOnError: true,
+            skipAutoSyncAfterTtsGeneration: true,
           });
 
           const afterTtsScene =

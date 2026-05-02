@@ -1358,6 +1358,7 @@ export default function BatchOperations({
       opts?: {
         seedOverride?: number;
         throwOnError?: boolean;
+        skipAutoSyncAfterTtsGeneration?: boolean;
       },
     ) => Promise<void>;
 
@@ -2237,6 +2238,7 @@ export default function BatchOperations({
                 {
                   seedOverride: seed,
                   throwOnError: true,
+                  skipAutoSyncAfterTtsGeneration: true,
                 },
               );
 

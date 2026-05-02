@@ -4966,6 +4966,7 @@ export default function OriginalVideosList({
           opts?: {
             seedOverride?: number;
             throwOnError?: boolean;
+            skipAutoSyncAfterTtsGeneration?: boolean;
           },
         ) => Promise<void>;
 
@@ -5760,6 +5761,7 @@ export default function OriginalVideosList({
                 {
                   seedOverride: seed,
                   throwOnError: true,
+                  skipAutoSyncAfterTtsGeneration: true,
                 },
               );
 
