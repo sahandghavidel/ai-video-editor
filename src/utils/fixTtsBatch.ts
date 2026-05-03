@@ -1,5 +1,16 @@
 import { BaserowRow } from '@/lib/baserow-actions';
 
+export type TtsComparisonAliasEntry = {
+  word: string;
+  replacement: string;
+};
+
+export type FixTtsAutoFixOptions = {
+  maxAttempts?: number;
+  suppressRefreshes?: boolean;
+  comparisonAliases?: TtsComparisonAliasEntry[];
+};
+
 export type FixTtsStatus = 'true' | 'confirmed' | null;
 
 const normalizeFixTtsStatus = (raw: unknown): FixTtsStatus => {

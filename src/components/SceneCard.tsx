@@ -11,7 +11,12 @@ import {
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
-import { extractLinkedVideoId, parseFixTtsStatus } from '@/utils/fixTtsBatch';
+import {
+  extractLinkedVideoId,
+  type FixTtsAutoFixOptions,
+  parseFixTtsStatus,
+  type TtsComparisonAliasEntry,
+} from '@/utils/fixTtsBatch';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
@@ -50,7 +55,7 @@ interface SceneCardProps {
     handleAutoFixMismatch: (
       sceneId: number,
       sceneData?: BaserowRow,
-      options?: { maxAttempts?: number },
+      options?: FixTtsAutoFixOptions,
     ) => Promise<void>;
     handleSentenceImprovement: (
       sceneId: number,
@@ -344,7 +349,6 @@ export default function SceneCard({
   >({});
 
   type CaptionsWord = { word: string; start: number; end: number };
-  type TtsComparisonAliasEntry = { word: string; replacement: string };
   type AliasCanonicalRule = {
     phrase: string;
     canonical: string;
@@ -2449,6 +2453,7 @@ export default function SceneCard({
         aggressiveEdgeTrim?: boolean;
         throwOnError?: boolean;
         skipAutoSyncAfterTtsGeneration?: boolean;
+        suppressRefreshes?: boolean;
       },
     ) => {
       try {
@@ -2549,7 +2554,9 @@ export default function SceneCard({
         onDataUpdateRef.current?.(updatedData);
 
         // Refresh data from server to ensure consistency
-        refreshDataRef.current?.();
+        if (!opts?.suppressRefreshes) {
+          refreshDataRef.current?.();
+        }
 
         // Auto-generate video if option is enabled
         if (
@@ -2591,7 +2598,7 @@ export default function SceneCard({
       sceneData?: unknown,
       zoomLevel: number = 0,
       panMode: 'none' | 'zoom' | 'zoomOut' | 'topToBottom' = 'none',
-      opts?: { throwOnError?: boolean },
+      opts?: { throwOnError?: boolean; suppressRefreshes?: boolean },
     ) => {
       try {
         setGeneratingVideo(sceneId);
@@ -2665,7 +2672,7 @@ export default function SceneCard({
         onDataUpdateRef.current?.(updatedData);
 
         // Only refresh from server if it's NOT a cache hit (to avoid wasteful refetch)
-        if (!isCached) {
+        if (!isCached && !opts?.suppressRefreshes) {
           refreshDataRef.current?.();
         }
       } catch (error) {
@@ -3293,7 +3300,7 @@ export default function SceneCard({
     async (
       sceneId: number,
       sceneData?: BaserowRow,
-      options?: { maxAttempts?: number },
+      options?: FixTtsAutoFixOptions,
     ) => {
       if (autoFixingMismatchSceneId !== null) return;
 
@@ -3310,6 +3317,7 @@ export default function SceneCard({
           Number.isFinite(requestedMaxAttempts) && requestedMaxAttempts > 0
             ? Math.max(1, Math.min(10, Math.floor(requestedMaxAttempts)))
             : 2;
+        const suppressRefreshes = options?.suppressRefreshes === true;
 
         const updateFixTtsStatus = async (
           status: 'true' | null,
@@ -3379,13 +3387,32 @@ export default function SceneCard({
           return;
         }
 
+        const initialMismatchReason = getStoredMismatchReason(
+          (initialFromApi ?? initialScene ?? ({} as BaserowRow)) as BaserowRow,
+        );
+        let didSetFlaggedTrueInThisRun = false;
+
         const hasExistingTtsAudio =
           Boolean(getStringField(initialFromApi, 'field_6891')) ||
           Boolean(getStringField(initialScene as unknown, 'field_6891'));
 
-        const setFlaggedTrue = async (mismatchReason: string) =>
-          updateFixTtsStatus('true', mismatchReason);
-        const clearFlagged = async () => updateFixTtsStatus(null, '');
+        const setFlaggedTrue = async (mismatchReason: string) => {
+          didSetFlaggedTrueInThisRun = true;
+          await updateFixTtsStatus('true', mismatchReason);
+        };
+
+        const clearFlagged = async () => {
+          const alreadyClearInBaserow =
+            !didSetFlaggedTrueInThisRun &&
+            initialFixTtsStatus !== 'true' &&
+            initialMismatchReason.length === 0;
+
+          if (alreadyClearInBaserow) {
+            return;
+          }
+
+          await updateFixTtsStatus(null, '');
+        };
 
         const desiredText = String(
           (initialFromApi?.field_6890 as string) ??
@@ -3403,7 +3430,21 @@ export default function SceneCard({
           return;
         }
 
-        const comparisonAliases = await loadTtsComparisonAliases();
+        const comparisonAliases = Array.isArray(options?.comparisonAliases)
+          ? options.comparisonAliases
+              .map((item) => {
+                const word =
+                  typeof item?.word === 'string' ? item.word.trim() : '';
+                const replacement =
+                  typeof item?.replacement === 'string'
+                    ? item.replacement.trim()
+                    : '';
+
+                if (!word || !replacement) return null;
+                return { word, replacement };
+              })
+              .filter((item): item is TtsComparisonAliasEntry => Boolean(item))
+          : await loadTtsComparisonAliases();
         const aliasRules = buildAliasCanonicalizationRules(comparisonAliases);
 
         const baseVideoUrl = String(
@@ -3441,6 +3482,7 @@ export default function SceneCard({
           await handleTTSProduce(sceneId, desiredText, initialScene, {
             throwOnError: true,
             skipAutoSyncAfterTtsGeneration: true,
+            suppressRefreshes,
           });
 
           const afterTtsScene =
@@ -3475,7 +3517,7 @@ export default function SceneCard({
             (afterTtsScene as unknown) ?? undefined,
             0,
             'none',
-            { throwOnError: true },
+            { throwOnError: true, suppressRefreshes },
           );
 
           const afterSyncScene =
@@ -3606,7 +3648,9 @@ export default function SceneCard({
         ) {
           await clearFlagged();
           setStatus('Match — nothing to do.');
-          refreshDataRef.current?.();
+          if (!suppressRefreshes) {
+            refreshDataRef.current?.();
+          }
           return;
         }
 
@@ -3638,6 +3682,7 @@ export default function SceneCard({
             seedOverride: seed,
             throwOnError: true,
             skipAutoSyncAfterTtsGeneration: true,
+            suppressRefreshes,
           });
 
           const afterTtsScene =
@@ -3670,7 +3715,7 @@ export default function SceneCard({
             (afterTtsScene as unknown) ?? undefined,
             0,
             'none',
-            { throwOnError: true },
+            { throwOnError: true, suppressRefreshes },
           );
 
           // Wait for Baserow to reflect the new final video URL (or at least confirm it's present).
@@ -3748,7 +3793,9 @@ export default function SceneCard({
           ) {
             await clearFlagged();
             setStatus(`Fixed — match after ${attempt}/${maxAttempts}.`);
-            refreshDataRef.current?.();
+            if (!suppressRefreshes) {
+              refreshDataRef.current?.();
+            }
             return;
           }
         }
@@ -3764,7 +3811,9 @@ export default function SceneCard({
         setStatus(
           `Still mismatched after ${maxAttempts} attempts. (Flagged=true) ${mismatchReason}`,
         );
-        refreshDataRef.current?.();
+        if (!suppressRefreshes) {
+          refreshDataRef.current?.();
+        }
       } catch (err) {
         console.error('Auto-fix mismatch failed:', err);
         setStatus(
@@ -3784,6 +3833,7 @@ export default function SceneCard({
       buildAliasCanonicalizationRules,
       isSpeechMatchForAutoFix,
       loadTtsComparisonAliases,
+      getStoredMismatchReason,
       buildMismatchReasonForTooltip,
       normalizeSpeechTextForCompare,
       sleep,
@@ -4891,7 +4941,7 @@ export default function SceneCard({
     (
       sceneId: number,
       sceneData?: BaserowRow,
-      options?: { maxAttempts?: number },
+      options?: FixTtsAutoFixOptions,
     ) => {
       return handleAutoFixMismatchRef.current(sceneId, sceneData, options);
     },

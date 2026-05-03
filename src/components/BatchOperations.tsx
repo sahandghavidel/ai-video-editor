@@ -12,6 +12,7 @@ import {
   cycleSpeed as cycleThroughSpeeds,
 } from '@/utils/batchOperations';
 import {
+  type FixTtsAutoFixOptions,
   getFixTtsEligibleScenes,
   hasSceneTtsAudioForFixTts,
   isSceneFlaggedForFixTts,
@@ -57,7 +58,7 @@ interface BatchOperationsProps {
   handleAutoFixMismatch: (
     sceneId: number,
     sceneData?: BaserowRow,
-    options?: { maxAttempts?: number },
+    options?: FixTtsAutoFixOptions,
   ) => Promise<void>;
   handleSentenceImprovement: (
     sceneId: number,

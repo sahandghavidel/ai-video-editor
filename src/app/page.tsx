@@ -1,6 +1,7 @@
 'use client';
 
 import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
+import { type FixTtsAutoFixOptions } from '@/utils/fixTtsBatch';
 import SceneCard from '@/components/SceneCard';
 import BatchOperations from '@/components/BatchOperations';
 import ModelSelection from '@/components/ModelSelection';
@@ -72,7 +73,7 @@ export default function Home() {
     handleAutoFixMismatch: (
       sceneId: number,
       sceneData?: BaserowRow,
-      options?: { maxAttempts?: number },
+      options?: FixTtsAutoFixOptions,
     ) => Promise<void>;
     handleSentenceImprovement: (
       sceneId: number,
@@ -147,7 +148,7 @@ export default function Home() {
       handleAutoFixMismatch: (
         sceneId: number,
         sceneData?: BaserowRow,
-        options?: { maxAttempts?: number },
+        options?: FixTtsAutoFixOptions,
       ) => Promise<void>;
       handleSentenceImprovement: (
         sceneId: number,

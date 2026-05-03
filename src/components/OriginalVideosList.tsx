@@ -61,10 +61,12 @@ import {
 } from '@/utils/batchOperations';
 import {
   extractLinkedVideoId as extractLinkedVideoIdFromField,
+  type FixTtsAutoFixOptions,
   getFixTtsEligibleScenes,
   hasSceneTtsAudioForFixTts,
   isSceneFlaggedForFixTts,
   parseFixTtsStatus,
+  type TtsComparisonAliasEntry,
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
@@ -98,7 +100,7 @@ interface SceneHandlers {
   handleAutoFixMismatch: (
     sceneId: number,
     sceneData?: BaserowRow,
-    options?: { maxAttempts?: number },
+    options?: FixTtsAutoFixOptions,
   ) => Promise<void>;
   handleSentenceImprovement: (
     sceneId: number,
@@ -4720,6 +4722,46 @@ export default function OriginalVideosList({
       return false;
     }
 
+    const loadComparisonAliasesOnce = async (): Promise<
+      TtsComparisonAliasEntry[]
+    > => {
+      try {
+        const response = await fetch('/api/tts-word-replacements', {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        if (!response.ok) return [];
+
+        const payload = (await response.json().catch(() => null)) as {
+          entries?: unknown;
+        } | null;
+
+        if (!Array.isArray(payload?.entries)) return [];
+
+        return payload.entries
+          .map((item) => {
+            if (!item || typeof item !== 'object') return null;
+            const rec = item as Record<string, unknown>;
+            const word = typeof rec.word === 'string' ? rec.word.trim() : '';
+            const replacement =
+              typeof rec.replacement === 'string' ? rec.replacement.trim() : '';
+            if (!word || !replacement) return null;
+            return { word, replacement };
+          })
+          .filter((entry): entry is TtsComparisonAliasEntry => Boolean(entry));
+      } catch {
+        return [];
+      }
+    };
+
+    const comparisonAliases = await loadComparisonAliasesOnce();
+    const autoFixOptions: FixTtsAutoFixOptions = {
+      suppressRefreshes: true,
+      comparisonAliases,
+      ...(flaggedOnly ? { maxAttempts: 1 } : {}),
+    };
+    const perSceneDelayMs = flaggedOnly ? 200 : 250;
+
     for (const scene of scenesToFix) {
       const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
       if (videoId && !isNaN(videoId)) {
@@ -4735,7 +4777,7 @@ export default function OriginalVideosList({
         await sceneHandlers.handleAutoFixMismatch(
           scene.id,
           sceneWithVoiceOverride,
-          flaggedOnly ? { maxAttempts: 1 } : undefined,
+          autoFixOptions,
         );
       } catch (error) {
         // Continue with other scenes; don't fail the whole batch.
@@ -4746,7 +4788,7 @@ export default function OriginalVideosList({
       }
 
       // Small delay to avoid overwhelming the backend
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, perSceneDelayMs));
     }
 
     return true;
