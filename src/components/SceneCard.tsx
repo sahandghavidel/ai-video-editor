@@ -2572,7 +2572,17 @@ export default function SceneCard({
           if (typeof videoUrl === 'string' && videoUrl) {
             // Wait a moment to ensure the TTS URL is properly updated
             setTimeout(() => {
-              handleVideoGenerate(sceneId, videoUrl, audioUrl, currentScene);
+              handleVideoGenerate(
+                sceneId,
+                videoUrl,
+                audioUrl,
+                currentScene,
+                undefined,
+                undefined,
+                opts?.suppressRefreshes
+                  ? { suppressRefreshes: true }
+                  : undefined,
+              );
             }, 1000);
           }
         }
