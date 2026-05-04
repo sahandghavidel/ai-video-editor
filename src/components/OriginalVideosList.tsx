@@ -4282,9 +4282,17 @@ export default function OriginalVideosList({
         setProducingTTS,
         playSound,
         ttsVoiceByVideoId,
+        {
+          suppressRefreshes: true,
+          perSceneDelayMs: 250,
+        },
       );
 
       console.log('Batch TTS generation completed for all videos');
+
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
 
       // Refresh the original videos list to show any updates
       await handleRefresh();

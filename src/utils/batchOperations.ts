@@ -10,6 +10,11 @@ export type SpeedUpAllVideosBatchOptions = {
   perSceneDelayMs?: number;
 };
 
+export type TtsAllVideosBatchOptions = {
+  suppressRefreshes?: boolean;
+  perSceneDelayMs?: number;
+};
+
 // Batch operation: Improve all sentences with AI
 export const handleImproveAllSentences = async (
   data: BaserowRow[],
@@ -585,10 +590,26 @@ export const handleGenerateAllTTSForAllVideos = async (
   setProducingTTS: (sceneId: number | null) => void,
   playSound = true,
   ttsVoiceByVideoId?: Map<number, string>,
+  options?: TtsAllVideosBatchOptions,
 ) => {
   setGeneratingAllVideos(true);
 
   try {
+    const suppressRefreshes = options?.suppressRefreshes === true;
+    const perSceneDelayMs =
+      typeof options?.perSceneDelayMs === 'number' &&
+      Number.isFinite(options.perSceneDelayMs) &&
+      options.perSceneDelayMs >= 0
+        ? options.perSceneDelayMs
+        : 3000;
+
+    const handleTTSProduceWithOptions = handleTTSProduce as unknown as (
+      sceneId: number,
+      text: string,
+      sceneData?: BaserowRow,
+      opts?: { suppressRefreshes?: boolean },
+    ) => Promise<void>;
+
     console.log('=== Starting Generate TTS for All Videos Batch Operation ===');
     console.log('Total scenes to process:', allData.length);
 
@@ -672,14 +693,17 @@ export const handleGenerateAllTTSForAllVideos = async (
                 } as BaserowRow)
               : scene;
 
-            await handleTTSProduce(
+            await handleTTSProduceWithOptions(
               scene.id,
               currentSentence,
               sceneWithVoiceOverride,
+              suppressRefreshes ? { suppressRefreshes: true } : undefined,
             );
             totalGenerated++;
             console.log(`  ✓ Successfully generated TTS for scene ${scene.id}`);
-            await wait(3000); // 3 seconds delay between generations
+            if (perSceneDelayMs > 0) {
+              await wait(perSceneDelayMs);
+            }
           } catch (error) {
             console.error(
               `  ✗ Failed to generate TTS for scene ${scene.id}:`,
