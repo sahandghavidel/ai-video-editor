@@ -5,6 +5,11 @@ import { playSuccessSound } from './soundManager';
 export const wait = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+export type SpeedUpAllVideosBatchOptions = {
+  suppressRefreshes?: boolean;
+  perSceneDelayMs?: number;
+};
+
 // Batch operation: Improve all sentences with AI
 export const handleImproveAllSentences = async (
   data: BaserowRow[],
@@ -726,10 +731,19 @@ export const handleSpeedUpAllVideosForAllScenes = async (
   setSpeedingUpVideo: (sceneId: number | null) => void,
   onRefresh?: () => void,
   playSound = true,
+  options?: SpeedUpAllVideosBatchOptions,
 ) => {
   setSpeedingUpAllVideos(true);
 
   try {
+    const suppressRefreshes = options?.suppressRefreshes === true;
+    const perSceneDelayMs =
+      typeof options?.perSceneDelayMs === 'number' &&
+      Number.isFinite(options.perSceneDelayMs) &&
+      options.perSceneDelayMs >= 0
+        ? options.perSceneDelayMs
+        : 3000;
+
     console.log('=== Starting Speed Up All Videos Batch Operation ===');
     console.log('Speed Up Mode:', videoSettings.speedUpMode);
     console.log('Total scenes to process:', allData.length);
@@ -854,12 +868,14 @@ export const handleSpeedUpAllVideosForAllScenes = async (
             console.log(`  ✓ Successfully sped up video for scene ${scene.id}`);
             totalSpedUp++;
 
-            // Refresh data after each successful speed up to show updates in real-time
-            if (onRefresh) {
+            // Optionally refresh after each scene (legacy behavior)
+            if (onRefresh && !suppressRefreshes) {
               await onRefresh();
             }
 
-            await wait(3000); // 3 seconds delay between speed ups
+            if (perSceneDelayMs > 0) {
+              await wait(perSceneDelayMs);
+            }
           } catch (error) {
             console.error(
               `  ✗ Failed to speed up video for scene ${scene.id}:`,
@@ -882,7 +898,10 @@ export const handleSpeedUpAllVideosForAllScenes = async (
     console.log(`Total videos sped up: ${totalSpedUp}`);
     console.log('==============================\n');
 
-    // Note: Data is refreshed after each scene, no need for final refresh
+    // In suppressed-refresh mode, do one final refresh at batch end.
+    if (onRefresh && suppressRefreshes) {
+      await onRefresh();
+    }
 
     // Play success sound when batch operation completes
     if (playSound) {

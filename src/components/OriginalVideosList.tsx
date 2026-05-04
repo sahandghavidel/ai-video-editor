@@ -4487,6 +4487,10 @@ export default function OriginalVideosList({
           }
         },
         playSound,
+        {
+          suppressRefreshes: true,
+          perSceneDelayMs: 250,
+        },
       );
 
       console.log('Batch speed up completed for all videos');
