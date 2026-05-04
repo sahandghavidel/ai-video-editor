@@ -8648,6 +8648,11 @@ export default function OriginalVideosList({
       setGeneratingClipsAll(true);
       setError(null);
 
+      const clipBatchOptions = {
+        suppressRefreshes: true,
+        perSceneDelayMs: 100,
+      };
+
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
@@ -8671,13 +8676,11 @@ export default function OriginalVideosList({
         console.log(`Generating clips for video ${video.id}...`);
 
         try {
-          await handleGenerateClipsInternal(video.id);
+          await handleGenerateClipsInternal(video.id, clipBatchOptions);
           console.log(`Successfully generated clips for video ${video.id}`);
 
-          // No need to refresh here since we refresh after each scene in handleGenerateClipsInternal
-
           // Small delay between videos
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 250));
         } catch (error) {
           console.error(
             `Failed to generate clips for video ${video.id}:`,
@@ -8688,6 +8691,12 @@ export default function OriginalVideosList({
       }
 
       console.log('Batch clip generation completed');
+
+      // Single refresh at batch end (instead of per-scene refreshes)
+      await handleRefresh();
+      if (refreshScenesData) {
+        refreshScenesData();
+      }
 
       // Play success sound (if enabled)
       if (playSound) {
@@ -10127,7 +10136,21 @@ export default function OriginalVideosList({
   };
 
   // Internal clip generation function (without UI state management)
-  const handleGenerateClipsInternal = async (videoId: number) => {
+  const handleGenerateClipsInternal = async (
+    videoId: number,
+    options?: {
+      suppressRefreshes?: boolean;
+      perSceneDelayMs?: number;
+    },
+  ) => {
+    const suppressRefreshes = options?.suppressRefreshes === true;
+    const perSceneDelayMs =
+      typeof options?.perSceneDelayMs === 'number' &&
+      Number.isFinite(options.perSceneDelayMs) &&
+      options.perSceneDelayMs >= 0
+        ? options.perSceneDelayMs
+        : 300;
+
     setGeneratingClipsGlobal(videoId);
     setClipsProgressGlobal({ current: 0, total: 1, percentage: 0 });
 
@@ -10181,17 +10204,25 @@ export default function OriginalVideosList({
             // Refresh data only when a scene is completed (not on every progress update)
             if (data.type === 'scene_complete') {
               console.log(
-                `Scene ${data.sceneNumber}/${data.total} completed, refreshing data...`,
+                suppressRefreshes
+                  ? `Scene ${data.sceneNumber}/${data.total} completed.`
+                  : `Scene ${data.sceneNumber}/${data.total} completed, refreshing data...`,
               );
 
-              // Refresh both original videos and scenes data after each scene completes
-              await handleRefresh();
-              if (refreshScenesData) {
-                refreshScenesData();
+              // Optionally refresh after each completed scene (legacy behavior)
+              if (!suppressRefreshes) {
+                await handleRefresh();
+                if (refreshScenesData) {
+                  refreshScenesData();
+                }
               }
 
-              // Small delay to ensure UI updates
-              await new Promise((resolve) => setTimeout(resolve, 300));
+              // Small delay to ensure UI updates / avoid API bursts
+              if (perSceneDelayMs > 0) {
+                await new Promise((resolve) =>
+                  setTimeout(resolve, perSceneDelayMs),
+                );
+              }
             }
 
             if (data.error) {
