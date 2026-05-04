@@ -4398,6 +4398,11 @@ export default function OriginalVideosList({
           }
         },
         playSound,
+        {
+          suppressRefreshes: true,
+          perSceneDelayMs: 250,
+          skipAlreadySyncedBySignature: true,
+        },
       );
 
       console.log('Batch video generation completed for all videos');

@@ -15,6 +15,110 @@ export type TtsAllVideosBatchOptions = {
   perSceneDelayMs?: number;
 };
 
+export type GenerateAllVideosBatchOptions = {
+  suppressRefreshes?: boolean;
+  perSceneDelayMs?: number;
+  skipAlreadySyncedBySignature?: boolean;
+};
+
+const normalizeMediaUrl = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : '';
+
+const extractLinkedVideoId = (videoIdField: unknown): number | null => {
+  if (typeof videoIdField === 'number') {
+    return Number.isFinite(videoIdField) ? videoIdField : null;
+  }
+
+  if (typeof videoIdField === 'string') {
+    const parsed = parseInt(videoIdField, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+    const firstId =
+      typeof videoIdField[0] === 'object' && videoIdField[0] !== null
+        ? (videoIdField[0] as { id?: unknown; value?: unknown }).id ||
+          (videoIdField[0] as { id?: unknown; value?: unknown }).value
+        : videoIdField[0];
+
+    const parsed = parseInt(String(firstId ?? ''), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (typeof videoIdField === 'object' && videoIdField !== null) {
+    const candidate =
+      (videoIdField as { id?: unknown; value?: unknown }).id ||
+      (videoIdField as { id?: unknown; value?: unknown }).value;
+    const parsed = parseInt(String(candidate ?? ''), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const extractTtsTimestampFromUrl = (audioUrl: string): string | null => {
+  const normalized = normalizeMediaUrl(audioUrl);
+  if (!normalized) return null;
+
+  // Pattern 1: tts_SCENEID_TIMESTAMP.wav
+  let ttsMatch = normalized.match(/tts_\d+_(\d{13})\.wav/);
+  if (ttsMatch && ttsMatch[1]) return ttsMatch[1];
+
+  // Pattern 2: tts_TIMESTAMP.wav
+  ttsMatch = normalized.match(/tts_(\d{13})\.wav/);
+  if (ttsMatch && ttsMatch[1]) return ttsMatch[1];
+
+  // Pattern 3: generic _TIMESTAMP.wav
+  ttsMatch = normalized.match(/_(\d{13})\.wav/);
+  if (ttsMatch && ttsMatch[1]) return ttsMatch[1];
+
+  return null;
+};
+
+const extractClipTimestampFromUrl = (videoUrl: string): string | null => {
+  const normalized = normalizeMediaUrl(videoUrl);
+  if (!normalized) return null;
+
+  // Pattern 1: clip_TIMESTAMP.mp4
+  let clipMatch = normalized.match(/clip_(\d+)\.mp4/);
+  if (clipMatch && clipMatch[1]) return clipMatch[1];
+
+  // Pattern 2: speed_TIMESTAMP.mp4
+  clipMatch = normalized.match(/speed_(\d+)\.mp4/);
+  if (clipMatch && clipMatch[1]) return clipMatch[1];
+
+  // Pattern 3: generic _TIMESTAMP.mp4
+  clipMatch = normalized.match(/_(\d{13})\.mp4/);
+  if (clipMatch && clipMatch[1]) return clipMatch[1];
+
+  return null;
+};
+
+const buildExpectedSyncedUrl = (params: {
+  sceneId: number;
+  videoId: number | null;
+  ttsTimestamp: string;
+  clipTimestamp: string;
+  qualityTag?: string;
+  zoomLevel?: number;
+  panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom';
+}): string => {
+  const qualityTag = params.qualityTag ?? 'enc_crf20';
+  const zoomLevel = Number.isFinite(params.zoomLevel)
+    ? Number(params.zoomLevel)
+    : 0;
+  const panMode = params.panMode ?? 'none';
+  const panSuffix = panMode !== 'none' ? `_${panMode}` : '';
+  const zoomSuffix = `_zoom${zoomLevel}${panSuffix}`;
+
+  const baseName =
+    params.videoId && Number.isFinite(params.videoId)
+      ? `video_${params.videoId}_scene_${params.sceneId}_synced_${params.ttsTimestamp}_${params.clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`
+      : `scene_${params.sceneId}_synced_${params.ttsTimestamp}_${params.clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`;
+
+  return `http://host.docker.internal:9000/nca-toolkit/${baseName}`;
+};
+
 // Batch operation: Improve all sentences with AI
 export const handleImproveAllSentences = async (
   data: BaserowRow[],
@@ -103,19 +207,40 @@ export const handleGenerateAllVideos = async (
   setGeneratingVideo: (sceneId: number | null) => void,
   onRefresh?: () => void,
   playSound = true,
+  options?: GenerateAllVideosBatchOptions,
 ) => {
   startBatchOperation('generatingAllVideos');
 
   try {
+    const suppressRefreshes = options?.suppressRefreshes === true;
+    const skipAlreadySyncedBySignature =
+      options?.skipAlreadySyncedBySignature !== false;
+    const perSceneDelayMs =
+      typeof options?.perSceneDelayMs === 'number' &&
+      Number.isFinite(options.perSceneDelayMs) &&
+      options.perSceneDelayMs >= 0
+        ? options.perSceneDelayMs
+        : 2000;
+
+    const handleVideoGenerateWithOptions = handleVideoGenerate as unknown as (
+      sceneId: number,
+      videoUrl: string,
+      audioUrl: string,
+      sceneData?: BaserowRow,
+      zoomLevel?: number,
+      panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom',
+      opts?: { suppressRefreshes?: boolean },
+    ) => Promise<void>;
+
     // Filter scenes that have both video (field_6888) and TTS audio (field_6891)
     const scenesToGenerate = data.filter((scene) => {
-      const videoUrl = scene['field_6888'];
-      const audioUrl = scene['field_6891'];
+      const videoUrl = normalizeMediaUrl(scene['field_6888']);
+      const audioUrl = normalizeMediaUrl(scene['field_6891']);
       return (
         typeof videoUrl === 'string' &&
-        videoUrl.trim() &&
+        videoUrl &&
         typeof audioUrl === 'string' &&
-        audioUrl.trim()
+        audioUrl
       );
     });
 
@@ -126,22 +251,69 @@ export const handleGenerateAllVideos = async (
       return;
     }
 
+    let totalSkippedBySignature = 0;
+
     for (const scene of scenesToGenerate) {
       setGeneratingVideo(scene.id);
       try {
-        await handleVideoGenerate(
+        const sceneVideoUrl = normalizeMediaUrl(scene['field_6888']);
+        const sceneAudioUrl = normalizeMediaUrl(scene['field_6891']);
+        const currentSyncedUrl = normalizeMediaUrl(scene['field_6886']);
+
+        const ttsTimestamp = extractTtsTimestampFromUrl(sceneAudioUrl);
+        const clipTimestamp = extractClipTimestampFromUrl(sceneVideoUrl);
+        const linkedVideoId = extractLinkedVideoId(scene['field_6889']);
+
+        if (
+          skipAlreadySyncedBySignature &&
+          currentSyncedUrl &&
+          ttsTimestamp &&
+          clipTimestamp
+        ) {
+          const expectedSyncUrl = buildExpectedSyncedUrl({
+            sceneId: scene.id,
+            videoId: linkedVideoId,
+            ttsTimestamp,
+            clipTimestamp,
+            qualityTag: 'enc_crf20',
+            zoomLevel: 0,
+            panMode: 'none',
+          });
+
+          if (expectedSyncUrl === currentSyncedUrl) {
+            totalSkippedBySignature += 1;
+            console.log(
+              `[SYNC ALL] Skipping scene ${scene.id}: final video already matches TTS/clip signature (${ttsTimestamp}/${clipTimestamp}).`,
+            );
+            continue;
+          }
+        }
+
+        await handleVideoGenerateWithOptions(
           scene.id,
-          scene['field_6888'] as string,
-          scene['field_6891'] as string,
+          sceneVideoUrl,
+          sceneAudioUrl,
           scene,
+          undefined,
+          undefined,
+          suppressRefreshes ? { suppressRefreshes: true } : undefined,
         );
-        await wait(2000); // 2 seconds delay between generations
+
+        if (perSceneDelayMs > 0) {
+          await wait(perSceneDelayMs);
+        }
       } catch (error) {
         console.error(`Error generating video for scene ${scene.id}:`, error);
         // Continue with next video
       } finally {
         setGeneratingVideo(null);
       }
+    }
+
+    if (totalSkippedBySignature > 0) {
+      console.log(
+        `[SYNC ALL] Signature-skip summary: ${totalSkippedBySignature}/${scenesToGenerate.length} scenes already matched expected sync output.`,
+      );
     }
 
     // Refresh data from server to get all updates

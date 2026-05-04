@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
       audioUrl,
       sceneId,
       videoId,
+      existingSyncedUrl,
       zoomLevel = 0,
       panMode = 'none',
     } = await request.json();
@@ -101,6 +102,30 @@ export async function POST(request: NextRequest) {
         videoId && sceneId
           ? `http://host.docker.internal:9000/nca-toolkit/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`
           : `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`;
+
+      const normalizedExistingSyncedUrl =
+        typeof existingSyncedUrl === 'string' ? existingSyncedUrl.trim() : '';
+
+      if (
+        normalizedExistingSyncedUrl &&
+        normalizedExistingSyncedUrl === expectedSyncUrl
+      ) {
+        console.log(
+          `[SYNC] existingSyncedUrl already matches expected signature: ${expectedSyncUrl}`,
+        );
+        console.log(
+          `[SYNC] Skipping HEAD check and regeneration (signature match).`,
+        );
+        return NextResponse.json({
+          videoUrl: expectedSyncUrl,
+          message: `Using synced video from deterministic signature match (TTS: ${ttsTimestamp}, Clip: ${clipTimestamp}, Zoom: ${zoomLevel}%${
+            panMode !== 'none' ? ` ${panMode}` : ''
+          })`,
+          cached: true,
+          method: 'signature_match_no_head',
+        });
+      }
+
       try {
         const checkResponse = await fetch(expectedSyncUrl, { method: 'HEAD' });
         if (checkResponse.ok) {
@@ -117,7 +142,7 @@ export async function POST(request: NextRequest) {
             method: 'cache_hit',
           });
         }
-      } catch (checkError) {
+      } catch {
         console.log(`[SYNC] No existing sync found, will generate new one`);
       }
     }

@@ -2631,6 +2631,16 @@ export default function SceneCard({
           }
         }
 
+        const toTrimmedUrl = (value: unknown): string =>
+          typeof value === 'string' ? value.trim() : '';
+
+        const latestKnownScene = dataRef.current.find(
+          (scene) => scene.id === sceneId,
+        );
+        const existingSyncedUrl =
+          toTrimmedUrl(typedSceneData?.['field_6886']) ||
+          toTrimmedUrl(latestKnownScene?.['field_6886']);
+
         // Call our API route instead of directly calling NCA service
         const response = await fetch('/api/generate-video', {
           method: 'POST',
@@ -2642,6 +2652,7 @@ export default function SceneCard({
             audioUrl,
             sceneId, // Pass sceneId for better tracking
             videoId: videoId || undefined,
+            existingSyncedUrl: existingSyncedUrl || undefined,
             zoomLevel, // Pass zoom level for video zoom effect
             panMode, // Pass pan mode: 'none', 'zoom', or 'topToBottom'
           }),
@@ -2661,13 +2672,25 @@ export default function SceneCard({
         const result = await response.json();
         const generatedVideoUrl = result.videoUrl;
         const isCached = result.cached === true;
+        const normalizedGeneratedVideoUrl = toTrimmedUrl(generatedVideoUrl);
+
+        if (
+          existingSyncedUrl &&
+          normalizedGeneratedVideoUrl &&
+          existingSyncedUrl === normalizedGeneratedVideoUrl
+        ) {
+          console.log(
+            `[SYNC] Scene ${sceneId} synced URL is unchanged; skipping Baserow update`,
+          );
+          return;
+        }
 
         console.log(`[SYNC] Received video URL: ${generatedVideoUrl}`);
         console.log(`[SYNC] Updating Baserow scene ${sceneId} with field_6886`);
 
         // Update the Baserow field with the generated video URL
         const updatedRow = await updateSceneRow(sceneId, {
-          field_6886: generatedVideoUrl,
+          field_6886: normalizedGeneratedVideoUrl,
         });
 
         console.log(`[SYNC] Baserow update result:`, updatedRow);
@@ -2675,7 +2698,7 @@ export default function SceneCard({
         // Update the local data optimistically
         const updatedData = dataRef.current.map((scene) => {
           if (scene.id === sceneId) {
-            return { ...scene, field_6886: generatedVideoUrl };
+            return { ...scene, field_6886: normalizedGeneratedVideoUrl };
           }
           return scene;
         });
