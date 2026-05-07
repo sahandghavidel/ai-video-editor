@@ -1,7 +1,13 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Save, Upload, X } from 'lucide-react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Check, Loader2, Save, Search, Upload, X } from 'lucide-react';
 import {
   buildEditorValueMap,
   extractUrls,
@@ -61,8 +67,10 @@ export default function VideoDetailsModal({
   const [uploadingFieldKey, setUploadingFieldKey] = useState<string | null>(
     null,
   );
+  const [fieldSearchQuery, setFieldSearchQuery] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isBusy = loading || saving || uploadingFieldKey !== null;
 
@@ -144,6 +152,7 @@ export default function VideoDetailsModal({
 
   useEffect(() => {
     if (!isOpen) {
+      setFieldSearchQuery('');
       setStatus(null);
       setError(null);
       return;
@@ -159,10 +168,35 @@ export default function VideoDetailsModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isBusy, isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen || loading || fields.length === 0 || !row) return;
+
+    const frameId = requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [fields.length, isOpen, loading, row]);
+
   const editableFields = useMemo(
     () => fields.filter((field) => isFieldEditable(field)),
     [fields],
   );
+
+  const normalizedSearchQuery = useMemo(
+    () => fieldSearchQuery.trim().toLowerCase(),
+    [fieldSearchQuery],
+  );
+
+  const filteredFields = useMemo(() => {
+    if (!normalizedSearchQuery) return fields;
+
+    return fields.filter((field) => {
+      const fieldKey = fieldKeyFromId(field.id);
+      const haystack = `${field.name} ${field.type} ${fieldKey}`.toLowerCase();
+      return haystack.includes(normalizedSearchQuery);
+    });
+  }, [fields, normalizedSearchQuery]);
 
   const hasChanges = useMemo(() => {
     return editableFields.some((field) => {
@@ -332,6 +366,34 @@ export default function VideoDetailsModal({
         </div>
 
         <div className='px-5 py-4 max-h-[70vh] overflow-y-auto space-y-3'>
+          {!loading && fields.length > 0 && row && (
+            <div className='rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2'>
+              <div className='relative'>
+                <Search className='w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none' />
+                <input
+                  ref={searchInputRef}
+                  type='text'
+                  value={fieldSearchQuery}
+                  onChange={(event) => setFieldSearchQuery(event.target.value)}
+                  placeholder='Search fields by name, type, or key (e.g. title, long_text, field_6852)'
+                  className='w-full pl-9 pr-20 py-2 rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm'
+                />
+                {fieldSearchQuery.trim().length > 0 && (
+                  <button
+                    onClick={() => setFieldSearchQuery('')}
+                    className='absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    title='Clear search'
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className='text-xs text-gray-500'>
+                Showing {filteredFields.length} of {fields.length} fields
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className='flex items-center justify-center py-10 text-gray-600 gap-2'>
               <Loader2 className='w-4 h-4 animate-spin' />
@@ -341,8 +403,16 @@ export default function VideoDetailsModal({
             <div className='rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600'>
               No fields found for this video.
             </div>
+          ) : filteredFields.length === 0 ? (
+            <div className='rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600'>
+              No fields matched{' '}
+              <code className='font-medium text-gray-800'>
+                {fieldSearchQuery.trim()}
+              </code>
+              . Try a different keyword.
+            </div>
           ) : (
-            fields.map((field) => {
+            filteredFields.map((field) => {
               const fieldKey = fieldKeyFromId(field.id);
               const draftValue = draftValues[fieldKey] ?? '';
               const rawValue = row[fieldKey];
