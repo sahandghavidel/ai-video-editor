@@ -46,6 +46,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import MergedVideoDisplay from './MergedVideoDisplay';
+import VideoDetailsModal from './video-details-modal/VideoDetailsModal';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { sendTelegramNotification } from '@/utils/notifications/telegram';
 import {
@@ -394,6 +395,7 @@ export default function OriginalVideosList({
       youtube: false,
       assets: false,
     });
+  const [isVideoDetailsModalOpen, setIsVideoDetailsModalOpen] = useState(false);
 
   // Get clip generation state from global store
   const {
@@ -513,6 +515,12 @@ export default function OriginalVideosList({
       cancelled = true;
     };
   }, [isScriptUploadModalOpen]);
+
+  useEffect(() => {
+    if (selectedOriginalVideo.id !== null) return;
+    if (!isVideoDetailsModalOpen) return;
+    setIsVideoDetailsModalOpen(false);
+  }, [isVideoDetailsModalOpen, selectedOriginalVideo.id]);
 
   // Refresh the original videos list when a merged video is saved
   useEffect(() => {
@@ -12458,6 +12466,18 @@ export default function OriginalVideosList({
                 </div>
                 <div className='flex items-center gap-1'>
                   <button
+                    onClick={() => setIsVideoDetailsModalOpen(true)}
+                    disabled={
+                      deleting === selectedOriginalVideo.id ||
+                      deletingScenesOnly === selectedOriginalVideo.id ||
+                      !selectedOriginalVideo.id
+                    }
+                    className='text-indigo-600 hover:text-indigo-800 p-1.5 hover:bg-indigo-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    title='Open dynamic details editor for selected video'
+                  >
+                    <Edit3 className='w-4 h-4' />
+                  </button>
+                  <button
                     onClick={() =>
                       selectedOriginalVideo.id &&
                       handleDeleteVideo(selectedOriginalVideo.id)
@@ -12499,6 +12519,7 @@ export default function OriginalVideosList({
                   </button>
                   <button
                     onClick={() => {
+                      setIsVideoDetailsModalOpen(false);
                       setSelectedOriginalVideo(null);
                       saveSettingsToLocalStorage();
                     }}
@@ -12511,6 +12532,15 @@ export default function OriginalVideosList({
               </div>
             </div>
           )}
+
+          <VideoDetailsModal
+            isOpen={
+              isVideoDetailsModalOpen && selectedOriginalVideo.id !== null
+            }
+            videoId={selectedOriginalVideo.id}
+            onClose={() => setIsVideoDetailsModalOpen(false)}
+            onUpdated={handleRefresh}
+          />
 
           {/* Bulk Status Change Controls */}
           {originalVideos.length > 0 && (
