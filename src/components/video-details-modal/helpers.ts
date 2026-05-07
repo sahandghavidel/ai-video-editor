@@ -334,11 +334,8 @@ export function hasEditorValueChanged(
 export function sortedFields(
   fields: BaserowFieldSchema[],
 ): BaserowFieldSchema[] {
-  return [...fields].sort((a, b) => {
-    if (typeof a.order === 'number' && typeof b.order === 'number') {
-      return a.order - b.order;
-    }
-
-    return a.id - b.id;
-  });
+  // Preserve the exact order returned by Baserow fields API.
+  // This mirrors Baserow's left-to-right column order in the modal
+  // (rendered top-to-bottom).
+  return [...fields];
 }
