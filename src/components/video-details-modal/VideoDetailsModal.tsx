@@ -151,24 +151,6 @@ export default function VideoDetailsModal({
   }, [isOpen, videoId, loadData]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setFieldSearchQuery('');
-      setStatus(null);
-      setError(null);
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isBusy) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isBusy, isOpen, onClose]);
-
-  useEffect(() => {
     if (!isOpen || loading || fields.length === 0 || !row) return;
 
     const frameId = requestAnimationFrame(() => {
@@ -224,61 +206,114 @@ export default function VideoDetailsModal({
     [],
   );
 
+  const saveChanges = useCallback(
+    async (options?: { silentIfNoChanges?: boolean }): Promise<boolean> => {
+      if (!videoId || !row) return true;
+
+      const patchPayload: Record<string, unknown> = {};
+
+      for (const field of editableFields) {
+        const fieldKey = fieldKeyFromId(field.id);
+        const previousValue = initialValues[fieldKey];
+        const nextValue = draftValues[fieldKey];
+
+        if (previousValue === undefined || nextValue === undefined) continue;
+        if (!hasEditorValueChanged(previousValue, nextValue)) continue;
+
+        patchPayload[fieldKey] = toPatchValue(field, nextValue);
+      }
+
+      if (Object.keys(patchPayload).length === 0) {
+        if (!options?.silentIfNoChanges) {
+          setStatus('No changes to save.');
+        }
+        return true;
+      }
+
+      setSaving(true);
+      setStatus(null);
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/baserow/videos/${videoId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(patchPayload),
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | (BaserowVideoRow & { error?: string })
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload?.error || `Failed to save changes (${response.status})`,
+          );
+        }
+
+        const updatedRow = payload as BaserowVideoRow;
+        applyRowValues(fields, updatedRow);
+
+        setStatus('Changes saved successfully.');
+        await Promise.resolve(onUpdated?.());
+        return true;
+      } catch (saveError) {
+        setError(getErrorMessage(saveError));
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [
+      applyRowValues,
+      draftValues,
+      editableFields,
+      fields,
+      initialValues,
+      onUpdated,
+      row,
+      videoId,
+    ],
+  );
+
   const handleSave = async () => {
-    if (!videoId || !row) return;
+    await saveChanges();
+  };
 
-    const patchPayload: Record<string, unknown> = {};
+  const handleCloseWithSave = useCallback(async () => {
+    if (isBusy) return;
 
-    for (const field of editableFields) {
-      const fieldKey = fieldKeyFromId(field.id);
-      const previousValue = initialValues[fieldKey];
-      const nextValue = draftValues[fieldKey];
-
-      if (previousValue === undefined || nextValue === undefined) continue;
-      if (!hasEditorValueChanged(previousValue, nextValue)) continue;
-
-      patchPayload[fieldKey] = toPatchValue(field, nextValue);
-    }
-
-    if (Object.keys(patchPayload).length === 0) {
-      setStatus('No changes to save.');
+    if (!videoId || !row) {
+      onClose();
       return;
     }
 
-    setSaving(true);
-    setStatus(null);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/baserow/videos/${videoId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(patchPayload),
-      });
-
-      const payload = (await response.json().catch(() => null)) as
-        | (BaserowVideoRow & { error?: string })
-        | null;
-
-      if (!response.ok) {
-        throw new Error(
-          payload?.error || `Failed to save changes (${response.status})`,
-        );
-      }
-
-      const updatedRow = payload as BaserowVideoRow;
-      applyRowValues(fields, updatedRow);
-
-      setStatus('Changes saved successfully.');
-      await Promise.resolve(onUpdated?.());
-    } catch (saveError) {
-      setError(getErrorMessage(saveError));
-    } finally {
-      setSaving(false);
+    const saved = await saveChanges({ silentIfNoChanges: true });
+    if (saved) {
+      onClose();
     }
-  };
+  }, [isBusy, onClose, row, saveChanges, videoId]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setFieldSearchQuery('');
+      setStatus(null);
+      setError(null);
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+
+      event.preventDefault();
+      void handleCloseWithSave();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleCloseWithSave, isOpen]);
 
   const handleUploadFile = async (
     fieldKey: string,
@@ -333,9 +368,7 @@ export default function VideoDetailsModal({
     <div
       className='fixed inset-0 z-[80] bg-black/55 flex items-center justify-center p-4'
       onClick={() => {
-        if (!isBusy) {
-          onClose();
-        }
+        void handleCloseWithSave();
       }}
     >
       <div
@@ -356,7 +389,9 @@ export default function VideoDetailsModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              void handleCloseWithSave();
+            }}
             disabled={isBusy}
             className='p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed'
             title='Close'
@@ -629,7 +664,9 @@ export default function VideoDetailsModal({
 
         <div className='px-5 py-4 border-t border-gray-200 bg-gray-50 flex flex-wrap items-center justify-end gap-2'>
           <button
-            onClick={onClose}
+            onClick={() => {
+              void handleCloseWithSave();
+            }}
             disabled={isBusy}
             className='px-4 py-2 rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed'
           >
