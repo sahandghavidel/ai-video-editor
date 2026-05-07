@@ -155,7 +155,7 @@ export default function VideoDetailsModal({
 
     try {
       const [fieldsRes, rowRes] = await Promise.all([
-        fetch('/api/baserow/videos/fields', {
+        fetch('/api/baserow/videos/fields?refresh=1', {
           method: 'GET',
           cache: 'no-store',
         }),

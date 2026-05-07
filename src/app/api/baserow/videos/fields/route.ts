@@ -3,9 +3,17 @@ import { getOriginalVideoFields } from '../_shared';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+function shouldForceRefresh(value: string | null): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
+export async function GET(request: Request) {
   try {
-    const fields = await getOriginalVideoFields();
+    const url = new URL(request.url);
+    const refresh = shouldForceRefresh(url.searchParams.get('refresh'));
+    const fields = await getOriginalVideoFields(refresh);
 
     return NextResponse.json(
       { fields },
