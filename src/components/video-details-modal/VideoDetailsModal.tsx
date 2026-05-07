@@ -71,15 +71,77 @@ export default function VideoDetailsModal({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const initialValuesRef = useRef<EditorValueMap>({});
+  const draftValuesRef = useRef<EditorValueMap>({});
 
   const isBusy = loading || saving || uploadingFieldKey !== null;
 
+  useEffect(() => {
+    initialValuesRef.current = initialValues;
+  }, [initialValues]);
+
+  useEffect(() => {
+    draftValuesRef.current = draftValues;
+  }, [draftValues]);
+
   const applyRowValues = useCallback(
-    (nextFields: BaserowFieldSchema[], nextRow: BaserowVideoRow) => {
+    (
+      nextFields: BaserowFieldSchema[],
+      nextRow: BaserowVideoRow,
+      options?: {
+        preserveUnsavedEdits?: boolean;
+        savedFieldKey?: string;
+      },
+    ) => {
       const editorValues = buildEditorValueMap(nextFields, nextRow);
       setRow(nextRow);
-      setInitialValues(editorValues);
-      setDraftValues(editorValues);
+
+      if (!options?.preserveUnsavedEdits) {
+        initialValuesRef.current = editorValues;
+        draftValuesRef.current = editorValues;
+        setInitialValues(editorValues);
+        setDraftValues(editorValues);
+        return;
+      }
+
+      const previousInitialValues = initialValuesRef.current;
+      const previousDraftValues = draftValuesRef.current;
+
+      const mergedInitialValues: EditorValueMap = { ...editorValues };
+      const mergedDraftValues: EditorValueMap = { ...editorValues };
+
+      for (const field of nextFields) {
+        const fieldKey = fieldKeyFromId(field.id);
+
+        if (fieldKey === options.savedFieldKey) {
+          continue;
+        }
+
+        const previousInitialValue = previousInitialValues[fieldKey];
+        const previousDraftValue = previousDraftValues[fieldKey];
+
+        if (
+          previousInitialValue === undefined ||
+          previousDraftValue === undefined
+        ) {
+          continue;
+        }
+
+        const wasDirty = hasEditorValueChanged(
+          previousInitialValue,
+          previousDraftValue,
+        );
+
+        if (!wasDirty) continue;
+
+        mergedInitialValues[fieldKey] = previousInitialValue;
+        mergedDraftValues[fieldKey] = previousDraftValue;
+      }
+
+      initialValuesRef.current = mergedInitialValues;
+      draftValuesRef.current = mergedDraftValues;
+      setInitialValues(mergedInitialValues);
+      setDraftValues(mergedDraftValues);
     },
     [],
   );
@@ -349,7 +411,10 @@ export default function VideoDetailsModal({
 
       const updatedRow = payload?.row;
       if (updatedRow) {
-        applyRowValues(fields, updatedRow);
+        applyRowValues(fields, updatedRow, {
+          preserveUnsavedEdits: true,
+          savedFieldKey: fieldKey,
+        });
       }
 
       const fileName = file.name || 'new file';
