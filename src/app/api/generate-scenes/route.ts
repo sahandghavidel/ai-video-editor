@@ -28,6 +28,16 @@ type TranscriptionData =
 
 const VIDEOS_TABLE_ID = 713;
 const SCRIPT_FIELD_KEY = 'field_6854'; // Script (6854)
+const TIMING_DECIMALS = 6;
+const TIMING_EPSILON = 1 / 10 ** TIMING_DECIMALS;
+
+function roundTiming(value: number): number {
+  return Number(value.toFixed(TIMING_DECIMALS));
+}
+
+function formatTiming(value: number): string {
+  return value.toFixed(TIMING_DECIMALS);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -573,9 +583,9 @@ function alignScriptToTranscription(
       return {
         id: index,
         words: sentenceText.trim(),
-        duration: parseFloat(duration.toFixed(2)),
-        startTime: parseFloat(startTime.toFixed(2)),
-        endTime: parseFloat(endTime.toFixed(2)),
+        duration: roundTiming(duration),
+        startTime: roundTiming(startTime),
+        endTime: roundTiming(endTime),
         preEndTime: 0,
         type: 'sentence',
         videoId,
@@ -660,9 +670,9 @@ function alignScriptToTranscription(
     alignedSegments.push({
       id: alignedSegments.length,
       words: sentenceText.trim(),
-      duration: parseFloat((endTime - startTime).toFixed(2)),
-      startTime: parseFloat(startTime.toFixed(2)),
-      endTime: parseFloat(endTime.toFixed(2)),
+      duration: roundTiming(endTime - startTime),
+      startTime: roundTiming(startTime),
+      endTime: roundTiming(endTime),
       preEndTime: 0,
       type: 'sentence',
       videoId,
@@ -707,14 +717,10 @@ function redistributeTimingByTranscriptWords(
     return [
       {
         ...segments[0],
-        startTime: parseFloat(wordSegments[0].start.toFixed(2)),
-        endTime: parseFloat(
-          wordSegments[wordSegments.length - 1].end.toFixed(2),
-        ),
-        duration: parseFloat(
-          (
-            wordSegments[wordSegments.length - 1].end - wordSegments[0].start
-          ).toFixed(2),
+        startTime: roundTiming(wordSegments[0].start),
+        endTime: roundTiming(wordSegments[wordSegments.length - 1].end),
+        duration: roundTiming(
+          wordSegments[wordSegments.length - 1].end - wordSegments[0].start,
         ),
       },
     ];
@@ -757,9 +763,9 @@ function redistributeTimingByTranscriptWords(
 
     return {
       ...segment,
-      startTime: parseFloat(startTime.toFixed(2)),
-      endTime: parseFloat(endTime.toFixed(2)),
-      duration: parseFloat((endTime - startTime).toFixed(2)),
+      startTime: roundTiming(startTime),
+      endTime: roundTiming(endTime),
+      duration: roundTiming(endTime - startTime),
     };
   });
 }
@@ -821,9 +827,9 @@ function finalizeSegments(
     allSegments.push({
       id: segmentId++,
       words: '',
-      duration: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
+      duration: roundTiming(sentenceSegments[0].startTime),
       startTime: 0,
-      endTime: parseFloat(sentenceSegments[0].startTime.toFixed(2)),
+      endTime: roundTiming(sentenceSegments[0].startTime),
       preEndTime: 0,
       type: 'gap',
       videoId,
@@ -834,17 +840,17 @@ function finalizeSegments(
     const sentence = sentenceSegments[i];
 
     if (sentence.startTime !== null && sentence.endTime !== null) {
-      const sentenceKey = `${sentence.startTime.toFixed(
-        2,
-      )}-${sentence.endTime.toFixed(2)}-${sentence.words}`;
+      const sentenceKey = `${formatTiming(sentence.startTime)}-${formatTiming(
+        sentence.endTime,
+      )}-${sentence.words}`;
       if (!sentenceSet.has(sentenceKey)) {
         sentenceSet.add(sentenceKey);
         allSegments.push({
           id: segmentId++,
           words: sentence.words,
-          duration: parseFloat(sentence.duration.toFixed(2)),
-          startTime: parseFloat(sentence.startTime.toFixed(2)),
-          endTime: parseFloat(sentence.endTime.toFixed(2)),
+          duration: roundTiming(sentence.duration),
+          startTime: roundTiming(sentence.startTime),
+          endTime: roundTiming(sentence.endTime),
           preEndTime: 0,
           type: 'sentence',
           videoId,
@@ -859,15 +865,17 @@ function finalizeSegments(
         const gapEndTime = nextSentence.startTime;
         const gapDuration = gapEndTime - gapStartTime;
 
-        const gapKey = `${gapStartTime.toFixed(2)}-${gapEndTime.toFixed(2)}`;
+        const gapKey = `${formatTiming(gapStartTime)}-${formatTiming(
+          gapEndTime,
+        )}`;
         if (gapDuration !== 0 && !gapSet.has(gapKey)) {
           gapSet.add(gapKey);
           allSegments.push({
             id: segmentId++,
             words: '',
-            duration: parseFloat(gapDuration.toFixed(2)),
-            startTime: parseFloat(gapStartTime.toFixed(2)),
-            endTime: parseFloat(gapEndTime.toFixed(2)),
+            duration: roundTiming(gapDuration),
+            startTime: roundTiming(gapStartTime),
+            endTime: roundTiming(gapEndTime),
             preEndTime: 0,
             type: 'gap',
             videoId,
@@ -897,28 +905,28 @@ function finalizeSegments(
 
     if (lastSentenceSegment && lastSentenceSegment.endTime < videoDuration) {
       const trailingGapDuration = videoDuration - lastSentenceSegment.endTime;
-      if (trailingGapDuration > 0.01) {
+      if (trailingGapDuration > TIMING_EPSILON) {
         console.log(
-          `✅ Adding trailing gap: ${trailingGapDuration.toFixed(
-            2,
-          )}s (video ends at ${videoDuration}s, last word at ${
-            lastSentenceSegment.endTime
-          }s)`,
+          `✅ Adding trailing gap: ${formatTiming(
+            trailingGapDuration,
+          )}s (video ends at ${formatTiming(videoDuration)}s, last word at ${formatTiming(
+            lastSentenceSegment.endTime,
+          )}s)`,
         );
         allSegments.push({
           id: segmentId++,
           words: '',
-          duration: parseFloat(trailingGapDuration.toFixed(2)),
-          startTime: parseFloat(lastSentenceSegment.endTime.toFixed(2)),
-          endTime: parseFloat(videoDuration.toFixed(2)),
+          duration: roundTiming(trailingGapDuration),
+          startTime: roundTiming(lastSentenceSegment.endTime),
+          endTime: roundTiming(videoDuration),
           preEndTime: 0,
           type: 'gap',
           videoId,
         });
       } else {
         console.log(
-          `⚠️ Trailing gap too small (${trailingGapDuration.toFixed(
-            3,
+          `⚠️ Trailing gap too small (${formatTiming(
+            trailingGapDuration,
           )}s), not adding`,
         );
       }
@@ -957,10 +965,10 @@ function finalizeSegments(
 
     const extendBy = Math.min(1, availableGap);
 
-    current.endTime = parseFloat((current.endTime + extendBy).toFixed(2));
-    current.duration = parseFloat((current.duration + extendBy).toFixed(2));
-    next.startTime = parseFloat((next.startTime + extendBy).toFixed(2));
-    next.duration = parseFloat((next.endTime - next.startTime).toFixed(2));
+    current.endTime = roundTiming(current.endTime + extendBy);
+    current.duration = roundTiming(current.duration + extendBy);
+    next.startTime = roundTiming(next.startTime + extendBy);
+    next.duration = roundTiming(next.endTime - next.startTime);
   }
 
   // Step 3: Adjust timings based on gap durations
@@ -975,30 +983,40 @@ function finalizeSegments(
       if (gapDuration < 0) {
         const overlapDuration = Math.abs(gapDuration);
         console.log(
-          `Processing negative gap ${gapDuration.toFixed(2)}s at index ${i}`,
+          `Processing negative gap ${formatTiming(gapDuration)}s at index ${i}`,
         );
         console.log(
-          `Previous segment: ${allSegments[i - 1]?.type} ${allSegments[
-            i - 1
-          ]?.startTime?.toFixed(2)}-${allSegments[i - 1]?.endTime?.toFixed(2)}`,
+          `Previous segment: ${allSegments[i - 1]?.type} ${
+            allSegments[i - 1]?.startTime
+              ? formatTiming(allSegments[i - 1].startTime)
+              : 'n/a'
+          }-${
+            allSegments[i - 1]?.endTime
+              ? formatTiming(allSegments[i - 1].endTime)
+              : 'n/a'
+          }`,
         );
         console.log(
-          `Next segment: ${allSegments[i + 1]?.type} ${allSegments[
-            i + 1
-          ]?.startTime?.toFixed(2)}-${allSegments[i + 1]?.endTime?.toFixed(2)}`,
+          `Next segment: ${allSegments[i + 1]?.type} ${
+            allSegments[i + 1]?.startTime
+              ? formatTiming(allSegments[i + 1].startTime)
+              : 'n/a'
+          }-${
+            allSegments[i + 1]?.endTime
+              ? formatTiming(allSegments[i + 1].endTime)
+              : 'n/a'
+          }`,
         );
 
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
-          allSegments[i - 1].endTime = parseFloat(
-            (allSegments[i - 1].endTime - overlapDuration).toFixed(2),
+          allSegments[i - 1].endTime = roundTiming(
+            allSegments[i - 1].endTime - overlapDuration,
           );
-          allSegments[i - 1].duration = parseFloat(
-            (allSegments[i - 1].duration - overlapDuration).toFixed(2),
+          allSegments[i - 1].duration = roundTiming(
+            allSegments[i - 1].duration - overlapDuration,
           );
           console.log(
-            `Trimmed previous sentence by ${overlapDuration.toFixed(
-              2,
-            )}s to resolve overlap`,
+            `Trimmed previous sentence by ${formatTiming(overlapDuration)}s to resolve overlap`,
           );
         }
 
@@ -1006,30 +1024,28 @@ function finalizeSegments(
           i < allSegments.length - 1 &&
           allSegments[i + 1].type === 'sentence'
         ) {
-          allSegments[i + 1].startTime = parseFloat(
-            (allSegments[i + 1].startTime + overlapDuration).toFixed(2),
+          allSegments[i + 1].startTime = roundTiming(
+            allSegments[i + 1].startTime + overlapDuration,
           );
-          allSegments[i + 1].duration = parseFloat(
-            (allSegments[i + 1].duration - overlapDuration).toFixed(2),
+          allSegments[i + 1].duration = roundTiming(
+            allSegments[i + 1].duration - overlapDuration,
           );
           console.log(
-            `Adjusted next sentence start time by +${overlapDuration.toFixed(
-              2,
-            )}s to resolve overlap`,
+            `Adjusted next sentence start time by +${formatTiming(overlapDuration)}s to resolve overlap`,
           );
         }
 
-        segment.startTime = parseFloat(segment.endTime.toFixed(2));
+        segment.startTime = roundTiming(segment.endTime);
         segment.duration = 0;
       } else if (gapDuration > 0.2) {
         const adjustAmount = 0.1;
 
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
-          allSegments[i - 1].endTime = parseFloat(
-            (allSegments[i - 1].endTime + adjustAmount).toFixed(2),
+          allSegments[i - 1].endTime = roundTiming(
+            allSegments[i - 1].endTime + adjustAmount,
           );
-          allSegments[i - 1].duration = parseFloat(
-            (allSegments[i - 1].duration + adjustAmount).toFixed(2),
+          allSegments[i - 1].duration = roundTiming(
+            allSegments[i - 1].duration + adjustAmount,
           );
         }
 
@@ -1037,45 +1053,35 @@ function finalizeSegments(
           i < allSegments.length - 1 &&
           allSegments[i + 1].type === 'sentence'
         ) {
-          allSegments[i + 1].startTime = parseFloat(
-            (allSegments[i + 1].startTime - adjustAmount).toFixed(2),
+          allSegments[i + 1].startTime = roundTiming(
+            allSegments[i + 1].startTime - adjustAmount,
           );
-          allSegments[i + 1].duration = parseFloat(
-            (allSegments[i + 1].duration + adjustAmount).toFixed(2),
+          allSegments[i + 1].duration = roundTiming(
+            allSegments[i + 1].duration + adjustAmount,
           );
         }
 
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
-          segment.startTime = parseFloat(
-            (segment.startTime + adjustAmount).toFixed(2),
-          );
-          segment.duration = parseFloat(
-            (segment.duration - adjustAmount).toFixed(2),
-          );
+          segment.startTime = roundTiming(segment.startTime + adjustAmount);
+          segment.duration = roundTiming(segment.duration - adjustAmount);
         }
         if (
           i < allSegments.length - 1 &&
           allSegments[i + 1].type === 'sentence'
         ) {
-          segment.endTime = parseFloat(
-            (segment.endTime - adjustAmount).toFixed(2),
-          );
-          segment.duration = parseFloat(
-            (segment.duration - adjustAmount).toFixed(2),
-          );
+          segment.endTime = roundTiming(segment.endTime - adjustAmount);
+          segment.duration = roundTiming(segment.duration - adjustAmount);
         }
       } else if (gapDuration > 0) {
         if (i > 0 && allSegments[i - 1].type === 'sentence') {
-          allSegments[i - 1].endTime = parseFloat(
-            (allSegments[i - 1].endTime + gapDuration).toFixed(2),
+          allSegments[i - 1].endTime = roundTiming(
+            allSegments[i - 1].endTime + gapDuration,
           );
-          allSegments[i - 1].duration = parseFloat(
-            (allSegments[i - 1].duration + gapDuration).toFixed(2),
+          allSegments[i - 1].duration = roundTiming(
+            allSegments[i - 1].duration + gapDuration,
           );
           console.log(
-            `Absorbed ${gapDuration.toFixed(
-              2,
-            )}s gap into previous sentence (extended end time)`,
+            `Absorbed ${formatTiming(gapDuration)}s gap into previous sentence (extended end time)`,
           );
         } else {
           if (
@@ -1083,14 +1089,12 @@ function finalizeSegments(
             allSegments[i + 1].type === 'sentence'
           ) {
             console.log(
-              `Small gap ${gapDuration.toFixed(
-                2,
-              )}s before sentence - leaving as is to avoid overlap`,
+              `Small gap ${formatTiming(gapDuration)}s before sentence - leaving as is to avoid overlap`,
             );
           }
         }
 
-        segment.startTime = parseFloat(segment.endTime.toFixed(2));
+        segment.startTime = roundTiming(segment.endTime);
         segment.duration = 0;
       }
     }
@@ -1119,12 +1123,12 @@ function finalizeSegments(
     if (currentSegment.startTime < previousSegment.endTime) {
       const overlap = previousSegment.endTime - currentSegment.startTime;
       currentSegment.startTime = previousSegment.endTime;
-      currentSegment.endTime = parseFloat(
-        (currentSegment.startTime + currentSegment.duration).toFixed(2),
+      currentSegment.endTime = roundTiming(
+        currentSegment.startTime + currentSegment.duration,
       );
       console.log(
-        `Fixed overlap: adjusted segment ${i} start time by +${overlap.toFixed(
-          2,
+        `Fixed overlap: adjusted segment ${i} start time by +${formatTiming(
+          overlap,
         )}s`,
       );
     }
@@ -1136,8 +1140,8 @@ function finalizeSegments(
     if (i === 0) {
       filteredSegments[i].preEndTime = 0;
     } else {
-      filteredSegments[i].preEndTime = parseFloat(
-        filteredSegments[i - 1].endTime.toFixed(2),
+      filteredSegments[i].preEndTime = roundTiming(
+        filteredSegments[i - 1].endTime,
       );
     }
   }

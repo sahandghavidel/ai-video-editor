@@ -133,13 +133,13 @@ def transcribe_with_mlx_whisperx(audio_path: str) -> dict:
                     if "start" in word_info and "end" in word_info:
                         segment_words.append({
                             "word": word_info["word"].strip(),
-                            "start": round(word_info["start"], 2),
-                            "end": round(word_info["end"], 2),
+                            "start": float(word_info["start"]),
+                            "end": float(word_info["end"]),
                         })
 
             segments.append({
-                "start": round(segment.get("start", 0), 2),
-                "end": round(segment.get("end", 0), 2),
+                "start": float(segment.get("start", 0)),
+                "end": float(segment.get("end", 0)),
                 "text": segment["text"].strip(),
                 "words": segment_words,
             })
@@ -151,7 +151,7 @@ def transcribe_with_mlx_whisperx(audio_path: str) -> dict:
         audio_duration = None
         try:
             waveform, sample_rate = torchaudio.load(audio_path)
-            audio_duration = round(waveform.shape[1] / sample_rate, 2)
+            audio_duration = float(waveform.shape[1] / sample_rate)
         except:
             if segments:
                 audio_duration = segments[-1]["end"]
