@@ -5536,10 +5536,16 @@ export default function SceneCard({
                   <span className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
                     ID:
                   </span>
-                  <span className='text-lg font-bold text-blue-600'>
-                    #{scene.id || 'N/A'}{' '}
+                  <span className='text-md font-bold text-blue-600'>
+                    {scene.id || 'N/A'}{' '}
                     <span className='text-gray-400'>
-                      ({String(scene.field_6884 || 'N/A')})
+                      (
+                      {typeof scene.field_6884 === 'number'
+                        ? scene.field_6884.toFixed(2)
+                        : typeof scene.field_6884 === 'string'
+                          ? parseFloat(scene.field_6884).toFixed(2)
+                          : 'N/A'}
+                      )
                     </span>
                   </span>
                 </div>
