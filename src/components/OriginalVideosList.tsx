@@ -1871,9 +1871,14 @@ export default function OriginalVideosList({
 
       const transcriptionData = await transcribeResponse.json();
 
-      // Extract video duration from transcription
-      const videoDuration = transcriptionData.response?.duration || null;
-      console.log('Video duration:', videoDuration);
+      const probedDuration = await syncVideoDurationFromUploadedUrl(
+        videoId,
+        videoUrl,
+      );
+      console.log(
+        'Video duration from Video Uploaded URL (6881):',
+        probedDuration ?? 'not available',
+      );
 
       // Step 2: Process the response to extract word timestamps
       const wordTimestamps = [];
@@ -1924,9 +1929,9 @@ export default function OriginalVideosList({
           field_6861: captionsUrl, // Captions URL field
         };
 
-        // Add duration if available
-        if (videoDuration !== null) {
-          updateData.field_6909 = videoDuration; // Duration field
+        // Add duration if available (source of truth: Video Uploaded URL 6881)
+        if (typeof probedDuration === 'number') {
+          updateData.field_6909 = probedDuration; // Duration field
         }
 
         await updateOriginalVideoRow(videoId, updateData);
@@ -3882,6 +3887,72 @@ export default function OriginalVideosList({
     }
   };
 
+  const toPositiveFiniteDuration = (value: unknown): number | undefined => {
+    const numericValue =
+      typeof value === 'number' ? value : Number.parseFloat(String(value));
+
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      return undefined;
+    }
+
+    return numericValue;
+  };
+
+  const syncVideoDurationFromUploadedUrl = async (
+    videoId: number,
+    videoUrl: string,
+    existingDuration?: number,
+  ): Promise<number | undefined> => {
+    if (!videoUrl) return undefined;
+
+    try {
+      const response = await fetch('/api/get-video-duration', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ videoUrl }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(
+          `Duration probe failed (${response.status}): ${errorText}`,
+        );
+      }
+
+      const payload = (await response.json().catch(() => null)) as {
+        duration?: unknown;
+      } | null;
+
+      const probedDuration = toPositiveFiniteDuration(payload?.duration);
+      if (!probedDuration) {
+        throw new Error('Duration probe returned an invalid duration');
+      }
+
+      const currentDuration = toPositiveFiniteDuration(existingDuration);
+      const shouldPersistDuration =
+        !currentDuration || Math.abs(currentDuration - probedDuration) > 0.01;
+
+      if (shouldPersistDuration) {
+        await updateOriginalVideoRow(videoId, {
+          field_6909: probedDuration,
+        });
+        console.log(
+          `Video ${videoId}: synced Duration (6909) from Video Uploaded URL (6881): ${probedDuration}s`,
+        );
+      }
+
+      return probedDuration;
+    } catch (error) {
+      console.warn(
+        `Video ${videoId}: failed to sync duration from Video Uploaded URL (6881)`,
+        error,
+      );
+      return undefined;
+    }
+  };
+
   // Generate Scenes for individual video
   const handleGenerateScenes = async (videoId: number) => {
     try {
@@ -3891,46 +3962,28 @@ export default function OriginalVideosList({
       // Find the video to get captions URL and duration
       const video = originalVideos.find((v) => v.id === videoId);
       const captionsUrl = extractUrl(video?.field_6861);
+      const videoUrl = extractUrl(video?.field_6881);
       const hasScript =
         typeof video?.field_6854 === 'string' &&
         video.field_6854.trim().length > 0;
-      let videoDuration = video?.field_6909 as number | undefined;
+      const existingDuration = toPositiveFiniteDuration(video?.field_6909);
+      let videoDuration: number | undefined = undefined;
+
+      // Source of truth: Duration (6909) should reflect Video Uploaded URL (6881)
+      if (videoUrl) {
+        videoDuration = await syncVideoDurationFromUploadedUrl(
+          videoId,
+          videoUrl,
+          existingDuration,
+        );
+      } else {
+        console.warn(
+          `Video ${videoId}: missing Video Uploaded URL (6881), skipping duration probe`,
+        );
+      }
 
       if (!captionsUrl && !hasScript) {
         throw new Error('No captions URL or script found for this video');
-      }
-
-      // Fallback: If duration not stored, calculate from captions
-      if (!videoDuration) {
-        console.log(
-          'Duration not found in database, calculating from captions...',
-        );
-        try {
-          if (captionsUrl) {
-            const captionsResponse = await fetch(captionsUrl);
-            if (captionsResponse.ok) {
-              const captions = await captionsResponse.json();
-              if (Array.isArray(captions) && captions.length > 0) {
-                // Get the end time of the last word
-                const lastWord = captions[captions.length - 1];
-                if (lastWord && typeof lastWord.end === 'number') {
-                  videoDuration = lastWord.end;
-                  console.log(
-                    `Calculated duration from captions: ${videoDuration}s`,
-                  );
-
-                  // Save duration to database for future use
-                  await updateOriginalVideoRow(videoId, {
-                    field_6909: videoDuration,
-                  });
-                  console.log('Duration saved to database');
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to calculate duration from captions:', error);
-        }
       }
 
       console.log('Generating scenes for video:', videoId);
@@ -4011,36 +4064,24 @@ export default function OriginalVideosList({
       // Process videos one by one
       for (const video of videosToProcess) {
         const captionsUrl = extractUrl(video.field_6861);
+        const videoUrl = extractUrl(video.field_6881);
         const hasScript =
           typeof video.field_6854 === 'string' &&
           video.field_6854.trim().length > 0;
-        let videoDuration = video?.field_6909 as number | undefined;
+        const existingDuration = toPositiveFiniteDuration(video?.field_6909);
+        let videoDuration: number | undefined = undefined;
 
-        // Fallback: Calculate duration from captions if not stored
-        if (captionsUrl && !videoDuration) {
-          try {
-            const captionsResponse = await fetch(captionsUrl);
-            if (captionsResponse.ok) {
-              const captions = await captionsResponse.json();
-              if (Array.isArray(captions) && captions.length > 0) {
-                const lastWord = captions[captions.length - 1];
-                if (lastWord && typeof lastWord.end === 'number') {
-                  videoDuration = lastWord.end;
-                  console.log(
-                    `Video ${video.id}: Calculated duration from captions: ${videoDuration}s`,
-                  );
-                  // Save duration to database
-                  await updateOriginalVideoRow(video.id, {
-                    field_6909: videoDuration,
-                  });
-                }
-              }
-            }
-          } catch {
-            console.warn(
-              `Video ${video.id}: Failed to calculate duration from captions`,
-            );
-          }
+        // Source of truth: Duration (6909) should reflect Video Uploaded URL (6881)
+        if (videoUrl) {
+          videoDuration = await syncVideoDurationFromUploadedUrl(
+            video.id,
+            videoUrl,
+            existingDuration,
+          );
+        } else {
+          console.warn(
+            `Video ${video.id}: missing Video Uploaded URL (6881), skipping duration probe`,
+          );
         }
 
         if (captionsUrl || hasScript) {
