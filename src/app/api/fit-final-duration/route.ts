@@ -166,8 +166,8 @@ export async function POST(request: NextRequest) {
       sceneId,
       videoId,
       muteAudio,
-      toleranceSec: 0.01,
-      maxCorrectionPasses: 1,
+      toleranceSec: 0.001,
+      maxCorrectionPasses: 2,
       cleanup: true,
     });
 
@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
       targetDurationSec,
       targetDurationFrameAlignedSec: result.targetDurationFrameAlignedSec,
       residualSec: result.residualSec,
+      residualFrameAlignedSec: result.residualFrameAlignedSec,
       passes: result.passes,
       appliedSpeeds: result.appliedSpeeds,
       correctionFps: result.correctionFps,

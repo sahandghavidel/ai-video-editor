@@ -39,6 +39,7 @@ export interface FitDurationComputationResult {
   sourceDurationSec: number;
   outputDurationSec: number;
   residualSec: number;
+  residualFrameAlignedSec: number;
   passes: number;
   appliedSpeeds: number[];
   correctionFps: number;
@@ -49,6 +50,13 @@ export interface FitDurationComputationResult {
   frameCorrectionApplied: boolean;
   targetDurationFrameAlignedSec: number;
 }
+
+const TIME_DECIMALS = 9;
+const SPEED_DECIMALS = 12;
+const ATEMPO_DECIMALS = 12;
+const FPS_DECIMALS = 9;
+const DEFAULT_DURATION_TOLERANCE_SEC = 0.001;
+const MIN_DURATION_TOLERANCE_SEC = 0.0001;
 
 export interface FitFinalDurationWithUploadOptions {
   inputUrl: string;
@@ -127,10 +135,14 @@ function makeTempMp4Path(prefix: string): string {
   );
 }
 
+function toFrameCount(durationSec: number, fps: number): number {
+  return Math.max(1, Math.round(durationSec * fps));
+}
+
 function chooseFrameCorrectionFps(probe: VideoTimingProbe): number {
   const candidate = probe.avgFps ?? probe.rFps ?? 30;
   const clamped = Math.max(1, Math.min(120, candidate));
-  return Number(clamped.toFixed(6));
+  return Number(clamped.toFixed(FPS_DECIMALS));
 }
 
 async function runCommand(
@@ -250,7 +262,7 @@ export function chooseAdaptiveCfrFramerate(probe: VideoTimingProbe): number {
     return nearestInt;
   }
 
-  return Number(clamped.toFixed(3));
+  return Number(clamped.toFixed(6));
 }
 
 export function shouldApplyConditionalCfr(probe: VideoTimingProbe): boolean {
@@ -276,7 +288,7 @@ function buildAtempoChain(speed: number): string {
   }
 
   if (Math.abs(remaining - 1.0) > 1e-6) {
-    filters.push(`atempo=${remaining.toFixed(6)}`);
+    filters.push(`atempo=${remaining.toFixed(ATEMPO_DECIMALS)}`);
   }
 
   return filters.length > 0 ? filters.join(',') : 'anull';
@@ -301,8 +313,8 @@ async function runFitPass(options: FitPassOptions): Promise<void> {
     muteAudio,
   } = options;
 
-  const targetDurationLabel = targetDurationSec.toFixed(6);
-  const speedLabel = speed.toFixed(10);
+  const targetDurationLabel = targetDurationSec.toFixed(TIME_DECIMALS);
+  const speedLabel = speed.toFixed(SPEED_DECIMALS);
 
   const videoFilter = [
     `setpts=PTS/${speedLabel}`,
@@ -382,11 +394,11 @@ async function runFrameCorrectionPass(
     muteAudio,
   } = options;
 
-  const fpsLabel = correctionFps.toFixed(6);
+  const fpsLabel = correctionFps.toFixed(FPS_DECIMALS);
   const targetDurationSec = targetFrameCount / correctionFps;
-  const targetDurationLabel = targetDurationSec.toFixed(6);
+  const targetDurationLabel = targetDurationSec.toFixed(TIME_DECIMALS);
   const padDurationSec = frameDelta > 0 ? frameDelta / correctionFps : 0;
-  const padDurationLabel = padDurationSec.toFixed(6);
+  const padDurationLabel = padDurationSec.toFixed(TIME_DECIMALS);
 
   const videoParts: string[] = [];
   if (frameDelta > 0) {
@@ -462,7 +474,10 @@ export async function fitVideoToDurationWithCorrection(
     throw new Error('targetDurationSec must be a positive number');
   }
 
-  const toleranceSec = Math.max(0.001, options.toleranceSec ?? 0.01);
+  const toleranceSec = Math.max(
+    MIN_DURATION_TOLERANCE_SEC,
+    options.toleranceSec ?? DEFAULT_DURATION_TOLERANCE_SEC,
+  );
   const maxCorrectionPasses = Math.max(
     0,
     Math.floor(options.maxCorrectionPasses ?? 1),
@@ -471,10 +486,7 @@ export async function fitVideoToDurationWithCorrection(
   const sourceProbe = await probeVideoTiming(options.inputUrl);
   const sourceDurationSec = sourceProbe.durationSec;
   const correctionFps = chooseFrameCorrectionFps(sourceProbe);
-  const targetFrameCount = Math.max(
-    1,
-    Math.round(targetDurationSec * correctionFps),
-  );
+  const targetFrameCount = toFrameCount(targetDurationSec, correctionFps);
   const targetDurationFrameAlignedSec = targetFrameCount / correctionFps;
 
   let currentInput = options.inputUrl;
@@ -508,7 +520,7 @@ export async function fitVideoToDurationWithCorrection(
       });
 
       passOutputs.push(outputPath);
-      appliedSpeeds.push(Number(speed.toFixed(8)));
+      appliedSpeeds.push(Number(speed.toFixed(SPEED_DECIMALS)));
 
       const outputProbe = await probeVideoTiming(outputPath);
       finalOutputDurationSec = outputProbe.durationSec;
@@ -529,8 +541,9 @@ export async function fitVideoToDurationWithCorrection(
       throw new Error('Unable to produce fitted output');
     }
 
-    const preCorrectionOutputFrameCount = Math.round(
-      finalOutputDurationSec * correctionFps,
+    const preCorrectionOutputFrameCount = toFrameCount(
+      finalOutputDurationSec,
+      correctionFps,
     );
     frameDeltaApplied = targetFrameCount - preCorrectionOutputFrameCount;
 
@@ -556,8 +569,13 @@ export async function fitVideoToDurationWithCorrection(
       currentProbe = correctedProbe;
     }
 
-    const outputFrameCount = Math.round(finalOutputDurationSec * correctionFps);
+    const outputFrameCount = toFrameCount(
+      finalOutputDurationSec,
+      correctionFps,
+    );
     frameDeltaRemaining = targetFrameCount - outputFrameCount;
+    const residualFrameAlignedSec =
+      finalOutputDurationSec - targetDurationFrameAlignedSec;
 
     for (const outputPath of passOutputs) {
       if (outputPath !== finalOutputPath) {
@@ -570,6 +588,7 @@ export async function fitVideoToDurationWithCorrection(
       sourceDurationSec,
       outputDurationSec: finalOutputDurationSec,
       residualSec: finalOutputDurationSec - targetDurationSec,
+      residualFrameAlignedSec,
       passes: appliedSpeeds.length,
       appliedSpeeds,
       correctionFps,
@@ -630,7 +649,7 @@ export async function fitFinalDurationWithUpload(
     fitLocalPath = fitResult.localPath;
 
     const timestamp = Date.now();
-    const targetTag = targetDurationSec.toFixed(3).replace('.', 'p');
+    const targetTag = targetDurationSec.toFixed(6).replace('.', 'p');
     const cfrTag = cfrApplied
       ? `_cfr${String(cfrFramerate).replace('.', 'p')}`
       : '';
