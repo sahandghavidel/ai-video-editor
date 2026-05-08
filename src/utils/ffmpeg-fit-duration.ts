@@ -57,6 +57,7 @@ const ATEMPO_DECIMALS = 12;
 const FPS_DECIMALS = 9;
 const DEFAULT_DURATION_TOLERANCE_SEC = 0.001;
 const MIN_DURATION_TOLERANCE_SEC = 0.0001;
+const FIT_FINAL_DURATION_CFR_FPS = 30;
 
 export interface FitFinalDurationWithUploadOptions {
   inputUrl: string;
@@ -622,21 +623,19 @@ export async function fitFinalDurationWithUpload(
 
   try {
     const sourceProbe = await probeVideoTiming(options.inputUrl);
-    const cfrFramerate = chooseAdaptiveCfrFramerate(sourceProbe);
-    const cfrApplied = shouldApplyConditionalCfr(sourceProbe);
+    const cfrFramerate = FIT_FINAL_DURATION_CFR_FPS;
+    const cfrApplied = true;
 
     let preparedInput = options.inputUrl;
     let preparedProbe = sourceProbe;
 
-    if (cfrApplied) {
-      cfrLocalPath = await convertToCFR({
-        inputUrl: options.inputUrl,
-        framerate: cfrFramerate,
-      });
+    cfrLocalPath = await convertToCFR({
+      inputUrl: options.inputUrl,
+      framerate: cfrFramerate,
+    });
 
-      preparedInput = cfrLocalPath;
-      preparedProbe = await probeVideoTiming(preparedInput);
-    }
+    preparedInput = cfrLocalPath;
+    preparedProbe = await probeVideoTiming(preparedInput);
 
     const fitResult = await fitVideoToDurationWithCorrection({
       inputUrl: preparedInput,

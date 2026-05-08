@@ -4829,7 +4829,7 @@ export default function BatchOperations({
                       sceneLoading.speedingUpVideo !== null
                     }
                     className='w-full h-10 mt-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
-                    title='Precisely fit each final video (field_6886) to Duration (field_6884) using conditional CFR + explicit frame add/drop correction'
+                    title='Precisely fit each final video (field_6886) to Duration (field_6884) using fixed CFR 30fps + explicit frame add/drop correction'
                   >
                     {(fittingFinalVideoDurations ||
                       sceneLoading.speedingUpVideo !== null) && (
