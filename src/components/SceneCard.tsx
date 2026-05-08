@@ -974,6 +974,10 @@ export default function SceneCard({
     return null;
   };
 
+  const SCENE_TIMING_DECIMALS = 6;
+  const roundSceneTiming = (value: number): number =>
+    Number(value.toFixed(SCENE_TIMING_DECIMALS));
+
   const buildWeightedTimingSegments = (
     sentences: string[],
     startTime: number,
@@ -1010,11 +1014,11 @@ export default function SceneCard({
       const rawDuration =
         totalDuration <= 0 ? 0 : (totalDuration * weights[i]) / totalWeight;
 
-      const start = Number(cursor.toFixed(2));
+      const start = roundSceneTiming(cursor);
       const end = isLast
-        ? Number(safeEnd.toFixed(2))
-        : Number((cursor + rawDuration).toFixed(2));
-      const duration = Number(Math.max(0, end - start).toFixed(2));
+        ? roundSceneTiming(safeEnd)
+        : roundSceneTiming(cursor + rawDuration);
+      const duration = roundSceneTiming(Math.max(0, end - start));
 
       segments.push({
         sentence,
@@ -1061,11 +1065,10 @@ export default function SceneCard({
     ).trim();
     const newOriginal = (currOriginal + sep + nextOriginal).trim();
 
-    const newEndTime = Number(nextScene.field_6897) || 0;
-    const currentStart = Number(currentScene.field_6896) || 0;
-    const newDuration = Math.max(
-      0,
-      Number((newEndTime - currentStart).toFixed(2)),
+    const newEndTime = roundSceneTiming(Number(nextScene.field_6897) || 0);
+    const currentStart = roundSceneTiming(Number(currentScene.field_6896) || 0);
+    const newDuration = roundSceneTiming(
+      Math.max(0, newEndTime - currentStart),
     );
 
     setCombiningId(sceneId);
