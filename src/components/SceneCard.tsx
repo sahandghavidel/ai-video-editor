@@ -5531,11 +5531,8 @@ export default function SceneCard({
 
             <div className='flex w-full gap-4'>
               {/* ID and Duration - Left Side, Desktop only */}
-              <div className='hidden sm:flex flex-row items-center gap-4'>
-                <div className='flex items-center gap-2'>
-                  <span className='text-xs font-semibold text-gray-500 uppercase tracking-wide'>
-                    ID:
-                  </span>
+              <div className='hidden sm:flex flex-row items-center gap-2'>
+                <div className='flex items-center gap-1'>
                   <span className='text-md font-bold text-blue-600'>
                     {scene.id || 'N/A'}{' '}
                     <span className='text-gray-400'>
