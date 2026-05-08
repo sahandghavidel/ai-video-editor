@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
         }
 
         const durationSeconds = await probeVideoDurationSeconds(finalVideoUrl);
-        const roundedDuration = Number(durationSeconds.toFixed(2));
+        const roundedDuration = Number(durationSeconds.toFixed(6));
 
         await baserowPatchSceneRow(baserowUrl, token, sceneId, {
           [FINAL_VIDEO_DURATION_FIELD_KEY]: roundedDuration,
