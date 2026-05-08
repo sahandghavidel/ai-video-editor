@@ -151,6 +151,8 @@ export default function BatchOperations({
   const [deletingEmptySceneId, setDeletingEmptySceneId] = useState<
     number | null
   >(null);
+  const [fittingFinalVideoDurations, setFittingFinalVideoDurations] =
+    useState(false);
 
   const [generatingAllSubtitles, setGeneratingAllSubtitles] = useState(false);
   const [generatingSubtitleSceneId, setGeneratingSubtitleSceneId] = useState<
@@ -2578,6 +2580,75 @@ export default function BatchOperations({
     );
   };
 
+  const parsePositiveNumber = (value: unknown): number | null => {
+    const parsed =
+      typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+          ? Number(value)
+          : Number.NaN;
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+
+    return parsed;
+  };
+
+  const extractLinkedVideoIdFromScene = (scene: BaserowRow): number | null => {
+    const raw =
+      scene['field_6889'] ??
+      (scene as unknown as { field_6889?: unknown }).field_6889;
+
+    const parseId = (candidate: unknown): number | null => {
+      const parsed =
+        typeof candidate === 'number'
+          ? candidate
+          : typeof candidate === 'string'
+            ? Number(candidate)
+            : Number.NaN;
+
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        return null;
+      }
+
+      return parsed;
+    };
+
+    const parseFromObject = (value: unknown): number | null => {
+      if (!value || typeof value !== 'object') return null;
+      const obj = value as Record<string, unknown>;
+
+      const direct = parseId(obj.id);
+      if (direct !== null) return direct;
+
+      const rowId = parseId(obj.row_id);
+      if (rowId !== null) return rowId;
+
+      const row = obj.row;
+      if (row && typeof row === 'object') {
+        const nested = parseId((row as Record<string, unknown>).id);
+        if (nested !== null) return nested;
+      }
+
+      return null;
+    };
+
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        const direct = parseId(item);
+        if (direct !== null) return direct;
+
+        const fromObj = parseFromObject(item);
+        if (fromObj !== null) return fromObj;
+      }
+
+      return null;
+    }
+
+    return parseId(raw) ?? parseFromObject(raw);
+  };
+
   const getExistingSceneVideoUrl = (scene: BaserowRow): string => {
     return extractUrlFromSceneField(
       scene['field_7098'] ??
@@ -3464,6 +3535,87 @@ export default function BatchOperations({
       playBatchDoneSound();
     } finally {
       setCreatingEnSrt(false);
+    }
+  };
+
+  const onFitFinalVideosToDuration = async () => {
+    if (fittingFinalVideoDurations || batchOperations.speedingUpAllVideos) {
+      return;
+    }
+
+    const scenesToFit = [...data]
+      .filter((scene) => {
+        const finalVideoUrl = getExistingFinalVideoUrl(scene);
+        const targetDurationSec = parsePositiveNumber(scene['field_6884']);
+
+        return Boolean(finalVideoUrl) && targetDurationSec !== null;
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+    if (scenesToFit.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    setFittingFinalVideoDurations(true);
+    startBatchOperation('speedingUpAllVideos');
+
+    try {
+      for (const scene of scenesToFit) {
+        const finalVideoUrl = getExistingFinalVideoUrl(scene);
+        const targetDurationSec = parsePositiveNumber(scene['field_6884']);
+
+        if (!finalVideoUrl || targetDurationSec === null) {
+          continue;
+        }
+
+        setSpeedingUpVideo(scene.id);
+
+        try {
+          const linkedVideoId = extractLinkedVideoIdFromScene(scene);
+
+          const res = await fetch('/api/fit-final-duration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sceneId: scene.id,
+              videoId: linkedVideoId ?? undefined,
+              videoUrl: finalVideoUrl,
+              targetDurationSec,
+              muteAudio: false,
+            }),
+          });
+
+          if (!res.ok) {
+            const payload = (await res.json().catch(() => null)) as {
+              error?: unknown;
+            } | null;
+
+            const message =
+              typeof payload?.error === 'string'
+                ? payload.error
+                : `Fit duration failed (${res.status})`;
+
+            throw new Error(message);
+          }
+        } catch (error) {
+          console.error(
+            `Fit final duration failed for scene ${scene.id}:`,
+            error,
+          );
+        } finally {
+          setSpeedingUpVideo(null);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setSpeedingUpVideo(null);
+      completeBatchOperation('speedingUpAllVideos');
+      setFittingFinalVideoDurations(false);
     }
   };
 
@@ -4666,6 +4818,35 @@ export default function BatchOperations({
                         : sceneLoading.speedingUpVideo !== null
                           ? `Busy (#${sceneLoading.speedingUpVideo})`
                           : getSpeedUpButtonText()}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={onFitFinalVideosToDuration}
+                    disabled={
+                      fittingFinalVideoDurations ||
+                      batchOperations.speedingUpAllVideos ||
+                      sceneLoading.speedingUpVideo !== null
+                    }
+                    className='w-full h-10 mt-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title='Precisely fit each final video (field_6886) to Duration (field_6884) using conditional CFR + explicit frame add/drop correction'
+                  >
+                    {(fittingFinalVideoDurations ||
+                      sceneLoading.speedingUpVideo !== null) && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    {!fittingFinalVideoDurations &&
+                      sceneLoading.speedingUpVideo === null && (
+                        <Clock className='w-4 h-4' />
+                      )}
+                    <span className='font-medium'>
+                      {fittingFinalVideoDurations
+                        ? sceneLoading.speedingUpVideo !== null
+                          ? `Fitting #${sceneLoading.speedingUpVideo}`
+                          : 'Fitting...'
+                        : sceneLoading.speedingUpVideo !== null
+                          ? `Busy (#${sceneLoading.speedingUpVideo})`
+                          : 'Fit Final Duration'}
                     </span>
                   </button>
 
