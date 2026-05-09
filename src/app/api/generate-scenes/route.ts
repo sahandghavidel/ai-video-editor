@@ -30,6 +30,7 @@ const VIDEOS_TABLE_ID = 713;
 const SCRIPT_FIELD_KEY = 'field_6854'; // Script (6854)
 const TIMING_DECIMALS = 6;
 const TIMING_EPSILON = 1 / 10 ** TIMING_DECIMALS;
+const TINY_EMPTY_SCENE_MAX_DURATION_SEC = 0.5;
 
 function roundTiming(value: number): number {
   return Number(value.toFixed(TIMING_DECIMALS));
@@ -112,9 +113,19 @@ export async function POST(request: NextRequest) {
         );
     console.log(`Generated ${scenes.length} scenes`);
 
+    // Final additive cleanup pass: merge tiny empty scenes into their
+    // previous scene so generation behavior remains the same, with this
+    // post-processing applied at the end.
+    const postProcessedScenes = mergeTinyEmptyScenesIntoPrevious(scenes);
+    if (postProcessedScenes.length !== scenes.length) {
+      console.log(
+        `Merged ${scenes.length - postProcessedScenes.length} tiny empty scene(s) (< ${TINY_EMPTY_SCENE_MAX_DURATION_SEC}s) into previous scenes`,
+      );
+    }
+
     // Step 3: Create all scene records in Baserow using batch operation
-    console.log(`Creating ${scenes.length} scenes in batch...`);
-    const createdScenes = await createSceneRecordsBatch(scenes);
+    console.log(`Creating ${postProcessedScenes.length} scenes in batch...`);
+    const createdScenes = await createSceneRecordsBatch(postProcessedScenes);
     const sceneIds = createdScenes
       .map((scene: { id?: number } | number) =>
         typeof scene === 'number' ? scene : scene.id,
@@ -1147,6 +1158,47 @@ function finalizeSegments(
   }
 
   return filteredSegments;
+}
+
+function mergeTinyEmptyScenesIntoPrevious(
+  segments: SceneSegment[],
+  maxDurationSec: number = TINY_EMPTY_SCENE_MAX_DURATION_SEC,
+): SceneSegment[] {
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return [];
+  }
+
+  const mergedSegments: SceneSegment[] = [];
+
+  for (const segment of segments) {
+    const segmentWords = String(segment.words ?? '').trim();
+    const isEmptyScene = segmentWords.length === 0;
+    const isTinyScene =
+      segment.duration > 0 && segment.duration < maxDurationSec;
+
+    // User requirement: merge to previous scene only when this is not
+    // the first scene.
+    if (isEmptyScene && isTinyScene && mergedSegments.length > 0) {
+      const previous = mergedSegments[mergedSegments.length - 1];
+      const mergedEndTime = Math.max(previous.endTime, segment.endTime);
+
+      previous.endTime = roundTiming(mergedEndTime);
+      previous.duration = roundTiming(previous.endTime - previous.startTime);
+      continue;
+    }
+
+    mergedSegments.push({ ...segment });
+  }
+
+  for (let i = 0; i < mergedSegments.length; i++) {
+    const current = mergedSegments[i];
+    current.id = i;
+    current.duration = roundTiming(current.endTime - current.startTime);
+    current.preEndTime =
+      i === 0 ? 0 : roundTiming(mergedSegments[i - 1].endTime);
+  }
+
+  return mergedSegments;
 }
 
 function generateScenesFromScriptAndTranscription(
