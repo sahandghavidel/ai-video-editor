@@ -162,6 +162,7 @@ export default function BatchOperations({
     useState(false);
   const [generatingDurationSrt, setGeneratingDurationSrt] = useState(false);
   const [creatingEnSrt, setCreatingEnSrt] = useState(false);
+  const [creatingDubbedEn, setCreatingDubbedEn] = useState(false);
 
   const [generatingAllSceneImages, setGeneratingAllSceneImages] =
     useState(false);
@@ -3538,6 +3539,52 @@ export default function BatchOperations({
     }
   };
 
+  const onCreateDubbedEn = async () => {
+    if (creatingDubbedEn) return;
+
+    const selectedVideoId = Number(selectedOriginalVideo.id);
+    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) {
+      return;
+    }
+
+    setCreatingDubbedEn(true);
+    try {
+      const res = await fetch('/api/create-dubbed-en', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: selectedVideoId }),
+      });
+
+      const payload = (await res.json().catch(() => null)) as {
+        error?: unknown;
+        details?: unknown;
+      } | null;
+
+      if (!res.ok) {
+        const details = Array.isArray(payload?.details)
+          ? payload.details
+              .map((item) => String(item))
+              .filter(Boolean)
+              .slice(0, 5)
+              .join(' | ')
+          : '';
+        const message =
+          typeof payload?.error === 'string' && payload.error.trim()
+            ? payload.error.trim()
+            : `Create Dubbed En failed (${res.status})`;
+
+        throw new Error(details ? `${message} — ${details}` : message);
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } catch (error) {
+      console.error('Create Dubbed En failed:', error);
+    } finally {
+      setCreatingDubbedEn(false);
+    }
+  };
+
   const onFitFinalVideosToDuration = async () => {
     if (fittingFinalVideoDurations || batchOperations.speedingUpAllVideos) {
       return;
@@ -4738,6 +4785,27 @@ export default function BatchOperations({
                           : creatingEnSrt
                             ? 'Processing...'
                             : 'Create En Srt'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={onCreateDubbedEn}
+                    disabled={!selectedOriginalVideo.id || creatingDubbedEn}
+                    className='w-full h-10 mt-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : creatingDubbedEn
+                          ? 'Creating scene Dubbed En, merging, and saving Final Dubbed Audio...'
+                          : 'Convert EN TTS (6891) to exact scene Duration (6884), save Dubbed En (7108), merge all, fit to Uploaded Video Duration (6909), and save Final Dubbed Audio (7109)'
+                    }
+                  >
+                    {creatingDubbedEn && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    {!creatingDubbedEn && <Volume2 className='w-4 h-4' />}
+                    <span className='font-medium'>
+                      {creatingDubbedEn ? 'Processing...' : 'Create Dubbed En'}
                     </span>
                   </button>
                 </div>
