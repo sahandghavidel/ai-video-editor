@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Agent } from 'undici';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 900;
 
 const SCENES_TABLE_ID = '714';
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const FIELD_KEY_REGEX = /^field_\d+$/;
+const TTS_PROVIDER_FETCH_DISPATCHER = new Agent({
+  headersTimeout: 0,
+  bodyTimeout: 0,
+});
 
 type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
 type BaserowRow = Record<string, unknown>;
@@ -316,12 +322,15 @@ async function generateSceneTts(options: {
     payload.ttsSettings = ttsSettings;
   }
 
-  const response = await fetch(`${origin}${providerPath}`, {
+  const providerRequestInit: RequestInit & { dispatcher: Agent } = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     cache: 'no-store',
-  });
+    dispatcher: TTS_PROVIDER_FETCH_DISPATCHER,
+  };
+
+  const response = await fetch(`${origin}${providerPath}`, providerRequestInit);
 
   const json = (await response.json().catch(() => null)) as {
     error?: unknown;

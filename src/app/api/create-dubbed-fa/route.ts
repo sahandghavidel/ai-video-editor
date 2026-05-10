@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Agent } from 'undici';
 import { parseSrtSegments } from '@/utils/captions-parser';
 import {
   loadTtsAudioReferencesStore,
@@ -7,6 +8,7 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 900;
 
 const VIDEOS_TABLE_ID = '713';
 const SCENES_TABLE_ID = '714';
@@ -30,6 +32,10 @@ const DEFAULT_DEVICE_MAP: 'mps' | 'cpu' | 'auto' = 'mps';
 const DEFAULT_DTYPE: 'float16' | 'float32' | 'bfloat16' = 'float32';
 const DEFAULT_NUM_STEP = 64;
 const DEFAULT_SPEED = 1;
+const STEP2_FETCH_DISPATCHER = new Agent({
+  headersTimeout: 0,
+  bodyTimeout: 0,
+});
 
 const MAX_TIMESTAMP_DELTA_SEC = 0.05;
 
@@ -632,32 +638,35 @@ export async function POST(request: NextRequest) {
       updatedCount += 1;
     }
 
+    const step2RequestInit: RequestInit & { dispatcher: Agent } = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        videoId,
+        sourceTextFieldKey: baserowFields.sceneTargetSentenceFieldKey,
+        destinationAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
+        provider: 'omnivoice',
+        referenceAudioFilename: selectedLanguageReference.filename,
+        skipIfDestinationExists: false,
+        ttsSettings: {
+          provider: 'omnivoice',
+          reference_audio_filename: selectedLanguageReference.filename,
+          omniVoice: {
+            referenceText: selectedLanguageReference.referenceText,
+            language: selectedLanguageReference.language,
+            deviceMap: selectedLanguageReference.deviceMap,
+            dtype: selectedLanguageReference.dtype,
+            numStep: selectedLanguageReference.numStep,
+            speed: selectedLanguageReference.speed,
+          },
+        },
+      }),
+      dispatcher: STEP2_FETCH_DISPATCHER,
+    };
+
     const step2Response = await fetch(
       `${request.nextUrl.origin}${GENERATE_SCENE_TTS_BY_FIELD_ROUTE}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoId,
-          sourceTextFieldKey: baserowFields.sceneTargetSentenceFieldKey,
-          destinationAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
-          provider: 'omnivoice',
-          referenceAudioFilename: selectedLanguageReference.filename,
-          skipIfDestinationExists: false,
-          ttsSettings: {
-            provider: 'omnivoice',
-            reference_audio_filename: selectedLanguageReference.filename,
-            omniVoice: {
-              referenceText: selectedLanguageReference.referenceText,
-              language: selectedLanguageReference.language,
-              deviceMap: selectedLanguageReference.deviceMap,
-              dtype: selectedLanguageReference.dtype,
-              numStep: selectedLanguageReference.numStep,
-              speed: selectedLanguageReference.speed,
-            },
-          },
-        }),
-      },
+      step2RequestInit,
     );
 
     const step2Payload = (await step2Response.json().catch(() => null)) as {
@@ -756,6 +765,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[create-dubbed-fa] error:', error);
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Unknown error',
