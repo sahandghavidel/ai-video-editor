@@ -163,6 +163,7 @@ export default function BatchOperations({
   const [generatingDurationSrt, setGeneratingDurationSrt] = useState(false);
   const [creatingEnSrt, setCreatingEnSrt] = useState(false);
   const [creatingDubbedEn, setCreatingDubbedEn] = useState(false);
+  const [creatingDubbedFa, setCreatingDubbedFa] = useState(false);
 
   const [generatingAllSceneImages, setGeneratingAllSceneImages] =
     useState(false);
@@ -3585,6 +3586,52 @@ export default function BatchOperations({
     }
   };
 
+  const onCreateDubbedFa = async () => {
+    if (creatingDubbedFa) return;
+
+    const selectedVideoId = Number(selectedOriginalVideo.id);
+    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) {
+      return;
+    }
+
+    setCreatingDubbedFa(true);
+    try {
+      const res = await fetch('/api/create-dubbed-fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: selectedVideoId }),
+      });
+
+      const payload = (await res.json().catch(() => null)) as {
+        error?: unknown;
+        details?: unknown;
+      } | null;
+
+      if (!res.ok) {
+        const details = Array.isArray(payload?.details)
+          ? payload.details
+              .map((item) => String(item))
+              .filter(Boolean)
+              .slice(0, 5)
+              .join(' | ')
+          : '';
+        const message =
+          typeof payload?.error === 'string' && payload.error.trim()
+            ? payload.error.trim()
+            : `Create Dubbed fa failed (${res.status})`;
+
+        throw new Error(details ? `${message} — ${details}` : message);
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } catch (error) {
+      console.error('Create Dubbed fa failed:', error);
+    } finally {
+      setCreatingDubbedFa(false);
+    }
+  };
+
   const onFitFinalVideosToDuration = async () => {
     if (fittingFinalVideoDurations || batchOperations.speedingUpAllVideos) {
       return;
@@ -4806,6 +4853,27 @@ export default function BatchOperations({
                     {!creatingDubbedEn && <Volume2 className='w-4 h-4' />}
                     <span className='font-medium'>
                       {creatingDubbedEn ? 'Processing...' : 'Create Dubbed En'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={onCreateDubbedFa}
+                    disabled={!selectedOriginalVideo.id || creatingDubbedFa}
+                    className='w-full h-10 mt-2 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : creatingDubbedFa
+                          ? 'Step 1: validating srt_fa (7112) and srt_en (6872), then mapping cues to Sentence_fa (7110)...'
+                          : 'Step 1: read srt_fa (7112) + srt_en (6872), validate timestamp alignment, then map FA cues into Sentence_fa (7110) scene-by-scene'
+                    }
+                  >
+                    {creatingDubbedFa && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    {!creatingDubbedFa && <Volume2 className='w-4 h-4' />}
+                    <span className='font-medium'>
+                      {creatingDubbedFa ? 'Step 1...' : 'Create Dubbed fa'}
                     </span>
                   </button>
                 </div>
