@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
-import { access, unlink, writeFile } from 'fs/promises';
+import { access, unlink } from 'fs/promises';
 import { uploadToMinio } from '@/utils/ffmpeg-direct';
 
 export const runtime = 'nodejs';
@@ -29,6 +29,10 @@ const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_FFPROBE_TIMEOUT_MS = 2 * 60 * 1000;
 const FINAL_MERGED_DURATION_TOLERANCE_SEC = 0.01;
 const FINAL_MERGED_MAX_TEMPO_PASSES = 3;
+const ENABLE_FINAL_MERGED_SPEED_MATCH = false;
+const SCENE_DURATION_TOLERANCE_SEC = 0.01;
+const SCENE_MAX_TEMPO_PASSES = 3;
+const ENABLE_SCENE_DURATION_FIT = true;
 
 type BaserowRow = Record<string, unknown>;
 
@@ -460,72 +464,198 @@ async function fitSceneAudioToDurationLocal(options: {
 
   const inputDurationSec = await probeMediaDurationSeconds(inputAudioUrl);
 
+  // Test mode: keep non-empty scene audio duration untouched so we can evaluate
+  // pure merge behavior (and compare m4a vs wav experiments) without scene-level
+  // speed/pad/trim side effects.
+  if (!ENABLE_SCENE_DURATION_FIT) {
+    const outputPath = makeTempPath(
+      `video_${videoId}_scene_${sceneId}_dubbed_en_local`,
+      'wav',
+    );
+
+    await runCommand(
+      'ffmpeg',
+      [
+        '-y',
+        '-i',
+        inputAudioUrl,
+        '-vn',
+        '-map_metadata',
+        '-1',
+        '-map_chapters',
+        '-1',
+        '-filter_complex',
+        `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
+        '-map',
+        '[aout]',
+        '-c:a',
+        'pcm_s16le',
+        '-ar',
+        String(AUDIO_SAMPLE_RATE),
+        '-ac',
+        String(AUDIO_CHANNELS),
+        outputPath,
+      ],
+      DEFAULT_FFMPEG_TIMEOUT_MS,
+    );
+
+    await access(outputPath);
+    const outputDurationSec = await probeMediaDurationSeconds(outputPath);
+
+    return {
+      localPath: outputPath,
+      inputDurationSec,
+      outputDurationSec,
+      speedApplied: 1,
+    };
+  }
+
   // User requirement:
   // - if shorter => pad with silence
   // - if longer => speed up
-  const speedApplied =
-    inputDurationSec > targetDurationSec
-      ? inputDurationSec / targetDurationSec
-      : 1;
 
-  const filterParts: string[] = [
-    `aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo`,
-  ];
+  // Shorter/equal: keep exact current behavior (pad + trim to target).
+  if (inputDurationSec <= targetDurationSec + 1e-9) {
+    const outputPath = makeTempPath(
+      `video_${videoId}_scene_${sceneId}_dubbed_en_local`,
+      'wav',
+    );
 
-  if (speedApplied > 1 + 1e-9) {
-    filterParts.push(buildAtempoChain(speedApplied));
+    await runCommand(
+      'ffmpeg',
+      [
+        '-y',
+        '-i',
+        inputAudioUrl,
+        '-vn',
+        '-map_metadata',
+        '-1',
+        '-map_chapters',
+        '-1',
+        '-filter_complex',
+        `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,apad,atrim=0:${formatSeconds(targetDurationSec)},asetpts=N/SR/TB[aout]`,
+        '-map',
+        '[aout]',
+        '-c:a',
+        'pcm_s16le',
+        '-ar',
+        String(AUDIO_SAMPLE_RATE),
+        '-ac',
+        String(AUDIO_CHANNELS),
+        outputPath,
+      ],
+      DEFAULT_FFMPEG_TIMEOUT_MS,
+    );
+
+    await access(outputPath);
+    const outputDurationSec = await probeMediaDurationSeconds(outputPath);
+
+    return {
+      localPath: outputPath,
+      inputDurationSec,
+      outputDurationSec,
+      speedApplied: 1,
+    };
   }
 
-  // Keep precision strict: pad if short, trim exact target endpoint.
-  filterParts.push(
-    'apad',
-    `atrim=0:${formatSeconds(targetDurationSec)}`,
-    'asetpts=N/SR/TB',
-  );
+  // Longer: tempo-only iterative correction (no hard trim) to avoid tail chopping.
+  let currentPath = inputAudioUrl;
+  let currentDurationSec = inputDurationSec;
+  let cumulativeSpeedApplied = 1;
+  const generatedPassPaths: string[] = [];
 
-  const outputPath = makeTempPath(
-    `video_${videoId}_scene_${sceneId}_dubbed_en_local`,
-    'm4a',
-  );
+  try {
+    for (
+      let passIndex = 1;
+      passIndex <= SCENE_MAX_TEMPO_PASSES;
+      passIndex += 1
+    ) {
+      const passSpeedApplied = currentDurationSec / targetDurationSec;
+      if (!Number.isFinite(passSpeedApplied) || passSpeedApplied <= 0) {
+        throw new Error(
+          `Invalid scene tempo speed on pass ${passIndex}: ${passSpeedApplied}`,
+        );
+      }
 
-  await runCommand(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputAudioUrl,
-      '-vn',
-      '-map_metadata',
-      '-1',
-      '-map_chapters',
-      '-1',
-      '-filter_complex',
-      `[0:a]${filterParts.join(',')}[aout]`,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
-      '-ar',
-      String(AUDIO_SAMPLE_RATE),
-      '-ac',
-      String(AUDIO_CHANNELS),
-      '-movflags',
-      '+faststart',
-      outputPath,
-    ],
-    DEFAULT_FFMPEG_TIMEOUT_MS,
-  );
+      const filterParts: string[] = [
+        `aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo`,
+      ];
 
-  await access(outputPath);
-  const outputDurationSec = await probeMediaDurationSeconds(outputPath);
+      if (Math.abs(passSpeedApplied - 1) > 1e-12) {
+        filterParts.push(buildAtempoChain(passSpeedApplied));
+      }
+
+      filterParts.push('asetpts=N/SR/TB');
+
+      const passOutputPath = makeTempPath(
+        `video_${videoId}_scene_${sceneId}_dubbed_en_local_pass_${passIndex}`,
+        'wav',
+      );
+
+      await runCommand(
+        'ffmpeg',
+        [
+          '-y',
+          '-i',
+          currentPath,
+          '-vn',
+          '-map_metadata',
+          '-1',
+          '-map_chapters',
+          '-1',
+          '-filter_complex',
+          `[0:a]${filterParts.join(',')}[aout]`,
+          '-map',
+          '[aout]',
+          '-c:a',
+          'pcm_s16le',
+          '-ar',
+          String(AUDIO_SAMPLE_RATE),
+          '-ac',
+          String(AUDIO_CHANNELS),
+          passOutputPath,
+        ],
+        DEFAULT_FFMPEG_TIMEOUT_MS,
+      );
+
+      await access(passOutputPath);
+      const passOutputDurationSec =
+        await probeMediaDurationSeconds(passOutputPath);
+
+      generatedPassPaths.push(passOutputPath);
+      cumulativeSpeedApplied *= passSpeedApplied;
+
+      if (currentPath !== inputAudioUrl) {
+        await safeUnlink(currentPath);
+      }
+
+      currentPath = passOutputPath;
+      currentDurationSec = passOutputDurationSec;
+
+      const deltaSec = currentDurationSec - targetDurationSec;
+      if (Math.abs(deltaSec) <= SCENE_DURATION_TOLERANCE_SEC) {
+        break;
+      }
+
+      // Longer branch should only speed up; stop if encoding undershoots target.
+      if (deltaSec < 0) {
+        break;
+      }
+    }
+  } catch (error) {
+    for (const generatedPath of generatedPassPaths) {
+      if (generatedPath !== currentPath) {
+        await safeUnlink(generatedPath);
+      }
+    }
+    throw error;
+  }
 
   return {
-    localPath: outputPath,
+    localPath: currentPath,
     inputDurationSec,
-    outputDurationSec,
-    speedApplied,
+    outputDurationSec: currentDurationSec,
+    speedApplied: cumulativeSpeedApplied,
   };
 }
 
@@ -543,7 +673,7 @@ async function createSilenceAudioToDurationLocal(options: {
 
   const outputPath = makeTempPath(
     `video_${videoId}_scene_${sceneId}_dubbed_en_silence_local`,
-    'm4a',
+    'wav',
   );
 
   await runCommand(
@@ -559,15 +689,11 @@ async function createSilenceAudioToDurationLocal(options: {
       '-map',
       '[aout]',
       '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
+      'pcm_s16le',
       '-ar',
       String(AUDIO_SAMPLE_RATE),
       '-ac',
       String(AUDIO_CHANNELS),
-      '-movflags',
-      '+faststart',
       outputPath,
     ],
     DEFAULT_FFMPEG_TIMEOUT_MS,
@@ -596,53 +722,79 @@ async function concatenateAudiosLocal(
     return inputPaths[0];
   }
 
-  const concatListPath = makeTempPath(
-    `video_${videoId}_dubbed_en_concat`,
-    'txt',
-  );
   const outputPath = makeTempPath(
     `video_${videoId}_dubbed_en_merged_local`,
-    'm4a',
+    'wav',
   );
 
-  const concatContent = inputPaths
-    .map((filePath) => `file '${filePath.replace(/'/g, "'\\''")}'`)
-    .join('\n');
+  const inputArgs = inputPaths.flatMap((filePath) => ['-i', filePath]);
+  const concatInputPads = inputPaths.map((_, index) => `[${index}:a]`).join('');
+  const filterComplex = `${concatInputPads}concat=n=${inputPaths.length}:v=0:a=1,aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo[aout]`;
 
-  try {
-    await writeFile(concatListPath, concatContent, 'utf8');
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      ...inputArgs,
+      '-vn',
+      '-filter_complex',
+      filterComplex,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
 
-    await runCommand(
-      'ffmpeg',
-      [
-        '-y',
-        '-f',
-        'concat',
-        '-safe',
-        '0',
-        '-i',
-        concatListPath,
-        '-vn',
-        '-c:a',
-        'aac',
-        '-b:a',
-        '192k',
-        '-ar',
-        String(AUDIO_SAMPLE_RATE),
-        '-ac',
-        String(AUDIO_CHANNELS),
-        '-movflags',
-        '+faststart',
-        outputPath,
-      ],
-      DEFAULT_FFMPEG_TIMEOUT_MS,
-    );
+  await access(outputPath);
+  return outputPath;
+}
 
-    await access(outputPath);
-    return outputPath;
-  } finally {
-    await safeUnlink(concatListPath);
-  }
+async function encodeAudioToM4aLocal(options: {
+  inputPath: string;
+  outputPrefix: string;
+}): Promise<string> {
+  const { inputPath, outputPrefix } = options;
+  const outputPath = makeTempPath(outputPrefix, 'm4a');
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      '-movflags',
+      '+faststart',
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
 }
 
 async function fitMergedAudioToVideoDurationLocal(options: {
@@ -900,12 +1052,18 @@ export async function POST(request: NextRequest) {
 
       tempFiles.push(fitted.localPath);
 
+      const sceneUploadLocalPath = await encodeAudioToM4aLocal({
+        inputPath: fitted.localPath,
+        outputPrefix: `video_${videoId}_scene_${job.sceneId}_dubbed_en_upload`,
+      });
+      tempFiles.push(sceneUploadLocalPath);
+
       const sceneFilename =
         job.source === 'silence'
           ? `video_${videoId}_scene_${job.sceneId}_dubbed_en_silence_${Date.now()}.m4a`
           : `video_${videoId}_scene_${job.sceneId}_dubbed_en_${Date.now()}.m4a`;
       const dubbedEnUrl = await uploadToMinio(
-        fitted.localPath,
+        sceneUploadLocalPath,
         sceneFilename,
         'audio/mp4',
       );
@@ -941,17 +1099,38 @@ export async function POST(request: NextRequest) {
     const mergedDurationBeforeFitSec =
       await probeMediaDurationSeconds(mergedLocalPath);
 
-    const fittedMerged = await fitMergedAudioToVideoDurationLocal({
-      inputPath: mergedLocalPath,
-      videoId,
-      targetDurationSec: targetVideoDurationSec,
-    });
+    let finalMergedLocalPath = mergedLocalPath;
+    let mergedDurationAfterFitSec = mergedDurationBeforeFitSec;
 
-    tempFiles.push(fittedMerged.localPath);
+    // Test mode: skip final whole-track speed matching so we can verify
+    // whether scene-fit + merge alone is sufficient.
+    if (ENABLE_FINAL_MERGED_SPEED_MATCH) {
+      const fittedMerged = await fitMergedAudioToVideoDurationLocal({
+        inputPath: mergedLocalPath,
+        videoId,
+        targetDurationSec: targetVideoDurationSec,
+      });
+
+      finalMergedLocalPath = fittedMerged.localPath;
+      mergedDurationAfterFitSec = fittedMerged.outputDurationSec;
+
+      if (!tempFiles.includes(fittedMerged.localPath)) {
+        tempFiles.push(fittedMerged.localPath);
+      }
+    }
+
+    let finalUploadLocalPath = finalMergedLocalPath;
+    if (!finalMergedLocalPath.toLowerCase().endsWith('.m4a')) {
+      finalUploadLocalPath = await encodeAudioToM4aLocal({
+        inputPath: finalMergedLocalPath,
+        outputPrefix: `video_${videoId}_final_dubbed_audio_upload`,
+      });
+      tempFiles.push(finalUploadLocalPath);
+    }
 
     const finalFilename = `video_${videoId}_final_dubbed_audio_${Date.now()}.m4a`;
     const finalDubbedAudioUrl = await uploadToMinio(
-      fittedMerged.localPath,
+      finalUploadLocalPath,
       finalFilename,
       'audio/mp4',
     );
@@ -971,7 +1150,9 @@ export async function POST(request: NextRequest) {
       finalDubbedField: VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY,
       videoTargetDurationSec: targetVideoDurationSec,
       mergedDurationBeforeFitSec,
-      mergedDurationAfterFitSec: fittedMerged.outputDurationSec,
+      mergedDurationAfterFitSec,
+      finalMergedSpeedMatchApplied: ENABLE_FINAL_MERGED_SPEED_MATCH,
+      sceneDurationFitApplied: ENABLE_SCENE_DURATION_FIT,
       finalDubbedAudioUrl,
       scenes: sceneResults
         .sort((a, b) => a.orderValue - b.orderValue)
