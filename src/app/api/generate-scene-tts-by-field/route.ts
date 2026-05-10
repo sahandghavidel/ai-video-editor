@@ -26,6 +26,23 @@ type SceneTtsFailure = {
   error: string;
 };
 
+class BaserowRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BaserowRequestError';
+    this.status = status;
+  }
+}
+
+function isBaserowAuthError(error: unknown): error is BaserowRequestError {
+  return (
+    error instanceof BaserowRequestError &&
+    (error.status === 401 || error.status === 403)
+  );
+}
+
 function parsePositiveInt(value: unknown): number | null {
   const parsed =
     typeof value === 'number'
@@ -219,7 +236,10 @@ async function baserowGetJson<T>(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    throw new Error(`Baserow GET failed (${response.status}) ${errorText}`);
+    throw new BaserowRequestError(
+      `Baserow GET failed (${response.status}) ${errorText}`,
+      response.status,
+    );
   }
 
   return (await response.json()) as T;
@@ -247,9 +267,57 @@ async function baserowPatchRow(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    throw new Error(
+    throw new BaserowRequestError(
       `Baserow PATCH failed for table ${tableId} row ${rowId} (${response.status}) ${errorText}`,
+      response.status,
     );
+  }
+}
+
+async function patchSceneAudioWithAuthRetry(options: {
+  baserowUrl: string;
+  token: string;
+  sceneId: number;
+  destinationAudioFieldKey: string;
+  audioUrl: string;
+}): Promise<string> {
+  const { baserowUrl, token, sceneId, destinationAudioFieldKey, audioUrl } =
+    options;
+
+  const patchPayload = {
+    [destinationAudioFieldKey]: audioUrl,
+  };
+
+  try {
+    await baserowPatchRow(
+      baserowUrl,
+      token,
+      SCENES_TABLE_ID,
+      sceneId,
+      patchPayload,
+    );
+
+    return token;
+  } catch (error) {
+    if (!isBaserowAuthError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      `[generate-scene-tts-by-field] Baserow auth expired while saving scene ${sceneId}. Refreshing token and retrying once...`,
+    );
+
+    const refreshedToken = await getJWTToken(true);
+
+    await baserowPatchRow(
+      baserowUrl,
+      refreshedToken,
+      SCENES_TABLE_ID,
+      sceneId,
+      patchPayload,
+    );
+
+    return refreshedToken;
   }
 }
 
@@ -364,6 +432,7 @@ export async function POST(request: NextRequest) {
       referenceAudioFilename?: unknown;
       ttsSettings?: unknown;
       skipIfDestinationExists?: unknown;
+      failFastOnSaveError?: unknown;
       onlySceneIds?: unknown;
     } | null;
 
@@ -422,8 +491,9 @@ export async function POST(request: NextRequest) {
 
     const skipIfDestinationExists = parseBoolean(
       body?.skipIfDestinationExists,
-      false,
+      true,
     );
+    const failFastOnSaveError = parseBoolean(body?.failFastOnSaveError, true);
 
     const onlySceneIdSet = Array.isArray(body?.onlySceneIds)
       ? new Set(
@@ -441,8 +511,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await getJWTToken();
-    const scenes = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+    let token = await getJWTToken();
+
+    let scenes: BaserowRow[];
+    try {
+      scenes = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+    } catch (error) {
+      if (!isBaserowAuthError(error)) {
+        throw error;
+      }
+
+      console.warn(
+        '[generate-scene-tts-by-field] Baserow auth expired while loading scenes. Refreshing token and retrying once...',
+      );
+
+      token = await getJWTToken(true);
+      scenes = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+    }
 
     if (scenes.length === 0) {
       return NextResponse.json(
@@ -461,6 +546,8 @@ export async function POST(request: NextRequest) {
     let skippedExistingCount = 0;
     let skippedSceneFilterCount = 0;
     let skippedInvalidSceneIdCount = 0;
+    let abortedOnSaveFailure = false;
+    let abortedSceneId: number | null = null;
 
     for (const scene of orderedScenes) {
       const sceneId = parsePositiveInt(scene.id);
@@ -501,11 +588,34 @@ export async function POST(request: NextRequest) {
           ttsSettings,
         });
 
-        await baserowPatchRow(baserowUrl, token, SCENES_TABLE_ID, sceneId, {
-          [destinationAudioFieldKey]: audioUrl,
-        });
+        try {
+          token = await patchSceneAudioWithAuthRetry({
+            baserowUrl,
+            token,
+            sceneId,
+            destinationAudioFieldKey,
+            audioUrl,
+          });
 
-        generatedCount += 1;
+          generatedCount += 1;
+        } catch (saveError) {
+          const saveMessage =
+            saveError instanceof Error ? saveError.message : 'Unknown error';
+
+          failures.push({
+            sceneId,
+            error: saveMessage,
+          });
+
+          if (failFastOnSaveError) {
+            abortedOnSaveFailure = true;
+            abortedSceneId = sceneId;
+            console.error(
+              `[generate-scene-tts-by-field] Fail-fast: stopping batch after save failure on scene ${sceneId}: ${saveMessage}`,
+            );
+            break;
+          }
+        }
       } catch (error) {
         failures.push({
           sceneId,
@@ -515,13 +625,17 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      ok: failures.length === 0,
+      ok: failures.length === 0 && !abortedOnSaveFailure,
       videoId,
       provider,
       providerPath,
       sourceTextFieldKey,
       destinationAudioFieldKey,
       referenceAudioFilename: referenceAudioFilename || null,
+      skipIfDestinationExists,
+      failFastOnSaveError,
+      abortedOnSaveFailure,
+      abortedSceneId,
       requestedSceneCount: orderedScenes.length,
       generatedCount,
       skippedNoTextCount,

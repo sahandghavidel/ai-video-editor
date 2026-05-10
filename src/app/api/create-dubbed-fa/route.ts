@@ -647,7 +647,8 @@ export async function POST(request: NextRequest) {
         destinationAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
         provider: 'omnivoice',
         referenceAudioFilename: selectedLanguageReference.filename,
-        skipIfDestinationExists: false,
+        skipIfDestinationExists: true,
+        failFastOnSaveError: true,
         ttsSettings: {
           provider: 'omnivoice',
           reference_audio_filename: selectedLanguageReference.filename,
