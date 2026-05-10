@@ -2,12 +2,19 @@ import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+export type OmniVoiceDeviceMap = 'mps' | 'cpu' | 'auto';
+export type OmniVoiceDType = 'float16' | 'float32' | 'bfloat16';
+
 export interface TtsAudioReferenceEntry {
   id: string;
   name: string;
   filename: string;
   language: string;
   referenceText: string;
+  deviceMap: OmniVoiceDeviceMap;
+  dtype: OmniVoiceDType;
+  numStep: number;
+  speed: number;
   description: string;
   tags: string[];
   isDefault: boolean;
@@ -52,6 +59,53 @@ async function ensureStoreFile(): Promise<void> {
   }
 }
 
+async function writeStore(entries: TtsAudioReferenceEntry[]): Promise<void> {
+  const payload: TtsAudioReferencesStore = { entries };
+  await fs.writeFile(STORE_FILE_PATH, JSON.stringify(payload, null, 2), 'utf8');
+}
+
+function toNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  return fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function asDeviceMap(value: unknown): OmniVoiceDeviceMap {
+  return value === 'cpu' || value === 'auto' || value === 'mps' ? value : 'mps';
+}
+
+function asDType(value: unknown): OmniVoiceDType {
+  return value === 'float16' || value === 'float32' || value === 'bfloat16'
+    ? value
+    : 'float32';
+}
+
+function normalizeDefaultsPerLanguage(
+  entries: TtsAudioReferenceEntry[],
+): TtsAudioReferenceEntry[] {
+  const seenLanguageDefault = new Set<string>();
+
+  return entries.map((entry) => {
+    if (!entry.isDefault) return entry;
+
+    const key = entry.language.toLowerCase();
+    if (seenLanguageDefault.has(key)) {
+      return { ...entry, isDefault: false };
+    }
+
+    seenLanguageDefault.add(key);
+    return entry;
+  });
+}
+
 export function sanitizeTtsAudioReferenceEntries(
   input: unknown,
 ): TtsAudioReferenceEntry[] {
@@ -83,6 +137,11 @@ export function sanitizeTtsAudioReferenceEntries(
     const referenceText =
       typeof entry.referenceText === 'string' ? entry.referenceText : '';
 
+    const deviceMap = asDeviceMap(entry.deviceMap);
+    const dtype = asDType(entry.dtype);
+    const numStep = Math.round(clamp(toNumber(entry.numStep, 64), 8, 64));
+    const speed = clamp(toNumber(entry.speed, 1), 0.5, 2);
+
     const description =
       typeof entry.description === 'string' ? entry.description : '';
 
@@ -111,6 +170,10 @@ export function sanitizeTtsAudioReferenceEntries(
       filename,
       language,
       referenceText,
+      deviceMap,
+      dtype,
+      numStep,
+      speed,
       description,
       tags,
       isDefault,
@@ -128,10 +191,29 @@ export async function loadTtsAudioReferencesStore(): Promise<TtsAudioReferencesS
   try {
     const content = await fs.readFile(STORE_FILE_PATH, 'utf8');
     const parsed = JSON.parse(content) as { entries?: unknown };
-    const entries = sanitizeTtsAudioReferenceEntries(parsed?.entries);
+    const entries = normalizeDefaultsPerLanguage(
+      sanitizeTtsAudioReferenceEntries(parsed?.entries),
+    );
 
     return { entries };
   } catch {
     return { entries: [] };
   }
+}
+
+export async function saveTtsAudioReferencesStore(
+  entriesInput: unknown,
+): Promise<TtsAudioReferencesStore> {
+  await ensureStoreFile();
+
+  const nowIso = new Date().toISOString();
+  const entries = normalizeDefaultsPerLanguage(
+    sanitizeTtsAudioReferenceEntries(entriesInput).map((entry) => ({
+      ...entry,
+      updatedAt: nowIso,
+    })),
+  );
+
+  await writeStore(entries);
+  return { entries };
 }

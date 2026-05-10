@@ -1,7 +1,9 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { ListMusic, RotateCcw } from 'lucide-react';
+import { TTSAudioReferencesModal } from '@/components/TTSAudioReferencesModal';
 
 interface TTSSettingsProps {
   className?: string;
@@ -46,13 +48,17 @@ const defaultTTSSettings = {
 
 export default function TTSSettings({ className = '' }: TTSSettingsProps) {
   const { ttsSettings, updateTTSSettings } = useAppStore();
+  const [audioReferencesModalOpen, setAudioReferencesModalOpen] =
+    useState(false);
 
   const handleReset = () => {
     updateTTSSettings(defaultTTSSettings);
   };
 
   return (
-    <div className='p-3 rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200'>
+    <div
+      className={`p-3 rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200 ${className}`}
+    >
       {/* Header - Compact */}
       <div className='flex items-center justify-between mb-3'>
         <div className='flex items-center space-x-2'>
@@ -103,6 +109,15 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
               OmniVoice runs locally via Python on Apple Silicon (MPS). It uses
               your selected reference filename for voice cloning.
             </div>
+
+            <button
+              onClick={() => setAudioReferencesModalOpen(true)}
+              className='inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-indigo-300 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 transition-colors text-xs font-medium'
+              title='Manage language-specific OmniVoice presets'
+            >
+              <ListMusic className='w-4 h-4' />
+              Manage Language Presets
+            </button>
 
             <div className='flex gap-1 items-center justify-between'>
               <label className='text-xs font-medium text-gray-700'>
@@ -727,6 +742,11 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
           </>
         )}
       </div>
+
+      <TTSAudioReferencesModal
+        isOpen={audioReferencesModalOpen}
+        onClose={() => setAudioReferencesModalOpen(false)}
+      />
 
       <style jsx>{`
         .slider::-webkit-slider-thumb {

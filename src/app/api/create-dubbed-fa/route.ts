@@ -20,6 +20,11 @@ const VIDEO_SRT_FA_FIELD_KEY = 'field_7112';
 const GENERATE_SCENE_TTS_BY_FIELD_ROUTE = '/api/generate-scene-tts-by-field';
 const DEFAULT_FA_REFERENCE_AUDIO_FILENAME = 'fa.wav';
 const DEFAULT_FA_REFERENCE_TEXT = '';
+const DEFAULT_FA_LANGUAGE = 'fa';
+const DEFAULT_FA_DEVICE_MAP: 'mps' | 'cpu' | 'auto' = 'mps';
+const DEFAULT_FA_DTYPE: 'float16' | 'float32' | 'bfloat16' = 'float32';
+const DEFAULT_FA_NUM_STEP = 64;
+const DEFAULT_FA_SPEED = 1;
 
 const MAX_TIMESTAMP_DELTA_SEC = 0.05;
 
@@ -41,7 +46,12 @@ type TimestampMismatch = {
 type ResolvedAudioReference = {
   id: string | null;
   filename: string;
+  language: string;
   referenceText: string;
+  deviceMap: 'mps' | 'cpu' | 'auto';
+  dtype: 'float16' | 'float32' | 'bfloat16';
+  numStep: number;
+  speed: number;
   source: 'store-default-fa' | 'store-first-fa' | 'fallback';
 };
 
@@ -210,7 +220,12 @@ async function resolveFaAudioReference(): Promise<ResolvedAudioReference> {
         return {
           id: defaultEntry.id,
           filename: defaultEntry.filename,
+          language: defaultEntry.language,
           referenceText: defaultEntry.referenceText,
+          deviceMap: defaultEntry.deviceMap,
+          dtype: defaultEntry.dtype,
+          numStep: defaultEntry.numStep,
+          speed: defaultEntry.speed,
           source: 'store-default-fa',
         };
       }
@@ -219,7 +234,12 @@ async function resolveFaAudioReference(): Promise<ResolvedAudioReference> {
       return {
         id: firstEntry.id,
         filename: firstEntry.filename,
+        language: firstEntry.language,
         referenceText: firstEntry.referenceText,
+        deviceMap: firstEntry.deviceMap,
+        dtype: firstEntry.dtype,
+        numStep: firstEntry.numStep,
+        speed: firstEntry.speed,
         source: 'store-first-fa',
       };
     }
@@ -233,7 +253,12 @@ async function resolveFaAudioReference(): Promise<ResolvedAudioReference> {
   return {
     id: null,
     filename: DEFAULT_FA_REFERENCE_AUDIO_FILENAME,
+    language: DEFAULT_FA_LANGUAGE,
     referenceText: DEFAULT_FA_REFERENCE_TEXT,
+    deviceMap: DEFAULT_FA_DEVICE_MAP,
+    dtype: DEFAULT_FA_DTYPE,
+    numStep: DEFAULT_FA_NUM_STEP,
+    speed: DEFAULT_FA_SPEED,
     source: 'fallback',
   };
 }
@@ -570,11 +595,11 @@ export async function POST(request: NextRequest) {
             reference_audio_filename: selectedFaReference.filename,
             omniVoice: {
               referenceText: selectedFaReference.referenceText,
-              language: 'fa',
-              deviceMap: 'mps',
-              dtype: 'float32',
-              numStep: 64,
-              speed: 1,
+              language: selectedFaReference.language,
+              deviceMap: selectedFaReference.deviceMap,
+              dtype: selectedFaReference.dtype,
+              numStep: selectedFaReference.numStep,
+              speed: selectedFaReference.speed,
             },
           },
         }),
@@ -642,7 +667,12 @@ export async function POST(request: NextRequest) {
         referenceAudioFilename: selectedFaReference.filename,
         referenceAudioReferenceId: selectedFaReference.id,
         referenceAudioSource: selectedFaReference.source,
+        language: selectedFaReference.language,
         referenceTextLength: selectedFaReference.referenceText.length,
+        deviceMap: selectedFaReference.deviceMap,
+        dtype: selectedFaReference.dtype,
+        numStep: selectedFaReference.numStep,
+        speed: selectedFaReference.speed,
         provider:
           typeof step2Payload?.provider === 'string'
             ? step2Payload.provider

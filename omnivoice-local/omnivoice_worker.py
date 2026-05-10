@@ -107,13 +107,18 @@ def _normalize_device_map(requested: str) -> str:
 
     requested = (requested or "mps").strip().lower()
 
-    if requested != "mps":
-        # Strict MPS mode by user request: do not allow auto/cpu/cuda selection.
-        return "mps"
+    if requested not in {"mps", "cpu", "auto"}:
+        requested = "mps"
+
+    if requested == "cpu":
+        return "cpu"
+
+    if requested == "auto":
+        return "mps" if torch.backends.mps.is_available() else "cpu"
 
     if not torch.backends.mps.is_available():
         raise RuntimeError(
-            "MPS device is not available. Strict MPS mode is enabled, so CPU fallback is disabled."
+            "MPS device is not available. Use device_map='auto' or 'cpu' for fallback."
         )
 
     return "mps"

@@ -3,14 +3,18 @@
     {
       "id": "fa-default",
       "name": "Farsi Default Voice",
-      "filename": "fa11.wav",
+      "filename": "ElevenLabs_2026-04-26T07_08_39__s0_v3.wav",
       "language": "fa",
-      "referenceText": "سرویس گوگل که به صورت رایگان ارائه می‌شود، کلمات، عبارات و صفحات وب را فوراً بین انگلیسی و بیش از 100 زبان دیگر ترجمه می‌کند.",
+      "referenceText": "انتخاب کنید کدام مراحل در اجرای کامل خط لوله لحاظ شوند",
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 64,
+      "speed": 1,
       "description": "Default Persian reference voice used for FA dubbing.",
       "tags": ["fa", "persian", "default"],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T00:00:00.000Z"
+      "updatedAt": "2026-05-10T05:21:43.340Z"
     },
     {
       "id": "fa-alt-1",
@@ -18,11 +22,15 @@
       "filename": "fa_alt_01.wav",
       "language": "fa",
       "referenceText": "",
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 64,
+      "speed": 1,
       "description": "Alternative Persian tone for tests or style variations.",
       "tags": ["fa", "persian", "alternate"],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-05-10T00:00:00.000Z"
+      "updatedAt": "2026-05-10T05:21:43.340Z"
     },
     {
       "id": "en-default",
@@ -30,11 +38,15 @@
       "filename": "en.wav",
       "language": "en",
       "referenceText": "",
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 64,
+      "speed": 1,
       "description": "Example English reference entry for future multilingual pipelines.",
       "tags": ["en", "english", "example"],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T00:00:00.000Z"
+      "updatedAt": "2026-05-10T05:21:43.340Z"
     }
   ]
 }

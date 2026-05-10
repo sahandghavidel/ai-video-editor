@@ -291,9 +291,10 @@ function resolveDType(value: unknown): OmniVoiceDType {
 }
 
 function resolveDeviceMap(value: unknown): OmniVoiceDeviceMap {
-  // Strict MPS mode: always run OmniVoice on Apple Silicon MPS.
-  // We intentionally ignore cpu/auto here to avoid silent CPU fallback behavior.
-  void value;
+  if (value === 'cpu' || value === 'auto' || value === 'mps') {
+    return value;
+  }
+
   return 'mps';
 }
 
