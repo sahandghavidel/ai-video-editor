@@ -32,6 +32,10 @@ const SCENE_COARSE_MAX_TEMPO_PASSES = 8;
 const SCENE_FINE_MAX_TEMPO_PASSES = 8;
 const SCENE_VERIFY_MAX_TEMPO_PASSES = 4;
 const SAVE_FITTED_AUDIO_AS_WAV = true;
+const FIT_DEBUG_LOGS = true;
+const LONGER_ADAPTIVE_UNDERSHOOT_MIN_SEC = 0.02;
+const LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC = 0.12;
+const LONGER_ADAPTIVE_UNDERSHOOT_RATIO = 0.35;
 
 type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
 type BaserowRow = Record<string, unknown>;
@@ -67,6 +71,24 @@ type SceneTtsFailure = {
   sceneId: number;
   error: string;
 };
+
+function logFitInfo(event: string, details?: Record<string, unknown>): void {
+  if (!FIT_DEBUG_LOGS) return;
+  if (details) {
+    console.log(`[fit-debug] ${event}`, details);
+    return;
+  }
+  console.log(`[fit-debug] ${event}`);
+}
+
+function logFitError(event: string, details?: Record<string, unknown>): void {
+  if (!FIT_DEBUG_LOGS) return;
+  if (details) {
+    console.error(`[fit-debug] ${event}`, details);
+    return;
+  }
+  console.error(`[fit-debug] ${event}`);
+}
 
 class BaserowRequestError extends Error {
   status: number;
@@ -269,6 +291,50 @@ function samplesToSeconds(sampleCount: number, sampleRate: number): number {
   }
 
   return sampleCount / sampleRate;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function computeAdaptiveUndershootSamples(options: {
+  overageSamples: number;
+  sampleRate: number;
+  targetSamples: number;
+}): { undershootSamples: number; undershootSec: number } {
+  const { overageSamples, sampleRate, targetSamples } = options;
+
+  if (!Number.isInteger(overageSamples) || overageSamples <= 0) {
+    return { undershootSamples: 0, undershootSec: 0 };
+  }
+
+  const minSamples = Math.max(
+    1,
+    secondsToSamples(LONGER_ADAPTIVE_UNDERSHOOT_MIN_SEC, sampleRate),
+  );
+  const maxSamples = Math.max(
+    minSamples,
+    secondsToSamples(LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC, sampleRate),
+  );
+
+  const rawSamples = Math.max(
+    1,
+    Math.round(overageSamples * LONGER_ADAPTIVE_UNDERSHOOT_RATIO),
+  );
+
+  const boundedSamples = clampNumber(rawSamples, minSamples, maxSamples);
+  const maxAllowedByTarget = Math.max(
+    1,
+    targetSamples - SCENE_FINAL_TOLERANCE_SAMPLES,
+  );
+  const undershootSamples = Math.min(boundedSamples, maxAllowedByTarget);
+
+  return {
+    undershootSamples,
+    undershootSec: roundDurationSeconds(
+      samplesToSeconds(undershootSamples, sampleRate),
+    ),
+  };
 }
 
 function parseTimeBase(value: unknown): number | null {
@@ -480,6 +546,15 @@ async function normalizeAudioToWavLocal(options: {
   inputAudioUrl: string;
 }): Promise<string> {
   const { sceneId, videoId, inputAudioUrl } = options;
+  const startedAt = Date.now();
+
+  logFitInfo('normalizeAudioToWavLocal:start', {
+    sceneId,
+    videoId,
+    inputAudioUrl,
+    sampleRate: AUDIO_SAMPLE_RATE,
+    channels: AUDIO_CHANNELS,
+  });
 
   const outputPath = makeTempPath(
     `video_${videoId}_scene_${sceneId}_dubbed_fit_normalized`,
@@ -513,6 +588,14 @@ async function normalizeAudioToWavLocal(options: {
   );
 
   await access(outputPath);
+
+  logFitInfo('normalizeAudioToWavLocal:done', {
+    sceneId,
+    videoId,
+    outputPath,
+    elapsedMs: Date.now() - startedAt,
+  });
+
   return outputPath;
 }
 
@@ -532,6 +615,15 @@ async function appendSilenceToAudioLocal(options: {
     silenceSamples,
     AUDIO_SAMPLE_RATE,
   );
+  const startedAt = Date.now();
+
+  logFitInfo('appendSilenceToAudioLocal:start', {
+    sceneId,
+    videoId,
+    inputPath,
+    silenceSamples,
+    silenceDurationSec: roundDurationSeconds(silenceDurationSec),
+  });
 
   const outputPath = makeTempPath(
     `video_${videoId}_scene_${sceneId}_dubbed_fit_silence`,
@@ -571,6 +663,14 @@ async function appendSilenceToAudioLocal(options: {
   );
 
   await access(outputPath);
+
+  logFitInfo('appendSilenceToAudioLocal:done', {
+    sceneId,
+    videoId,
+    outputPath,
+    elapsedMs: Date.now() - startedAt,
+  });
+
   return outputPath;
 }
 
@@ -602,17 +702,36 @@ async function tempoMatchAudioToDurationLocal(options: {
     throw new Error(`Invalid target sample count: ${targetSamples}`);
   }
 
+  const startedAt = Date.now();
   let currentPath = inputPath;
   const initialMetrics = await probeAudioMetrics(inputPath);
   let currentSamples = initialMetrics.sampleCount;
   let currentSampleRate = initialMetrics.sampleRate;
   let cumulativeSpeedApplied = 1;
   const generatedPassPaths: string[] = [];
+  let executedPasses = 0;
+  let stopReason = 'not-set';
+
+  logFitInfo('tempoMatchAudioToDurationLocal:start', {
+    sceneId,
+    videoId,
+    inputPath,
+    outputPrefix,
+    targetSamples,
+    targetDurationSec: roundDurationSeconds(
+      samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE),
+    ),
+    initialSamples: currentSamples,
+    initialDurationSec: initialMetrics.durationSec,
+    toleranceSamples,
+    maxPasses,
+  });
 
   try {
     for (let passIndex = 1; passIndex <= maxPasses; passIndex += 1) {
       const deltaSamples = currentSamples - targetSamples;
       if (Math.abs(deltaSamples) <= toleranceSamples) {
+        stopReason = 'within-tolerance-before-pass';
         break;
       }
 
@@ -622,6 +741,20 @@ async function tempoMatchAudioToDurationLocal(options: {
           `Invalid scene tempo speed on pass ${passIndex}: ${passSpeedApplied}`,
         );
       }
+
+      logFitInfo('tempoMatchAudioToDurationLocal:pass-start', {
+        sceneId,
+        videoId,
+        outputPrefix,
+        passIndex,
+        currentSamples,
+        currentDurationSec: roundDurationSeconds(
+          samplesToSeconds(currentSamples, currentSampleRate),
+        ),
+        targetSamples,
+        deltaSamples,
+        passSpeedApplied,
+      });
 
       const filterParts: string[] = [
         `aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo`,
@@ -679,12 +812,47 @@ async function tempoMatchAudioToDurationLocal(options: {
       currentPath = passOutputPath;
       currentSamples = passMetrics.sampleCount;
       currentSampleRate = passMetrics.sampleRate;
+      executedPasses += 1;
+
+      logFitInfo('tempoMatchAudioToDurationLocal:pass-done', {
+        sceneId,
+        videoId,
+        outputPrefix,
+        passIndex,
+        outputPath: passOutputPath,
+        outputSamples: currentSamples,
+        outputDurationSec: passMetrics.durationSec,
+        deltaSamplesAfterPass: currentSamples - targetSamples,
+        cumulativeSpeedApplied,
+      });
 
       if (currentSamples === previousSamples) {
+        stopReason = 'sample-count-unchanged';
         break;
       }
     }
+
+    if (stopReason === 'not-set') {
+      const finalDelta = currentSamples - targetSamples;
+      stopReason =
+        Math.abs(finalDelta) <= toleranceSamples
+          ? 'within-tolerance-after-pass'
+          : executedPasses >= maxPasses
+            ? 'max-passes-reached'
+            : 'loop-complete';
+    }
   } catch (error) {
+    logFitError('tempoMatchAudioToDurationLocal:error', {
+      sceneId,
+      videoId,
+      outputPrefix,
+      executedPasses,
+      currentSamples,
+      targetSamples,
+      deltaSamples: currentSamples - targetSamples,
+      message: error instanceof Error ? error.message : String(error),
+    });
+
     for (const generatedPath of generatedPassPaths) {
       if (generatedPath !== currentPath) {
         await safeUnlink(generatedPath);
@@ -693,11 +861,28 @@ async function tempoMatchAudioToDurationLocal(options: {
     throw error;
   }
 
+  const finalDeltaSamples = currentSamples - targetSamples;
+  const finalDurationSec = roundDurationSeconds(
+    samplesToSeconds(currentSamples, currentSampleRate),
+  );
+
+  logFitInfo('tempoMatchAudioToDurationLocal:done', {
+    sceneId,
+    videoId,
+    outputPrefix,
+    executedPasses,
+    stopReason,
+    targetSamples,
+    finalSamples: currentSamples,
+    finalDeltaSamples,
+    finalDurationSec,
+    finalDeltaSec: roundDurationSeconds(finalDeltaSamples / currentSampleRate),
+    elapsedMs: Date.now() - startedAt,
+  });
+
   return {
     localPath: currentPath,
-    outputDurationSec: roundDurationSeconds(
-      samplesToSeconds(currentSamples, currentSampleRate),
-    ),
+    outputDurationSec: finalDurationSec,
     outputSamples: currentSamples,
     speedApplied: cumulativeSpeedApplied,
   };
@@ -715,11 +900,43 @@ async function fitSceneAudioToDurationLocal(options: {
   speedApplied: number;
 }> {
   const { sceneId, videoId, inputAudioUrl, targetDurationSec } = options;
+  const startedAt = Date.now();
   const normalizedTargetDurationSec = roundDurationSeconds(targetDurationSec);
   const targetSamples = secondsToSamples(
     normalizedTargetDurationSec,
     AUDIO_SAMPLE_RATE,
   );
+
+  logFitInfo('fitSceneAudioToDurationLocal:start', {
+    sceneId,
+    videoId,
+    inputAudioUrl,
+    targetDurationSec: normalizedTargetDurationSec,
+    targetSamples,
+    method: 'wav-adaptive-undershoot-for-longer',
+    stages: [
+      {
+        name: 'coarse',
+        toleranceSamples: SCENE_COARSE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_COARSE_MAX_TEMPO_PASSES,
+      },
+      {
+        name: 'fine',
+        toleranceSamples: SCENE_FINE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_FINE_MAX_TEMPO_PASSES,
+      },
+      {
+        name: 'verify',
+        toleranceSamples: SCENE_FINAL_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_VERIFY_MAX_TEMPO_PASSES,
+      },
+    ],
+    longerAdaptiveUndershoot: {
+      minSec: LONGER_ADAPTIVE_UNDERSHOOT_MIN_SEC,
+      maxSec: LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC,
+      ratio: LONGER_ADAPTIVE_UNDERSHOOT_RATIO,
+    },
+  });
 
   const cleanupPaths = new Set<string>();
 
@@ -739,8 +956,156 @@ async function fitSceneAudioToDurationLocal(options: {
     let workingPath = normalizedInputPath;
     let cumulativeSpeedApplied = 1;
 
+    const stageTemplates: Array<{
+      name: string;
+      outputPrefix: string;
+      toleranceSamples: number;
+      maxPasses: number;
+    }> = [
+      {
+        name: 'coarse',
+        outputPrefix: 'dubbed_fit_tempo_coarse',
+        toleranceSamples: SCENE_COARSE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_COARSE_MAX_TEMPO_PASSES,
+      },
+      {
+        name: 'fine',
+        outputPrefix: 'dubbed_fit_tempo_fine',
+        toleranceSamples: SCENE_FINE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_FINE_MAX_TEMPO_PASSES,
+      },
+      {
+        name: 'verify',
+        outputPrefix: 'dubbed_fit_tempo_verify',
+        toleranceSamples: SCENE_FINAL_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_VERIFY_MAX_TEMPO_PASSES,
+      },
+    ];
+
+    const runTempoStages = async (
+      stageVariant: string,
+      desiredTargetSamples: number,
+    ): Promise<{ sampleCount: number; sampleRate: number }> => {
+      let latestOutputSamples = Number.NaN;
+
+      for (const stageTemplate of stageTemplates) {
+        const stageName = `${stageTemplate.name}:${stageVariant}`;
+        const stageOutputPrefix = `${stageTemplate.outputPrefix}_${stageVariant}`;
+
+        logFitInfo('fitSceneAudioToDurationLocal:stage-start', {
+          sceneId,
+          videoId,
+          stageName,
+          stageOutputPrefix,
+          stageToleranceSamples: stageTemplate.toleranceSamples,
+          stageMaxPasses: stageTemplate.maxPasses,
+          desiredTargetSamples,
+          desiredTargetDurationSec: roundDurationSeconds(
+            samplesToSeconds(desiredTargetSamples, AUDIO_SAMPLE_RATE),
+          ),
+          finalTargetSamples: targetSamples,
+        });
+
+        const stageResult = await tempoMatchAudioToDurationLocal({
+          sceneId,
+          videoId,
+          inputPath: workingPath,
+          targetSamples: desiredTargetSamples,
+          outputPrefix: stageOutputPrefix,
+          toleranceSamples: stageTemplate.toleranceSamples,
+          maxPasses: stageTemplate.maxPasses,
+        });
+
+        cumulativeSpeedApplied *= stageResult.speedApplied;
+        latestOutputSamples = stageResult.outputSamples;
+
+        logFitInfo('fitSceneAudioToDurationLocal:stage-done', {
+          sceneId,
+          videoId,
+          stageName,
+          stageOutputPath: stageResult.localPath,
+          stageOutputSamples: stageResult.outputSamples,
+          stageOutputDurationSec: stageResult.outputDurationSec,
+          stageDeltaSamplesToDesired:
+            stageResult.outputSamples - desiredTargetSamples,
+          stageDeltaSamplesToFinal: stageResult.outputSamples - targetSamples,
+          stageSpeedApplied: stageResult.speedApplied,
+          cumulativeSpeedApplied,
+        });
+
+        if (stageResult.localPath !== workingPath) {
+          await safeUnlink(workingPath);
+          cleanupPaths.delete(workingPath);
+
+          cleanupPaths.add(stageResult.localPath);
+          workingPath = stageResult.localPath;
+        }
+
+        if (
+          Math.abs(stageResult.outputSamples - desiredTargetSamples) <=
+          SCENE_FINAL_TOLERANCE_SAMPLES
+        ) {
+          logFitInfo(
+            'fitSceneAudioToDurationLocal:early-stop-final-tolerance',
+            {
+              sceneId,
+              videoId,
+              stageName,
+              finalToleranceSamples: SCENE_FINAL_TOLERANCE_SAMPLES,
+              currentDeltaSamplesToDesired:
+                stageResult.outputSamples - desiredTargetSamples,
+            },
+          );
+          break;
+        }
+      }
+
+      const metrics = await probeAudioMetrics(workingPath);
+
+      logFitInfo('fitSceneAudioToDurationLocal:stage-variant-done', {
+        sceneId,
+        videoId,
+        stageVariant,
+        latestOutputSamples,
+        variantFinalSamples: metrics.sampleCount,
+        variantFinalDurationSec: metrics.durationSec,
+        variantDeltaSamplesToFinal: metrics.sampleCount - targetSamples,
+      });
+
+      return {
+        sampleCount: metrics.sampleCount,
+        sampleRate: metrics.sampleRate,
+      };
+    };
+
+    const initialDeltaSamples = inputMetrics.sampleCount - targetSamples;
+    logFitInfo('fitSceneAudioToDurationLocal:input-classification', {
+      sceneId,
+      videoId,
+      inputSamples: inputMetrics.sampleCount,
+      inputDurationSec,
+      targetSamples,
+      targetDurationSec: normalizedTargetDurationSec,
+      deltaSamples: initialDeltaSamples,
+      classification:
+        initialDeltaSamples < 0
+          ? 'shorter-needs-silence'
+          : initialDeltaSamples > 0
+            ? 'longer-needs-tempo-speedup'
+            : 'exact-match',
+    });
+
     if (inputMetrics.sampleCount < targetSamples) {
       const silenceSamples = targetSamples - inputMetrics.sampleCount;
+      logFitInfo('fitSceneAudioToDurationLocal:append-silence-needed', {
+        sceneId,
+        videoId,
+        silenceSamples,
+        silenceDurationSec: roundDurationSeconds(
+          samplesToSeconds(silenceSamples, AUDIO_SAMPLE_RATE),
+        ),
+      });
+
       const withSilencePath = await appendSilenceToAudioLocal({
         sceneId,
         videoId,
@@ -754,63 +1119,140 @@ async function fitSceneAudioToDurationLocal(options: {
         cleanupPaths.delete(workingPath);
         workingPath = withSilencePath;
       }
-    }
-
-    const stages: Array<{
-      outputPrefix: string;
-      toleranceSamples: number;
-      maxPasses: number;
-    }> = [
-      {
-        outputPrefix: 'dubbed_fit_tempo_coarse',
-        toleranceSamples: SCENE_COARSE_TOLERANCE_SAMPLES,
-        maxPasses: SCENE_COARSE_MAX_TEMPO_PASSES,
-      },
-      {
-        outputPrefix: 'dubbed_fit_tempo_fine',
-        toleranceSamples: SCENE_FINE_TOLERANCE_SAMPLES,
-        maxPasses: SCENE_FINE_MAX_TEMPO_PASSES,
-      },
-      {
-        outputPrefix: 'dubbed_fit_tempo_verify',
-        toleranceSamples: SCENE_FINAL_TOLERANCE_SAMPLES,
-        maxPasses: SCENE_VERIFY_MAX_TEMPO_PASSES,
-      },
-    ];
-
-    for (const stage of stages) {
-      const stageResult = await tempoMatchAudioToDurationLocal({
-        sceneId,
-        videoId,
-        inputPath: workingPath,
+      await runTempoStages('after-shorter-silence', targetSamples);
+    } else if (inputMetrics.sampleCount > targetSamples) {
+      const adaptiveUndershoot = computeAdaptiveUndershootSamples({
+        overageSamples: inputMetrics.sampleCount - targetSamples,
+        sampleRate: inputMetrics.sampleRate,
         targetSamples,
-        outputPrefix: stage.outputPrefix,
-        toleranceSamples: stage.toleranceSamples,
-        maxPasses: stage.maxPasses,
       });
 
-      cumulativeSpeedApplied *= stageResult.speedApplied;
+      const undershootTargetSamples = Math.max(
+        SCENE_FINAL_TOLERANCE_SAMPLES,
+        targetSamples - adaptiveUndershoot.undershootSamples,
+      );
 
-      if (stageResult.localPath !== workingPath) {
-        await safeUnlink(workingPath);
-        cleanupPaths.delete(workingPath);
+      logFitInfo('fitSceneAudioToDurationLocal:adaptive-undershoot-selected', {
+        sceneId,
+        videoId,
+        overageSamples: inputMetrics.sampleCount - targetSamples,
+        overageSec: roundDurationSeconds(
+          (inputMetrics.sampleCount - targetSamples) / inputMetrics.sampleRate,
+        ),
+        undershootRatio: LONGER_ADAPTIVE_UNDERSHOOT_RATIO,
+        undershootSamples: adaptiveUndershoot.undershootSamples,
+        undershootSec: adaptiveUndershoot.undershootSec,
+        undershootTargetSamples,
+        undershootTargetDurationSec: roundDurationSeconds(
+          samplesToSeconds(undershootTargetSamples, inputMetrics.sampleRate),
+        ),
+      });
 
-        cleanupPaths.add(stageResult.localPath);
-        workingPath = stageResult.localPath;
+      let postUndershootMetrics = await runTempoStages(
+        'longer-adaptive-undershoot',
+        undershootTargetSamples,
+      );
+
+      if (postUndershootMetrics.sampleCount >= targetSamples) {
+        logFitInfo(
+          'fitSceneAudioToDurationLocal:adaptive-undershoot-fallback-to-exact',
+          {
+            sceneId,
+            videoId,
+            postUndershootSamples: postUndershootMetrics.sampleCount,
+            targetSamples,
+            deltaSamples: postUndershootMetrics.sampleCount - targetSamples,
+          },
+        );
+
+        postUndershootMetrics = await runTempoStages(
+          'longer-adaptive-fallback-exact',
+          targetSamples,
+        );
       }
 
-      if (
-        Math.abs(stageResult.outputSamples - targetSamples) <=
-        SCENE_FINAL_TOLERANCE_SAMPLES
-      ) {
-        break;
+      if (postUndershootMetrics.sampleCount < targetSamples) {
+        const silenceSamples =
+          targetSamples - postUndershootMetrics.sampleCount;
+        logFitInfo(
+          'fitSceneAudioToDurationLocal:adaptive-undershoot-pad-final-silence',
+          {
+            sceneId,
+            videoId,
+            postUndershootSamples: postUndershootMetrics.sampleCount,
+            targetSamples,
+            silenceSamples,
+            silenceDurationSec: roundDurationSeconds(
+              silenceSamples / postUndershootMetrics.sampleRate,
+            ),
+          },
+        );
+
+        const withSilencePath = await appendSilenceToAudioLocal({
+          sceneId,
+          videoId,
+          inputPath: workingPath,
+          silenceSamples,
+        });
+        cleanupPaths.add(withSilencePath);
+
+        if (withSilencePath !== workingPath) {
+          await safeUnlink(workingPath);
+          cleanupPaths.delete(workingPath);
+          workingPath = withSilencePath;
+        }
+      } else if (postUndershootMetrics.sampleCount > targetSamples) {
+        logFitInfo(
+          'fitSceneAudioToDurationLocal:adaptive-undershoot-still-long-after-fallback',
+          {
+            sceneId,
+            videoId,
+            postUndershootSamples: postUndershootMetrics.sampleCount,
+            targetSamples,
+            finalOverageSamples:
+              postUndershootMetrics.sampleCount - targetSamples,
+            finalOverageSec: roundDurationSeconds(
+              (postUndershootMetrics.sampleCount - targetSamples) /
+                postUndershootMetrics.sampleRate,
+            ),
+          },
+        );
       }
+    } else {
+      logFitInfo(
+        'fitSceneAudioToDurationLocal:exact-input-match-no-adjustment-needed',
+        {
+          sceneId,
+          videoId,
+          inputSamples: inputMetrics.sampleCount,
+          targetSamples,
+        },
+      );
     }
 
     const finalMetrics = await probeAudioMetrics(workingPath);
     const outputDurationSec = roundDurationSeconds(
       samplesToSeconds(finalMetrics.sampleCount, finalMetrics.sampleRate),
     );
+    const finalDeltaSamples = finalMetrics.sampleCount - targetSamples;
+
+    logFitInfo('fitSceneAudioToDurationLocal:done', {
+      sceneId,
+      videoId,
+      outputPath: workingPath,
+      inputDurationSec,
+      outputDurationSec,
+      targetDurationSec: normalizedTargetDurationSec,
+      inputSamples: inputMetrics.sampleCount,
+      outputSamples: finalMetrics.sampleCount,
+      targetSamples,
+      finalDeltaSamples,
+      finalDeltaSec: roundDurationSeconds(
+        finalDeltaSamples / finalMetrics.sampleRate,
+      ),
+      cumulativeSpeedApplied,
+      elapsedMs: Date.now() - startedAt,
+    });
 
     cleanupPaths.delete(workingPath);
 
@@ -821,6 +1263,15 @@ async function fitSceneAudioToDurationLocal(options: {
       speedApplied: cumulativeSpeedApplied,
     };
   } catch (error) {
+    logFitError('fitSceneAudioToDurationLocal:error', {
+      sceneId,
+      videoId,
+      targetDurationSec: normalizedTargetDurationSec,
+      targetSamples,
+      message: error instanceof Error ? error.message : String(error),
+      elapsedMs: Date.now() - startedAt,
+    });
+
     for (const filePath of cleanupPaths) {
       await safeUnlink(filePath);
     }
@@ -996,6 +1447,15 @@ async function fitAndUploadSceneAudio(options: {
   speedApplied: number;
 }> {
   const { audioUrl, sceneId, videoId, targetDurationSec } = options;
+  const startedAt = Date.now();
+
+  logFitInfo('fitAndUploadSceneAudio:start', {
+    sceneId,
+    videoId,
+    audioUrl,
+    targetDurationSec,
+    saveAsWav: SAVE_FITTED_AUDIO_AS_WAV,
+  });
 
   let fittedLocalPath: string | null = null;
   let uploadLocalPath: string | null = null;
@@ -1009,13 +1469,38 @@ async function fitAndUploadSceneAudio(options: {
     });
     fittedLocalPath = fitted.localPath;
 
+    logFitInfo('fitAndUploadSceneAudio:fitted-local-ready', {
+      sceneId,
+      videoId,
+      fittedLocalPath,
+      inputDurationSec: fitted.inputDurationSec,
+      outputDurationSec: fitted.outputDurationSec,
+      speedApplied: fitted.speedApplied,
+    });
+
     if (SAVE_FITTED_AUDIO_AS_WAV) {
       const filename = `video_${videoId}_scene_${sceneId}_dubbed_fitted_${Date.now()}.wav`;
+
+      logFitInfo('fitAndUploadSceneAudio:wav-upload-start', {
+        sceneId,
+        videoId,
+        filename,
+        contentType: 'audio/wav',
+      });
+
       const uploadUrl = await uploadToMinio(
         fitted.localPath,
         filename,
         'audio/wav',
       );
+
+      logFitInfo('fitAndUploadSceneAudio:wav-upload-done', {
+        sceneId,
+        videoId,
+        uploadUrl,
+        outputDurationSec: fitted.outputDurationSec,
+        elapsedMs: Date.now() - startedAt,
+      });
 
       return {
         uploadUrl,
@@ -1028,6 +1513,12 @@ async function fitAndUploadSceneAudio(options: {
     uploadLocalPath = await encodeAudioToM4aLocal({
       inputPath: fitted.localPath,
       outputPrefix: `video_${videoId}_scene_${sceneId}_dubbed_fit_upload`,
+    });
+
+    logFitInfo('fitAndUploadSceneAudio:m4a-encoded', {
+      sceneId,
+      videoId,
+      uploadLocalPath,
     });
 
     const normalizedTargetDurationSec = roundDurationSeconds(targetDurationSec);
@@ -1043,6 +1534,14 @@ async function fitAndUploadSceneAudio(options: {
       uploadLocalPath = uploadCorrected.localPath;
     }
 
+    logFitInfo('fitAndUploadSceneAudio:m4a-post-correction', {
+      sceneId,
+      videoId,
+      correctedLocalPath: uploadLocalPath,
+      correctedDurationSec: uploadCorrected.outputDurationSec,
+      correctedSpeedApplied: uploadCorrected.speedApplied,
+    });
+
     const filename = `video_${videoId}_scene_${sceneId}_dubbed_fitted_${Date.now()}.m4a`;
     const uploadUrl = await uploadToMinio(
       uploadLocalPath,
@@ -1050,15 +1549,40 @@ async function fitAndUploadSceneAudio(options: {
       'audio/mp4',
     );
 
+    logFitInfo('fitAndUploadSceneAudio:m4a-upload-done', {
+      sceneId,
+      videoId,
+      uploadUrl,
+      filename,
+      outputDurationSec: uploadCorrected.outputDurationSec,
+      elapsedMs: Date.now() - startedAt,
+    });
+
     return {
       uploadUrl,
       inputDurationSec: fitted.inputDurationSec,
       outputDurationSec: uploadCorrected.outputDurationSec,
       speedApplied: fitted.speedApplied * uploadCorrected.speedApplied,
     };
+  } catch (error) {
+    logFitError('fitAndUploadSceneAudio:error', {
+      sceneId,
+      videoId,
+      targetDurationSec,
+      message: error instanceof Error ? error.message : String(error),
+      elapsedMs: Date.now() - startedAt,
+    });
+    throw error;
   } finally {
     await safeUnlink(uploadLocalPath);
     await safeUnlink(fittedLocalPath);
+
+    logFitInfo('fitAndUploadSceneAudio:cleanup', {
+      sceneId,
+      videoId,
+      uploadLocalPath,
+      fittedLocalPath,
+    });
   }
 }
 
@@ -1263,6 +1787,15 @@ async function generateSceneTts(options: {
     ttsSettings,
   } = options;
 
+  logFitInfo('generateSceneTts:start', {
+    sceneId,
+    videoId,
+    providerPath,
+    textLength: text.length,
+    hasReferenceAudioFilename: Boolean(referenceAudioFilename),
+    hasTtsSettings: Boolean(ttsSettings),
+  });
+
   const payload: Record<string, unknown> = {
     text,
     sceneId,
@@ -1297,20 +1830,44 @@ async function generateSceneTts(options: {
       typeof json?.error === 'string' && json.error.trim()
         ? json.error.trim()
         : `TTS provider failed (${response.status})`;
+
+    logFitError('generateSceneTts:error-response', {
+      sceneId,
+      videoId,
+      providerPath,
+      status: response.status,
+      message,
+    });
+
     throw new Error(message);
   }
 
   const audioUrl =
     typeof json?.audioUrl === 'string' ? json.audioUrl.trim() : '';
   if (!audioUrl) {
+    logFitError('generateSceneTts:error-empty-audio-url', {
+      sceneId,
+      videoId,
+      providerPath,
+    });
     throw new Error('TTS provider returned empty audioUrl');
   }
+
+  logFitInfo('generateSceneTts:done', {
+    sceneId,
+    videoId,
+    providerPath,
+    audioUrl,
+  });
 
   return audioUrl;
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const requestStartedAt = Date.now();
+    const fitDebugRunId = `fit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
     const body = (await request.json().catch(() => null)) as {
       videoId?: unknown;
       sourceTextFieldKey?: unknown;
@@ -1408,6 +1965,28 @@ export async function POST(request: NextRequest) {
         )
       : null;
 
+    logFitInfo('post:start', {
+      fitDebugRunId,
+      videoId,
+      sourceTextFieldKey,
+      destinationAudioFieldKey,
+      sceneDurationFieldKey,
+      provider,
+      providerPath,
+      fitAudioToSceneDuration,
+      skipIfDestinationExists,
+      failFastOnSaveError,
+      saveFittedAudioAsWav: SAVE_FITTED_AUDIO_AS_WAV,
+      sceneToleranceSec: SCENE_DURATION_TOLERANCE_SEC,
+      coarseToleranceSamples: SCENE_COARSE_TOLERANCE_SAMPLES,
+      fineToleranceSamples: SCENE_FINE_TOLERANCE_SAMPLES,
+      finalToleranceSamples: SCENE_FINAL_TOLERANCE_SAMPLES,
+      coarseMaxPasses: SCENE_COARSE_MAX_TEMPO_PASSES,
+      fineMaxPasses: SCENE_FINE_MAX_TEMPO_PASSES,
+      verifyMaxPasses: SCENE_VERIFY_MAX_TEMPO_PASSES,
+      filteredOnlySceneIdsCount: onlySceneIdSet?.size ?? 0,
+    });
+
     const baserowUrl = process.env.BASEROW_API_URL;
     if (!baserowUrl) {
       return NextResponse.json(
@@ -1441,6 +2020,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    logFitInfo('post:scenes-loaded', {
+      fitDebugRunId,
+      videoId,
+      totalScenes: scenes.length,
+    });
+
     const orderedScenes = [...scenes].sort(
       (a, b) => getSceneOrderValue(a) - getSceneOrderValue(b),
     );
@@ -1460,8 +2045,14 @@ export async function POST(request: NextRequest) {
       const sceneId = parsePositiveInt(scene.id);
       if (!sceneId) {
         skippedInvalidSceneIdCount += 1;
+        logFitInfo('post:scene-skip-invalid-scene-id', {
+          fitDebugRunId,
+          rawSceneId: scene.id,
+        });
         continue;
       }
+
+      const sceneStartedAt = Date.now();
 
       if (
         onlySceneIdSet &&
@@ -1469,18 +2060,33 @@ export async function POST(request: NextRequest) {
         !onlySceneIdSet.has(sceneId)
       ) {
         skippedSceneFilterCount += 1;
+        logFitInfo('post:scene-skip-scene-filter', {
+          fitDebugRunId,
+          sceneId,
+        });
         continue;
       }
 
       const text = String(scene[sourceTextFieldKey] ?? '').trim();
       if (!text) {
         skippedNoTextCount += 1;
+        logFitInfo('post:scene-skip-no-text', {
+          fitDebugRunId,
+          sceneId,
+          sourceTextFieldKey,
+        });
         continue;
       }
 
       const existingAudioUrl = extractUrl(scene[destinationAudioFieldKey]);
       if (skipIfDestinationExists && existingAudioUrl) {
         skippedExistingCount += 1;
+        logFitInfo('post:scene-skip-existing-audio', {
+          fitDebugRunId,
+          sceneId,
+          destinationAudioFieldKey,
+          existingAudioUrl,
+        });
         continue;
       }
 
@@ -1499,8 +2105,27 @@ export async function POST(request: NextRequest) {
           sceneId,
           error: `Missing/invalid duration in ${sceneDurationFieldKey}`,
         });
+
+        logFitInfo('post:scene-skip-missing-duration', {
+          fitDebugRunId,
+          sceneId,
+          sceneDurationFieldKey,
+          rawDuration: scene[sceneDurationFieldKey as string],
+        });
+
         continue;
       }
+
+      logFitInfo('post:scene-start', {
+        fitDebugRunId,
+        sceneId,
+        textLength: text.length,
+        targetDurationSec,
+        targetSamples:
+          targetDurationSec && fitAudioToSceneDuration
+            ? secondsToSamples(targetDurationSec, AUDIO_SAMPLE_RATE)
+            : null,
+      });
 
       try {
         let audioUrl = await generateSceneTts({
@@ -1513,15 +2138,45 @@ export async function POST(request: NextRequest) {
           ttsSettings,
         });
 
+        logFitInfo('post:scene-tts-generated', {
+          fitDebugRunId,
+          sceneId,
+          audioUrl,
+        });
+
         if (fitAudioToSceneDuration && targetDurationSec) {
+          logFitInfo('post:scene-fit-start', {
+            fitDebugRunId,
+            sceneId,
+            targetDurationSec,
+            targetSamples: secondsToSamples(
+              targetDurationSec,
+              AUDIO_SAMPLE_RATE,
+            ),
+          });
+
           const fitted = await fitAndUploadSceneAudio({
             audioUrl,
             sceneId,
             videoId,
             targetDurationSec,
           });
+
           audioUrl = fitted.uploadUrl;
           fittedCount += 1;
+
+          logFitInfo('post:scene-fit-done', {
+            fitDebugRunId,
+            sceneId,
+            fittedUploadUrl: fitted.uploadUrl,
+            inputDurationSec: fitted.inputDurationSec,
+            outputDurationSec: fitted.outputDurationSec,
+            targetDurationSec,
+            durationDeltaSec: roundDurationSeconds(
+              fitted.outputDurationSec - targetDurationSec,
+            ),
+            speedApplied: fitted.speedApplied,
+          });
         }
 
         try {
@@ -1534,6 +2189,14 @@ export async function POST(request: NextRequest) {
           });
 
           generatedCount += 1;
+
+          logFitInfo('post:scene-save-success', {
+            fitDebugRunId,
+            sceneId,
+            destinationAudioFieldKey,
+            savedAudioUrl: audioUrl,
+            elapsedMs: Date.now() - sceneStartedAt,
+          });
         } catch (saveError) {
           const saveMessage =
             saveError instanceof Error ? saveError.message : 'Unknown error';
@@ -1541,6 +2204,14 @@ export async function POST(request: NextRequest) {
           failures.push({
             sceneId,
             error: saveMessage,
+          });
+
+          logFitError('post:scene-save-error', {
+            fitDebugRunId,
+            sceneId,
+            destinationAudioFieldKey,
+            message: saveMessage,
+            elapsedMs: Date.now() - sceneStartedAt,
           });
 
           if (failFastOnSaveError) {
@@ -1553,12 +2224,39 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+
         failures.push({
           sceneId,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: message,
+        });
+
+        logFitError('post:scene-error', {
+          fitDebugRunId,
+          sceneId,
+          message,
+          elapsedMs: Date.now() - sceneStartedAt,
         });
       }
     }
+
+    logFitInfo('post:done', {
+      fitDebugRunId,
+      videoId,
+      requestedSceneCount: orderedScenes.length,
+      generatedCount,
+      fittedCount,
+      skippedNoTextCount,
+      skippedExistingCount,
+      skippedMissingDurationCount,
+      skippedSceneFilterCount,
+      skippedInvalidSceneIdCount,
+      failureCount: failures.length,
+      abortedOnSaveFailure,
+      abortedSceneId,
+      elapsedMs: Date.now() - requestStartedAt,
+    });
 
     return NextResponse.json({
       ok: failures.length === 0 && !abortedOnSaveFailure,
