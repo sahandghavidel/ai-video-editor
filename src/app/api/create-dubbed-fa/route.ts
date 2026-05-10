@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseSrtSegments } from '@/utils/captions-parser';
+import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,9 +12,14 @@ const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const SCENE_DURATION_FIELD_KEY = 'field_7107';
 const SCENE_SENTENCE_EN_FIELD_KEY = 'field_6890';
 const SCENE_SENTENCE_FA_FIELD_KEY = 'field_7110';
+const SCENE_DUBBED_FA_FIELD_KEY = 'field_7111';
 
 const VIDEO_SRT_EN_FIELD_KEY = 'field_6872';
 const VIDEO_SRT_FA_FIELD_KEY = 'field_7112';
+
+const GENERATE_SCENE_TTS_BY_FIELD_ROUTE = '/api/generate-scene-tts-by-field';
+const DEFAULT_FA_REFERENCE_AUDIO_FILENAME = 'fa.wav';
+const DEFAULT_FA_REFERENCE_TEXT = '';
 
 const MAX_TIMESTAMP_DELTA_SEC = 0.05;
 
@@ -30,6 +36,13 @@ type TimestampMismatch = {
   enEnd: number;
   faStart: number;
   faEnd: number;
+};
+
+type ResolvedAudioReference = {
+  id: string | null;
+  filename: string;
+  referenceText: string;
+  source: 'store-default-fa' | 'store-first-fa' | 'fallback';
 };
 
 function parsePositiveInt(value: unknown): number | null {
@@ -178,6 +191,51 @@ function shouldIncludeSceneForDurationSrt(scene: BaserowRow): boolean {
   const duration = parsePositiveNumber(scene[SCENE_DURATION_FIELD_KEY]);
   const sentence = String(scene[SCENE_SENTENCE_EN_FIELD_KEY] ?? '').trim();
   return Boolean(duration) && sentence.length > 0;
+}
+
+async function resolveFaAudioReference(): Promise<ResolvedAudioReference> {
+  try {
+    const { entries } = await loadTtsAudioReferencesStore();
+
+    const faEntries = entries.filter(
+      (entry) =>
+        entry.enabled &&
+        entry.language.toLowerCase() === 'fa' &&
+        entry.filename.trim().length > 0,
+    );
+
+    if (faEntries.length > 0) {
+      const defaultEntry = faEntries.find((entry) => entry.isDefault);
+      if (defaultEntry) {
+        return {
+          id: defaultEntry.id,
+          filename: defaultEntry.filename,
+          referenceText: defaultEntry.referenceText,
+          source: 'store-default-fa',
+        };
+      }
+
+      const firstEntry = faEntries[0];
+      return {
+        id: firstEntry.id,
+        filename: firstEntry.filename,
+        referenceText: firstEntry.referenceText,
+        source: 'store-first-fa',
+      };
+    }
+  } catch (error) {
+    console.warn(
+      '[create-dubbed-fa] Failed to load audio references store. Falling back to static FA reference.',
+      error,
+    );
+  }
+
+  return {
+    id: null,
+    filename: DEFAULT_FA_REFERENCE_AUDIO_FILENAME,
+    referenceText: DEFAULT_FA_REFERENCE_TEXT,
+    source: 'fallback',
+  };
 }
 
 let cachedToken: string | null = null;
@@ -493,20 +551,117 @@ export async function POST(request: NextRequest) {
       updatedCount += 1;
     }
 
+    const selectedFaReference = await resolveFaAudioReference();
+
+    const step2Response = await fetch(
+      `${request.nextUrl.origin}${GENERATE_SCENE_TTS_BY_FIELD_ROUTE}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId,
+          sourceTextFieldKey: SCENE_SENTENCE_FA_FIELD_KEY,
+          destinationAudioFieldKey: SCENE_DUBBED_FA_FIELD_KEY,
+          provider: 'omnivoice',
+          referenceAudioFilename: selectedFaReference.filename,
+          skipIfDestinationExists: false,
+          ttsSettings: {
+            provider: 'omnivoice',
+            reference_audio_filename: selectedFaReference.filename,
+            omniVoice: {
+              referenceText: selectedFaReference.referenceText,
+              language: 'fa',
+              deviceMap: 'mps',
+              dtype: 'float32',
+              numStep: 64,
+              speed: 1,
+            },
+          },
+        }),
+      },
+    );
+
+    const step2Payload = (await step2Response.json().catch(() => null)) as {
+      ok?: unknown;
+      error?: unknown;
+      failureCount?: unknown;
+      failures?: unknown;
+      generatedCount?: unknown;
+      skippedNoTextCount?: unknown;
+      skippedExistingCount?: unknown;
+      skippedSceneFilterCount?: unknown;
+      skippedInvalidSceneIdCount?: unknown;
+      provider?: unknown;
+      providerPath?: unknown;
+    } | null;
+
+    if (!step2Response.ok || step2Payload?.ok !== true) {
+      const failurePreview = Array.isArray(step2Payload?.failures)
+        ? step2Payload.failures
+            .slice(0, 5)
+            .map((item) => {
+              if (!item || typeof item !== 'object') return '';
+              const row = item as { sceneId?: unknown; error?: unknown };
+              return `scene ${String(row.sceneId ?? 'n/a')}: ${String(
+                row.error ?? 'unknown error',
+              )}`;
+            })
+            .filter(Boolean)
+            .join(' | ')
+        : '';
+
+      const message =
+        typeof step2Payload?.error === 'string' && step2Payload.error.trim()
+          ? step2Payload.error.trim()
+          : `Step 2 FA TTS generation failed (${step2Response.status})`;
+
+      throw new Error(
+        failurePreview ? `${message} — ${failurePreview}` : message,
+      );
+    }
+
     return NextResponse.json({
       ok: true,
-      step: 'step-1-map-srt-fa-to-sentence-fa',
+      step: 'step-1-map-srt-fa-and-step-2-generate-dubbed-fa',
       videoId,
-      srtEnField: VIDEO_SRT_EN_FIELD_KEY,
-      srtFaField: VIDEO_SRT_FA_FIELD_KEY,
-      sentenceFaField: SCENE_SENTENCE_FA_FIELD_KEY,
-      enCueCount: enCues.length,
-      faCueCount: faCues.length,
-      eligibleSceneCount: eligibleScenes.length,
-      updatedCount,
-      unchangedCount,
-      enSceneTextMismatchCount: enSceneTextMismatchSceneIds.length,
-      enSceneTextMismatchSceneIds: enSceneTextMismatchSceneIds.slice(0, 20),
+      step1: {
+        srtEnField: VIDEO_SRT_EN_FIELD_KEY,
+        srtFaField: VIDEO_SRT_FA_FIELD_KEY,
+        sentenceFaField: SCENE_SENTENCE_FA_FIELD_KEY,
+        enCueCount: enCues.length,
+        faCueCount: faCues.length,
+        eligibleSceneCount: eligibleScenes.length,
+        updatedCount,
+        unchangedCount,
+        enSceneTextMismatchCount: enSceneTextMismatchSceneIds.length,
+        enSceneTextMismatchSceneIds: enSceneTextMismatchSceneIds.slice(0, 20),
+      },
+      step2: {
+        sourceTextField: SCENE_SENTENCE_FA_FIELD_KEY,
+        dubbedFaField: SCENE_DUBBED_FA_FIELD_KEY,
+        referenceAudioFilename: selectedFaReference.filename,
+        referenceAudioReferenceId: selectedFaReference.id,
+        referenceAudioSource: selectedFaReference.source,
+        referenceTextLength: selectedFaReference.referenceText.length,
+        provider:
+          typeof step2Payload?.provider === 'string'
+            ? step2Payload.provider
+            : 'omnivoice',
+        providerPath:
+          typeof step2Payload?.providerPath === 'string'
+            ? step2Payload.providerPath
+            : '/api/generate-tts-omnivoice',
+        generatedCount: Number(step2Payload?.generatedCount ?? 0),
+        skippedNoTextCount: Number(step2Payload?.skippedNoTextCount ?? 0),
+        skippedExistingCount: Number(step2Payload?.skippedExistingCount ?? 0),
+        skippedSceneFilterCount: Number(
+          step2Payload?.skippedSceneFilterCount ?? 0,
+        ),
+        skippedInvalidSceneIdCount: Number(
+          step2Payload?.skippedInvalidSceneIdCount ?? 0,
+        ),
+        failureCount: Number(step2Payload?.failureCount ?? 0),
+      },
     });
   } catch (error) {
     console.error('[create-dubbed-fa] error:', error);

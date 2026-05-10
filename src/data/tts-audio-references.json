@@ -1,0 +1,40 @@
+{
+  "entries": [
+    {
+      "id": "fa-default",
+      "name": "Farsi Default Voice",
+      "filename": "fa11.wav",
+      "language": "fa",
+      "referenceText": "سرویس گوگل که به صورت رایگان ارائه می‌شود، کلمات، عبارات و صفحات وب را فوراً بین انگلیسی و بیش از 100 زبان دیگر ترجمه می‌کند.",
+      "description": "Default Persian reference voice used for FA dubbing.",
+      "tags": ["fa", "persian", "default"],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-05-10T00:00:00.000Z"
+    },
+    {
+      "id": "fa-alt-1",
+      "name": "Farsi Alternate Voice",
+      "filename": "fa_alt_01.wav",
+      "language": "fa",
+      "referenceText": "",
+      "description": "Alternative Persian tone for tests or style variations.",
+      "tags": ["fa", "persian", "alternate"],
+      "isDefault": false,
+      "enabled": true,
+      "updatedAt": "2026-05-10T00:00:00.000Z"
+    },
+    {
+      "id": "en-default",
+      "name": "English Default Voice",
+      "filename": "en.wav",
+      "language": "en",
+      "referenceText": "",
+      "description": "Example English reference entry for future multilingual pipelines.",
+      "tags": ["en", "english", "example"],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-05-10T00:00:00.000Z"
+    }
+  ]
+}

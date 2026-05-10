@@ -4864,8 +4864,8 @@ export default function BatchOperations({
                       !selectedOriginalVideo.id
                         ? 'Select an original video first'
                         : creatingDubbedFa
-                          ? 'Step 1: validating srt_fa (7112) and srt_en (6872), then mapping cues to Sentence_fa (7110)...'
-                          : 'Step 1: read srt_fa (7112) + srt_en (6872), validate timestamp alignment, then map FA cues into Sentence_fa (7110) scene-by-scene'
+                          ? 'Step 1/2: map srt_fa (7112) to Sentence_fa (7110). Step 2/2: generate OmniVoice FA TTS into Dubbed_fa (7111)...'
+                          : 'Step 1/2 map srt_fa (7112) with srt_en (6872) into Sentence_fa (7110), then Step 2/2 generate OmniVoice FA TTS to Dubbed_fa (7111)'
                     }
                   >
                     {creatingDubbedFa && (
@@ -4873,7 +4873,7 @@ export default function BatchOperations({
                     )}
                     {!creatingDubbedFa && <Volume2 className='w-4 h-4' />}
                     <span className='font-medium'>
-                      {creatingDubbedFa ? 'Step 1...' : 'Create Dubbed fa'}
+                      {creatingDubbedFa ? 'Processing...' : 'Create Dubbed fa'}
                     </span>
                   </button>
                 </div>
