@@ -22,7 +22,7 @@
       "tags": ["fa", "persian", "default"],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T05:21:43.340Z"
+      "updatedAt": "2026-05-10T06:49:15.083Z"
     },
     {
       "id": "fa-alt-1",
@@ -46,21 +46,21 @@
       "tags": ["fa", "persian", "alternate"],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-05-10T05:21:43.340Z"
+      "updatedAt": "2026-05-10T06:49:15.083Z"
     },
     {
       "id": "en-default",
-      "name": "English Default Voice",
-      "filename": "en.wav",
-      "language": "en",
-      "referenceText": "",
+      "name": "Chinese Default Voice",
+      "filename": "ElevenLabs_2026-05-10T06_36_55__s0_v3.wav",
+      "language": "zh",
+      "referenceText": "选择要在完整流水线执行中包含的步骤",
       "baserowFields": {
-        "videoSrtFieldKey": "field_6872",
+        "videoSrtFieldKey": "field_7114",
         "videoReferenceSrtFieldKey": "field_6872",
         "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
-        "sceneTargetSentenceFieldKey": "field_6890",
-        "sceneDubbedAudioFieldKey": "field_7108"
+        "sceneTargetSentenceFieldKey": "field_7115",
+        "sceneDubbedAudioFieldKey": "field_7116"
       },
       "deviceMap": "mps",
       "dtype": "float32",
@@ -70,7 +70,7 @@
       "tags": ["en", "english", "example"],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T05:21:43.340Z"
+      "updatedAt": "2026-05-10T06:49:15.083Z"
     }
   ]
 }

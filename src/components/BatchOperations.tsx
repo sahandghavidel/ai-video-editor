@@ -4957,6 +4957,12 @@ export default function BatchOperations({
                     <select
                       value={activeDubbedLanguage}
                       onChange={(e) => setDubbingLanguage(e.target.value)}
+                      onFocus={() => {
+                        void loadDubbedLanguages();
+                      }}
+                      onPointerDown={() => {
+                        void loadDubbedLanguages();
+                      }}
                       disabled={creatingDubbedFa}
                       className='w-full h-9 px-2 bg-white border border-teal-300 rounded-lg text-sm text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-teal-100 disabled:text-teal-500 disabled:cursor-not-allowed'
                       title='Select language preset for Create Dubbed'
