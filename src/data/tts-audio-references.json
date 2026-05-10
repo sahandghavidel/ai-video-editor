@@ -6,6 +6,14 @@
       "filename": "ElevenLabs_2026-04-26T07_08_39__s0_v3.wav",
       "language": "fa",
       "referenceText": "انتخاب کنید کدام مراحل در اجرای کامل خط لوله لحاظ شوند",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7112",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7110",
+        "sceneDubbedAudioFieldKey": "field_7111"
+      },
       "deviceMap": "mps",
       "dtype": "float32",
       "numStep": 64,
@@ -22,6 +30,14 @@
       "filename": "fa_alt_01.wav",
       "language": "fa",
       "referenceText": "",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7112",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7110",
+        "sceneDubbedAudioFieldKey": "field_7111"
+      },
       "deviceMap": "mps",
       "dtype": "float32",
       "numStep": 64,
@@ -38,6 +54,14 @@
       "filename": "en.wav",
       "language": "en",
       "referenceText": "",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_6872",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_6890",
+        "sceneDubbedAudioFieldKey": "field_7108"
+      },
       "deviceMap": "mps",
       "dtype": "float32",
       "numStep": 64,

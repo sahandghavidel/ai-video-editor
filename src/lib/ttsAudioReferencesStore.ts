@@ -5,12 +5,22 @@ import path from 'path';
 export type OmniVoiceDeviceMap = 'mps' | 'cpu' | 'auto';
 export type OmniVoiceDType = 'float16' | 'float32' | 'bfloat16';
 
+export interface LanguageBaserowFields {
+  videoSrtFieldKey: string;
+  videoReferenceSrtFieldKey: string;
+  sceneDurationFieldKey: string;
+  sceneReferenceSentenceFieldKey: string;
+  sceneTargetSentenceFieldKey: string;
+  sceneDubbedAudioFieldKey: string;
+}
+
 export interface TtsAudioReferenceEntry {
   id: string;
   name: string;
   filename: string;
   language: string;
   referenceText: string;
+  baserowFields: LanguageBaserowFields;
   deviceMap: OmniVoiceDeviceMap;
   dtype: OmniVoiceDType;
   numStep: number;
@@ -35,6 +45,17 @@ const STORE_FILE_PATH = path.join(
 
 const EMPTY_STORE: TtsAudioReferencesStore = {
   entries: [],
+};
+
+const FIELD_KEY_REGEX = /^field_\d+$/;
+
+const DEFAULT_LANGUAGE_BASEROW_FIELDS: LanguageBaserowFields = {
+  videoSrtFieldKey: 'field_7112',
+  videoReferenceSrtFieldKey: 'field_6872',
+  sceneDurationFieldKey: 'field_7107',
+  sceneReferenceSentenceFieldKey: 'field_6890',
+  sceneTargetSentenceFieldKey: 'field_7110',
+  sceneDubbedAudioFieldKey: 'field_7111',
 };
 
 function createEntryId(): string {
@@ -88,6 +109,47 @@ function asDType(value: unknown): OmniVoiceDType {
     : 'float32';
 }
 
+function asFieldKey(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+
+  const trimmed = value.trim();
+  return FIELD_KEY_REGEX.test(trimmed) ? trimmed : fallback;
+}
+
+function sanitizeLanguageBaserowFields(value: unknown): LanguageBaserowFields {
+  const fields =
+    value && typeof value === 'object'
+      ? (value as Record<string, unknown>)
+      : {};
+
+  return {
+    videoSrtFieldKey: asFieldKey(
+      fields.videoSrtFieldKey,
+      DEFAULT_LANGUAGE_BASEROW_FIELDS.videoSrtFieldKey,
+    ),
+    videoReferenceSrtFieldKey: asFieldKey(
+      fields.videoReferenceSrtFieldKey,
+      DEFAULT_LANGUAGE_BASEROW_FIELDS.videoReferenceSrtFieldKey,
+    ),
+    sceneDurationFieldKey: asFieldKey(
+      fields.sceneDurationFieldKey,
+      DEFAULT_LANGUAGE_BASEROW_FIELDS.sceneDurationFieldKey,
+    ),
+    sceneReferenceSentenceFieldKey: asFieldKey(
+      fields.sceneReferenceSentenceFieldKey,
+      DEFAULT_LANGUAGE_BASEROW_FIELDS.sceneReferenceSentenceFieldKey,
+    ),
+    sceneTargetSentenceFieldKey: asFieldKey(
+      fields.sceneTargetSentenceFieldKey,
+      DEFAULT_LANGUAGE_BASEROW_FIELDS.sceneTargetSentenceFieldKey,
+    ),
+    sceneDubbedAudioFieldKey: asFieldKey(
+      fields.sceneDubbedAudioFieldKey,
+      DEFAULT_LANGUAGE_BASEROW_FIELDS.sceneDubbedAudioFieldKey,
+    ),
+  };
+}
+
 function normalizeDefaultsPerLanguage(
   entries: TtsAudioReferenceEntry[],
 ): TtsAudioReferenceEntry[] {
@@ -137,6 +199,8 @@ export function sanitizeTtsAudioReferenceEntries(
     const referenceText =
       typeof entry.referenceText === 'string' ? entry.referenceText : '';
 
+    const baserowFields = sanitizeLanguageBaserowFields(entry.baserowFields);
+
     const deviceMap = asDeviceMap(entry.deviceMap);
     const dtype = asDType(entry.dtype);
     const numStep = Math.round(clamp(toNumber(entry.numStep, 64), 8, 64));
@@ -170,6 +234,7 @@ export function sanitizeTtsAudioReferenceEntries(
       filename,
       language,
       referenceText,
+      baserowFields,
       deviceMap,
       dtype,
       numStep,

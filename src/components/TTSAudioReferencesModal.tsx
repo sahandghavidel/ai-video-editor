@@ -6,12 +6,22 @@ import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 type DeviceMap = 'mps' | 'cpu' | 'auto';
 type DType = 'float16' | 'float32' | 'bfloat16';
 
+type BaserowLanguageFields = {
+  videoSrtFieldKey: string;
+  videoReferenceSrtFieldKey: string;
+  sceneDurationFieldKey: string;
+  sceneReferenceSentenceFieldKey: string;
+  sceneTargetSentenceFieldKey: string;
+  sceneDubbedAudioFieldKey: string;
+};
+
 type AudioReferenceEntry = {
   id: string;
   name: string;
   filename: string;
   language: string;
   referenceText: string;
+  baserowFields: BaserowLanguageFields;
   deviceMap: DeviceMap;
   dtype: DType;
   numStep: number;
@@ -31,12 +41,20 @@ interface TTSAudioReferencesModalProps {
 const createLocalEntryId = () =>
   `audio-ref-local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const FIELD_KEY_REGEX = /^field_\d+$/;
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function asFieldKey(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return FIELD_KEY_REGEX.test(trimmed) ? trimmed : fallback;
 }
 
 function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
@@ -88,6 +106,38 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
         : Number.NaN;
   const speed = Number.isFinite(speedRaw) ? clamp(speedRaw, 0.5, 2) : 1;
 
+  const baserowFieldsRaw =
+    entry.baserowFields && typeof entry.baserowFields === 'object'
+      ? (entry.baserowFields as Record<string, unknown>)
+      : {};
+
+  const baserowFields: BaserowLanguageFields = {
+    videoSrtFieldKey: asFieldKey(
+      baserowFieldsRaw.videoSrtFieldKey,
+      'field_7112',
+    ),
+    videoReferenceSrtFieldKey: asFieldKey(
+      baserowFieldsRaw.videoReferenceSrtFieldKey,
+      'field_6872',
+    ),
+    sceneDurationFieldKey: asFieldKey(
+      baserowFieldsRaw.sceneDurationFieldKey,
+      'field_7107',
+    ),
+    sceneReferenceSentenceFieldKey: asFieldKey(
+      baserowFieldsRaw.sceneReferenceSentenceFieldKey,
+      'field_6890',
+    ),
+    sceneTargetSentenceFieldKey: asFieldKey(
+      baserowFieldsRaw.sceneTargetSentenceFieldKey,
+      'field_7110',
+    ),
+    sceneDubbedAudioFieldKey: asFieldKey(
+      baserowFieldsRaw.sceneDubbedAudioFieldKey,
+      'field_7111',
+    ),
+  };
+
   return {
     id,
     name: nameRaw || filename,
@@ -95,6 +145,7 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
     language: (languageRaw || 'und').toLowerCase(),
     referenceText:
       typeof entry.referenceText === 'string' ? entry.referenceText : '',
+    baserowFields,
     deviceMap,
     dtype,
     numStep,
@@ -152,6 +203,32 @@ export function TTSAudioReferencesModal({
           name: entry.name.trim() || entry.filename.trim(),
           filename: entry.filename.trim(),
           referenceText: entry.referenceText,
+          baserowFields: {
+            videoSrtFieldKey: asFieldKey(
+              entry.baserowFields.videoSrtFieldKey,
+              'field_7112',
+            ),
+            videoReferenceSrtFieldKey: asFieldKey(
+              entry.baserowFields.videoReferenceSrtFieldKey,
+              'field_6872',
+            ),
+            sceneDurationFieldKey: asFieldKey(
+              entry.baserowFields.sceneDurationFieldKey,
+              'field_7107',
+            ),
+            sceneReferenceSentenceFieldKey: asFieldKey(
+              entry.baserowFields.sceneReferenceSentenceFieldKey,
+              'field_6890',
+            ),
+            sceneTargetSentenceFieldKey: asFieldKey(
+              entry.baserowFields.sceneTargetSentenceFieldKey,
+              'field_7110',
+            ),
+            sceneDubbedAudioFieldKey: asFieldKey(
+              entry.baserowFields.sceneDubbedAudioFieldKey,
+              'field_7111',
+            ),
+          },
           numStep: Math.round(clamp(entry.numStep, 8, 64)),
           speed: clamp(entry.speed, 0.5, 2),
         })),
@@ -225,6 +302,14 @@ export function TTSAudioReferencesModal({
         filename: '',
         language: 'fa',
         referenceText: '',
+        baserowFields: {
+          videoSrtFieldKey: 'field_7112',
+          videoReferenceSrtFieldKey: 'field_6872',
+          sceneDurationFieldKey: 'field_7107',
+          sceneReferenceSentenceFieldKey: 'field_6890',
+          sceneTargetSentenceFieldKey: 'field_7110',
+          sceneDubbedAudioFieldKey: 'field_7111',
+        },
         deviceMap: 'mps',
         dtype: 'float32',
         numStep: 64,
@@ -344,7 +429,7 @@ export function TTSAudioReferencesModal({
             </p>
             <p className='text-xs text-gray-500 mt-1'>
               Editable fields: Language, Filename, Reference Text, Device,
-              DType, Num Step, Speed.
+              DType, Num Step, Speed, and Baserow field mappings.
             </p>
           </div>
           <button
@@ -530,6 +615,137 @@ export function TTSAudioReferencesModal({
                       }
                       className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
                     />
+                  </div>
+                </div>
+
+                <div className='rounded-md border border-indigo-200 bg-indigo-50 p-3 space-y-2'>
+                  <p className='text-xs font-medium text-indigo-900'>
+                    Baserow field mapping for this language (use field_###)
+                  </p>
+
+                  <div className='grid grid-cols-1 md:grid-cols-2 gap-2'>
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Video SRT Field
+                      </label>
+                      <input
+                        type='text'
+                        value={entry.baserowFields.videoSrtFieldKey}
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              videoSrtFieldKey: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_7112'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
+
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Reference Video SRT Field
+                      </label>
+                      <input
+                        type='text'
+                        value={entry.baserowFields.videoReferenceSrtFieldKey}
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              videoReferenceSrtFieldKey: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_6872'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
+
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Scene Duration Field
+                      </label>
+                      <input
+                        type='text'
+                        value={entry.baserowFields.sceneDurationFieldKey}
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              sceneDurationFieldKey: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_7107'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
+
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Scene Reference Sentence Field
+                      </label>
+                      <input
+                        type='text'
+                        value={
+                          entry.baserowFields.sceneReferenceSentenceFieldKey
+                        }
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              sceneReferenceSentenceFieldKey:
+                                event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_6890'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
+
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Scene Target Sentence Field
+                      </label>
+                      <input
+                        type='text'
+                        value={entry.baserowFields.sceneTargetSentenceFieldKey}
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              sceneTargetSentenceFieldKey: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_7110'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
+
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Scene Dubbed Audio Field
+                      </label>
+                      <input
+                        type='text'
+                        value={entry.baserowFields.sceneDubbedAudioFieldKey}
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              sceneDubbedAudioFieldKey: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_7111'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
                   </div>
                 </div>
 

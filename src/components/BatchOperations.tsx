@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BaserowRow, getSceneById } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -91,6 +91,17 @@ interface BatchOperationsProps {
 const INTRO_QA_SCENE_LIMIT = 10;
 const INTRO_QA_MAX_AUDIO_ATTEMPTS = 3;
 
+type AudioReferenceLanguageEntry = {
+  language?: unknown;
+  enabled?: unknown;
+  isDefault?: unknown;
+};
+
+function normalizeLanguageCode(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase();
+}
+
 export default function BatchOperations({
   data,
   onRefresh,
@@ -164,6 +175,11 @@ export default function BatchOperations({
   const [creatingEnSrt, setCreatingEnSrt] = useState(false);
   const [creatingDubbedEn, setCreatingDubbedEn] = useState(false);
   const [creatingDubbedFa, setCreatingDubbedFa] = useState(false);
+  const [dubbingLanguage, setDubbingLanguage] = useState('fa');
+  const [availableDubbingLanguages, setAvailableDubbingLanguages] = useState<
+    string[]
+  >(['fa']);
+  const [loadingDubbingLanguages, setLoadingDubbingLanguages] = useState(false);
 
   const [generatingAllSceneImages, setGeneratingAllSceneImages] =
     useState(false);
@@ -231,6 +247,66 @@ export default function BatchOperations({
     playSuccessSound();
   };
 
+  const loadDubbedLanguages = useCallback(async () => {
+    setLoadingDubbingLanguages(true);
+
+    try {
+      const response = await fetch('/api/tts-audio-references', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load dubbed languages (${response.status})`);
+      }
+
+      const payload = (await response.json().catch(() => null)) as {
+        entries?: unknown;
+      } | null;
+
+      const rawEntries = Array.isArray(payload?.entries)
+        ? (payload.entries as AudioReferenceLanguageEntry[])
+        : [];
+
+      const enabledEntries = rawEntries.filter(
+        (entry) =>
+          entry && typeof entry === 'object' && entry.enabled !== false,
+      );
+
+      const uniqueLanguages = Array.from(
+        new Set(
+          enabledEntries
+            .map((entry) => normalizeLanguageCode(entry.language))
+            .filter(Boolean),
+        ),
+      ).sort();
+
+      const languages = uniqueLanguages.length > 0 ? uniqueLanguages : ['fa'];
+      const defaultLanguage = normalizeLanguageCode(
+        enabledEntries.find((entry) => entry.isDefault === true)?.language,
+      );
+
+      setAvailableDubbingLanguages(languages);
+      setDubbingLanguage((current) => {
+        if (languages.includes(current)) return current;
+        if (defaultLanguage && languages.includes(defaultLanguage)) {
+          return defaultLanguage;
+        }
+        if (languages.includes('fa')) return 'fa';
+        return languages[0];
+      });
+    } catch (error) {
+      console.error(
+        'Failed to load dubbed languages for Create Dubbed button:',
+        error,
+      );
+      setAvailableDubbingLanguages(['fa']);
+      setDubbingLanguage((current) => current || 'fa');
+    } finally {
+      setLoadingDubbingLanguages(false);
+    }
+  }, []);
+
   const isSceneFlagged = (scene: unknown): boolean => {
     if (!scene || typeof scene !== 'object') return false;
 
@@ -241,6 +317,11 @@ export default function BatchOperations({
   useEffect(() => {
     loadSettingsFromLocalStorage();
   }, [loadSettingsFromLocalStorage]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    void loadDubbedLanguages();
+  }, [isExpanded, loadDubbedLanguages]);
 
   // Close settings menu when clicking outside
   useEffect(() => {
@@ -3586,6 +3667,12 @@ export default function BatchOperations({
     }
   };
 
+  const activeDubbedLanguage =
+    String(dubbingLanguage || 'fa')
+      .trim()
+      .toLowerCase() || 'fa';
+  const activeDubbedLanguageLabel = activeDubbedLanguage.toUpperCase();
+
   const onCreateDubbedFa = async () => {
     if (creatingDubbedFa) return;
 
@@ -3599,7 +3686,10 @@ export default function BatchOperations({
       const res = await fetch('/api/create-dubbed-fa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: selectedVideoId }),
+        body: JSON.stringify({
+          videoId: selectedVideoId,
+          language: activeDubbedLanguage,
+        }),
       });
 
       const payload = (await res.json().catch(() => null)) as {
@@ -3618,7 +3708,7 @@ export default function BatchOperations({
         const message =
           typeof payload?.error === 'string' && payload.error.trim()
             ? payload.error.trim()
-            : `Create Dubbed fa failed (${res.status})`;
+            : `Create Dubbed ${activeDubbedLanguageLabel} failed (${res.status})`;
 
         throw new Error(details ? `${message} — ${details}` : message);
       }
@@ -3626,7 +3716,10 @@ export default function BatchOperations({
       onRefresh?.();
       playBatchDoneSound();
     } catch (error) {
-      console.error('Create Dubbed fa failed:', error);
+      console.error(
+        `Create Dubbed ${activeDubbedLanguageLabel} failed:`,
+        error,
+      );
     } finally {
       setCreatingDubbedFa(false);
     }
@@ -4856,6 +4949,26 @@ export default function BatchOperations({
                     </span>
                   </button>
 
+                  <div className='mt-2'>
+                    <label className='block text-[11px] font-medium text-teal-900 mb-1'>
+                      Dubbed Language
+                      {loadingDubbingLanguages ? ' (loading...)' : ''}
+                    </label>
+                    <select
+                      value={activeDubbedLanguage}
+                      onChange={(e) => setDubbingLanguage(e.target.value)}
+                      disabled={creatingDubbedFa}
+                      className='w-full h-9 px-2 bg-white border border-teal-300 rounded-lg text-sm text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-teal-100 disabled:text-teal-500 disabled:cursor-not-allowed'
+                      title='Select language preset for Create Dubbed'
+                    >
+                      {availableDubbingLanguages.map((languageCode) => (
+                        <option key={languageCode} value={languageCode}>
+                          {languageCode.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <button
                     onClick={onCreateDubbedFa}
                     disabled={!selectedOriginalVideo.id || creatingDubbedFa}
@@ -4864,8 +4977,8 @@ export default function BatchOperations({
                       !selectedOriginalVideo.id
                         ? 'Select an original video first'
                         : creatingDubbedFa
-                          ? 'Step 1/2: map srt_fa (7112) to Sentence_fa (7110). Step 2/2: generate OmniVoice FA TTS into Dubbed_fa (7111)...'
-                          : 'Step 1/2 map srt_fa (7112) with srt_en (6872) into Sentence_fa (7110), then Step 2/2 generate OmniVoice FA TTS to Dubbed_fa (7111)'
+                          ? `Step 1/2 map language SRT into target sentence field. Step 2/2 generate OmniVoice TTS into dubbed field for ${activeDubbedLanguageLabel}...`
+                          : `Use language preset ${activeDubbedLanguageLabel} from Global TTS Settings → Manage Language Presets (Baserow fields + OmniVoice params)`
                     }
                   >
                     {creatingDubbedFa && (
@@ -4873,7 +4986,9 @@ export default function BatchOperations({
                     )}
                     {!creatingDubbedFa && <Volume2 className='w-4 h-4' />}
                     <span className='font-medium'>
-                      {creatingDubbedFa ? 'Processing...' : 'Create Dubbed fa'}
+                      {creatingDubbedFa
+                        ? 'Processing...'
+                        : `Create Dubbed ${activeDubbedLanguageLabel}`}
                     </span>
                   </button>
                 </div>

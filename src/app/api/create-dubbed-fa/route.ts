@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseSrtSegments } from '@/utils/captions-parser';
-import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
+import {
+  loadTtsAudioReferencesStore,
+  type LanguageBaserowFields,
+} from '@/lib/ttsAudioReferencesStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,22 +12,24 @@ const VIDEOS_TABLE_ID = '713';
 const SCENES_TABLE_ID = '714';
 
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
-const SCENE_DURATION_FIELD_KEY = 'field_7107';
-const SCENE_SENTENCE_EN_FIELD_KEY = 'field_6890';
-const SCENE_SENTENCE_FA_FIELD_KEY = 'field_7110';
-const SCENE_DUBBED_FA_FIELD_KEY = 'field_7111';
 
-const VIDEO_SRT_EN_FIELD_KEY = 'field_6872';
-const VIDEO_SRT_FA_FIELD_KEY = 'field_7112';
+const DEFAULT_DUBBED_LANGUAGE = 'fa';
+const FALLBACK_LANGUAGE_BASEROW_FIELDS: LanguageBaserowFields = {
+  videoSrtFieldKey: 'field_7112',
+  videoReferenceSrtFieldKey: 'field_6872',
+  sceneDurationFieldKey: 'field_7107',
+  sceneReferenceSentenceFieldKey: 'field_6890',
+  sceneTargetSentenceFieldKey: 'field_7110',
+  sceneDubbedAudioFieldKey: 'field_7111',
+};
 
 const GENERATE_SCENE_TTS_BY_FIELD_ROUTE = '/api/generate-scene-tts-by-field';
-const DEFAULT_FA_REFERENCE_AUDIO_FILENAME = 'fa.wav';
-const DEFAULT_FA_REFERENCE_TEXT = '';
-const DEFAULT_FA_LANGUAGE = 'fa';
-const DEFAULT_FA_DEVICE_MAP: 'mps' | 'cpu' | 'auto' = 'mps';
-const DEFAULT_FA_DTYPE: 'float16' | 'float32' | 'bfloat16' = 'float32';
-const DEFAULT_FA_NUM_STEP = 64;
-const DEFAULT_FA_SPEED = 1;
+const DEFAULT_REFERENCE_AUDIO_FILENAME = 'fa.wav';
+const DEFAULT_REFERENCE_TEXT = '';
+const DEFAULT_DEVICE_MAP: 'mps' | 'cpu' | 'auto' = 'mps';
+const DEFAULT_DTYPE: 'float16' | 'float32' | 'bfloat16' = 'float32';
+const DEFAULT_NUM_STEP = 64;
+const DEFAULT_SPEED = 1;
 
 const MAX_TIMESTAMP_DELTA_SEC = 0.05;
 
@@ -48,11 +53,12 @@ type ResolvedAudioReference = {
   filename: string;
   language: string;
   referenceText: string;
+  baserowFields: LanguageBaserowFields;
   deviceMap: 'mps' | 'cpu' | 'auto';
   dtype: 'float16' | 'float32' | 'bfloat16';
   numStep: number;
   speed: number;
-  source: 'store-default-fa' | 'store-first-fa' | 'fallback';
+  source: 'store-default-language' | 'store-first-language' | 'fallback';
 };
 
 function parsePositiveInt(value: unknown): number | null {
@@ -197,68 +203,88 @@ function collectTimestampMismatches(
   return mismatches;
 }
 
-function shouldIncludeSceneForDurationSrt(scene: BaserowRow): boolean {
-  const duration = parsePositiveNumber(scene[SCENE_DURATION_FIELD_KEY]);
-  const sentence = String(scene[SCENE_SENTENCE_EN_FIELD_KEY] ?? '').trim();
+function shouldIncludeSceneForDurationSrt(
+  scene: BaserowRow,
+  baserowFields: LanguageBaserowFields,
+): boolean {
+  const duration = parsePositiveNumber(
+    scene[baserowFields.sceneDurationFieldKey],
+  );
+  const sentence = String(
+    scene[baserowFields.sceneReferenceSentenceFieldKey] ?? '',
+  ).trim();
   return Boolean(duration) && sentence.length > 0;
 }
 
-async function resolveFaAudioReference(): Promise<ResolvedAudioReference> {
+function normalizeLanguageCode(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_DUBBED_LANGUAGE;
+  const normalized = value.trim().toLowerCase();
+  return normalized || DEFAULT_DUBBED_LANGUAGE;
+}
+
+async function resolveLanguageAudioReference(
+  requestedLanguage: string,
+): Promise<ResolvedAudioReference> {
+  const normalizedLanguage = normalizeLanguageCode(requestedLanguage);
+
   try {
     const { entries } = await loadTtsAudioReferencesStore();
 
-    const faEntries = entries.filter(
+    const languageEntries = entries.filter(
       (entry) =>
         entry.enabled &&
-        entry.language.toLowerCase() === 'fa' &&
+        entry.language.toLowerCase() === normalizedLanguage &&
         entry.filename.trim().length > 0,
     );
 
-    if (faEntries.length > 0) {
-      const defaultEntry = faEntries.find((entry) => entry.isDefault);
+    if (languageEntries.length > 0) {
+      const defaultEntry = languageEntries.find((entry) => entry.isDefault);
       if (defaultEntry) {
         return {
           id: defaultEntry.id,
           filename: defaultEntry.filename,
           language: defaultEntry.language,
           referenceText: defaultEntry.referenceText,
+          baserowFields: defaultEntry.baserowFields,
           deviceMap: defaultEntry.deviceMap,
           dtype: defaultEntry.dtype,
           numStep: defaultEntry.numStep,
           speed: defaultEntry.speed,
-          source: 'store-default-fa',
+          source: 'store-default-language',
         };
       }
 
-      const firstEntry = faEntries[0];
+      const firstEntry = languageEntries[0];
       return {
         id: firstEntry.id,
         filename: firstEntry.filename,
         language: firstEntry.language,
         referenceText: firstEntry.referenceText,
+        baserowFields: firstEntry.baserowFields,
         deviceMap: firstEntry.deviceMap,
         dtype: firstEntry.dtype,
         numStep: firstEntry.numStep,
         speed: firstEntry.speed,
-        source: 'store-first-fa',
+        source: 'store-first-language',
       };
     }
   } catch (error) {
     console.warn(
-      '[create-dubbed-fa] Failed to load audio references store. Falling back to static FA reference.',
+      '[create-dubbed-fa] Failed to load audio references store. Falling back to static language reference.',
       error,
     );
   }
 
   return {
     id: null,
-    filename: DEFAULT_FA_REFERENCE_AUDIO_FILENAME,
-    language: DEFAULT_FA_LANGUAGE,
-    referenceText: DEFAULT_FA_REFERENCE_TEXT,
-    deviceMap: DEFAULT_FA_DEVICE_MAP,
-    dtype: DEFAULT_FA_DTYPE,
-    numStep: DEFAULT_FA_NUM_STEP,
-    speed: DEFAULT_FA_SPEED,
+    filename: DEFAULT_REFERENCE_AUDIO_FILENAME,
+    language: normalizedLanguage,
+    referenceText: DEFAULT_REFERENCE_TEXT,
+    baserowFields: FALLBACK_LANGUAGE_BASEROW_FIELDS,
+    deviceMap: DEFAULT_DEVICE_MAP,
+    dtype: DEFAULT_DTYPE,
+    numStep: DEFAULT_NUM_STEP,
+    speed: DEFAULT_SPEED,
     source: 'fallback',
   };
 }
@@ -414,6 +440,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as {
       videoId?: unknown;
+      language?: unknown;
     } | null;
 
     const videoId = parsePositiveInt(body?.videoId);
@@ -423,6 +450,24 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    const requestedLanguage = normalizeLanguageCode(body?.language);
+    const selectedLanguageReference =
+      await resolveLanguageAudioReference(requestedLanguage);
+
+    if (
+      requestedLanguage !== DEFAULT_DUBBED_LANGUAGE &&
+      selectedLanguageReference.source === 'fallback'
+    ) {
+      return NextResponse.json(
+        {
+          error: `No language preset found for '${requestedLanguage}'. Add one in Global TTS Settings → Manage Language Presets (including Baserow fields).`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const baserowFields = selectedLanguageReference.baserowFields;
 
     const baserowUrl = process.env.BASEROW_API_URL;
     if (!baserowUrl) {
@@ -440,30 +485,32 @@ export async function POST(request: NextRequest) {
       `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
     );
 
-    const srtEnUrl = extractUrl(videoRow[VIDEO_SRT_EN_FIELD_KEY]);
-    const srtFaUrl = extractUrl(videoRow[VIDEO_SRT_FA_FIELD_KEY]);
+    const srtReferenceUrl = extractUrl(
+      videoRow[baserowFields.videoReferenceSrtFieldKey],
+    );
+    const srtTargetUrl = extractUrl(videoRow[baserowFields.videoSrtFieldKey]);
 
-    if (!srtEnUrl) {
+    if (!srtReferenceUrl) {
       return NextResponse.json(
         {
-          error: `Selected video is missing srt_en URL (${VIDEO_SRT_EN_FIELD_KEY})`,
+          error: `Selected video is missing reference SRT URL (${baserowFields.videoReferenceSrtFieldKey}) for language '${selectedLanguageReference.language}'.`,
         },
         { status: 400 },
       );
     }
 
-    if (!srtFaUrl) {
+    if (!srtTargetUrl) {
       return NextResponse.json(
         {
-          error: `Selected video is missing srt_fa URL (${VIDEO_SRT_FA_FIELD_KEY})`,
+          error: `Selected video is missing target-language SRT URL (${baserowFields.videoSrtFieldKey}) for language '${selectedLanguageReference.language}'.`,
         },
         { status: 400 },
       );
     }
 
     const [srtEnContent, srtFaContent] = await Promise.all([
-      fetchTextFromUrl(srtEnUrl),
-      fetchTextFromUrl(srtFaUrl),
+      fetchTextFromUrl(srtReferenceUrl),
+      fetchTextFromUrl(srtTargetUrl),
     ]);
 
     const enCues = parseSrtSegments(srtEnContent);
@@ -472,7 +519,7 @@ export async function POST(request: NextRequest) {
     if (enCues.length === 0) {
       return NextResponse.json(
         {
-          error: `srt_en (${VIDEO_SRT_EN_FIELD_KEY}) could not be parsed into cues`,
+          error: `Reference SRT (${baserowFields.videoReferenceSrtFieldKey}) could not be parsed into cues`,
         },
         { status: 400 },
       );
@@ -481,7 +528,7 @@ export async function POST(request: NextRequest) {
     if (faCues.length === 0) {
       return NextResponse.json(
         {
-          error: `srt_fa (${VIDEO_SRT_FA_FIELD_KEY}) could not be parsed into cues`,
+          error: `Target-language SRT (${baserowFields.videoSrtFieldKey}) could not be parsed into cues`,
         },
         { status: 400 },
       );
@@ -491,9 +538,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'srt_en and srt_fa cue counts do not match. Please ensure both SRT files have the same cues.',
-          enCueCount: enCues.length,
-          faCueCount: faCues.length,
+            'Reference SRT and target-language SRT cue counts do not match. Please ensure both SRT files have the same cues.',
+          referenceCueCount: enCues.length,
+          targetCueCount: faCues.length,
+          referenceSrtField: baserowFields.videoReferenceSrtFieldKey,
+          targetSrtField: baserowFields.videoSrtFieldKey,
         },
         { status: 400 },
       );
@@ -504,10 +553,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'srt_en and srt_fa timestamps are not aligned cue-by-cue. Please align FA SRT timestamps with EN SRT first.',
+            'Reference SRT and target-language SRT timestamps are not aligned cue-by-cue. Please align target SRT timestamps with the reference SRT first.',
           mismatchCount: timestampMismatches.length,
           sampleMismatches: timestampMismatches.slice(0, 10),
           maxAllowedDeltaSec: MAX_TIMESTAMP_DELTA_SEC,
+          referenceSrtField: baserowFields.videoReferenceSrtFieldKey,
+          targetSrtField: baserowFields.videoSrtFieldKey,
         },
         { status: 400 },
       );
@@ -523,22 +574,27 @@ export async function POST(request: NextRequest) {
 
     const eligibleScenes = [...scenes]
       .sort((a, b) => getSceneOrderValue(a) - getSceneOrderValue(b))
-      .filter((scene) => shouldIncludeSceneForDurationSrt(scene));
+      .filter((scene) =>
+        shouldIncludeSceneForDurationSrt(scene, baserowFields),
+      );
 
     if (eligibleScenes.length !== enCues.length) {
       return NextResponse.json(
         {
           error:
-            'Scene count eligible for En SRT mapping does not match SRT cue count. Regenerate En SRT and retry.',
+            'Scene count eligible for SRT mapping does not match SRT cue count. Check scene duration/reference sentence mappings and retry.',
           eligibleSceneCount: eligibleScenes.length,
-          enCueCount: enCues.length,
-          faCueCount: faCues.length,
+          referenceCueCount: enCues.length,
+          targetCueCount: faCues.length,
+          sceneDurationField: baserowFields.sceneDurationFieldKey,
+          sceneReferenceSentenceField:
+            baserowFields.sceneReferenceSentenceFieldKey,
         },
         { status: 400 },
       );
     }
 
-    const enSceneTextMismatchSceneIds: number[] = [];
+    const referenceSceneTextMismatchSceneIds: number[] = [];
     let updatedCount = 0;
     let unchangedCount = 0;
 
@@ -549,34 +605,32 @@ export async function POST(request: NextRequest) {
 
       const enCue = enCues[i];
       const faCue = faCues[i];
-      const currentSceneEn = String(
-        scene[SCENE_SENTENCE_EN_FIELD_KEY] ?? '',
+      const currentSceneReference = String(
+        scene[baserowFields.sceneReferenceSentenceFieldKey] ?? '',
       ).trim();
-      const nextSceneFa = String(faCue.text ?? '').trim();
-      const currentSceneFa = String(
-        scene[SCENE_SENTENCE_FA_FIELD_KEY] ?? '',
+      const nextSceneTarget = String(faCue.text ?? '').trim();
+      const currentSceneTarget = String(
+        scene[baserowFields.sceneTargetSentenceFieldKey] ?? '',
       ).trim();
 
       if (
-        normalizeForLooseCompare(currentSceneEn) !==
+        normalizeForLooseCompare(currentSceneReference) !==
         normalizeForLooseCompare(enCue.text)
       ) {
-        enSceneTextMismatchSceneIds.push(sceneId);
+        referenceSceneTextMismatchSceneIds.push(sceneId);
       }
 
-      if (!nextSceneFa || nextSceneFa === currentSceneFa) {
+      if (!nextSceneTarget || nextSceneTarget === currentSceneTarget) {
         unchangedCount += 1;
         continue;
       }
 
       await baserowPatchRow(baserowUrl, token, SCENES_TABLE_ID, sceneId, {
-        [SCENE_SENTENCE_FA_FIELD_KEY]: nextSceneFa,
+        [baserowFields.sceneTargetSentenceFieldKey]: nextSceneTarget,
       });
 
       updatedCount += 1;
     }
-
-    const selectedFaReference = await resolveFaAudioReference();
 
     const step2Response = await fetch(
       `${request.nextUrl.origin}${GENERATE_SCENE_TTS_BY_FIELD_ROUTE}`,
@@ -585,21 +639,21 @@ export async function POST(request: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoId,
-          sourceTextFieldKey: SCENE_SENTENCE_FA_FIELD_KEY,
-          destinationAudioFieldKey: SCENE_DUBBED_FA_FIELD_KEY,
+          sourceTextFieldKey: baserowFields.sceneTargetSentenceFieldKey,
+          destinationAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
           provider: 'omnivoice',
-          referenceAudioFilename: selectedFaReference.filename,
+          referenceAudioFilename: selectedLanguageReference.filename,
           skipIfDestinationExists: false,
           ttsSettings: {
             provider: 'omnivoice',
-            reference_audio_filename: selectedFaReference.filename,
+            reference_audio_filename: selectedLanguageReference.filename,
             omniVoice: {
-              referenceText: selectedFaReference.referenceText,
-              language: selectedFaReference.language,
-              deviceMap: selectedFaReference.deviceMap,
-              dtype: selectedFaReference.dtype,
-              numStep: selectedFaReference.numStep,
-              speed: selectedFaReference.speed,
+              referenceText: selectedLanguageReference.referenceText,
+              language: selectedLanguageReference.language,
+              deviceMap: selectedLanguageReference.deviceMap,
+              dtype: selectedLanguageReference.dtype,
+              numStep: selectedLanguageReference.numStep,
+              speed: selectedLanguageReference.speed,
             },
           },
         }),
@@ -638,7 +692,7 @@ export async function POST(request: NextRequest) {
       const message =
         typeof step2Payload?.error === 'string' && step2Payload.error.trim()
           ? step2Payload.error.trim()
-          : `Step 2 FA TTS generation failed (${step2Response.status})`;
+          : `Step 2 ${selectedLanguageReference.language} TTS generation failed (${step2Response.status})`;
 
       throw new Error(
         failurePreview ? `${message} — ${failurePreview}` : message,
@@ -647,32 +701,39 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      step: 'step-1-map-srt-fa-and-step-2-generate-dubbed-fa',
+      step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio',
       videoId,
+      language: selectedLanguageReference.language,
       step1: {
-        srtEnField: VIDEO_SRT_EN_FIELD_KEY,
-        srtFaField: VIDEO_SRT_FA_FIELD_KEY,
-        sentenceFaField: SCENE_SENTENCE_FA_FIELD_KEY,
-        enCueCount: enCues.length,
-        faCueCount: faCues.length,
+        referenceSrtField: baserowFields.videoReferenceSrtFieldKey,
+        targetSrtField: baserowFields.videoSrtFieldKey,
+        sceneDurationField: baserowFields.sceneDurationFieldKey,
+        sceneReferenceSentenceField:
+          baserowFields.sceneReferenceSentenceFieldKey,
+        sceneTargetSentenceField: baserowFields.sceneTargetSentenceFieldKey,
+        referenceCueCount: enCues.length,
+        targetCueCount: faCues.length,
         eligibleSceneCount: eligibleScenes.length,
         updatedCount,
         unchangedCount,
-        enSceneTextMismatchCount: enSceneTextMismatchSceneIds.length,
-        enSceneTextMismatchSceneIds: enSceneTextMismatchSceneIds.slice(0, 20),
+        referenceSceneTextMismatchCount:
+          referenceSceneTextMismatchSceneIds.length,
+        referenceSceneTextMismatchSceneIds:
+          referenceSceneTextMismatchSceneIds.slice(0, 20),
       },
       step2: {
-        sourceTextField: SCENE_SENTENCE_FA_FIELD_KEY,
-        dubbedFaField: SCENE_DUBBED_FA_FIELD_KEY,
-        referenceAudioFilename: selectedFaReference.filename,
-        referenceAudioReferenceId: selectedFaReference.id,
-        referenceAudioSource: selectedFaReference.source,
-        language: selectedFaReference.language,
-        referenceTextLength: selectedFaReference.referenceText.length,
-        deviceMap: selectedFaReference.deviceMap,
-        dtype: selectedFaReference.dtype,
-        numStep: selectedFaReference.numStep,
-        speed: selectedFaReference.speed,
+        sourceTextField: baserowFields.sceneTargetSentenceFieldKey,
+        dubbedAudioField: baserowFields.sceneDubbedAudioFieldKey,
+        referenceAudioFilename: selectedLanguageReference.filename,
+        referenceAudioReferenceId: selectedLanguageReference.id,
+        referenceAudioSource: selectedLanguageReference.source,
+        language: selectedLanguageReference.language,
+        referenceTextLength: selectedLanguageReference.referenceText.length,
+        deviceMap: selectedLanguageReference.deviceMap,
+        dtype: selectedLanguageReference.dtype,
+        numStep: selectedLanguageReference.numStep,
+        speed: selectedLanguageReference.speed,
+        baserowFields,
         provider:
           typeof step2Payload?.provider === 'string'
             ? step2Payload.provider
