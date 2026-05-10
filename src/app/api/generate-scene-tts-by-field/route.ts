@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Agent } from 'undici';
+import { spawn } from 'child_process';
+import path from 'path';
+import { access, unlink } from 'fs/promises';
+import { uploadToMinio } from '@/utils/ffmpeg-direct';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,12 +17,50 @@ const TTS_PROVIDER_FETCH_DISPATCHER = new Agent({
   bodyTimeout: 0,
 });
 
+const AUDIO_SAMPLE_RATE = 48000;
+const AUDIO_CHANNELS = 2;
+const TIME_DECIMALS = 6;
+const SPEED_DECIMALS = 12;
+const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_FFPROBE_TIMEOUT_MS = 2 * 60 * 1000;
+const SCENE_DURATION_TOLERANCE_SEC = 1 / AUDIO_SAMPLE_RATE;
+const SCENE_MAX_TEMPO_PASSES = 10;
+const SCENE_COARSE_TOLERANCE_SAMPLES = 8;
+const SCENE_FINE_TOLERANCE_SAMPLES = 2;
+const SCENE_FINAL_TOLERANCE_SAMPLES = 1;
+const SCENE_COARSE_MAX_TEMPO_PASSES = 8;
+const SCENE_FINE_MAX_TEMPO_PASSES = 8;
+const SCENE_VERIFY_MAX_TEMPO_PASSES = 4;
+const SAVE_FITTED_AUDIO_AS_WAV = true;
+
 type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
 type BaserowRow = Record<string, unknown>;
 
 type BaserowListResponse = {
   results?: BaserowRow[];
   next?: string | null;
+};
+
+type FFprobeStream = {
+  codec_type?: unknown;
+  duration?: string | number;
+  sample_rate?: string | number;
+  nb_samples?: string | number;
+  duration_ts?: string | number;
+  time_base?: unknown;
+};
+
+type FFprobeOutput = {
+  format?: {
+    duration?: string | number;
+  };
+  streams?: FFprobeStream[];
+};
+
+type AudioProbeMetrics = {
+  durationSec: number;
+  sampleRate: number;
+  sampleCount: number;
 };
 
 type SceneTtsFailure = {
@@ -52,6 +94,21 @@ function parsePositiveInt(value: unknown): number | null {
         : Number.NaN;
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function parsePositiveNumber(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : Number.NaN;
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
     return null;
   }
 
@@ -173,6 +230,836 @@ function resolveTtsPath(provider: TtsProvider): string {
   }
 
   return '/api/generate-tts';
+}
+
+function formatSeconds(value: number): string {
+  return value.toFixed(TIME_DECIMALS);
+}
+
+function roundDurationSeconds(value: number): number {
+  if (!Number.isFinite(value)) return value;
+  return Number(value.toFixed(TIME_DECIMALS));
+}
+
+function secondsToSamples(seconds: number, sampleRate: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(
+      `Invalid duration seconds for sample conversion: ${seconds}`,
+    );
+  }
+
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0) {
+    throw new Error(`Invalid sample rate for sample conversion: ${sampleRate}`);
+  }
+
+  return Math.max(1, Math.round(seconds * sampleRate));
+}
+
+function samplesToSeconds(sampleCount: number, sampleRate: number): number {
+  if (!Number.isInteger(sampleCount) || sampleCount <= 0) {
+    throw new Error(
+      `Invalid sample count for duration conversion: ${sampleCount}`,
+    );
+  }
+
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0) {
+    throw new Error(
+      `Invalid sample rate for duration conversion: ${sampleRate}`,
+    );
+  }
+
+  return sampleCount / sampleRate;
+}
+
+function parseTimeBase(value: unknown): number | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const [numeratorRaw, denominatorRaw] = value.trim().split('/');
+  if (!numeratorRaw || !denominatorRaw) {
+    return null;
+  }
+
+  const numerator = Number(numeratorRaw);
+  const denominator = Number(denominatorRaw);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator)) {
+    return null;
+  }
+
+  if (denominator <= 0) {
+    return null;
+  }
+
+  const timeBase = numerator / denominator;
+  return Number.isFinite(timeBase) && timeBase > 0 ? timeBase : null;
+}
+
+function parsePositiveRoundedInt(value: unknown): number | null {
+  const parsed = parseNumberish(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  const rounded = Math.round(parsed);
+  return rounded > 0 ? rounded : null;
+}
+
+function buildAtempoChain(speed: number): string {
+  if (!Number.isFinite(speed) || speed <= 0) {
+    throw new Error(`Invalid tempo speed: ${speed}`);
+  }
+
+  const filters: string[] = [];
+  let remaining = speed;
+
+  while (remaining > 2.0) {
+    filters.push('atempo=2.0');
+    remaining /= 2.0;
+  }
+
+  while (remaining < 0.5) {
+    filters.push('atempo=0.5');
+    remaining /= 0.5;
+  }
+
+  if (Math.abs(remaining - 1.0) > 1e-9) {
+    filters.push(`atempo=${remaining.toFixed(SPEED_DECIMALS)}`);
+  }
+
+  return filters.length > 0 ? filters.join(',') : 'anull';
+}
+
+function makeTempPath(prefix: string, extension: string): string {
+  const safeExt = extension.replace(/^\./, '');
+  return path.resolve(
+    '/tmp',
+    `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${safeExt}`,
+  );
+}
+
+async function safeUnlink(filePath?: string | null): Promise<void> {
+  if (!filePath) return;
+  try {
+    await unlink(filePath);
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
+async function runCommand(
+  command: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      const stderrTail = stderr.trim().slice(-2000);
+      reject(
+        new Error(
+          `${command} failed with code ${code}${stderrTail ? `: ${stderrTail}` : ''}`,
+        ),
+      );
+    });
+  });
+}
+
+async function probeMediaDurationSeconds(input: string): Promise<number> {
+  const metrics = await probeAudioMetrics(input);
+  return metrics.durationSec;
+}
+
+async function probeAudioMetrics(input: string): Promise<AudioProbeMetrics> {
+  const { stdout } = await runCommand(
+    'ffprobe',
+    [
+      '-v',
+      'quiet',
+      '-print_format',
+      'json',
+      '-show_format',
+      '-show_streams',
+      input,
+    ],
+    DEFAULT_FFPROBE_TIMEOUT_MS,
+  );
+
+  const parsed = (JSON.parse(stdout) ?? {}) as FFprobeOutput;
+  const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+  const audioStream =
+    streams.find((stream) => stream?.codec_type === 'audio') ??
+    streams[0] ??
+    null;
+
+  const sampleRate =
+    parsePositiveInt(audioStream?.sample_rate) ?? AUDIO_SAMPLE_RATE;
+
+  const sampleCandidates: number[] = [];
+
+  const nbSamples = parsePositiveRoundedInt(audioStream?.nb_samples);
+  if (nbSamples) {
+    sampleCandidates.push(nbSamples);
+  }
+
+  const durationTs = parseNumberish(audioStream?.duration_ts);
+  const timeBase = parseTimeBase(audioStream?.time_base);
+  if (Number.isFinite(durationTs) && durationTs > 0 && timeBase) {
+    const durationFromTsSec = durationTs * timeBase;
+    if (Number.isFinite(durationFromTsSec) && durationFromTsSec > 0) {
+      sampleCandidates.push(secondsToSamples(durationFromTsSec, sampleRate));
+    }
+  }
+
+  const streamDurationSec = parseNumberish(audioStream?.duration);
+  if (Number.isFinite(streamDurationSec) && streamDurationSec > 0) {
+    sampleCandidates.push(secondsToSamples(streamDurationSec, sampleRate));
+  }
+
+  const formatDurationSec = parseNumberish(parsed.format?.duration);
+  if (Number.isFinite(formatDurationSec) && formatDurationSec > 0) {
+    sampleCandidates.push(secondsToSamples(formatDurationSec, sampleRate));
+  }
+
+  const sampleCount =
+    sampleCandidates.length > 0 ? Math.max(...sampleCandidates) : Number.NaN;
+  if (!Number.isFinite(sampleCount) || sampleCount <= 0) {
+    throw new Error('Unable to determine media duration via ffprobe');
+  }
+
+  const durationSec = roundDurationSeconds(
+    samplesToSeconds(Math.round(sampleCount), sampleRate),
+  );
+
+  return {
+    durationSec,
+    sampleRate,
+    sampleCount: Math.round(sampleCount),
+  };
+}
+
+async function normalizeAudioToWavLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputAudioUrl: string;
+}): Promise<string> {
+  const { sceneId, videoId, inputAudioUrl } = options;
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_scene_${sceneId}_dubbed_fit_normalized`,
+    'wav',
+  );
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputAudioUrl,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function appendSilenceToAudioLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputPath: string;
+  silenceSamples: number;
+}): Promise<string> {
+  const { sceneId, videoId, inputPath, silenceSamples } = options;
+
+  if (!Number.isInteger(silenceSamples) || silenceSamples <= 0) {
+    throw new Error(`Invalid silence sample count: ${silenceSamples}`);
+  }
+
+  const silenceDurationSec = samplesToSeconds(
+    silenceSamples,
+    AUDIO_SAMPLE_RATE,
+  );
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_scene_${sceneId}_dubbed_fit_silence`,
+    'wav',
+  );
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-f',
+      'lavfi',
+      '-t',
+      formatSeconds(silenceDurationSec),
+      '-i',
+      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function tempoMatchAudioToDurationLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputPath: string;
+  targetSamples: number;
+  outputPrefix: string;
+  toleranceSamples?: number;
+  maxPasses?: number;
+}): Promise<{
+  localPath: string;
+  outputDurationSec: number;
+  outputSamples: number;
+  speedApplied: number;
+}> {
+  const {
+    sceneId,
+    videoId,
+    inputPath,
+    targetSamples,
+    outputPrefix,
+    toleranceSamples = SCENE_FINE_TOLERANCE_SAMPLES,
+    maxPasses = SCENE_MAX_TEMPO_PASSES,
+  } = options;
+
+  if (!Number.isInteger(targetSamples) || targetSamples <= 0) {
+    throw new Error(`Invalid target sample count: ${targetSamples}`);
+  }
+
+  let currentPath = inputPath;
+  const initialMetrics = await probeAudioMetrics(inputPath);
+  let currentSamples = initialMetrics.sampleCount;
+  let currentSampleRate = initialMetrics.sampleRate;
+  let cumulativeSpeedApplied = 1;
+  const generatedPassPaths: string[] = [];
+
+  try {
+    for (let passIndex = 1; passIndex <= maxPasses; passIndex += 1) {
+      const deltaSamples = currentSamples - targetSamples;
+      if (Math.abs(deltaSamples) <= toleranceSamples) {
+        break;
+      }
+
+      const passSpeedApplied = currentSamples / targetSamples;
+      if (!Number.isFinite(passSpeedApplied) || passSpeedApplied <= 0) {
+        throw new Error(
+          `Invalid scene tempo speed on pass ${passIndex}: ${passSpeedApplied}`,
+        );
+      }
+
+      const filterParts: string[] = [
+        `aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo`,
+      ];
+
+      if (Math.abs(passSpeedApplied - 1) > 1e-9) {
+        filterParts.push(buildAtempoChain(passSpeedApplied));
+      }
+
+      filterParts.push('asetpts=N/SR/TB');
+
+      const passOutputPath = makeTempPath(
+        `${outputPrefix}_${videoId}_${sceneId}_pass_${passIndex}`,
+        'wav',
+      );
+
+      await runCommand(
+        'ffmpeg',
+        [
+          '-y',
+          '-i',
+          currentPath,
+          '-vn',
+          '-map_metadata',
+          '-1',
+          '-map_chapters',
+          '-1',
+          '-filter_complex',
+          `[0:a]${filterParts.join(',')}[aout]`,
+          '-map',
+          '[aout]',
+          '-c:a',
+          'pcm_s16le',
+          '-ar',
+          String(AUDIO_SAMPLE_RATE),
+          '-ac',
+          String(AUDIO_CHANNELS),
+          passOutputPath,
+        ],
+        DEFAULT_FFMPEG_TIMEOUT_MS,
+      );
+
+      await access(passOutputPath);
+      const passMetrics = await probeAudioMetrics(passOutputPath);
+
+      generatedPassPaths.push(passOutputPath);
+      cumulativeSpeedApplied *= passSpeedApplied;
+
+      const previousSamples = currentSamples;
+
+      if (currentPath !== inputPath) {
+        await safeUnlink(currentPath);
+      }
+
+      currentPath = passOutputPath;
+      currentSamples = passMetrics.sampleCount;
+      currentSampleRate = passMetrics.sampleRate;
+
+      if (currentSamples === previousSamples) {
+        break;
+      }
+    }
+  } catch (error) {
+    for (const generatedPath of generatedPassPaths) {
+      if (generatedPath !== currentPath) {
+        await safeUnlink(generatedPath);
+      }
+    }
+    throw error;
+  }
+
+  return {
+    localPath: currentPath,
+    outputDurationSec: roundDurationSeconds(
+      samplesToSeconds(currentSamples, currentSampleRate),
+    ),
+    outputSamples: currentSamples,
+    speedApplied: cumulativeSpeedApplied,
+  };
+}
+
+async function fitSceneAudioToDurationLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputAudioUrl: string;
+  targetDurationSec: number;
+}): Promise<{
+  localPath: string;
+  inputDurationSec: number;
+  outputDurationSec: number;
+  speedApplied: number;
+}> {
+  const { sceneId, videoId, inputAudioUrl, targetDurationSec } = options;
+  const normalizedTargetDurationSec = roundDurationSeconds(targetDurationSec);
+  const targetSamples = secondsToSamples(
+    normalizedTargetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
+
+  const cleanupPaths = new Set<string>();
+
+  try {
+    const normalizedInputPath = await normalizeAudioToWavLocal({
+      sceneId,
+      videoId,
+      inputAudioUrl,
+    });
+    cleanupPaths.add(normalizedInputPath);
+
+    const inputMetrics = await probeAudioMetrics(normalizedInputPath);
+    const inputDurationSec = roundDurationSeconds(
+      samplesToSeconds(inputMetrics.sampleCount, inputMetrics.sampleRate),
+    );
+
+    let workingPath = normalizedInputPath;
+    let cumulativeSpeedApplied = 1;
+
+    if (inputMetrics.sampleCount < targetSamples) {
+      const silenceSamples = targetSamples - inputMetrics.sampleCount;
+      const withSilencePath = await appendSilenceToAudioLocal({
+        sceneId,
+        videoId,
+        inputPath: workingPath,
+        silenceSamples,
+      });
+      cleanupPaths.add(withSilencePath);
+
+      if (withSilencePath !== workingPath) {
+        await safeUnlink(workingPath);
+        cleanupPaths.delete(workingPath);
+        workingPath = withSilencePath;
+      }
+    }
+
+    const stages: Array<{
+      outputPrefix: string;
+      toleranceSamples: number;
+      maxPasses: number;
+    }> = [
+      {
+        outputPrefix: 'dubbed_fit_tempo_coarse',
+        toleranceSamples: SCENE_COARSE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_COARSE_MAX_TEMPO_PASSES,
+      },
+      {
+        outputPrefix: 'dubbed_fit_tempo_fine',
+        toleranceSamples: SCENE_FINE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_FINE_MAX_TEMPO_PASSES,
+      },
+      {
+        outputPrefix: 'dubbed_fit_tempo_verify',
+        toleranceSamples: SCENE_FINAL_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_VERIFY_MAX_TEMPO_PASSES,
+      },
+    ];
+
+    for (const stage of stages) {
+      const stageResult = await tempoMatchAudioToDurationLocal({
+        sceneId,
+        videoId,
+        inputPath: workingPath,
+        targetSamples,
+        outputPrefix: stage.outputPrefix,
+        toleranceSamples: stage.toleranceSamples,
+        maxPasses: stage.maxPasses,
+      });
+
+      cumulativeSpeedApplied *= stageResult.speedApplied;
+
+      if (stageResult.localPath !== workingPath) {
+        await safeUnlink(workingPath);
+        cleanupPaths.delete(workingPath);
+
+        cleanupPaths.add(stageResult.localPath);
+        workingPath = stageResult.localPath;
+      }
+
+      if (
+        Math.abs(stageResult.outputSamples - targetSamples) <=
+        SCENE_FINAL_TOLERANCE_SAMPLES
+      ) {
+        break;
+      }
+    }
+
+    const finalMetrics = await probeAudioMetrics(workingPath);
+    const outputDurationSec = roundDurationSeconds(
+      samplesToSeconds(finalMetrics.sampleCount, finalMetrics.sampleRate),
+    );
+
+    cleanupPaths.delete(workingPath);
+
+    return {
+      localPath: workingPath,
+      inputDurationSec,
+      outputDurationSec,
+      speedApplied: cumulativeSpeedApplied,
+    };
+  } catch (error) {
+    for (const filePath of cleanupPaths) {
+      await safeUnlink(filePath);
+    }
+    throw error;
+  }
+}
+
+async function encodeAudioToM4aLocal(options: {
+  inputPath: string;
+  outputPrefix: string;
+}): Promise<string> {
+  const { inputPath, outputPrefix } = options;
+  const outputPath = makeTempPath(outputPrefix, 'm4a');
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      '-movflags',
+      '+faststart',
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function tempoMatchM4aToDurationLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputPath: string;
+  targetDurationSec: number;
+  toleranceSec?: number;
+  maxPasses?: number;
+}): Promise<{
+  localPath: string;
+  outputDurationSec: number;
+  speedApplied: number;
+}> {
+  const {
+    sceneId,
+    videoId,
+    inputPath,
+    targetDurationSec,
+    toleranceSec = SCENE_DURATION_TOLERANCE_SEC,
+    maxPasses = SCENE_MAX_TEMPO_PASSES,
+  } = options;
+
+  let currentPath = inputPath;
+  let currentDurationSec = await probeMediaDurationSeconds(inputPath);
+  let cumulativeSpeedApplied = 1;
+  const generatedPassPaths: string[] = [];
+
+  try {
+    for (let passIndex = 1; passIndex <= maxPasses; passIndex += 1) {
+      const deltaSec = currentDurationSec - targetDurationSec;
+      if (Math.abs(deltaSec) <= toleranceSec) {
+        break;
+      }
+
+      const passSpeedApplied = currentDurationSec / targetDurationSec;
+      if (!Number.isFinite(passSpeedApplied) || passSpeedApplied <= 0) {
+        throw new Error(
+          `Invalid m4a tempo speed on pass ${passIndex}: ${passSpeedApplied}`,
+        );
+      }
+
+      const filterParts: string[] = [
+        `aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo`,
+      ];
+
+      if (Math.abs(passSpeedApplied - 1) > 1e-9) {
+        filterParts.push(buildAtempoChain(passSpeedApplied));
+      }
+
+      filterParts.push('asetpts=N/SR/TB');
+
+      const passOutputPath = makeTempPath(
+        `video_${videoId}_scene_${sceneId}_dubbed_fit_upload_pass_${passIndex}`,
+        'm4a',
+      );
+
+      await runCommand(
+        'ffmpeg',
+        [
+          '-y',
+          '-i',
+          currentPath,
+          '-vn',
+          '-map_metadata',
+          '-1',
+          '-map_chapters',
+          '-1',
+          '-filter_complex',
+          `[0:a]${filterParts.join(',')}[aout]`,
+          '-map',
+          '[aout]',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-ar',
+          String(AUDIO_SAMPLE_RATE),
+          '-ac',
+          String(AUDIO_CHANNELS),
+          '-movflags',
+          '+faststart',
+          passOutputPath,
+        ],
+        DEFAULT_FFMPEG_TIMEOUT_MS,
+      );
+
+      await access(passOutputPath);
+      const passOutputDurationSec =
+        await probeMediaDurationSeconds(passOutputPath);
+
+      generatedPassPaths.push(passOutputPath);
+      cumulativeSpeedApplied *= passSpeedApplied;
+
+      if (currentPath !== inputPath) {
+        await safeUnlink(currentPath);
+      }
+
+      currentPath = passOutputPath;
+      currentDurationSec = passOutputDurationSec;
+    }
+  } catch (error) {
+    for (const generatedPath of generatedPassPaths) {
+      if (generatedPath !== currentPath) {
+        await safeUnlink(generatedPath);
+      }
+    }
+    throw error;
+  }
+
+  return {
+    localPath: currentPath,
+    outputDurationSec: roundDurationSeconds(currentDurationSec),
+    speedApplied: cumulativeSpeedApplied,
+  };
+}
+
+async function fitAndUploadSceneAudio(options: {
+  audioUrl: string;
+  sceneId: number;
+  videoId: number;
+  targetDurationSec: number;
+}): Promise<{
+  uploadUrl: string;
+  inputDurationSec: number;
+  outputDurationSec: number;
+  speedApplied: number;
+}> {
+  const { audioUrl, sceneId, videoId, targetDurationSec } = options;
+
+  let fittedLocalPath: string | null = null;
+  let uploadLocalPath: string | null = null;
+
+  try {
+    const fitted = await fitSceneAudioToDurationLocal({
+      sceneId,
+      videoId,
+      inputAudioUrl: audioUrl,
+      targetDurationSec,
+    });
+    fittedLocalPath = fitted.localPath;
+
+    if (SAVE_FITTED_AUDIO_AS_WAV) {
+      const filename = `video_${videoId}_scene_${sceneId}_dubbed_fitted_${Date.now()}.wav`;
+      const uploadUrl = await uploadToMinio(
+        fitted.localPath,
+        filename,
+        'audio/wav',
+      );
+
+      return {
+        uploadUrl,
+        inputDurationSec: fitted.inputDurationSec,
+        outputDurationSec: fitted.outputDurationSec,
+        speedApplied: fitted.speedApplied,
+      };
+    }
+
+    uploadLocalPath = await encodeAudioToM4aLocal({
+      inputPath: fitted.localPath,
+      outputPrefix: `video_${videoId}_scene_${sceneId}_dubbed_fit_upload`,
+    });
+
+    const normalizedTargetDurationSec = roundDurationSeconds(targetDurationSec);
+    const uploadCorrected = await tempoMatchM4aToDurationLocal({
+      sceneId,
+      videoId,
+      inputPath: uploadLocalPath,
+      targetDurationSec: normalizedTargetDurationSec,
+    });
+
+    if (uploadCorrected.localPath !== uploadLocalPath) {
+      await safeUnlink(uploadLocalPath);
+      uploadLocalPath = uploadCorrected.localPath;
+    }
+
+    const filename = `video_${videoId}_scene_${sceneId}_dubbed_fitted_${Date.now()}.m4a`;
+    const uploadUrl = await uploadToMinio(
+      uploadLocalPath,
+      filename,
+      'audio/mp4',
+    );
+
+    return {
+      uploadUrl,
+      inputDurationSec: fitted.inputDurationSec,
+      outputDurationSec: uploadCorrected.outputDurationSec,
+      speedApplied: fitted.speedApplied * uploadCorrected.speedApplied,
+    };
+  } finally {
+    await safeUnlink(uploadLocalPath);
+    await safeUnlink(fittedLocalPath);
+  }
 }
 
 let cachedToken: string | null = null;
@@ -428,11 +1315,13 @@ export async function POST(request: NextRequest) {
       videoId?: unknown;
       sourceTextFieldKey?: unknown;
       destinationAudioFieldKey?: unknown;
+      sceneDurationFieldKey?: unknown;
       provider?: unknown;
       referenceAudioFilename?: unknown;
       ttsSettings?: unknown;
       skipIfDestinationExists?: unknown;
       failFastOnSaveError?: unknown;
+      fitAudioToSceneDuration?: unknown;
       onlySceneIds?: unknown;
     } | null;
 
@@ -471,6 +1360,22 @@ export async function POST(request: NextRequest) {
         {
           error:
             'sourceTextFieldKey and destinationAudioFieldKey must be different fields',
+        },
+        { status: 400 },
+      );
+    }
+
+    const fitAudioToSceneDuration = parseBoolean(
+      body?.fitAudioToSceneDuration,
+      false,
+    );
+
+    const sceneDurationFieldKey = asFieldKey(body?.sceneDurationFieldKey);
+    if (fitAudioToSceneDuration && !sceneDurationFieldKey) {
+      return NextResponse.json(
+        {
+          error:
+            'sceneDurationFieldKey is required when fitAudioToSceneDuration is enabled',
         },
         { status: 400 },
       );
@@ -546,6 +1451,8 @@ export async function POST(request: NextRequest) {
     let skippedExistingCount = 0;
     let skippedSceneFilterCount = 0;
     let skippedInvalidSceneIdCount = 0;
+    let skippedMissingDurationCount = 0;
+    let fittedCount = 0;
     let abortedOnSaveFailure = false;
     let abortedSceneId: number | null = null;
 
@@ -577,8 +1484,26 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const targetDurationSec = fitAudioToSceneDuration
+        ? (() => {
+            const parsed = parsePositiveNumber(
+              scene[sceneDurationFieldKey as string],
+            );
+            return parsed ? roundDurationSeconds(parsed) : null;
+          })()
+        : null;
+
+      if (fitAudioToSceneDuration && !targetDurationSec) {
+        skippedMissingDurationCount += 1;
+        failures.push({
+          sceneId,
+          error: `Missing/invalid duration in ${sceneDurationFieldKey}`,
+        });
+        continue;
+      }
+
       try {
-        const audioUrl = await generateSceneTts({
+        let audioUrl = await generateSceneTts({
           origin: request.nextUrl.origin,
           providerPath,
           text,
@@ -587,6 +1512,17 @@ export async function POST(request: NextRequest) {
           referenceAudioFilename: referenceAudioFilename || undefined,
           ttsSettings,
         });
+
+        if (fitAudioToSceneDuration && targetDurationSec) {
+          const fitted = await fitAndUploadSceneAudio({
+            audioUrl,
+            sceneId,
+            videoId,
+            targetDurationSec,
+          });
+          audioUrl = fitted.uploadUrl;
+          fittedCount += 1;
+        }
 
         try {
           token = await patchSceneAudioWithAuthRetry({
@@ -631,15 +1567,19 @@ export async function POST(request: NextRequest) {
       providerPath,
       sourceTextFieldKey,
       destinationAudioFieldKey,
+      sceneDurationFieldKey,
       referenceAudioFilename: referenceAudioFilename || null,
       skipIfDestinationExists,
       failFastOnSaveError,
+      fitAudioToSceneDuration,
       abortedOnSaveFailure,
       abortedSceneId,
       requestedSceneCount: orderedScenes.length,
       generatedCount,
+      fittedCount,
       skippedNoTextCount,
       skippedExistingCount,
+      skippedMissingDurationCount,
       skippedSceneFilterCount,
       skippedInvalidSceneIdCount,
       failureCount: failures.length,

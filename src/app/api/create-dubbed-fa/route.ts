@@ -14,6 +14,7 @@ const VIDEOS_TABLE_ID = '713';
 const SCENES_TABLE_ID = '714';
 
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
+const SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT = 'field_6884';
 
 const DEFAULT_DUBBED_LANGUAGE = 'fa';
 const FALLBACK_LANGUAGE_BASEROW_FIELDS: LanguageBaserowFields = {
@@ -645,10 +646,12 @@ export async function POST(request: NextRequest) {
         videoId,
         sourceTextFieldKey: baserowFields.sceneTargetSentenceFieldKey,
         destinationAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
+        sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
         provider: 'omnivoice',
         referenceAudioFilename: selectedLanguageReference.filename,
         skipIfDestinationExists: true,
         failFastOnSaveError: true,
+        fitAudioToSceneDuration: true,
         ttsSettings: {
           provider: 'omnivoice',
           reference_audio_filename: selectedLanguageReference.filename,
