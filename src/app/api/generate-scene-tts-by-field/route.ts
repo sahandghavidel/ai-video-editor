@@ -30,12 +30,13 @@ const SCENE_FINE_TOLERANCE_SAMPLES = 2;
 const SCENE_FINAL_TOLERANCE_SAMPLES = 1;
 const SCENE_COARSE_MAX_TEMPO_PASSES = 8;
 const SCENE_FINE_MAX_TEMPO_PASSES = 8;
-const SCENE_VERIFY_MAX_TEMPO_PASSES = 4;
+const SCENE_VERIFY_MAX_TEMPO_PASSES = 8;
 const SAVE_FITTED_AUDIO_AS_WAV = true;
 const FIT_DEBUG_LOGS = false;
 const LONGER_ADAPTIVE_UNDERSHOOT_MIN_SEC = 0.02;
 const LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC = 0.12;
 const LONGER_ADAPTIVE_UNDERSHOOT_RATIO = 0.35;
+const DEFAULT_EMPTY_SENTENCE_FIELD_KEY = 'field_6890';
 
 type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
 type BaserowRow = Record<string, unknown>;
@@ -672,6 +673,116 @@ async function appendSilenceToAudioLocal(options: {
   });
 
   return outputPath;
+}
+
+async function createSilenceAudioToDurationLocal(options: {
+  sceneId: number;
+  videoId: number;
+  targetDurationSec: number;
+}): Promise<string> {
+  const { sceneId, videoId, targetDurationSec } = options;
+
+  const roundedTargetDurationSec = roundDurationSeconds(targetDurationSec);
+  if (
+    !Number.isFinite(roundedTargetDurationSec) ||
+    roundedTargetDurationSec <= 0
+  ) {
+    throw new Error(
+      `Invalid target duration for silence generation: ${targetDurationSec}`,
+    );
+  }
+
+  const targetSamples = secondsToSamples(
+    roundedTargetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
+  const sampleAlignedTargetDurationSec = roundDurationSeconds(
+    samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE),
+  );
+
+  const startedAt = Date.now();
+
+  logFitInfo('createSilenceAudioToDurationLocal:start', {
+    sceneId,
+    videoId,
+    targetDurationSec: roundedTargetDurationSec,
+    targetSamples,
+    sampleAlignedTargetDurationSec,
+  });
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_scene_${sceneId}_dubbed_fit_silence_source`,
+    'wav',
+  );
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=0:${formatSeconds(sampleAlignedTargetDurationSec)},asetpts=N/SR/TB[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+
+  logFitInfo('createSilenceAudioToDurationLocal:done', {
+    sceneId,
+    videoId,
+    outputPath,
+    elapsedMs: Date.now() - startedAt,
+  });
+
+  return outputPath;
+}
+
+async function createAndUploadSilentSceneAudio(options: {
+  sceneId: number;
+  videoId: number;
+  targetDurationSec: number;
+}): Promise<{
+  uploadUrl: string;
+  inputDurationSec: number;
+  outputDurationSec: number;
+  speedApplied: number;
+}> {
+  const { sceneId, videoId, targetDurationSec } = options;
+
+  const silentSourcePath = await createSilenceAudioToDurationLocal({
+    sceneId,
+    videoId,
+    targetDurationSec,
+  });
+
+  try {
+    return await fitAndUploadSceneAudio({
+      audioUrl: silentSourcePath,
+      sceneId,
+      videoId,
+      targetDurationSec,
+    });
+  } finally {
+    await safeUnlink(silentSourcePath);
+  }
 }
 
 async function tempoMatchAudioToDurationLocal(options: {
@@ -1873,6 +1984,8 @@ export async function POST(request: NextRequest) {
       sourceTextFieldKey?: unknown;
       destinationAudioFieldKey?: unknown;
       originalAudioFieldKey?: unknown;
+      createSilenceForEmptySentence?: unknown;
+      emptySentenceFieldKey?: unknown;
       sceneDurationFieldKey?: unknown;
       provider?: unknown;
       referenceAudioFilename?: unknown;
@@ -1960,6 +2073,37 @@ export async function POST(request: NextRequest) {
     }
 
     const saveOriginalAudioBeforeFit = Boolean(originalAudioFieldKey);
+    const createSilenceForEmptySentence = parseBoolean(
+      body?.createSilenceForEmptySentence,
+      false,
+    );
+
+    const emptySentenceFieldKeyRaw = body?.emptySentenceFieldKey;
+    const hasEmptySentenceFieldKeyInput =
+      emptySentenceFieldKeyRaw !== undefined &&
+      emptySentenceFieldKeyRaw !== null &&
+      !(
+        typeof emptySentenceFieldKeyRaw === 'string' &&
+        emptySentenceFieldKeyRaw.trim().length === 0
+      );
+
+    const parsedEmptySentenceFieldKey = hasEmptySentenceFieldKeyInput
+      ? asFieldKey(emptySentenceFieldKeyRaw)
+      : null;
+
+    if (hasEmptySentenceFieldKeyInput && !parsedEmptySentenceFieldKey) {
+      return NextResponse.json(
+        {
+          error:
+            'emptySentenceFieldKey must be a Baserow field key (e.g., field_6890) when provided',
+        },
+        { status: 400 },
+      );
+    }
+
+    const emptySentenceFieldKey = createSilenceForEmptySentence
+      ? (parsedEmptySentenceFieldKey ?? DEFAULT_EMPTY_SENTENCE_FIELD_KEY)
+      : parsedEmptySentenceFieldKey;
 
     const fitAudioToSceneDuration = parseBoolean(
       body?.fitAudioToSceneDuration,
@@ -2010,6 +2154,8 @@ export async function POST(request: NextRequest) {
       sourceTextFieldKey,
       destinationAudioFieldKey,
       originalAudioFieldKey,
+      createSilenceForEmptySentence,
+      emptySentenceFieldKey,
       sceneDurationFieldKey,
       provider,
       providerPath,
@@ -2079,6 +2225,7 @@ export async function POST(request: NextRequest) {
     let skippedInvalidSceneIdCount = 0;
     let skippedMissingDurationCount = 0;
     let fittedCount = 0;
+    let silentGeneratedCount = 0;
     let originalSavedCount = 0;
     let skippedOriginalSaveCount = 0;
     let abortedOnSaveFailure = false;
@@ -2106,17 +2253,6 @@ export async function POST(request: NextRequest) {
         logFitInfo('post:scene-skip-scene-filter', {
           fitDebugRunId,
           sceneId,
-        });
-        continue;
-      }
-
-      const text = String(scene[sourceTextFieldKey] ?? '').trim();
-      if (!text) {
-        skippedNoTextCount += 1;
-        logFitInfo('post:scene-skip-no-text', {
-          fitDebugRunId,
-          sceneId,
-          sourceTextFieldKey,
         });
         continue;
       }
@@ -2159,9 +2295,35 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const text = String(scene[sourceTextFieldKey] ?? '').trim();
+      const emptySentenceText = emptySentenceFieldKey
+        ? String(scene[emptySentenceFieldKey] ?? '').trim()
+        : '';
+
+      const shouldCreateSilenceForScene =
+        createSilenceForEmptySentence &&
+        fitAudioToSceneDuration &&
+        Boolean(targetDurationSec) &&
+        !text &&
+        (!emptySentenceFieldKey || emptySentenceText.length === 0);
+
+      if (!text && !shouldCreateSilenceForScene) {
+        skippedNoTextCount += 1;
+        logFitInfo('post:scene-skip-no-text', {
+          fitDebugRunId,
+          sceneId,
+          sourceTextFieldKey,
+          emptySentenceFieldKey,
+          emptySentenceTextLength: emptySentenceText.length,
+          createSilenceForEmptySentence,
+        });
+        continue;
+      }
+
       logFitInfo('post:scene-start', {
         fitDebugRunId,
         sceneId,
+        mode: shouldCreateSilenceForScene ? 'silence' : 'tts',
         textLength: text.length,
         targetDurationSec,
         targetSamples:
@@ -2169,6 +2331,106 @@ export async function POST(request: NextRequest) {
             ? secondsToSamples(targetDurationSec, AUDIO_SAMPLE_RATE)
             : null,
       });
+
+      if (shouldCreateSilenceForScene && targetDurationSec) {
+        try {
+          logFitInfo('post:scene-silence-fit-start', {
+            fitDebugRunId,
+            sceneId,
+            targetDurationSec,
+            targetSamples: secondsToSamples(
+              targetDurationSec,
+              AUDIO_SAMPLE_RATE,
+            ),
+            emptySentenceFieldKey,
+          });
+
+          const silentFitted = await createAndUploadSilentSceneAudio({
+            sceneId,
+            videoId,
+            targetDurationSec,
+          });
+
+          fittedCount += 1;
+          skippedOriginalSaveCount += 1;
+
+          logFitInfo('post:scene-silence-fit-done', {
+            fitDebugRunId,
+            sceneId,
+            fittedUploadUrl: silentFitted.uploadUrl,
+            inputDurationSec: silentFitted.inputDurationSec,
+            outputDurationSec: silentFitted.outputDurationSec,
+            targetDurationSec,
+            durationDeltaSec: roundDurationSeconds(
+              silentFitted.outputDurationSec - targetDurationSec,
+            ),
+            speedApplied: silentFitted.speedApplied,
+          });
+
+          try {
+            token = await patchSceneAudioWithAuthRetry({
+              baserowUrl,
+              token,
+              sceneId,
+              destinationAudioFieldKey,
+              audioUrl: silentFitted.uploadUrl,
+            });
+
+            generatedCount += 1;
+            silentGeneratedCount += 1;
+
+            logFitInfo('post:scene-silence-save-success', {
+              fitDebugRunId,
+              sceneId,
+              destinationAudioFieldKey,
+              savedAudioUrl: silentFitted.uploadUrl,
+              elapsedMs: Date.now() - sceneStartedAt,
+            });
+          } catch (saveError) {
+            const saveMessage =
+              saveError instanceof Error ? saveError.message : 'Unknown error';
+
+            failures.push({
+              sceneId,
+              error: saveMessage,
+            });
+
+            logFitError('post:scene-silence-save-error', {
+              fitDebugRunId,
+              sceneId,
+              destinationAudioFieldKey,
+              message: saveMessage,
+              elapsedMs: Date.now() - sceneStartedAt,
+            });
+
+            if (failFastOnSaveError) {
+              abortedOnSaveFailure = true;
+              abortedSceneId = sceneId;
+              console.error(
+                `[generate-scene-tts-by-field] Fail-fast: stopping batch after silence save failure on scene ${sceneId}: ${saveMessage}`,
+              );
+              break;
+            }
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown error';
+
+          failures.push({
+            sceneId,
+            error: `Silent audio generation failed: ${message}`,
+          });
+
+          logFitError('post:scene-silence-error', {
+            fitDebugRunId,
+            sceneId,
+            message,
+            elapsedMs: Date.now() - sceneStartedAt,
+          });
+        }
+
+        continue;
+      }
 
       try {
         const generatedAudioUrl = await generateSceneTts({
@@ -2342,6 +2604,7 @@ export async function POST(request: NextRequest) {
       requestedSceneCount: orderedScenes.length,
       generatedCount,
       fittedCount,
+      silentGeneratedCount,
       originalSavedCount,
       skippedOriginalSaveCount,
       skippedNoTextCount,
@@ -2363,6 +2626,8 @@ export async function POST(request: NextRequest) {
       sourceTextFieldKey,
       destinationAudioFieldKey,
       originalAudioFieldKey,
+      createSilenceForEmptySentence,
+      emptySentenceFieldKey,
       sceneDurationFieldKey,
       saveOriginalAudioBeforeFit,
       referenceAudioFilename: referenceAudioFilename || null,
@@ -2374,6 +2639,7 @@ export async function POST(request: NextRequest) {
       requestedSceneCount: orderedScenes.length,
       generatedCount,
       fittedCount,
+      silentGeneratedCount,
       originalSavedCount,
       skippedOriginalSaveCount,
       skippedNoTextCount,
