@@ -12,7 +12,8 @@
         "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7110",
-        "sceneDubbedAudioFieldKey": "field_7111"
+        "sceneDubbedAudioFieldKey": "field_7111",
+        "sceneOriginalAudioFieldKey": "field_7117"
       },
       "deviceMap": "mps",
       "dtype": "float32",
@@ -26,35 +27,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T15:37:15.389Z"
-    },
-    {
-      "id": "fa-alt-1",
-      "name": "Farsi Alternate Voice",
-      "filename": "fa_alt_01.wav",
-      "language": "fa",
-      "referenceText": "",
-      "baserowFields": {
-        "videoSrtFieldKey": "field_7112",
-        "videoReferenceSrtFieldKey": "field_6872",
-        "sceneDurationFieldKey": "field_7107",
-        "sceneReferenceSentenceFieldKey": "field_6890",
-        "sceneTargetSentenceFieldKey": "field_7110",
-        "sceneDubbedAudioFieldKey": "field_7111"
-      },
-      "deviceMap": "mps",
-      "dtype": "float32",
-      "numStep": 64,
-      "speed": 1,
-      "description": "Alternative Persian tone for tests or style variations.",
-      "tags": [
-        "fa",
-        "persian",
-        "alternate"
-      ],
-      "isDefault": false,
-      "enabled": true,
-      "updatedAt": "2026-05-10T15:37:15.389Z"
+      "updatedAt": "2026-05-11T03:57:03.848Z"
     },
     {
       "id": "en-default",
@@ -68,7 +41,8 @@
         "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7115",
-        "sceneDubbedAudioFieldKey": "field_7116"
+        "sceneDubbedAudioFieldKey": "field_7116",
+        "sceneOriginalAudioFieldKey": "field_7118"
       },
       "deviceMap": "mps",
       "dtype": "float32",
@@ -82,7 +56,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T15:37:15.389Z"
+      "updatedAt": "2026-05-11T03:57:03.848Z"
     }
   ]
 }

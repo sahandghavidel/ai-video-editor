@@ -646,6 +646,8 @@ export async function POST(request: NextRequest) {
         videoId,
         sourceTextFieldKey: baserowFields.sceneTargetSentenceFieldKey,
         destinationAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
+        originalAudioFieldKey:
+          baserowFields.sceneOriginalAudioFieldKey || undefined,
         sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
         provider: 'omnivoice',
         referenceAudioFilename: selectedLanguageReference.filename,
@@ -679,6 +681,8 @@ export async function POST(request: NextRequest) {
       failureCount?: unknown;
       failures?: unknown;
       generatedCount?: unknown;
+      originalSavedCount?: unknown;
+      skippedOriginalSaveCount?: unknown;
       skippedNoTextCount?: unknown;
       skippedExistingCount?: unknown;
       skippedSceneFilterCount?: unknown;
@@ -737,6 +741,7 @@ export async function POST(request: NextRequest) {
       step2: {
         sourceTextField: baserowFields.sceneTargetSentenceFieldKey,
         dubbedAudioField: baserowFields.sceneDubbedAudioFieldKey,
+        originalAudioField: baserowFields.sceneOriginalAudioFieldKey ?? null,
         referenceAudioFilename: selectedLanguageReference.filename,
         referenceAudioReferenceId: selectedLanguageReference.id,
         referenceAudioSource: selectedLanguageReference.source,
@@ -756,6 +761,10 @@ export async function POST(request: NextRequest) {
             ? step2Payload.providerPath
             : '/api/generate-tts-omnivoice',
         generatedCount: Number(step2Payload?.generatedCount ?? 0),
+        originalSavedCount: Number(step2Payload?.originalSavedCount ?? 0),
+        skippedOriginalSaveCount: Number(
+          step2Payload?.skippedOriginalSaveCount ?? 0,
+        ),
         skippedNoTextCount: Number(step2Payload?.skippedNoTextCount ?? 0),
         skippedExistingCount: Number(step2Payload?.skippedExistingCount ?? 0),
         skippedSceneFilterCount: Number(

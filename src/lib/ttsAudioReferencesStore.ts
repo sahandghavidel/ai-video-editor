@@ -12,6 +12,7 @@ export interface LanguageBaserowFields {
   sceneReferenceSentenceFieldKey: string;
   sceneTargetSentenceFieldKey: string;
   sceneDubbedAudioFieldKey: string;
+  sceneOriginalAudioFieldKey?: string;
 }
 
 export interface TtsAudioReferenceEntry {
@@ -116,6 +117,15 @@ function asFieldKey(value: unknown, fallback: string): string {
   return FIELD_KEY_REGEX.test(trimmed) ? trimmed : fallback;
 }
 
+function asOptionalFieldKey(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  return FIELD_KEY_REGEX.test(trimmed) ? trimmed : undefined;
+}
+
 function sanitizeLanguageBaserowFields(value: unknown): LanguageBaserowFields {
   const fields =
     value && typeof value === 'object'
@@ -146,6 +156,9 @@ function sanitizeLanguageBaserowFields(value: unknown): LanguageBaserowFields {
     sceneDubbedAudioFieldKey: asFieldKey(
       fields.sceneDubbedAudioFieldKey,
       DEFAULT_LANGUAGE_BASEROW_FIELDS.sceneDubbedAudioFieldKey,
+    ),
+    sceneOriginalAudioFieldKey: asOptionalFieldKey(
+      fields.sceneOriginalAudioFieldKey,
     ),
   };
 }

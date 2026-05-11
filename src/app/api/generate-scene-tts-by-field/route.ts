@@ -1872,6 +1872,7 @@ export async function POST(request: NextRequest) {
       videoId?: unknown;
       sourceTextFieldKey?: unknown;
       destinationAudioFieldKey?: unknown;
+      originalAudioFieldKey?: unknown;
       sceneDurationFieldKey?: unknown;
       provider?: unknown;
       referenceAudioFilename?: unknown;
@@ -1922,6 +1923,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const originalAudioFieldKeyRaw = body?.originalAudioFieldKey;
+    const hasOriginalAudioFieldKeyInput =
+      originalAudioFieldKeyRaw !== undefined &&
+      originalAudioFieldKeyRaw !== null &&
+      !(
+        typeof originalAudioFieldKeyRaw === 'string' &&
+        originalAudioFieldKeyRaw.trim().length === 0
+      );
+
+    const originalAudioFieldKey = hasOriginalAudioFieldKeyInput
+      ? asFieldKey(originalAudioFieldKeyRaw)
+      : null;
+
+    if (hasOriginalAudioFieldKeyInput && !originalAudioFieldKey) {
+      return NextResponse.json(
+        {
+          error:
+            'originalAudioFieldKey must be a Baserow field key (e.g., field_7117) when provided',
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      originalAudioFieldKey &&
+      originalAudioFieldKey === destinationAudioFieldKey
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'originalAudioFieldKey must be different from destinationAudioFieldKey',
+        },
+        { status: 400 },
+      );
+    }
+
+    const saveOriginalAudioBeforeFit = Boolean(originalAudioFieldKey);
+
     const fitAudioToSceneDuration = parseBoolean(
       body?.fitAudioToSceneDuration,
       false,
@@ -1970,10 +2009,12 @@ export async function POST(request: NextRequest) {
       videoId,
       sourceTextFieldKey,
       destinationAudioFieldKey,
+      originalAudioFieldKey,
       sceneDurationFieldKey,
       provider,
       providerPath,
       fitAudioToSceneDuration,
+      saveOriginalAudioBeforeFit,
       skipIfDestinationExists,
       failFastOnSaveError,
       saveFittedAudioAsWav: SAVE_FITTED_AUDIO_AS_WAV,
@@ -2038,6 +2079,8 @@ export async function POST(request: NextRequest) {
     let skippedInvalidSceneIdCount = 0;
     let skippedMissingDurationCount = 0;
     let fittedCount = 0;
+    let originalSavedCount = 0;
+    let skippedOriginalSaveCount = 0;
     let abortedOnSaveFailure = false;
     let abortedSceneId: number | null = null;
 
@@ -2128,7 +2171,7 @@ export async function POST(request: NextRequest) {
       });
 
       try {
-        let audioUrl = await generateSceneTts({
+        const generatedAudioUrl = await generateSceneTts({
           origin: request.nextUrl.origin,
           providerPath,
           text,
@@ -2138,11 +2181,63 @@ export async function POST(request: NextRequest) {
           ttsSettings,
         });
 
+        let audioUrl = generatedAudioUrl;
+
         logFitInfo('post:scene-tts-generated', {
           fitDebugRunId,
           sceneId,
-          audioUrl,
+          audioUrl: generatedAudioUrl,
         });
+
+        if (saveOriginalAudioBeforeFit && originalAudioFieldKey) {
+          try {
+            token = await patchSceneAudioWithAuthRetry({
+              baserowUrl,
+              token,
+              sceneId,
+              destinationAudioFieldKey: originalAudioFieldKey,
+              audioUrl: generatedAudioUrl,
+            });
+
+            originalSavedCount += 1;
+
+            logFitInfo('post:scene-save-original-success', {
+              fitDebugRunId,
+              sceneId,
+              originalAudioFieldKey,
+              savedAudioUrl: generatedAudioUrl,
+            });
+          } catch (saveError) {
+            const saveMessage =
+              saveError instanceof Error ? saveError.message : 'Unknown error';
+
+            failures.push({
+              sceneId,
+              error: `Failed to save original audio to ${originalAudioFieldKey}: ${saveMessage}`,
+            });
+
+            logFitError('post:scene-save-original-error', {
+              fitDebugRunId,
+              sceneId,
+              originalAudioFieldKey,
+              message: saveMessage,
+              elapsedMs: Date.now() - sceneStartedAt,
+            });
+
+            if (failFastOnSaveError) {
+              abortedOnSaveFailure = true;
+              abortedSceneId = sceneId;
+              console.error(
+                `[generate-scene-tts-by-field] Fail-fast: stopping batch after original save failure on scene ${sceneId}: ${saveMessage}`,
+              );
+              break;
+            }
+
+            continue;
+          }
+        } else {
+          skippedOriginalSaveCount += 1;
+        }
 
         if (fitAudioToSceneDuration && targetDurationSec) {
           logFitInfo('post:scene-fit-start', {
@@ -2247,6 +2342,8 @@ export async function POST(request: NextRequest) {
       requestedSceneCount: orderedScenes.length,
       generatedCount,
       fittedCount,
+      originalSavedCount,
+      skippedOriginalSaveCount,
       skippedNoTextCount,
       skippedExistingCount,
       skippedMissingDurationCount,
@@ -2265,7 +2362,9 @@ export async function POST(request: NextRequest) {
       providerPath,
       sourceTextFieldKey,
       destinationAudioFieldKey,
+      originalAudioFieldKey,
       sceneDurationFieldKey,
+      saveOriginalAudioBeforeFit,
       referenceAudioFilename: referenceAudioFilename || null,
       skipIfDestinationExists,
       failFastOnSaveError,
@@ -2275,6 +2374,8 @@ export async function POST(request: NextRequest) {
       requestedSceneCount: orderedScenes.length,
       generatedCount,
       fittedCount,
+      originalSavedCount,
+      skippedOriginalSaveCount,
       skippedNoTextCount,
       skippedExistingCount,
       skippedMissingDurationCount,

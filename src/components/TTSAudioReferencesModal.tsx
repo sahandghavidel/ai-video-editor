@@ -13,6 +13,7 @@ type BaserowLanguageFields = {
   sceneReferenceSentenceFieldKey: string;
   sceneTargetSentenceFieldKey: string;
   sceneDubbedAudioFieldKey: string;
+  sceneOriginalAudioFieldKey: string;
 };
 
 type AudioReferenceEntry = {
@@ -55,6 +56,12 @@ function asFieldKey(value: unknown, fallback: string): string {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
   return FIELD_KEY_REGEX.test(trimmed) ? trimmed : fallback;
+}
+
+function asOptionalFieldKey(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return FIELD_KEY_REGEX.test(trimmed) ? trimmed : '';
 }
 
 function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
@@ -135,6 +142,9 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
     sceneDubbedAudioFieldKey: asFieldKey(
       baserowFieldsRaw.sceneDubbedAudioFieldKey,
       'field_7111',
+    ),
+    sceneOriginalAudioFieldKey: asOptionalFieldKey(
+      baserowFieldsRaw.sceneOriginalAudioFieldKey,
     ),
   };
 
@@ -228,6 +238,9 @@ export function TTSAudioReferencesModal({
               entry.baserowFields.sceneDubbedAudioFieldKey,
               'field_7111',
             ),
+            sceneOriginalAudioFieldKey: asOptionalFieldKey(
+              entry.baserowFields.sceneOriginalAudioFieldKey,
+            ),
           },
           numStep: Math.round(clamp(entry.numStep, 8, 64)),
           speed: clamp(entry.speed, 0.5, 2),
@@ -309,6 +322,7 @@ export function TTSAudioReferencesModal({
           sceneReferenceSentenceFieldKey: 'field_6890',
           sceneTargetSentenceFieldKey: 'field_7110',
           sceneDubbedAudioFieldKey: 'field_7111',
+          sceneOriginalAudioFieldKey: '',
         },
         deviceMap: 'mps',
         dtype: 'float32',
@@ -743,6 +757,26 @@ export function TTSAudioReferencesModal({
                           })
                         }
                         placeholder='field_7111'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
+
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Scene Original TTS Audio Field (optional)
+                      </label>
+                      <input
+                        type='text'
+                        value={entry.baserowFields.sceneOriginalAudioFieldKey}
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              sceneOriginalAudioFieldKey: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_7117'
                         className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
                       />
                     </div>
