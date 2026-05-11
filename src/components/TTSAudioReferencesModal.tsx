@@ -9,6 +9,7 @@ type DType = 'float16' | 'float32' | 'bfloat16';
 type BaserowLanguageFields = {
   videoSrtFieldKey: string;
   videoReferenceSrtFieldKey: string;
+  videoFinalDubbedAudioFieldKey: string;
   sceneDurationFieldKey: string;
   sceneReferenceSentenceFieldKey: string;
   sceneTargetSentenceFieldKey: string;
@@ -127,6 +128,9 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
       baserowFieldsRaw.videoReferenceSrtFieldKey,
       'field_6872',
     ),
+    videoFinalDubbedAudioFieldKey: asOptionalFieldKey(
+      baserowFieldsRaw.videoFinalDubbedAudioFieldKey,
+    ),
     sceneDurationFieldKey: asFieldKey(
       baserowFieldsRaw.sceneDurationFieldKey,
       'field_7107',
@@ -221,6 +225,9 @@ export function TTSAudioReferencesModal({
             videoReferenceSrtFieldKey: asFieldKey(
               entry.baserowFields.videoReferenceSrtFieldKey,
               'field_6872',
+            ),
+            videoFinalDubbedAudioFieldKey: asOptionalFieldKey(
+              entry.baserowFields.videoFinalDubbedAudioFieldKey,
             ),
             sceneDurationFieldKey: asFieldKey(
               entry.baserowFields.sceneDurationFieldKey,
@@ -318,6 +325,7 @@ export function TTSAudioReferencesModal({
         baserowFields: {
           videoSrtFieldKey: 'field_7112',
           videoReferenceSrtFieldKey: 'field_6872',
+          videoFinalDubbedAudioFieldKey: 'field_7113',
           sceneDurationFieldKey: 'field_7107',
           sceneReferenceSentenceFieldKey: 'field_6890',
           sceneTargetSentenceFieldKey: 'field_7110',
@@ -674,6 +682,28 @@ export function TTSAudioReferencesModal({
                           })
                         }
                         placeholder='field_6872'
+                        className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                      />
+                    </div>
+
+                    <div className='space-y-1'>
+                      <label className='text-xs font-medium text-gray-700'>
+                        Video Final Dubbed Audio Field (optional)
+                      </label>
+                      <input
+                        type='text'
+                        value={
+                          entry.baserowFields.videoFinalDubbedAudioFieldKey
+                        }
+                        onChange={(event) =>
+                          updateEntry(entry.id, {
+                            baserowFields: {
+                              ...entry.baserowFields,
+                              videoFinalDubbedAudioFieldKey: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder='field_7113'
                         className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
                       />
                     </div>

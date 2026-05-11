@@ -8,6 +8,7 @@ export type OmniVoiceDType = 'float16' | 'float32' | 'bfloat16';
 export interface LanguageBaserowFields {
   videoSrtFieldKey: string;
   videoReferenceSrtFieldKey: string;
+  videoFinalDubbedAudioFieldKey?: string;
   sceneDurationFieldKey: string;
   sceneReferenceSentenceFieldKey: string;
   sceneTargetSentenceFieldKey: string;
@@ -140,6 +141,9 @@ function sanitizeLanguageBaserowFields(value: unknown): LanguageBaserowFields {
     videoReferenceSrtFieldKey: asFieldKey(
       fields.videoReferenceSrtFieldKey,
       DEFAULT_LANGUAGE_BASEROW_FIELDS.videoReferenceSrtFieldKey,
+    ),
+    videoFinalDubbedAudioFieldKey: asOptionalFieldKey(
+      fields.videoFinalDubbedAudioFieldKey,
     ),
     sceneDurationFieldKey: asFieldKey(
       fields.sceneDurationFieldKey,

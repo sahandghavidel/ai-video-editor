@@ -9,6 +9,7 @@
       "baserowFields": {
         "videoSrtFieldKey": "field_7112",
         "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7113",
         "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7110",
@@ -27,7 +28,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-11T03:57:03.848Z"
+      "updatedAt": "2026-05-11T05:05:57.686Z"
     },
     {
       "id": "en-default",
@@ -38,6 +39,7 @@
       "baserowFields": {
         "videoSrtFieldKey": "field_7114",
         "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7119",
         "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7115",
@@ -56,7 +58,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-11T03:57:03.848Z"
+      "updatedAt": "2026-05-11T05:05:57.686Z"
     }
   ]
 }

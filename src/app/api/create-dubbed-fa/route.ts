@@ -15,11 +15,13 @@ const SCENES_TABLE_ID = '714';
 
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT = 'field_6884';
+const VIDEO_FINAL_DUBBED_FA_FIELD_KEY = 'field_7113';
 
 const DEFAULT_DUBBED_LANGUAGE = 'fa';
 const FALLBACK_LANGUAGE_BASEROW_FIELDS: LanguageBaserowFields = {
   videoSrtFieldKey: 'field_7112',
   videoReferenceSrtFieldKey: 'field_6872',
+  videoFinalDubbedAudioFieldKey: VIDEO_FINAL_DUBBED_FA_FIELD_KEY,
   sceneDurationFieldKey: 'field_7107',
   sceneReferenceSentenceFieldKey: 'field_6890',
   sceneTargetSentenceFieldKey: 'field_7110',
@@ -27,6 +29,7 @@ const FALLBACK_LANGUAGE_BASEROW_FIELDS: LanguageBaserowFields = {
 };
 
 const GENERATE_SCENE_TTS_BY_FIELD_ROUTE = '/api/generate-scene-tts-by-field';
+const MERGE_DUBBED_AUDIO_BY_FIELD_ROUTE = '/api/merge-dubbed-audio-by-field';
 const DEFAULT_REFERENCE_AUDIO_FILENAME = 'fa.wav';
 const DEFAULT_REFERENCE_TEXT = '';
 const DEFAULT_DEVICE_MAP: 'mps' | 'cpu' | 'auto' = 'mps';
@@ -719,9 +722,80 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const configuredFinalDubbedAudioField =
+      typeof baserowFields.videoFinalDubbedAudioFieldKey === 'string'
+        ? baserowFields.videoFinalDubbedAudioFieldKey.trim()
+        : '';
+
+    const finalDubbedAudioFieldKey =
+      configuredFinalDubbedAudioField ||
+      (selectedLanguageReference.language === DEFAULT_DUBBED_LANGUAGE
+        ? VIDEO_FINAL_DUBBED_FA_FIELD_KEY
+        : '');
+
+    if (!finalDubbedAudioFieldKey) {
+      return NextResponse.json(
+        {
+          error: `Missing final dubbed audio destination field for language '${selectedLanguageReference.language}'. Set Video Final Dubbed Audio Field in Global TTS Settings → Manage Language Presets.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const step3Response = await fetch(
+      `${request.nextUrl.origin}${MERGE_DUBBED_AUDIO_BY_FIELD_ROUTE}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId,
+          sourceSceneAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
+          destinationVideoAudioFieldKey: finalDubbedAudioFieldKey,
+          sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
+          requireAudioForDurationScenes: true,
+        }),
+        dispatcher: STEP2_FETCH_DISPATCHER,
+      } as RequestInit & { dispatcher: Agent },
+    );
+
+    const step3Payload = (await step3Response.json().catch(() => null)) as {
+      ok?: unknown;
+      error?: unknown;
+      missingAudioSceneIds?: unknown;
+      mergedSceneCount?: unknown;
+      expectedMergedDurationSec?: unknown;
+      mergedOutputDurationSec?: unknown;
+      mergedOutputDeltaSamples?: unknown;
+      mergeCorrectionPasses?: unknown;
+      finalDubbedAudioUrl?: unknown;
+      destinationVideoAudioFieldKey?: unknown;
+    } | null;
+
+    if (!step3Response.ok || step3Payload?.ok !== true) {
+      const missingAudioPreview = Array.isArray(
+        step3Payload?.missingAudioSceneIds,
+      )
+        ? step3Payload.missingAudioSceneIds
+            .slice(0, 10)
+            .map((value) => String(value))
+            .join(', ')
+        : '';
+
+      const message =
+        typeof step3Payload?.error === 'string' && step3Payload.error.trim()
+          ? step3Payload.error.trim()
+          : `Step 3 merge/save final dubbed audio failed (${step3Response.status})`;
+
+      throw new Error(
+        missingAudioPreview
+          ? `${message} — missing scene audio IDs: ${missingAudioPreview}`
+          : message,
+      );
+    }
+
     return NextResponse.json({
       ok: true,
-      step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio',
+      step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio-and-step-3-merge-save-final-dubbed-audio',
       videoId,
       language: selectedLanguageReference.language,
       step1: {
@@ -780,6 +854,25 @@ export async function POST(request: NextRequest) {
           step2Payload?.skippedInvalidSceneIdCount ?? 0,
         ),
         failureCount: Number(step2Payload?.failureCount ?? 0),
+      },
+      step3: {
+        sourceSceneAudioField: baserowFields.sceneDubbedAudioFieldKey,
+        destinationVideoAudioField: finalDubbedAudioFieldKey,
+        mergedSceneCount: Number(step3Payload?.mergedSceneCount ?? 0),
+        expectedMergedDurationSec: Number(
+          step3Payload?.expectedMergedDurationSec ?? 0,
+        ),
+        mergedOutputDurationSec: Number(
+          step3Payload?.mergedOutputDurationSec ?? 0,
+        ),
+        mergedOutputDeltaSamples: Number(
+          step3Payload?.mergedOutputDeltaSamples ?? 0,
+        ),
+        mergeCorrectionPasses: Number(step3Payload?.mergeCorrectionPasses ?? 0),
+        finalDubbedAudioUrl:
+          typeof step3Payload?.finalDubbedAudioUrl === 'string'
+            ? step3Payload.finalDubbedAudioUrl
+            : null,
       },
     });
   } catch (error) {
