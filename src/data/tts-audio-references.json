@@ -16,13 +16,17 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 64,
+      "numStep": 16,
       "speed": 1,
       "description": "Default Persian reference voice used for FA dubbing.",
-      "tags": ["fa", "persian", "default"],
+      "tags": [
+        "fa",
+        "persian",
+        "default"
+      ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T06:49:15.083Z"
+      "updatedAt": "2026-05-10T15:37:15.389Z"
     },
     {
       "id": "fa-alt-1",
@@ -43,10 +47,14 @@
       "numStep": 64,
       "speed": 1,
       "description": "Alternative Persian tone for tests or style variations.",
-      "tags": ["fa", "persian", "alternate"],
+      "tags": [
+        "fa",
+        "persian",
+        "alternate"
+      ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-05-10T06:49:15.083Z"
+      "updatedAt": "2026-05-10T15:37:15.389Z"
     },
     {
       "id": "en-default",
@@ -67,10 +75,14 @@
       "numStep": 64,
       "speed": 1,
       "description": "Example English reference entry for future multilingual pipelines.",
-      "tags": ["en", "english", "example"],
+      "tags": [
+        "en",
+        "english",
+        "example"
+      ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-10T06:49:15.083Z"
+      "updatedAt": "2026-05-10T15:37:15.389Z"
     }
   ]
 }
