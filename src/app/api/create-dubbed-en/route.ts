@@ -26,7 +26,6 @@ const SPEED_DECIMALS = 12;
 
 const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_FFPROBE_TIMEOUT_MS = 2 * 60 * 1000;
-const MERGE_ALIGNMENT_MAX_PASSES = 4;
 const SCENE_DURATION_TOLERANCE_SEC = 1 / AUDIO_SAMPLE_RATE;
 const SCENE_DURATION_TOLERANCE_SAMPLES = Math.max(
   1,
@@ -1164,191 +1163,6 @@ async function concatenateAudiosLocal(
   return outputPath;
 }
 
-async function fitMergedAudioToVideoDurationLocal(options: {
-  inputPath: string;
-  videoId: number;
-  expectedSamples: number;
-}): Promise<{
-  localPath: string;
-  inputDurationSec: number;
-  outputDurationSec: number;
-  outputSamples: number;
-  deltaSamples: number;
-  correctionPasses: number;
-}> {
-  const { inputPath, videoId, expectedSamples } = options;
-
-  if (!Number.isInteger(expectedSamples) || expectedSamples <= 0) {
-    throw new Error(`Invalid expected sample count: ${expectedSamples}`);
-  }
-
-  const inputMetrics = await probeAudioMetrics(inputPath);
-  const inputDurationSec = inputMetrics.durationSec;
-  let currentPath = inputPath;
-  let correctionPasses = 0;
-
-  for (
-    let passIndex = 1;
-    passIndex <= MERGE_ALIGNMENT_MAX_PASSES;
-    passIndex += 1
-  ) {
-    const metrics = await probeAudioMetrics(currentPath);
-    const deltaSamples = metrics.sampleCount - expectedSamples;
-
-    if (deltaSamples === 0) {
-      return {
-        localPath: currentPath,
-        inputDurationSec,
-        outputDurationSec: metrics.durationSec,
-        outputSamples: metrics.sampleCount,
-        deltaSamples: 0,
-        correctionPasses,
-      };
-    }
-
-    const nextPath =
-      deltaSamples < 0
-        ? await appendSilenceSamplesToAudioLocal({
-            videoId,
-            inputPath: currentPath,
-            silenceSamples: Math.abs(deltaSamples),
-            passIndex,
-          })
-        : await trimAudioToSampleCountLocal({
-            videoId,
-            inputPath: currentPath,
-            targetSamples: expectedSamples,
-            passIndex,
-          });
-
-    correctionPasses += 1;
-
-    if (currentPath !== inputPath) {
-      await safeUnlink(currentPath);
-    }
-
-    currentPath = nextPath;
-  }
-
-  const finalMetrics = await probeAudioMetrics(currentPath);
-
-  return {
-    localPath: currentPath,
-    inputDurationSec,
-    outputDurationSec: finalMetrics.durationSec,
-    outputSamples: finalMetrics.sampleCount,
-    deltaSamples: finalMetrics.sampleCount - expectedSamples,
-    correctionPasses,
-  };
-}
-
-async function appendSilenceSamplesToAudioLocal(options: {
-  videoId: number;
-  inputPath: string;
-  silenceSamples: number;
-  passIndex: number;
-}): Promise<string> {
-  const { videoId, inputPath, silenceSamples, passIndex } = options;
-
-  if (!Number.isInteger(silenceSamples) || silenceSamples <= 0) {
-    throw new Error(`Invalid silence sample count: ${silenceSamples}`);
-  }
-
-  const silenceDurationSec = samplesToSeconds(
-    silenceSamples,
-    AUDIO_SAMPLE_RATE,
-  );
-
-  const outputPath = makeTempPath(
-    `video_${videoId}_dubbed_en_merged_align_pad_${passIndex}`,
-    'wav',
-  );
-
-  await runCommand(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputPath,
-      '-f',
-      'lavfi',
-      '-t',
-      formatSeconds(silenceDurationSec),
-      '-i',
-      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
-      '-vn',
-      '-map_metadata',
-      '-1',
-      '-map_chapters',
-      '-1',
-      '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'pcm_s16le',
-      '-ar',
-      String(AUDIO_SAMPLE_RATE),
-      '-ac',
-      String(AUDIO_CHANNELS),
-      outputPath,
-    ],
-    DEFAULT_FFMPEG_TIMEOUT_MS,
-  );
-
-  await access(outputPath);
-  return outputPath;
-}
-
-async function trimAudioToSampleCountLocal(options: {
-  videoId: number;
-  inputPath: string;
-  targetSamples: number;
-  passIndex: number;
-}): Promise<string> {
-  const { videoId, inputPath, targetSamples, passIndex } = options;
-
-  if (!Number.isInteger(targetSamples) || targetSamples <= 0) {
-    throw new Error(`Invalid target sample count: ${targetSamples}`);
-  }
-
-  const targetDurationSec = samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE);
-
-  const outputPath = makeTempPath(
-    `video_${videoId}_dubbed_en_merged_align_trim_${passIndex}`,
-    'wav',
-  );
-
-  await runCommand(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputPath,
-      '-vn',
-      '-map_metadata',
-      '-1',
-      '-map_chapters',
-      '-1',
-      '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=0:${formatSeconds(targetDurationSec)},asetpts=N/SR/TB[aout]`,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'pcm_s16le',
-      '-ar',
-      String(AUDIO_SAMPLE_RATE),
-      '-ac',
-      String(AUDIO_CHANNELS),
-      outputPath,
-    ],
-    DEFAULT_FFMPEG_TIMEOUT_MS,
-  );
-
-  await access(outputPath);
-  return outputPath;
-}
-
 export async function POST(request: NextRequest) {
   const tempFiles: string[] = [];
 
@@ -1531,19 +1345,11 @@ export async function POST(request: NextRequest) {
       tempFiles.push(mergedLocalPath);
     }
 
-    const fittedMerged = await fitMergedAudioToVideoDurationLocal({
-      inputPath: mergedLocalPath,
-      videoId,
-      expectedSamples: expectedMergedSamples,
-    });
-
-    if (!tempFiles.includes(fittedMerged.localPath)) {
-      tempFiles.push(fittedMerged.localPath);
-    }
+    const mergedMetrics = await probeAudioMetrics(mergedLocalPath);
 
     const finalFilename = `video_${videoId}_final_dubbed_audio_${Date.now()}.wav`;
     const finalDubbedAudioUrl = await uploadToMinio(
-      fittedMerged.localPath,
+      mergedLocalPath,
       finalFilename,
       'audio/wav',
     );
@@ -1563,10 +1369,11 @@ export async function POST(request: NextRequest) {
       finalDubbedField: VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY,
       expectedMergedSamples,
       expectedMergedDurationSec,
-      mergedOutputSamples: fittedMerged.outputSamples,
-      mergedOutputDurationSec: fittedMerged.outputDurationSec,
-      mergedOutputDeltaSamples: fittedMerged.deltaSamples,
-      mergeCorrectionPasses: fittedMerged.correctionPasses,
+      mergedOutputSamples: mergedMetrics.sampleCount,
+      mergedOutputDurationSec: mergedMetrics.durationSec,
+      mergedOutputDeltaSamples:
+        mergedMetrics.sampleCount - expectedMergedSamples,
+      mergeCorrectionPasses: 0,
       sceneDurationFitApplied: ENABLE_SCENE_DURATION_FIT,
       finalDubbedAudioUrl,
       scenes: sceneResults
