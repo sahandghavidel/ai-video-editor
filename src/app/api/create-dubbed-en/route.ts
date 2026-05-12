@@ -17,6 +17,7 @@ const SCENE_DUBBED_EN_FIELD_KEY = 'field_7108';
 const SCENE_SENTENCE_FIELD_KEY = 'field_6890';
 
 const VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY = 'field_7109';
+const VIDEO_UPLOADED_DURATION_FIELD_KEY = 'field_6909';
 
 const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_CHANNELS = 2;
@@ -76,14 +77,14 @@ type SceneJob = {
   sceneId: number;
   orderValue: number;
   audioUrl: string | null;
-  source: 'tts' | 'silence';
+  source: 'tts' | 'silence' | 'existing';
   targetDurationSec: number;
 };
 
 type SceneProcessResult = {
   sceneId: number;
   orderValue: number;
-  source: 'tts' | 'silence';
+  source: 'tts' | 'silence' | 'existing';
   targetDurationSec: number;
   inputDurationSec: number;
   outputDurationSec: number;
@@ -92,6 +93,57 @@ type SceneProcessResult = {
   dubbedEnUrl: string;
   localAdjustedPath: string;
 };
+
+type FinalMergeCorrectionMode = 'none' | 'pad-silence' | 'trim-end';
+
+type FinalMergeCorrectionResult = {
+  localPath: string;
+  outputDurationSec: number;
+  outputSamples: number;
+  targetDurationSec: number;
+  targetSamples: number;
+  correctionPasses: number;
+  correctionMode: FinalMergeCorrectionMode;
+};
+
+class BaserowRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BaserowRequestError';
+    this.status = status;
+  }
+}
+
+function isBaserowAuthError(error: unknown): error is BaserowRequestError {
+  return (
+    error instanceof BaserowRequestError &&
+    (error.status === 401 || error.status === 403)
+  );
+}
+
+function isTransientBaserowError(error: unknown): boolean {
+  if (error instanceof BaserowRequestError) {
+    return [408, 425, 429, 500, 502, 503, 504].includes(error.status);
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    error.name === 'TypeError' ||
+    message.includes('fetch failed') ||
+    message.includes('network') ||
+    message.includes('socket') ||
+    message.includes('timed out') ||
+    message.includes('econnreset') ||
+    message.includes('enotfound') ||
+    message.includes('etimedout')
+  );
+}
 
 function parsePositiveInt(value: unknown): number | null {
   const parsed =
@@ -444,46 +496,45 @@ async function probeAudioMetrics(input: string): Promise<AudioProbeMetrics> {
   const sampleRate =
     parsePositiveInt(audioStream?.sample_rate) ?? AUDIO_SAMPLE_RATE;
 
-  const sampleCandidates: number[] = [];
+  let sampleCount = parsePositiveRoundedInt(audioStream?.nb_samples);
 
-  const nbSamples = parsePositiveRoundedInt(audioStream?.nb_samples);
-  if (nbSamples) {
-    sampleCandidates.push(nbSamples);
-  }
-
-  const durationTs = parseNumberish(audioStream?.duration_ts);
-  const timeBase = parseTimeBase(audioStream?.time_base);
-  if (Number.isFinite(durationTs) && durationTs > 0 && timeBase) {
-    const durationFromTsSec = durationTs * timeBase;
-    if (Number.isFinite(durationFromTsSec) && durationFromTsSec > 0) {
-      sampleCandidates.push(secondsToSamples(durationFromTsSec, sampleRate));
+  if (!sampleCount) {
+    const durationTs = parseNumberish(audioStream?.duration_ts);
+    const timeBase = parseTimeBase(audioStream?.time_base);
+    if (Number.isFinite(durationTs) && durationTs > 0 && timeBase) {
+      const durationFromTsSec = durationTs * timeBase;
+      if (Number.isFinite(durationFromTsSec) && durationFromTsSec > 0) {
+        sampleCount = secondsToSamples(durationFromTsSec, sampleRate);
+      }
     }
   }
 
-  const streamDurationSec = parseNumberish(audioStream?.duration);
-  if (Number.isFinite(streamDurationSec) && streamDurationSec > 0) {
-    sampleCandidates.push(secondsToSamples(streamDurationSec, sampleRate));
+  if (!sampleCount) {
+    const streamDurationSec = parseNumberish(audioStream?.duration);
+    if (Number.isFinite(streamDurationSec) && streamDurationSec > 0) {
+      sampleCount = secondsToSamples(streamDurationSec, sampleRate);
+    }
   }
 
-  const formatDurationSec = parseNumberish(parsed.format?.duration);
-  if (Number.isFinite(formatDurationSec) && formatDurationSec > 0) {
-    sampleCandidates.push(secondsToSamples(formatDurationSec, sampleRate));
+  if (!sampleCount) {
+    const formatDurationSec = parseNumberish(parsed.format?.duration);
+    if (Number.isFinite(formatDurationSec) && formatDurationSec > 0) {
+      sampleCount = secondsToSamples(formatDurationSec, sampleRate);
+    }
   }
 
-  const sampleCount =
-    sampleCandidates.length > 0 ? Math.max(...sampleCandidates) : Number.NaN;
-  if (!Number.isFinite(sampleCount) || sampleCount <= 0) {
+  if (!sampleCount) {
     throw new Error('Unable to determine media duration via ffprobe');
   }
 
   const durationSec = roundDurationSeconds(
-    samplesToSeconds(Math.round(sampleCount), sampleRate),
+    samplesToSeconds(sampleCount, sampleRate),
   );
 
   return {
     durationSec,
     sampleRate,
-    sampleCount: Math.round(sampleCount),
+    sampleCount,
   };
 }
 
@@ -548,7 +599,10 @@ async function baserowGetJson<T>(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    throw new Error(`Baserow GET failed (${response.status}) ${errorText}`);
+    throw new BaserowRequestError(
+      `Baserow GET failed (${response.status}) ${errorText}`,
+      response.status,
+    );
   }
 
   return (await response.json()) as T;
@@ -576,9 +630,128 @@ async function baserowPatchRow(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    throw new Error(
+    throw new BaserowRequestError(
       `Baserow PATCH failed for table ${tableId} row ${rowId} (${response.status}) ${errorText}`,
+      response.status,
     );
+  }
+}
+
+async function patchSceneDubbedEnWithAuthRetry(options: {
+  baserowUrl: string;
+  token: string;
+  sceneId: number;
+  dubbedEnUrl: string;
+}): Promise<string> {
+  const { baserowUrl, token, sceneId, dubbedEnUrl } = options;
+
+  const patchPayload = {
+    [SCENE_DUBBED_EN_FIELD_KEY]: dubbedEnUrl,
+  };
+
+  try {
+    await baserowPatchRow(
+      baserowUrl,
+      token,
+      SCENES_TABLE_ID,
+      sceneId,
+      patchPayload,
+    );
+    return token;
+  } catch (error) {
+    if (isTransientBaserowError(error)) {
+      console.warn(
+        `[create-dubbed-en] Transient Baserow error while saving scene ${sceneId}. Retrying once...`,
+      );
+
+      await baserowPatchRow(
+        baserowUrl,
+        token,
+        SCENES_TABLE_ID,
+        sceneId,
+        patchPayload,
+      );
+
+      return token;
+    }
+
+    if (!isBaserowAuthError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      `[create-dubbed-en] Baserow auth expired while saving scene ${sceneId}. Refreshing token and retrying once...`,
+    );
+
+    const refreshedToken = await getJWTToken(true);
+    await baserowPatchRow(
+      baserowUrl,
+      refreshedToken,
+      SCENES_TABLE_ID,
+      sceneId,
+      patchPayload,
+    );
+
+    return refreshedToken;
+  }
+}
+
+async function patchFinalDubbedEnWithAuthRetry(options: {
+  baserowUrl: string;
+  token: string;
+  videoId: number;
+  finalDubbedAudioUrl: string;
+}): Promise<string> {
+  const { baserowUrl, token, videoId, finalDubbedAudioUrl } = options;
+
+  const patchPayload = {
+    [VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY]: finalDubbedAudioUrl,
+  };
+
+  try {
+    await baserowPatchRow(
+      baserowUrl,
+      token,
+      VIDEOS_TABLE_ID,
+      videoId,
+      patchPayload,
+    );
+    return token;
+  } catch (error) {
+    if (isTransientBaserowError(error)) {
+      console.warn(
+        `[create-dubbed-en] Transient Baserow error while saving final dubbed audio for video ${videoId}. Retrying once...`,
+      );
+
+      await baserowPatchRow(
+        baserowUrl,
+        token,
+        VIDEOS_TABLE_ID,
+        videoId,
+        patchPayload,
+      );
+
+      return token;
+    }
+
+    if (!isBaserowAuthError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      `[create-dubbed-en] Baserow auth expired while saving final dubbed audio for video ${videoId}. Refreshing token and retrying once...`,
+    );
+
+    const refreshedToken = await getJWTToken(true);
+    await baserowPatchRow(
+      baserowUrl,
+      refreshedToken,
+      VIDEOS_TABLE_ID,
+      videoId,
+      patchPayload,
+    );
+
+    return refreshedToken;
   }
 }
 
@@ -618,6 +791,18 @@ async function fetchAllScenesForVideo(
   return all;
 }
 
+async function fetchVideoRowById(
+  baserowUrl: string,
+  token: string,
+  videoId: number,
+): Promise<BaserowRow> {
+  return baserowGetJson<BaserowRow>(
+    baserowUrl,
+    token,
+    `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
+  );
+}
+
 async function normalizeAudioToWavLocal(options: {
   sceneId: number;
   videoId: number;
@@ -646,7 +831,7 @@ async function normalizeAudioToWavLocal(options: {
       '-map',
       '[aout]',
       '-c:a',
-      'pcm_f32le',
+      'pcm_s16le',
       '-ar',
       String(AUDIO_SAMPLE_RATE),
       '-ac',
@@ -700,11 +885,11 @@ async function appendSilenceToAudioLocal(options: {
       '-map_chapters',
       '-1',
       '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
+      `[0:a]aformat=sample_fmts=s16:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=s16:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
       '-map',
       '[aout]',
       '-c:a',
-      'pcm_f32le',
+      'pcm_s16le',
       '-ar',
       String(AUDIO_SAMPLE_RATE),
       '-ac',
@@ -716,6 +901,170 @@ async function appendSilenceToAudioLocal(options: {
 
   await access(outputPath);
   return outputPath;
+}
+
+async function appendSilenceSamplesToAudioLocal(options: {
+  videoId: number;
+  inputPath: string;
+  silenceSamples: number;
+  outputPrefix: string;
+}): Promise<string> {
+  const { videoId, inputPath, silenceSamples, outputPrefix } = options;
+
+  if (!Number.isInteger(silenceSamples) || silenceSamples <= 0) {
+    throw new Error(`Invalid silence sample count: ${silenceSamples}`);
+  }
+
+  const silenceDurationSec = samplesToSeconds(
+    silenceSamples,
+    AUDIO_SAMPLE_RATE,
+  );
+
+  const outputPath = makeTempPath(`${outputPrefix}_${videoId}`, 'wav');
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-f',
+      'lavfi',
+      '-t',
+      formatSeconds(silenceDurationSec),
+      '-i',
+      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function trimAudioToSampleCountLocal(options: {
+  inputPath: string;
+  targetSamples: number;
+  outputPrefix: string;
+}): Promise<string> {
+  const { inputPath, targetSamples, outputPrefix } = options;
+
+  if (!Number.isInteger(targetSamples) || targetSamples <= 0) {
+    throw new Error(`Invalid target sample count: ${targetSamples}`);
+  }
+
+  const outputPath = makeTempPath(outputPrefix, 'wav');
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=s16:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=start_sample=0:end_sample=${targetSamples},asetpts=N/SR/TB[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function fitMergedAudioToTargetDurationWithPadTrimLocal(options: {
+  inputPath: string;
+  videoId: number;
+  targetDurationSec: number;
+}): Promise<FinalMergeCorrectionResult> {
+  const { inputPath, videoId, targetDurationSec } = options;
+  const normalizedTargetDurationSec = roundDurationSeconds(targetDurationSec);
+  const targetSamples = secondsToSamples(
+    normalizedTargetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
+  const initialMetrics = await probeAudioMetrics(inputPath);
+  const deltaSamples = initialMetrics.sampleCount - targetSamples;
+
+  if (deltaSamples === 0) {
+    return {
+      localPath: inputPath,
+      outputDurationSec: initialMetrics.durationSec,
+      outputSamples: initialMetrics.sampleCount,
+      targetDurationSec: normalizedTargetDurationSec,
+      targetSamples,
+      correctionPasses: 0,
+      correctionMode: 'none',
+    };
+  }
+
+  const correctionMode: FinalMergeCorrectionMode =
+    deltaSamples < 0 ? 'pad-silence' : 'trim-end';
+
+  const correctedPath =
+    deltaSamples < 0
+      ? await appendSilenceSamplesToAudioLocal({
+          videoId,
+          inputPath,
+          silenceSamples: Math.abs(deltaSamples),
+          outputPrefix: `video_${videoId}_dubbed_en_merge_pad`,
+        })
+      : await trimAudioToSampleCountLocal({
+          inputPath,
+          targetSamples,
+          outputPrefix: `video_${videoId}_dubbed_en_merge_trim`,
+        });
+
+  try {
+    const finalMetrics = await probeAudioMetrics(correctedPath);
+    if (finalMetrics.sampleCount !== targetSamples) {
+      throw new Error(
+        `Unable to align merged audio exactly to uploaded video duration. targetSamples=${targetSamples}, actualSamples=${finalMetrics.sampleCount}`,
+      );
+    }
+
+    return {
+      localPath: correctedPath,
+      outputDurationSec: finalMetrics.durationSec,
+      outputSamples: finalMetrics.sampleCount,
+      targetDurationSec: normalizedTargetDurationSec,
+      targetSamples,
+      correctionPasses: 1,
+      correctionMode,
+    };
+  } catch (error) {
+    await safeUnlink(correctedPath);
+    throw error;
+  }
 }
 
 async function tempoMatchAudioToDurationLocal(options: {
@@ -798,7 +1147,7 @@ async function tempoMatchAudioToDurationLocal(options: {
           '-map',
           '[aout]',
           '-c:a',
-          'pcm_f32le',
+          'pcm_s16le',
           '-ar',
           String(AUDIO_SAMPLE_RATE),
           '-ac',
@@ -1092,7 +1441,7 @@ async function createSilenceAudioToDurationLocal(options: {
       '-map',
       '[aout]',
       '-c:a',
-      'pcm_f32le',
+      'pcm_s16le',
       '-ar',
       String(AUDIO_SAMPLE_RATE),
       '-ac',
@@ -1119,10 +1468,6 @@ async function concatenateAudiosLocal(
 ): Promise<string> {
   if (inputPaths.length === 0) {
     throw new Error('No scene dubbed audios to merge');
-  }
-
-  if (inputPaths.length === 1) {
-    return inputPaths[0];
   }
 
   const outputPath = makeTempPath(
@@ -1187,9 +1532,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await getJWTToken();
+    let token = await getJWTToken();
 
-    const scenesRaw = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+    let videoRow: BaserowRow;
+    try {
+      videoRow = await fetchVideoRowById(baserowUrl, token, videoId);
+    } catch (error) {
+      if (isBaserowAuthError(error)) {
+        console.warn(
+          `[create-dubbed-en] Baserow auth expired while loading video ${videoId}. Refreshing token and retrying once...`,
+        );
+
+        token = await getJWTToken(true);
+        videoRow = await fetchVideoRowById(baserowUrl, token, videoId);
+      } else if (isTransientBaserowError(error)) {
+        console.warn(
+          `[create-dubbed-en] Transient Baserow error while loading video ${videoId}. Retrying once...`,
+        );
+
+        videoRow = await fetchVideoRowById(baserowUrl, token, videoId);
+      } else {
+        throw error;
+      }
+    }
+    const uploadedVideoDurationSecRaw = parsePositiveNumber(
+      videoRow[VIDEO_UPLOADED_DURATION_FIELD_KEY],
+    );
+
+    if (!uploadedVideoDurationSecRaw) {
+      return NextResponse.json(
+        {
+          error: `Video ${videoId} is missing valid Uploaded Video Duration (${VIDEO_UPLOADED_DURATION_FIELD_KEY})`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const uploadedVideoDurationSec = roundDurationSeconds(
+      uploadedVideoDurationSecRaw,
+    );
+    const uploadedVideoDurationSamples = secondsToSamples(
+      uploadedVideoDurationSec,
+      AUDIO_SAMPLE_RATE,
+    );
+
+    let scenesRaw: BaserowRow[];
+    try {
+      scenesRaw = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+    } catch (error) {
+      if (isBaserowAuthError(error)) {
+        console.warn(
+          `[create-dubbed-en] Baserow auth expired while loading scenes for video ${videoId}. Refreshing token and retrying once...`,
+        );
+
+        token = await getJWTToken(true);
+        scenesRaw = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+      } else if (isTransientBaserowError(error)) {
+        console.warn(
+          `[create-dubbed-en] Transient Baserow error while loading scenes for video ${videoId}. Retrying once...`,
+        );
+
+        scenesRaw = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+      } else {
+        throw error;
+      }
+    }
+
     if (scenesRaw.length === 0) {
       return NextResponse.json(
         { error: `No scenes found for video ${videoId}` },
@@ -1220,6 +1628,18 @@ export async function POST(request: NextRequest) {
         validationErrors.push(
           `Scene ${sceneId} is missing valid Duration (${SCENE_DURATION_FIELD_KEY})`,
         );
+        continue;
+      }
+
+      const existingDubbedEnUrl = extractUrl(scene[SCENE_DUBBED_EN_FIELD_KEY]);
+      if (existingDubbedEnUrl) {
+        sceneJobs.push({
+          sceneId,
+          orderValue,
+          audioUrl: existingDubbedEnUrl,
+          source: 'existing',
+          targetDurationSec,
+        });
         continue;
       }
 
@@ -1267,6 +1687,31 @@ export async function POST(request: NextRequest) {
     const sceneResults: SceneProcessResult[] = [];
 
     for (const job of sceneJobs) {
+      if (job.source === 'existing') {
+        const existingDubbedEnUrl = job.audioUrl || '';
+        const sampleCount = secondsToSamples(
+          job.targetDurationSec,
+          AUDIO_SAMPLE_RATE,
+        );
+        const durationSec = roundDurationSeconds(
+          samplesToSeconds(sampleCount, AUDIO_SAMPLE_RATE),
+        );
+
+        sceneResults.push({
+          sceneId: job.sceneId,
+          orderValue: job.orderValue,
+          source: 'existing',
+          targetDurationSec: job.targetDurationSec,
+          inputDurationSec: durationSec,
+          outputDurationSec: durationSec,
+          outputSampleCount: sampleCount,
+          speedApplied: 1,
+          dubbedEnUrl: existingDubbedEnUrl,
+          localAdjustedPath: existingDubbedEnUrl,
+        });
+        continue;
+      }
+
       const fitted =
         job.source === 'silence'
           ? await createSilenceAudioToDurationLocal({
@@ -1295,8 +1740,11 @@ export async function POST(request: NextRequest) {
         'audio/wav',
       );
 
-      await baserowPatchRow(baserowUrl, token, SCENES_TABLE_ID, job.sceneId, {
-        [SCENE_DUBBED_EN_FIELD_KEY]: dubbedEnUrl,
+      token = await patchSceneDubbedEnWithAuthRetry({
+        baserowUrl,
+        token,
+        sceneId: job.sceneId,
+        dubbedEnUrl,
       });
 
       sceneResults.push({
@@ -1334,12 +1782,25 @@ export async function POST(request: NextRequest) {
       samplesToSeconds(expectedMergedSamples, AUDIO_SAMPLE_RATE),
     );
 
-    const mergedLocalPath = await concatenateAudiosLocal(
+    let mergedLocalPath = await concatenateAudiosLocal(
       sceneResults
         .sort((a, b) => a.orderValue - b.orderValue)
         .map((result) => result.localAdjustedPath),
       videoId,
     );
+
+    if (!tempFiles.includes(mergedLocalPath)) {
+      tempFiles.push(mergedLocalPath);
+    }
+
+    const mergedCorrectionResult =
+      await fitMergedAudioToTargetDurationWithPadTrimLocal({
+        inputPath: mergedLocalPath,
+        videoId,
+        targetDurationSec: uploadedVideoDurationSec,
+      });
+
+    mergedLocalPath = mergedCorrectionResult.localPath;
 
     if (!tempFiles.includes(mergedLocalPath)) {
       tempFiles.push(mergedLocalPath);
@@ -1354,14 +1815,20 @@ export async function POST(request: NextRequest) {
       'audio/wav',
     );
 
-    await baserowPatchRow(baserowUrl, token, VIDEOS_TABLE_ID, videoId, {
-      [VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY]: finalDubbedAudioUrl,
+    token = await patchFinalDubbedEnWithAuthRetry({
+      baserowUrl,
+      token,
+      videoId,
+      finalDubbedAudioUrl,
     });
 
     return NextResponse.json({
       ok: true,
       videoId,
       processedSceneCount: sceneResults.length,
+      skippedExistingSceneCount: sceneResults.filter(
+        (s) => s.source === 'existing',
+      ).length,
       silenceSceneCount: sceneResults.filter((s) => s.source === 'silence')
         .length,
       ttsSceneCount: sceneResults.filter((s) => s.source === 'tts').length,
@@ -1369,11 +1836,17 @@ export async function POST(request: NextRequest) {
       finalDubbedField: VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY,
       expectedMergedSamples,
       expectedMergedDurationSec,
+      uploadedVideoDurationField: VIDEO_UPLOADED_DURATION_FIELD_KEY,
+      uploadedVideoDurationSec,
+      uploadedVideoDurationSamples,
       mergedOutputSamples: mergedMetrics.sampleCount,
       mergedOutputDurationSec: mergedMetrics.durationSec,
       mergedOutputDeltaSamples:
         mergedMetrics.sampleCount - expectedMergedSamples,
-      mergeCorrectionPasses: 0,
+      mergedOutputDeltaSamplesToUploadedVideo:
+        mergedMetrics.sampleCount - uploadedVideoDurationSamples,
+      mergeCorrectionMode: mergedCorrectionResult.correctionMode,
+      mergeCorrectionPasses: mergedCorrectionResult.correctionPasses,
       sceneDurationFitApplied: ENABLE_SCENE_DURATION_FIT,
       finalDubbedAudioUrl,
       scenes: sceneResults

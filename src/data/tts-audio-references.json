@@ -17,7 +17,7 @@
         "sceneOriginalAudioFieldKey": "field_7117"
       },
       "deviceMap": "mps",
-      "dtype": "float32",
+      "dtype": "float16",
       "numStep": 64,
       "speed": 1,
       "description": "Default Persian reference voice used for FA dubbing.",
@@ -28,7 +28,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-11T06:07:44.620Z"
+      "updatedAt": "2026-05-12T07:59:40.313Z"
     },
     {
       "id": "en-default",
@@ -58,7 +58,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-11T06:07:44.620Z"
+      "updatedAt": "2026-05-12T07:59:40.313Z"
     }
   ]
 }
