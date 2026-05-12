@@ -16,22 +16,32 @@ const SCENE_DURATION_FIELD_KEY = 'field_6884';
 const SCENE_DUBBED_EN_FIELD_KEY = 'field_7108';
 const SCENE_SENTENCE_FIELD_KEY = 'field_6890';
 
-const VIDEO_DURATION_FIELD_KEY = 'field_6909';
 const VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY = 'field_7109';
 
 const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_CHANNELS = 2;
 
-const TIME_DECIMALS = 9;
+const TIME_DECIMALS = 6;
 const SPEED_DECIMALS = 12;
 
 const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_FFPROBE_TIMEOUT_MS = 2 * 60 * 1000;
-const FINAL_MERGED_DURATION_TOLERANCE_SEC = 0.01;
-const FINAL_MERGED_MAX_TEMPO_PASSES = 3;
-const ENABLE_FINAL_MERGED_SPEED_MATCH = true;
-const SCENE_DURATION_TOLERANCE_SEC = 0.01;
-const SCENE_MAX_TEMPO_PASSES = 3;
+const MERGE_ALIGNMENT_MAX_PASSES = 4;
+const SCENE_DURATION_TOLERANCE_SEC = 1 / AUDIO_SAMPLE_RATE;
+const SCENE_DURATION_TOLERANCE_SAMPLES = Math.max(
+  1,
+  Math.round(SCENE_DURATION_TOLERANCE_SEC * AUDIO_SAMPLE_RATE),
+);
+const SCENE_MAX_TEMPO_PASSES = 10;
+const SCENE_COARSE_TOLERANCE_SAMPLES = 6;
+const SCENE_FINE_TOLERANCE_SAMPLES = 2;
+const SCENE_FINAL_TOLERANCE_SAMPLES = 1;
+const SCENE_COARSE_MAX_TEMPO_PASSES = 4;
+const SCENE_FINE_MAX_TEMPO_PASSES = 0;
+const SCENE_VERIFY_MAX_TEMPO_PASSES = 0;
+const LONGER_ADAPTIVE_UNDERSHOOT_MIN_SEC = 0.005;
+const LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC = 0.03;
+const LONGER_ADAPTIVE_UNDERSHOOT_RATIO = 0.05;
 const ENABLE_SCENE_DURATION_FIT = true;
 
 type BaserowRow = Record<string, unknown>;
@@ -42,7 +52,12 @@ type BaserowListResponse = {
 };
 
 type FFprobeStream = {
+  codec_type?: unknown;
   duration?: string | number;
+  sample_rate?: string | number;
+  nb_samples?: string | number;
+  duration_ts?: string | number;
+  time_base?: unknown;
 };
 
 type FFprobeOutput = {
@@ -50,6 +65,12 @@ type FFprobeOutput = {
     duration?: string | number;
   };
   streams?: FFprobeStream[];
+};
+
+type AudioProbeMetrics = {
+  durationSec: number;
+  sampleRate: number;
+  sampleCount: number;
 };
 
 type SceneJob = {
@@ -67,6 +88,7 @@ type SceneProcessResult = {
   targetDurationSec: number;
   inputDurationSec: number;
   outputDurationSec: number;
+  outputSampleCount: number;
   speedApplied: number;
   dubbedEnUrl: string;
   localAdjustedPath: string;
@@ -184,6 +206,119 @@ function formatSeconds(value: number): string {
   return value.toFixed(TIME_DECIMALS);
 }
 
+function roundDurationSeconds(value: number): number {
+  if (!Number.isFinite(value)) return value;
+  return Number(value.toFixed(TIME_DECIMALS));
+}
+
+function secondsToSamples(seconds: number, sampleRate: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(
+      `Invalid duration seconds for sample conversion: ${seconds}`,
+    );
+  }
+
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0) {
+    throw new Error(`Invalid sample rate for sample conversion: ${sampleRate}`);
+  }
+
+  return Math.max(1, Math.round(seconds * sampleRate));
+}
+
+function samplesToSeconds(sampleCount: number, sampleRate: number): number {
+  if (!Number.isInteger(sampleCount) || sampleCount <= 0) {
+    throw new Error(
+      `Invalid sample count for duration conversion: ${sampleCount}`,
+    );
+  }
+
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0) {
+    throw new Error(
+      `Invalid sample rate for duration conversion: ${sampleRate}`,
+    );
+  }
+
+  return sampleCount / sampleRate;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function computeAdaptiveUndershootSamples(options: {
+  overageSamples: number;
+  sampleRate: number;
+  targetSamples: number;
+}): { undershootSamples: number; undershootSec: number } {
+  const { overageSamples, sampleRate, targetSamples } = options;
+
+  if (!Number.isInteger(overageSamples) || overageSamples <= 0) {
+    return { undershootSamples: 0, undershootSec: 0 };
+  }
+
+  const minSamples = Math.max(
+    1,
+    secondsToSamples(LONGER_ADAPTIVE_UNDERSHOOT_MIN_SEC, sampleRate),
+  );
+  const maxSamples = Math.max(
+    minSamples,
+    secondsToSamples(LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC, sampleRate),
+  );
+
+  const rawSamples = Math.max(
+    1,
+    Math.round(overageSamples * LONGER_ADAPTIVE_UNDERSHOOT_RATIO),
+  );
+
+  const boundedSamples = clampNumber(rawSamples, minSamples, maxSamples);
+  const maxAllowedByTarget = Math.max(
+    1,
+    targetSamples - SCENE_FINAL_TOLERANCE_SAMPLES,
+  );
+  const undershootSamples = Math.min(boundedSamples, maxAllowedByTarget);
+
+  return {
+    undershootSamples,
+    undershootSec: roundDurationSeconds(
+      samplesToSeconds(undershootSamples, sampleRate),
+    ),
+  };
+}
+
+function parseTimeBase(value: unknown): number | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const [numeratorRaw, denominatorRaw] = value.trim().split('/');
+  if (!numeratorRaw || !denominatorRaw) {
+    return null;
+  }
+
+  const numerator = Number(numeratorRaw);
+  const denominator = Number(denominatorRaw);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator)) {
+    return null;
+  }
+
+  if (denominator <= 0) {
+    return null;
+  }
+
+  const timeBase = numerator / denominator;
+  return Number.isFinite(timeBase) && timeBase > 0 ? timeBase : null;
+}
+
+function parsePositiveRoundedInt(value: unknown): number | null {
+  const parsed = parseNumberish(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  const rounded = Math.round(parsed);
+  return rounded > 0 ? rounded : null;
+}
+
 function buildAtempoChain(speed: number): string {
   if (!Number.isFinite(speed) || speed <= 0) {
     throw new Error(`Invalid tempo speed: ${speed}`);
@@ -281,6 +416,11 @@ async function runCommand(
 }
 
 async function probeMediaDurationSeconds(input: string): Promise<number> {
+  const metrics = await probeAudioMetrics(input);
+  return metrics.durationSec;
+}
+
+async function probeAudioMetrics(input: string): Promise<AudioProbeMetrics> {
   const { stdout } = await runCommand(
     'ffprobe',
     [
@@ -296,26 +436,56 @@ async function probeMediaDurationSeconds(input: string): Promise<number> {
   );
 
   const parsed = (JSON.parse(stdout) ?? {}) as FFprobeOutput;
-  const candidates: number[] = [];
+  const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+  const audioStream =
+    streams.find((stream) => stream?.codec_type === 'audio') ??
+    streams[0] ??
+    null;
 
-  const formatDuration = parseNumberish(parsed.format?.duration);
-  if (Number.isFinite(formatDuration) && formatDuration > 0) {
-    candidates.push(formatDuration);
+  const sampleRate =
+    parsePositiveInt(audioStream?.sample_rate) ?? AUDIO_SAMPLE_RATE;
+
+  const sampleCandidates: number[] = [];
+
+  const nbSamples = parsePositiveRoundedInt(audioStream?.nb_samples);
+  if (nbSamples) {
+    sampleCandidates.push(nbSamples);
   }
 
-  for (const stream of parsed.streams ?? []) {
-    const streamDuration = parseNumberish(stream.duration);
-    if (Number.isFinite(streamDuration) && streamDuration > 0) {
-      candidates.push(streamDuration);
+  const durationTs = parseNumberish(audioStream?.duration_ts);
+  const timeBase = parseTimeBase(audioStream?.time_base);
+  if (Number.isFinite(durationTs) && durationTs > 0 && timeBase) {
+    const durationFromTsSec = durationTs * timeBase;
+    if (Number.isFinite(durationFromTsSec) && durationFromTsSec > 0) {
+      sampleCandidates.push(secondsToSamples(durationFromTsSec, sampleRate));
     }
   }
 
-  const duration = candidates.length > 0 ? Math.max(...candidates) : Number.NaN;
-  if (!Number.isFinite(duration) || duration <= 0) {
+  const streamDurationSec = parseNumberish(audioStream?.duration);
+  if (Number.isFinite(streamDurationSec) && streamDurationSec > 0) {
+    sampleCandidates.push(secondsToSamples(streamDurationSec, sampleRate));
+  }
+
+  const formatDurationSec = parseNumberish(parsed.format?.duration);
+  if (Number.isFinite(formatDurationSec) && formatDurationSec > 0) {
+    sampleCandidates.push(secondsToSamples(formatDurationSec, sampleRate));
+  }
+
+  const sampleCount =
+    sampleCandidates.length > 0 ? Math.max(...sampleCandidates) : Number.NaN;
+  if (!Number.isFinite(sampleCount) || sampleCount <= 0) {
     throw new Error('Unable to determine media duration via ffprobe');
   }
 
-  return duration;
+  const durationSec = roundDurationSeconds(
+    samplesToSeconds(Math.round(sampleCount), sampleRate),
+  );
+
+  return {
+    durationSec,
+    sampleRate,
+    sampleCount: Math.round(sampleCount),
+  };
 }
 
 let cachedToken: string | null = null;
@@ -449,128 +619,149 @@ async function fetchAllScenesForVideo(
   return all;
 }
 
-async function fitSceneAudioToDurationLocal(options: {
+async function normalizeAudioToWavLocal(options: {
   sceneId: number;
   videoId: number;
   inputAudioUrl: string;
-  targetDurationSec: number;
+}): Promise<string> {
+  const { sceneId, videoId, inputAudioUrl } = options;
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_scene_${sceneId}_dubbed_en_fit_normalized`,
+    'wav',
+  );
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputAudioUrl,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_f32le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function appendSilenceToAudioLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputPath: string;
+  silenceSamples: number;
+}): Promise<string> {
+  const { sceneId, videoId, inputPath, silenceSamples } = options;
+
+  if (!Number.isInteger(silenceSamples) || silenceSamples <= 0) {
+    throw new Error(`Invalid silence sample count: ${silenceSamples}`);
+  }
+
+  const silenceDurationSec = samplesToSeconds(
+    silenceSamples,
+    AUDIO_SAMPLE_RATE,
+  );
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_scene_${sceneId}_dubbed_en_fit_silence`,
+    'wav',
+  );
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-f',
+      'lavfi',
+      '-t',
+      formatSeconds(silenceDurationSec),
+      '-i',
+      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_f32le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function tempoMatchAudioToDurationLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputPath: string;
+  targetSamples: number;
+  outputPrefix: string;
+  toleranceSamples?: number;
+  maxPasses?: number;
 }): Promise<{
   localPath: string;
-  inputDurationSec: number;
   outputDurationSec: number;
+  outputSamples: number;
   speedApplied: number;
 }> {
-  const { sceneId, videoId, inputAudioUrl, targetDurationSec } = options;
+  const {
+    sceneId,
+    videoId,
+    inputPath,
+    targetSamples,
+    outputPrefix,
+    toleranceSamples = SCENE_DURATION_TOLERANCE_SAMPLES,
+    maxPasses = SCENE_MAX_TEMPO_PASSES,
+  } = options;
 
-  const inputDurationSec = await probeMediaDurationSeconds(inputAudioUrl);
-
-  // Test mode: keep non-empty scene audio duration untouched so we can evaluate
-  // pure merge behavior (and compare m4a vs wav experiments) without scene-level
-  // speed/pad/trim side effects.
-  if (!ENABLE_SCENE_DURATION_FIT) {
-    const outputPath = makeTempPath(
-      `video_${videoId}_scene_${sceneId}_dubbed_en_local`,
-      'wav',
-    );
-
-    await runCommand(
-      'ffmpeg',
-      [
-        '-y',
-        '-i',
-        inputAudioUrl,
-        '-vn',
-        '-map_metadata',
-        '-1',
-        '-map_chapters',
-        '-1',
-        '-filter_complex',
-        `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
-        '-map',
-        '[aout]',
-        '-c:a',
-        'pcm_s16le',
-        '-ar',
-        String(AUDIO_SAMPLE_RATE),
-        '-ac',
-        String(AUDIO_CHANNELS),
-        outputPath,
-      ],
-      DEFAULT_FFMPEG_TIMEOUT_MS,
-    );
-
-    await access(outputPath);
-    const outputDurationSec = await probeMediaDurationSeconds(outputPath);
-
-    return {
-      localPath: outputPath,
-      inputDurationSec,
-      outputDurationSec,
-      speedApplied: 1,
-    };
+  if (!Number.isInteger(targetSamples) || targetSamples <= 0) {
+    throw new Error(`Invalid target sample count: ${targetSamples}`);
   }
 
-  // User requirement:
-  // - if shorter => pad with silence
-  // - if longer => speed up
-
-  // Shorter/equal: keep exact current behavior (pad + trim to target).
-  if (inputDurationSec <= targetDurationSec + 1e-9) {
-    const outputPath = makeTempPath(
-      `video_${videoId}_scene_${sceneId}_dubbed_en_local`,
-      'wav',
-    );
-
-    await runCommand(
-      'ffmpeg',
-      [
-        '-y',
-        '-i',
-        inputAudioUrl,
-        '-vn',
-        '-map_metadata',
-        '-1',
-        '-map_chapters',
-        '-1',
-        '-filter_complex',
-        `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,apad,atrim=0:${formatSeconds(targetDurationSec)},asetpts=N/SR/TB[aout]`,
-        '-map',
-        '[aout]',
-        '-c:a',
-        'pcm_s16le',
-        '-ar',
-        String(AUDIO_SAMPLE_RATE),
-        '-ac',
-        String(AUDIO_CHANNELS),
-        outputPath,
-      ],
-      DEFAULT_FFMPEG_TIMEOUT_MS,
-    );
-
-    await access(outputPath);
-    const outputDurationSec = await probeMediaDurationSeconds(outputPath);
-
-    return {
-      localPath: outputPath,
-      inputDurationSec,
-      outputDurationSec,
-      speedApplied: 1,
-    };
-  }
-
-  // Longer: tempo-only iterative correction (no hard trim) to avoid tail chopping.
-  let currentPath = inputAudioUrl;
-  let currentDurationSec = inputDurationSec;
+  let currentPath = inputPath;
+  const initialMetrics = await probeAudioMetrics(inputPath);
+  let currentSamples = initialMetrics.sampleCount;
+  let currentSampleRate = initialMetrics.sampleRate;
   let cumulativeSpeedApplied = 1;
   const generatedPassPaths: string[] = [];
 
   try {
-    for (
-      let passIndex = 1;
-      passIndex <= SCENE_MAX_TEMPO_PASSES;
-      passIndex += 1
-    ) {
-      const passSpeedApplied = currentDurationSec / targetDurationSec;
+    for (let passIndex = 1; passIndex <= maxPasses; passIndex += 1) {
+      const deltaSamples = currentSamples - targetSamples;
+      if (Math.abs(deltaSamples) <= toleranceSamples) {
+        break;
+      }
+
+      const passSpeedApplied = currentSamples / targetSamples;
       if (!Number.isFinite(passSpeedApplied) || passSpeedApplied <= 0) {
         throw new Error(
           `Invalid scene tempo speed on pass ${passIndex}: ${passSpeedApplied}`,
@@ -581,14 +772,14 @@ async function fitSceneAudioToDurationLocal(options: {
         `aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo`,
       ];
 
-      if (Math.abs(passSpeedApplied - 1) > 1e-12) {
+      if (Math.abs(passSpeedApplied - 1) > 1e-9) {
         filterParts.push(buildAtempoChain(passSpeedApplied));
       }
 
       filterParts.push('asetpts=N/SR/TB');
 
       const passOutputPath = makeTempPath(
-        `video_${videoId}_scene_${sceneId}_dubbed_en_local_pass_${passIndex}`,
+        `${outputPrefix}_${videoId}_${sceneId}_pass_${passIndex}`,
         'wav',
       );
 
@@ -608,7 +799,7 @@ async function fitSceneAudioToDurationLocal(options: {
           '-map',
           '[aout]',
           '-c:a',
-          'pcm_s16le',
+          'pcm_f32le',
           '-ar',
           String(AUDIO_SAMPLE_RATE),
           '-ac',
@@ -619,26 +810,22 @@ async function fitSceneAudioToDurationLocal(options: {
       );
 
       await access(passOutputPath);
-      const passOutputDurationSec =
-        await probeMediaDurationSeconds(passOutputPath);
+      const passMetrics = await probeAudioMetrics(passOutputPath);
 
       generatedPassPaths.push(passOutputPath);
       cumulativeSpeedApplied *= passSpeedApplied;
 
-      if (currentPath !== inputAudioUrl) {
+      const previousSamples = currentSamples;
+
+      if (currentPath !== inputPath) {
         await safeUnlink(currentPath);
       }
 
       currentPath = passOutputPath;
-      currentDurationSec = passOutputDurationSec;
+      currentSamples = passMetrics.sampleCount;
+      currentSampleRate = passMetrics.sampleRate;
 
-      const deltaSec = currentDurationSec - targetDurationSec;
-      if (Math.abs(deltaSec) <= SCENE_DURATION_TOLERANCE_SEC) {
-        break;
-      }
-
-      // Longer branch should only speed up; stop if encoding undershoots target.
-      if (deltaSec < 0) {
+      if (currentSamples === previousSamples) {
         break;
       }
     }
@@ -653,10 +840,204 @@ async function fitSceneAudioToDurationLocal(options: {
 
   return {
     localPath: currentPath,
-    inputDurationSec,
-    outputDurationSec: currentDurationSec,
+    outputDurationSec: roundDurationSeconds(
+      samplesToSeconds(currentSamples, currentSampleRate),
+    ),
+    outputSamples: currentSamples,
     speedApplied: cumulativeSpeedApplied,
   };
+}
+
+async function fitSceneAudioToDurationLocal(options: {
+  sceneId: number;
+  videoId: number;
+  inputAudioUrl: string;
+  targetDurationSec: number;
+}): Promise<{
+  localPath: string;
+  inputDurationSec: number;
+  outputDurationSec: number;
+  speedApplied: number;
+}> {
+  const { sceneId, videoId, inputAudioUrl, targetDurationSec } = options;
+  const normalizedTargetDurationSec = roundDurationSeconds(targetDurationSec);
+  const targetSamples = secondsToSamples(
+    normalizedTargetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
+
+  const cleanupPaths = new Set<string>();
+
+  try {
+    const normalizedInputPath = await normalizeAudioToWavLocal({
+      sceneId,
+      videoId,
+      inputAudioUrl,
+    });
+    cleanupPaths.add(normalizedInputPath);
+
+    const inputMetrics = await probeAudioMetrics(normalizedInputPath);
+    const inputDurationSec = roundDurationSeconds(
+      samplesToSeconds(inputMetrics.sampleCount, inputMetrics.sampleRate),
+    );
+
+    if (!ENABLE_SCENE_DURATION_FIT) {
+      cleanupPaths.delete(normalizedInputPath);
+      return {
+        localPath: normalizedInputPath,
+        inputDurationSec,
+        outputDurationSec: inputDurationSec,
+        speedApplied: 1,
+      };
+    }
+
+    let workingPath = normalizedInputPath;
+    let cumulativeSpeedApplied = 1;
+
+    const stageTemplates: Array<{
+      outputPrefix: string;
+      toleranceSamples: number;
+      maxPasses: number;
+    }> = [
+      {
+        outputPrefix: 'dubbed_en_fit_tempo_coarse',
+        toleranceSamples: SCENE_COARSE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_COARSE_MAX_TEMPO_PASSES,
+      },
+      {
+        outputPrefix: 'dubbed_en_fit_tempo_fine',
+        toleranceSamples: SCENE_FINE_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_FINE_MAX_TEMPO_PASSES,
+      },
+      {
+        outputPrefix: 'dubbed_en_fit_tempo_verify',
+        toleranceSamples: SCENE_FINAL_TOLERANCE_SAMPLES,
+        maxPasses: SCENE_VERIFY_MAX_TEMPO_PASSES,
+      },
+    ];
+
+    const runTempoStages = async (
+      stageVariant: string,
+      desiredTargetSamples: number,
+    ): Promise<{ sampleCount: number; sampleRate: number }> => {
+      for (const stageTemplate of stageTemplates) {
+        if (stageTemplate.maxPasses <= 0) {
+          continue;
+        }
+
+        const stageResult = await tempoMatchAudioToDurationLocal({
+          sceneId,
+          videoId,
+          inputPath: workingPath,
+          targetSamples: desiredTargetSamples,
+          outputPrefix: `${stageTemplate.outputPrefix}_${stageVariant}`,
+          toleranceSamples: stageTemplate.toleranceSamples,
+          maxPasses: stageTemplate.maxPasses,
+        });
+
+        cumulativeSpeedApplied *= stageResult.speedApplied;
+
+        if (stageResult.localPath !== workingPath) {
+          await safeUnlink(workingPath);
+          cleanupPaths.delete(workingPath);
+          cleanupPaths.add(stageResult.localPath);
+          workingPath = stageResult.localPath;
+        }
+
+        if (
+          Math.abs(stageResult.outputSamples - desiredTargetSamples) <=
+          SCENE_FINAL_TOLERANCE_SAMPLES
+        ) {
+          break;
+        }
+      }
+
+      const metrics = await probeAudioMetrics(workingPath);
+      return {
+        sampleCount: metrics.sampleCount,
+        sampleRate: metrics.sampleRate,
+      };
+    };
+
+    if (inputMetrics.sampleCount < targetSamples) {
+      const silenceSamples = targetSamples - inputMetrics.sampleCount;
+      const withSilencePath = await appendSilenceToAudioLocal({
+        sceneId,
+        videoId,
+        inputPath: workingPath,
+        silenceSamples,
+      });
+      cleanupPaths.add(withSilencePath);
+
+      if (withSilencePath !== workingPath) {
+        await safeUnlink(workingPath);
+        cleanupPaths.delete(workingPath);
+        workingPath = withSilencePath;
+      }
+
+      await runTempoStages('after-shorter-silence', targetSamples);
+    } else if (inputMetrics.sampleCount > targetSamples) {
+      const adaptiveUndershoot = computeAdaptiveUndershootSamples({
+        overageSamples: inputMetrics.sampleCount - targetSamples,
+        sampleRate: inputMetrics.sampleRate,
+        targetSamples,
+      });
+
+      const undershootTargetSamples = Math.max(
+        SCENE_FINAL_TOLERANCE_SAMPLES,
+        targetSamples - adaptiveUndershoot.undershootSamples,
+      );
+
+      let postUndershootMetrics = await runTempoStages(
+        'longer-adaptive-undershoot',
+        undershootTargetSamples,
+      );
+
+      if (postUndershootMetrics.sampleCount >= targetSamples) {
+        postUndershootMetrics = await runTempoStages(
+          'longer-adaptive-fallback-exact',
+          targetSamples,
+        );
+      }
+
+      if (postUndershootMetrics.sampleCount < targetSamples) {
+        const silenceSamples =
+          targetSamples - postUndershootMetrics.sampleCount;
+        const withSilencePath = await appendSilenceToAudioLocal({
+          sceneId,
+          videoId,
+          inputPath: workingPath,
+          silenceSamples,
+        });
+        cleanupPaths.add(withSilencePath);
+
+        if (withSilencePath !== workingPath) {
+          await safeUnlink(workingPath);
+          cleanupPaths.delete(workingPath);
+          workingPath = withSilencePath;
+        }
+      }
+    }
+
+    const finalMetrics = await probeAudioMetrics(workingPath);
+    const outputDurationSec = roundDurationSeconds(
+      samplesToSeconds(finalMetrics.sampleCount, finalMetrics.sampleRate),
+    );
+
+    cleanupPaths.delete(workingPath);
+
+    return {
+      localPath: workingPath,
+      inputDurationSec,
+      outputDurationSec,
+      speedApplied: cumulativeSpeedApplied,
+    };
+  } catch (error) {
+    for (const filePath of cleanupPaths) {
+      await safeUnlink(filePath);
+    }
+    throw error;
+  }
 }
 
 async function createSilenceAudioToDurationLocal(options: {
@@ -670,6 +1051,24 @@ async function createSilenceAudioToDurationLocal(options: {
   speedApplied: number;
 }> {
   const { sceneId, videoId, targetDurationSec } = options;
+  const roundedTargetDurationSec = roundDurationSeconds(targetDurationSec);
+
+  if (
+    !Number.isFinite(roundedTargetDurationSec) ||
+    roundedTargetDurationSec <= 0
+  ) {
+    throw new Error(
+      `Invalid target duration for silence generation: ${targetDurationSec}`,
+    );
+  }
+
+  const targetSamples = secondsToSamples(
+    roundedTargetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
+  const sampleAlignedTargetDurationSec = roundDurationSeconds(
+    samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE),
+  );
 
   const outputPath = makeTempPath(
     `video_${videoId}_scene_${sceneId}_dubbed_en_silence_local`,
@@ -684,12 +1083,17 @@ async function createSilenceAudioToDurationLocal(options: {
       'lavfi',
       '-i',
       `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
       '-filter_complex',
-      `[0:a]atrim=0:${formatSeconds(targetDurationSec)},asetpts=N/SR/TB[aout]`,
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=0:${formatSeconds(sampleAlignedTargetDurationSec)},asetpts=N/SR/TB[aout]`,
       '-map',
       '[aout]',
       '-c:a',
-      'pcm_s16le',
+      'pcm_f32le',
       '-ar',
       String(AUDIO_SAMPLE_RATE),
       '-ac',
@@ -704,7 +1108,7 @@ async function createSilenceAudioToDurationLocal(options: {
 
   return {
     localPath: outputPath,
-    inputDurationSec: targetDurationSec,
+    inputDurationSec: sampleAlignedTargetDurationSec,
     outputDurationSec,
     speedApplied: 1,
   };
@@ -737,6 +1141,10 @@ async function concatenateAudiosLocal(
       '-y',
       ...inputArgs,
       '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
       '-filter_complex',
       filterComplex,
       '-map',
@@ -756,12 +1164,160 @@ async function concatenateAudiosLocal(
   return outputPath;
 }
 
-async function encodeAudioToM4aLocal(options: {
+async function fitMergedAudioToVideoDurationLocal(options: {
   inputPath: string;
-  outputPrefix: string;
+  videoId: number;
+  expectedSamples: number;
+}): Promise<{
+  localPath: string;
+  inputDurationSec: number;
+  outputDurationSec: number;
+  outputSamples: number;
+  deltaSamples: number;
+  correctionPasses: number;
+}> {
+  const { inputPath, videoId, expectedSamples } = options;
+
+  if (!Number.isInteger(expectedSamples) || expectedSamples <= 0) {
+    throw new Error(`Invalid expected sample count: ${expectedSamples}`);
+  }
+
+  const inputMetrics = await probeAudioMetrics(inputPath);
+  const inputDurationSec = inputMetrics.durationSec;
+  let currentPath = inputPath;
+  let correctionPasses = 0;
+
+  for (
+    let passIndex = 1;
+    passIndex <= MERGE_ALIGNMENT_MAX_PASSES;
+    passIndex += 1
+  ) {
+    const metrics = await probeAudioMetrics(currentPath);
+    const deltaSamples = metrics.sampleCount - expectedSamples;
+
+    if (deltaSamples === 0) {
+      return {
+        localPath: currentPath,
+        inputDurationSec,
+        outputDurationSec: metrics.durationSec,
+        outputSamples: metrics.sampleCount,
+        deltaSamples: 0,
+        correctionPasses,
+      };
+    }
+
+    const nextPath =
+      deltaSamples < 0
+        ? await appendSilenceSamplesToAudioLocal({
+            videoId,
+            inputPath: currentPath,
+            silenceSamples: Math.abs(deltaSamples),
+            passIndex,
+          })
+        : await trimAudioToSampleCountLocal({
+            videoId,
+            inputPath: currentPath,
+            targetSamples: expectedSamples,
+            passIndex,
+          });
+
+    correctionPasses += 1;
+
+    if (currentPath !== inputPath) {
+      await safeUnlink(currentPath);
+    }
+
+    currentPath = nextPath;
+  }
+
+  const finalMetrics = await probeAudioMetrics(currentPath);
+
+  return {
+    localPath: currentPath,
+    inputDurationSec,
+    outputDurationSec: finalMetrics.durationSec,
+    outputSamples: finalMetrics.sampleCount,
+    deltaSamples: finalMetrics.sampleCount - expectedSamples,
+    correctionPasses,
+  };
+}
+
+async function appendSilenceSamplesToAudioLocal(options: {
+  videoId: number;
+  inputPath: string;
+  silenceSamples: number;
+  passIndex: number;
 }): Promise<string> {
-  const { inputPath, outputPrefix } = options;
-  const outputPath = makeTempPath(outputPrefix, 'm4a');
+  const { videoId, inputPath, silenceSamples, passIndex } = options;
+
+  if (!Number.isInteger(silenceSamples) || silenceSamples <= 0) {
+    throw new Error(`Invalid silence sample count: ${silenceSamples}`);
+  }
+
+  const silenceDurationSec = samplesToSeconds(
+    silenceSamples,
+    AUDIO_SAMPLE_RATE,
+  );
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_dubbed_en_merged_align_pad_${passIndex}`,
+    'wav',
+  );
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-f',
+      'lavfi',
+      '-t',
+      formatSeconds(silenceDurationSec),
+      '-i',
+      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
+}
+
+async function trimAudioToSampleCountLocal(options: {
+  videoId: number;
+  inputPath: string;
+  targetSamples: number;
+  passIndex: number;
+}): Promise<string> {
+  const { videoId, inputPath, targetSamples, passIndex } = options;
+
+  if (!Number.isInteger(targetSamples) || targetSamples <= 0) {
+    throw new Error(`Invalid target sample count: ${targetSamples}`);
+  }
+
+  const targetDurationSec = samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE);
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_dubbed_en_merged_align_trim_${passIndex}`,
+    'wav',
+  );
 
   await runCommand(
     'ffmpeg',
@@ -775,19 +1331,15 @@ async function encodeAudioToM4aLocal(options: {
       '-map_chapters',
       '-1',
       '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=0:${formatSeconds(targetDurationSec)},asetpts=N/SR/TB[aout]`,
       '-map',
       '[aout]',
       '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
+      'pcm_s16le',
       '-ar',
       String(AUDIO_SAMPLE_RATE),
       '-ac',
       String(AUDIO_CHANNELS),
-      '-movflags',
-      '+faststart',
       outputPath,
     ],
     DEFAULT_FFMPEG_TIMEOUT_MS,
@@ -795,122 +1347,6 @@ async function encodeAudioToM4aLocal(options: {
 
   await access(outputPath);
   return outputPath;
-}
-
-async function fitMergedAudioToVideoDurationLocal(options: {
-  inputPath: string;
-  videoId: number;
-  targetDurationSec: number;
-}): Promise<{
-  localPath: string;
-  inputDurationSec: number;
-  outputDurationSec: number;
-  speedApplied: number;
-}> {
-  const { inputPath, videoId, targetDurationSec } = options;
-
-  const inputDurationSec = await probeMediaDurationSeconds(inputPath);
-  let currentPath = inputPath;
-  let currentDurationSec = inputDurationSec;
-  let cumulativeSpeedApplied = 1;
-  const generatedPassPaths: string[] = [];
-
-  try {
-    for (
-      let passIndex = 1;
-      passIndex <= FINAL_MERGED_MAX_TEMPO_PASSES;
-      passIndex += 1
-    ) {
-      const deltaSec = currentDurationSec - targetDurationSec;
-      if (Math.abs(deltaSec) <= FINAL_MERGED_DURATION_TOLERANCE_SEC) {
-        break;
-      }
-
-      const passSpeedApplied = currentDurationSec / targetDurationSec;
-      if (!Number.isFinite(passSpeedApplied) || passSpeedApplied <= 0) {
-        throw new Error(
-          `Invalid merged tempo speed on pass ${passIndex}: ${passSpeedApplied}`,
-        );
-      }
-
-      const filterParts: string[] = [
-        `aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo`,
-      ];
-
-      if (Math.abs(passSpeedApplied - 1) > 1e-12) {
-        filterParts.push(buildAtempoChain(passSpeedApplied));
-      }
-
-      // Important user requirement:
-      // - merge all fitted scene audios first
-      // - then match full track duration by tempo only (speed up / slow down)
-      // - do NOT trim or pad final merged audio to avoid chopping tail content
-      filterParts.push('asetpts=N/SR/TB');
-
-      const passOutputPath = makeTempPath(
-        `video_${videoId}_final_dubbed_en_local_pass_${passIndex}`,
-        'm4a',
-      );
-
-      await runCommand(
-        'ffmpeg',
-        [
-          '-y',
-          '-i',
-          currentPath,
-          '-vn',
-          '-map_metadata',
-          '-1',
-          '-map_chapters',
-          '-1',
-          '-filter_complex',
-          `[0:a]${filterParts.join(',')}[aout]`,
-          '-map',
-          '[aout]',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '192k',
-          '-ar',
-          String(AUDIO_SAMPLE_RATE),
-          '-ac',
-          String(AUDIO_CHANNELS),
-          '-movflags',
-          '+faststart',
-          passOutputPath,
-        ],
-        DEFAULT_FFMPEG_TIMEOUT_MS,
-      );
-
-      await access(passOutputPath);
-      const passOutputDurationSec =
-        await probeMediaDurationSeconds(passOutputPath);
-
-      generatedPassPaths.push(passOutputPath);
-      cumulativeSpeedApplied *= passSpeedApplied;
-
-      if (currentPath !== inputPath) {
-        await safeUnlink(currentPath);
-      }
-
-      currentPath = passOutputPath;
-      currentDurationSec = passOutputDurationSec;
-    }
-  } catch (error) {
-    for (const generatedPath of generatedPassPaths) {
-      if (generatedPath !== currentPath) {
-        await safeUnlink(generatedPath);
-      }
-    }
-    throw error;
-  }
-
-  return {
-    localPath: currentPath,
-    inputDurationSec,
-    outputDurationSec: currentDurationSec,
-    speedApplied: cumulativeSpeedApplied,
-  };
 }
 
 export async function POST(request: NextRequest) {
@@ -938,25 +1374,6 @@ export async function POST(request: NextRequest) {
     }
 
     const token = await getJWTToken();
-
-    const videoRow = await baserowGetJson<BaserowRow>(
-      baserowUrl,
-      token,
-      `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
-    );
-
-    const targetVideoDurationSec = parsePositiveNumber(
-      videoRow[VIDEO_DURATION_FIELD_KEY],
-    );
-
-    if (!targetVideoDurationSec) {
-      return NextResponse.json(
-        {
-          error: `Selected video is missing a valid Uploaded Video Duration (${VIDEO_DURATION_FIELD_KEY})`,
-        },
-        { status: 400 },
-      );
-    }
 
     const scenesRaw = await fetchAllScenesForVideo(baserowUrl, token, videoId);
     if (scenesRaw.length === 0) {
@@ -1052,20 +1469,16 @@ export async function POST(request: NextRequest) {
 
       tempFiles.push(fitted.localPath);
 
-      const sceneUploadLocalPath = await encodeAudioToM4aLocal({
-        inputPath: fitted.localPath,
-        outputPrefix: `video_${videoId}_scene_${job.sceneId}_dubbed_en_upload`,
-      });
-      tempFiles.push(sceneUploadLocalPath);
+      const fittedMetrics = await probeAudioMetrics(fitted.localPath);
 
       const sceneFilename =
         job.source === 'silence'
-          ? `video_${videoId}_scene_${job.sceneId}_dubbed_en_silence_${Date.now()}.m4a`
-          : `video_${videoId}_scene_${job.sceneId}_dubbed_en_${Date.now()}.m4a`;
+          ? `video_${videoId}_scene_${job.sceneId}_dubbed_en_silence_${Date.now()}.wav`
+          : `video_${videoId}_scene_${job.sceneId}_dubbed_en_${Date.now()}.wav`;
       const dubbedEnUrl = await uploadToMinio(
-        sceneUploadLocalPath,
+        fitted.localPath,
         sceneFilename,
-        'audio/mp4',
+        'audio/wav',
       );
 
       await baserowPatchRow(baserowUrl, token, SCENES_TABLE_ID, job.sceneId, {
@@ -1078,12 +1491,34 @@ export async function POST(request: NextRequest) {
         source: job.source,
         targetDurationSec: job.targetDurationSec,
         inputDurationSec: fitted.inputDurationSec,
-        outputDurationSec: fitted.outputDurationSec,
+        outputDurationSec: fittedMetrics.durationSec,
+        outputSampleCount: fittedMetrics.sampleCount,
         speedApplied: fitted.speedApplied,
         dubbedEnUrl,
         localAdjustedPath: fitted.localPath,
       });
     }
+
+    const expectedMergedSamples = sceneResults.reduce(
+      (sum, item) => sum + item.outputSampleCount,
+      0,
+    );
+
+    if (
+      !Number.isInteger(expectedMergedSamples) ||
+      expectedMergedSamples <= 0
+    ) {
+      return NextResponse.json(
+        {
+          error: 'Unable to determine expected merged sample count',
+        },
+        { status: 500 },
+      );
+    }
+
+    const expectedMergedDurationSec = roundDurationSeconds(
+      samplesToSeconds(expectedMergedSamples, AUDIO_SAMPLE_RATE),
+    );
 
     const mergedLocalPath = await concatenateAudiosLocal(
       sceneResults
@@ -1096,43 +1531,21 @@ export async function POST(request: NextRequest) {
       tempFiles.push(mergedLocalPath);
     }
 
-    const mergedDurationBeforeFitSec =
-      await probeMediaDurationSeconds(mergedLocalPath);
+    const fittedMerged = await fitMergedAudioToVideoDurationLocal({
+      inputPath: mergedLocalPath,
+      videoId,
+      expectedSamples: expectedMergedSamples,
+    });
 
-    let finalMergedLocalPath = mergedLocalPath;
-    let mergedDurationAfterFitSec = mergedDurationBeforeFitSec;
-
-    // Test mode: skip final whole-track speed matching so we can verify
-    // whether scene-fit + merge alone is sufficient.
-    if (ENABLE_FINAL_MERGED_SPEED_MATCH) {
-      const fittedMerged = await fitMergedAudioToVideoDurationLocal({
-        inputPath: mergedLocalPath,
-        videoId,
-        targetDurationSec: targetVideoDurationSec,
-      });
-
-      finalMergedLocalPath = fittedMerged.localPath;
-      mergedDurationAfterFitSec = fittedMerged.outputDurationSec;
-
-      if (!tempFiles.includes(fittedMerged.localPath)) {
-        tempFiles.push(fittedMerged.localPath);
-      }
+    if (!tempFiles.includes(fittedMerged.localPath)) {
+      tempFiles.push(fittedMerged.localPath);
     }
 
-    let finalUploadLocalPath = finalMergedLocalPath;
-    if (!finalMergedLocalPath.toLowerCase().endsWith('.m4a')) {
-      finalUploadLocalPath = await encodeAudioToM4aLocal({
-        inputPath: finalMergedLocalPath,
-        outputPrefix: `video_${videoId}_final_dubbed_audio_upload`,
-      });
-      tempFiles.push(finalUploadLocalPath);
-    }
-
-    const finalFilename = `video_${videoId}_final_dubbed_audio_${Date.now()}.m4a`;
+    const finalFilename = `video_${videoId}_final_dubbed_audio_${Date.now()}.wav`;
     const finalDubbedAudioUrl = await uploadToMinio(
-      finalUploadLocalPath,
+      fittedMerged.localPath,
       finalFilename,
-      'audio/mp4',
+      'audio/wav',
     );
 
     await baserowPatchRow(baserowUrl, token, VIDEOS_TABLE_ID, videoId, {
@@ -1148,10 +1561,12 @@ export async function POST(request: NextRequest) {
       ttsSceneCount: sceneResults.filter((s) => s.source === 'tts').length,
       sceneDubbedField: SCENE_DUBBED_EN_FIELD_KEY,
       finalDubbedField: VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY,
-      videoTargetDurationSec: targetVideoDurationSec,
-      mergedDurationBeforeFitSec,
-      mergedDurationAfterFitSec,
-      finalMergedSpeedMatchApplied: ENABLE_FINAL_MERGED_SPEED_MATCH,
+      expectedMergedSamples,
+      expectedMergedDurationSec,
+      mergedOutputSamples: fittedMerged.outputSamples,
+      mergedOutputDurationSec: fittedMerged.outputDurationSec,
+      mergedOutputDeltaSamples: fittedMerged.deltaSamples,
+      mergeCorrectionPasses: fittedMerged.correctionPasses,
       sceneDurationFitApplied: ENABLE_SCENE_DURATION_FIT,
       finalDubbedAudioUrl,
       scenes: sceneResults
@@ -1163,6 +1578,7 @@ export async function POST(request: NextRequest) {
           targetDurationSec: sceneResult.targetDurationSec,
           inputDurationSec: sceneResult.inputDurationSec,
           outputDurationSec: sceneResult.outputDurationSec,
+          outputSampleCount: sceneResult.outputSampleCount,
           speedApplied: sceneResult.speedApplied,
           dubbedEnUrl: sceneResult.dubbedEnUrl,
         })),
