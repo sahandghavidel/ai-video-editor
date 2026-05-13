@@ -2590,31 +2590,16 @@ export default function OriginalVideosList({
         }
 
         try {
-          // Step 1: calculate durations
-          const durRes = await fetch('/api/calculate-final-video-durations', {
+          const createEnSrtResponse = await fetch('/api/create-en-srt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sceneIds }),
+            body: JSON.stringify({ videoId: video.id, sceneIds }),
           });
 
-          if (!durRes.ok) {
-            const t = await durRes.text().catch(() => '');
+          if (!createEnSrtResponse.ok) {
+            const t = await createEnSrtResponse.text().catch(() => '');
             throw new Error(
-              `Duration calculation failed for video #${video.id}: ${durRes.status} ${t}`,
-            );
-          }
-
-          // Step 2: generate SRT and save URL
-          const srtRes = await fetch('/api/generate-duration-srt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoId: video.id }),
-          });
-
-          if (!srtRes.ok) {
-            const t = await srtRes.text().catch(() => '');
-            throw new Error(
-              `SRT generation failed for video #${video.id}: ${srtRes.status} ${t}`,
+              `Create En Srt failed for video #${video.id}: ${createEnSrtResponse.status} ${t}`,
             );
           }
 

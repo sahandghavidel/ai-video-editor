@@ -3481,42 +3481,8 @@ export default function BatchOperations({
     setCalculatingFinalVideoDurations(true);
 
     try {
-      const res = await fetch('/api/calculate-final-video-durations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneIds }),
-      });
-
-      const payload = (await res.json().catch(() => null)) as {
-        error?: unknown;
-        requestedCount?: unknown;
-        updatedCount?: unknown;
-        skippedMissingFinalVideoUrlCount?: unknown;
-        failedCount?: unknown;
-        failures?: unknown;
-      } | null;
-
-      if (!res.ok) {
-        const message =
-          typeof payload?.error === 'string'
-            ? payload.error
-            : `Failed to calculate final durations (${res.status})`;
-        throw new Error(message);
-      }
-
-      const failedCount = Number(payload?.failedCount ?? 0);
-      if (failedCount > 0) {
-        console.warn('Final duration batch completed with failures:', {
-          requestedCount: Number(payload?.requestedCount ?? 0),
-          updatedCount: Number(payload?.updatedCount ?? 0),
-          skippedMissingFinalVideoUrlCount: Number(
-            payload?.skippedMissingFinalVideoUrlCount ?? 0,
-          ),
-          failedCount,
-          failures: Array.isArray(payload?.failures) ? payload?.failures : [],
-        });
-      }
-
+      // Step 1 is now centralized in /api/create-en-srt.
+      // Keep this preflight for UI compatibility and early validation.
       if (refreshOnDone) {
         onRefresh?.();
       }
@@ -3525,7 +3491,7 @@ export default function BatchOperations({
       }
       return true;
     } catch (error) {
-      console.error('Final duration batch failed:', error);
+      console.error('Final duration preflight failed:', error);
       return false;
     } finally {
       setCalculatingFinalVideoDurations(false);
@@ -3541,38 +3507,35 @@ export default function BatchOperations({
     const selectedVideoId = Number(selectedOriginalVideo.id);
     if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) return false;
 
+    const sceneIds = [...data]
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      .map((scene) => Number(scene.id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    if (sceneIds.length === 0) return true;
+
     setGeneratingDurationSrt(true);
     try {
-      const res = await fetch('/api/generate-duration-srt', {
+      const res = await fetch('/api/create-en-srt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: selectedVideoId }),
+        body: JSON.stringify({ videoId: selectedVideoId, sceneIds }),
       });
 
       const payload = (await res.json().catch(() => null)) as {
         error?: unknown;
-        srtUrl?: unknown;
-        includedScenes?: unknown;
-        totalScenes?: unknown;
-        skippedNoDuration?: unknown;
-        skippedNoSentence?: unknown;
       } | null;
 
       if (!res.ok) {
         const message =
           typeof payload?.error === 'string'
             ? payload.error
-            : `Failed to generate duration SRT (${res.status})`;
+            : `Failed to create EN SRT (${res.status})`;
         throw new Error(message);
       }
 
-      console.log('Duration SRT generated and saved to field_6872:', {
+      console.log('Create En Srt completed via /api/create-en-srt:', {
         videoId: selectedVideoId,
-        srtUrl: typeof payload?.srtUrl === 'string' ? payload.srtUrl : null,
-        includedScenes: Number(payload?.includedScenes ?? 0),
-        totalScenes: Number(payload?.totalScenes ?? 0),
-        skippedNoDuration: Number(payload?.skippedNoDuration ?? 0),
-        skippedNoSentence: Number(payload?.skippedNoSentence ?? 0),
       });
 
       if (refreshOnDone) {
