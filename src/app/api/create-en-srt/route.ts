@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Toggle: when true, build EN SRT using scene Duration (field_6884)
+// instead of calculating/using Final Video Duration (field_7107).
+const USE_ORIGINAL_VIDEO_DURATION = true;
+
+const ORIGINAL_DURATION_FIELD_KEY = 'field_6884';
+
 type CreateEnSrtRequest = {
   videoId?: unknown;
   sceneIds?: unknown;
@@ -67,35 +73,44 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = new URL(request.url).origin;
 
-    const durationResponse = await fetch(
-      `${baseUrl}/api/calculate-final-video-durations`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneIds }),
-        cache: 'no-store',
-      },
-    );
+    let durationResult: Record<string, unknown> | null = null;
 
-    if (!durationResponse.ok) {
-      const message = await readErrorMessage(durationResponse);
-      return NextResponse.json(
+    if (!USE_ORIGINAL_VIDEO_DURATION) {
+      const durationResponse = await fetch(
+        `${baseUrl}/api/calculate-final-video-durations`,
         {
-          error: `Duration calculation failed: ${message}`,
-          step: 'calculate-final-video-durations',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneIds }),
+          cache: 'no-store',
         },
-        { status: durationResponse.status || 500 },
       );
-    }
 
-    const durationResult = (await durationResponse
-      .json()
-      .catch(() => null)) as Record<string, unknown> | null;
+      if (!durationResponse.ok) {
+        const message = await readErrorMessage(durationResponse);
+        return NextResponse.json(
+          {
+            error: `Duration calculation failed: ${message}`,
+            step: 'calculate-final-video-durations',
+          },
+          { status: durationResponse.status || 500 },
+        );
+      }
+
+      durationResult = (await durationResponse
+        .json()
+        .catch(() => null)) as Record<string, unknown> | null;
+    }
 
     const srtResponse = await fetch(`${baseUrl}/api/generate-duration-srt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoId }),
+      body: JSON.stringify({
+        videoId,
+        durationFieldKey: USE_ORIGINAL_VIDEO_DURATION
+          ? ORIGINAL_DURATION_FIELD_KEY
+          : undefined,
+      }),
       cache: 'no-store',
     });
 
@@ -120,6 +135,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       videoId,
       sceneIds,
+      usingOriginalVideoDuration: USE_ORIGINAL_VIDEO_DURATION,
       durationResult,
       srtResult,
     });

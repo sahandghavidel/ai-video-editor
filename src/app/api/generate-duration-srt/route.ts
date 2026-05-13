@@ -8,7 +8,20 @@ const SCENES_TABLE_ID = '714';
 const VIDEO_CAPTIONS_URL_FIELD_KEY = 'field_6872';
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const SCENE_SENTENCE_FIELD_KEY = 'field_6890';
-const SCENE_DURATION_FIELD_KEY = 'field_7107';
+const SCENE_FINAL_VIDEO_DURATION_FIELD_KEY = 'field_7107';
+const SCENE_ORIGINAL_DURATION_FIELD_KEY = 'field_6884';
+
+function resolveDurationFieldKey(
+  raw: unknown,
+):
+  | typeof SCENE_FINAL_VIDEO_DURATION_FIELD_KEY
+  | typeof SCENE_ORIGINAL_DURATION_FIELD_KEY {
+  if (raw === SCENE_ORIGINAL_DURATION_FIELD_KEY) {
+    return SCENE_ORIGINAL_DURATION_FIELD_KEY;
+  }
+
+  return SCENE_FINAL_VIDEO_DURATION_FIELD_KEY;
+}
 
 type BaserowRow = Record<string, unknown>;
 
@@ -175,7 +188,12 @@ async function uploadSrtToMinio(filename: string, srtContent: string) {
   return uploadUrl;
 }
 
-function buildSrtFromScenes(scenes: BaserowRow[]): {
+function buildSrtFromScenes(
+  scenes: BaserowRow[],
+  durationFieldKey:
+    | typeof SCENE_FINAL_VIDEO_DURATION_FIELD_KEY
+    | typeof SCENE_ORIGINAL_DURATION_FIELD_KEY,
+): {
   srt: string;
   totalScenes: number;
   includedScenes: number;
@@ -193,7 +211,7 @@ function buildSrtFromScenes(scenes: BaserowRow[]): {
   const lines: string[] = [];
 
   for (const scene of sortedScenes) {
-    const duration = parseNumberish(scene[SCENE_DURATION_FIELD_KEY]);
+    const duration = parseNumberish(scene[durationFieldKey]);
     const sentence = String(scene[SCENE_SENTENCE_FIELD_KEY] ?? '').trim();
 
     if (!Number.isFinite(duration) || duration <= 0) {
@@ -230,7 +248,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as {
       videoId?: unknown;
+      durationFieldKey?: unknown;
     } | null;
+    const durationFieldKey = resolveDurationFieldKey(body?.durationFieldKey);
 
     const videoId = Number(body?.videoId);
     if (!Number.isFinite(videoId) || videoId <= 0) {
@@ -258,12 +278,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const srtResult = buildSrtFromScenes(scenes);
+    const srtResult = buildSrtFromScenes(scenes, durationFieldKey);
     if (!srtResult.srt.trim()) {
       return NextResponse.json(
         {
-          error:
-            'SRT content is empty. Ensure scene durations (7107) and sentences (6890) exist.',
+          error: `SRT content is empty. Ensure scene durations (${durationFieldKey}) and sentences (6890) exist.`,
         },
         { status: 400 },
       );
@@ -281,6 +300,7 @@ export async function POST(request: NextRequest) {
       filename,
       ...srtResult,
       savedField: VIDEO_CAPTIONS_URL_FIELD_KEY,
+      durationFieldKey,
     });
   } catch (error) {
     console.error('[generate-duration-srt] error:', error);

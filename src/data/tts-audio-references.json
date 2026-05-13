@@ -10,7 +10,7 @@
         "videoSrtFieldKey": "field_7112",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7113",
-        "sceneDurationFieldKey": "field_7107",
+        "sceneDurationFieldKey": "field_6884",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7110",
         "sceneDubbedAudioFieldKey": "field_7111",
@@ -28,7 +28,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-12T14:53:49.569Z"
+      "updatedAt": "2026-05-13T03:44:17.522Z"
     },
     {
       "id": "en-default",
@@ -58,7 +58,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-12T14:53:49.569Z"
+      "updatedAt": "2026-05-13T03:44:17.522Z"
     }
   ]
 }
