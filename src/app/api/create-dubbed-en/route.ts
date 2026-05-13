@@ -18,6 +18,7 @@ const SCENE_SENTENCE_FIELD_KEY = 'field_6890';
 
 const VIDEO_FINAL_DUBBED_AUDIO_FIELD_KEY = 'field_7109';
 const VIDEO_UPLOADED_DURATION_FIELD_KEY = 'field_6909';
+const VIDEO_UPLOADED_URL_FIELD_KEY = 'field_6881';
 
 const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_CHANNELS = 2;
@@ -740,6 +741,65 @@ async function patchFinalDubbedEnWithAuthRetry(options: {
 
     console.warn(
       `[create-dubbed-en] Baserow auth expired while saving final dubbed audio for video ${videoId}. Refreshing token and retrying once...`,
+    );
+
+    const refreshedToken = await getJWTToken(true);
+    await baserowPatchRow(
+      baserowUrl,
+      refreshedToken,
+      VIDEOS_TABLE_ID,
+      videoId,
+      patchPayload,
+    );
+
+    return refreshedToken;
+  }
+}
+
+async function patchUploadedVideoDurationWithAuthRetry(options: {
+  baserowUrl: string;
+  token: string;
+  videoId: number;
+  uploadedVideoDurationSec: number;
+}): Promise<string> {
+  const { baserowUrl, token, videoId, uploadedVideoDurationSec } = options;
+
+  const patchPayload = {
+    [VIDEO_UPLOADED_DURATION_FIELD_KEY]: uploadedVideoDurationSec,
+  };
+
+  try {
+    await baserowPatchRow(
+      baserowUrl,
+      token,
+      VIDEOS_TABLE_ID,
+      videoId,
+      patchPayload,
+    );
+    return token;
+  } catch (error) {
+    if (isTransientBaserowError(error)) {
+      console.warn(
+        `[create-dubbed-en] Transient Baserow error while saving uploaded video duration for video ${videoId}. Retrying once...`,
+      );
+
+      await baserowPatchRow(
+        baserowUrl,
+        token,
+        VIDEOS_TABLE_ID,
+        videoId,
+        patchPayload,
+      );
+
+      return token;
+    }
+
+    if (!isBaserowAuthError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      `[create-dubbed-en] Baserow auth expired while saving uploaded video duration for video ${videoId}. Refreshing token and retrying once...`,
     );
 
     const refreshedToken = await getJWTToken(true);
@@ -1555,17 +1615,58 @@ export async function POST(request: NextRequest) {
         throw error;
       }
     }
-    const uploadedVideoDurationSecRaw = parsePositiveNumber(
+    let uploadedVideoDurationSecRaw = parsePositiveNumber(
       videoRow[VIDEO_UPLOADED_DURATION_FIELD_KEY],
     );
 
     if (!uploadedVideoDurationSecRaw) {
-      return NextResponse.json(
-        {
-          error: `Video ${videoId} is missing valid Uploaded Video Duration (${VIDEO_UPLOADED_DURATION_FIELD_KEY})`,
-        },
-        { status: 400 },
+      const uploadedVideoUrl = extractUrl(
+        videoRow[VIDEO_UPLOADED_URL_FIELD_KEY],
       );
+
+      if (!uploadedVideoUrl) {
+        return NextResponse.json(
+          {
+            error: `Video ${videoId} is missing valid Uploaded Video Duration (${VIDEO_UPLOADED_DURATION_FIELD_KEY}) and Uploaded Video URL (${VIDEO_UPLOADED_URL_FIELD_KEY})`,
+          },
+          { status: 400 },
+        );
+      }
+
+      try {
+        const probedDurationSec = roundDurationSeconds(
+          await probeMediaDurationSeconds(uploadedVideoUrl),
+        );
+
+        if (!Number.isFinite(probedDurationSec) || probedDurationSec <= 0) {
+          throw new Error('Duration probe returned an invalid duration');
+        }
+
+        token = await patchUploadedVideoDurationWithAuthRetry({
+          baserowUrl,
+          token,
+          videoId,
+          uploadedVideoDurationSec: probedDurationSec,
+        });
+
+        uploadedVideoDurationSecRaw = probedDurationSec;
+
+        console.log(
+          `[create-dubbed-en] Video ${videoId}: synced Uploaded Video Duration (${VIDEO_UPLOADED_DURATION_FIELD_KEY}) from Uploaded Video URL (${VIDEO_UPLOADED_URL_FIELD_KEY}) = ${probedDurationSec}s`,
+        );
+      } catch (probeError) {
+        return NextResponse.json(
+          {
+            error: `Video ${videoId} is missing valid Uploaded Video Duration (${VIDEO_UPLOADED_DURATION_FIELD_KEY}) and duration probe from Uploaded Video URL (${VIDEO_UPLOADED_URL_FIELD_KEY}) failed`,
+            details: [
+              probeError instanceof Error
+                ? probeError.message
+                : String(probeError),
+            ],
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const uploadedVideoDurationSec = roundDurationSeconds(
