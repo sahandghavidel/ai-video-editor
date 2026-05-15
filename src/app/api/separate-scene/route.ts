@@ -1132,8 +1132,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const beforeSceneId = parsePositiveInt(body.beforeSceneId);
-
     const baserowUrl = process.env.BASEROW_API_URL;
     if (!baserowUrl) {
       return NextResponse.json(
@@ -1158,6 +1156,21 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    const videoRow = await getTableRow(
+      baserowUrl,
+      VIDEOS_TABLE_ID,
+      videoId,
+      token,
+    );
+    const existingSceneIds = extractSceneIdsFromLinkedField(
+      videoRow.field_6866,
+    );
+    const sourceSceneIndexInVideo = existingSceneIds.indexOf(sceneId);
+    const canonicalBeforeSceneId =
+      sourceSceneIndexInVideo >= 0
+        ? existingSceneIds[sourceSceneIndexInVideo + 1]
+        : undefined;
 
     const sourceStart = parseFiniteNumber(sourceScene.field_6896) ?? 0;
     const sourceEndField = parseFiniteNumber(sourceScene.field_6897);
@@ -1252,7 +1265,7 @@ export async function POST(request: NextRequest) {
         SCENES_TABLE_ID,
         payload,
         token,
-        beforeSceneId ?? undefined,
+        canonicalBeforeSceneId,
       );
 
       createdRows.push(createdRow);
@@ -1266,19 +1279,12 @@ export async function POST(request: NextRequest) {
     let linkedSceneIds: number[] = [];
 
     try {
-      const videoRow = await getTableRow(
-        baserowUrl,
-        VIDEOS_TABLE_ID,
-        videoId,
-        token,
-      );
-      const existingSceneIds = extractSceneIdsFromLinkedField(
-        videoRow.field_6866,
-      );
-
       const baseIds =
         existingSceneIds.length > 0 ? [...existingSceneIds] : [sceneId];
-      const sourceIndex = baseIds.indexOf(sceneId);
+      const sourceIndex =
+        sourceSceneIndexInVideo >= 0
+          ? sourceSceneIndexInVideo
+          : baseIds.indexOf(sceneId);
       const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : baseIds.length;
 
       baseIds.splice(insertAt, 0, ...createdSceneIds);
@@ -1306,6 +1312,7 @@ export async function POST(request: NextRequest) {
       videoId,
       segmentCount: segmentPayloads.length,
       createdSceneIds,
+      canonicalBeforeSceneId: canonicalBeforeSceneId ?? null,
       linkedScenesUpdated,
       linkedSceneIds,
       updatedSourceScene,

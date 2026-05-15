@@ -1003,6 +1003,44 @@ export default function SceneCard({
   const roundSceneTiming = (value: number): number =>
     Number(value.toFixed(SCENE_TIMING_DECIMALS));
 
+  const getSceneRealOrderRank = (scene: BaserowRow): number => {
+    const customOrder = Number(scene.field_7104);
+    if (Number.isFinite(customOrder)) {
+      return customOrder;
+    }
+
+    const baserowOrder = Number(scene.order);
+    if (Number.isFinite(baserowOrder)) {
+      return baserowOrder;
+    }
+
+    return Number.POSITIVE_INFINITY;
+  };
+
+  const compareScenesByRealOrder = (a: BaserowRow, b: BaserowRow): number => {
+    const orderDelta = getSceneRealOrderRank(a) - getSceneRealOrderRank(b);
+    if (orderDelta !== 0) {
+      return orderDelta;
+    }
+
+    const startA = Number(a.field_6896);
+    const startB = Number(b.field_6896);
+    if (
+      Number.isFinite(startA) &&
+      Number.isFinite(startB) &&
+      startA !== startB
+    ) {
+      return startA - startB;
+    }
+
+    return a.id - b.id;
+  };
+
+  const getScenesInRealVideoOrder = (videoId: number): BaserowRow[] =>
+    data
+      .filter((scene) => getVideoIdFromScene(scene) === videoId)
+      .sort(compareScenesByRealOrder);
+
   const buildWeightedTimingSegments = (
     sentences: string[],
     startTime: number,
@@ -1174,13 +1212,12 @@ export default function SceneCard({
     const startTime = Number(currentScene.field_6896) || 0;
     const endTime = Number(currentScene.field_6897) || startTime;
     const segments = buildWeightedTimingSegments(sentences, startTime, endTime);
-    const filteredIndex = filteredAndSortedData.findIndex(
-      (s) => s.id === sceneId,
-    );
+    const scenesInRealOrder = getScenesInRealVideoOrder(videoId);
+    const realOrderIndex = scenesInRealOrder.findIndex((s) => s.id === sceneId);
     const nextSceneInOrder =
-      filteredIndex >= 0 ? filteredAndSortedData[filteredIndex + 1] : undefined;
+      realOrderIndex >= 0 ? scenesInRealOrder[realOrderIndex + 1] : undefined;
     const beforeSceneId = nextSceneInOrder?.id;
-    const fallbackBaseOrder = filteredIndex >= 0 ? filteredIndex + 1 : 1;
+    const fallbackBaseOrder = realOrderIndex >= 0 ? realOrderIndex + 1 : 1;
     const currentSceneOrder = Number(currentScene.field_7104);
     const baseSceneOrder = Number.isFinite(currentSceneOrder)
       ? currentSceneOrder
@@ -1267,7 +1304,9 @@ export default function SceneCard({
         // IMPORTANT: build from currently loaded scene rows (selected video data)
         // instead of selectedOriginalVideo.sceneIds, which can be stale after
         // combine/delete operations and cause Baserow linked-row update failures.
-        const existingIds = normalizeSceneIds(data.map((s) => s.id));
+        const existingIds = normalizeSceneIds(
+          scenesInRealOrder.map((scene) => scene.id),
+        );
         const currentIndex = existingIds.indexOf(sceneId);
         const insertAt =
           currentIndex >= 0 ? currentIndex + 1 : existingIds.length;
@@ -1390,18 +1429,21 @@ export default function SceneCard({
       );
     }
 
-    const sceneExists = data.some((scene) => scene.id === activeSceneId);
-    if (!sceneExists) {
+    const activeScene = data.find((scene) => scene.id === activeSceneId);
+    if (!activeScene) {
       throw new Error(
         'Scene not found in current data. Please refresh and try again.',
       );
     }
 
-    const filteredIndex = filteredAndSortedData.findIndex(
+    const videoId = getVideoIdFromScene(activeScene);
+    const scenesInRealOrder =
+      videoId !== null ? getScenesInRealVideoOrder(videoId) : [];
+    const realOrderIndex = scenesInRealOrder.findIndex(
       (scene) => scene.id === activeSceneId,
     );
     const nextSceneInOrder =
-      filteredIndex >= 0 ? filteredAndSortedData[filteredIndex + 1] : undefined;
+      realOrderIndex >= 0 ? scenesInRealOrder[realOrderIndex + 1] : undefined;
     const beforeSceneId = nextSceneInOrder?.id;
 
     setSplittingId(activeSceneId);
@@ -1414,7 +1456,7 @@ export default function SceneCard({
         },
         body: JSON.stringify({
           sceneId: activeSceneId,
-          beforeSceneId,
+          ...(typeof beforeSceneId === 'number' ? { beforeSceneId } : {}),
           editedWords,
         }),
       });
