@@ -173,6 +173,8 @@ export default function BatchOperations({
     transcribeApplyGenerateCurrentSceneId,
     setTranscribeApplyGenerateCurrentSceneId,
   ] = useState<number | null>(null);
+  const [transcribeApplyGenerateMinChars, setTranscribeApplyGenerateMinChars] =
+    useState(150);
 
   const [generatingAllSubtitles, setGeneratingAllSubtitles] = useState(false);
   const [generatingSubtitleSceneId, setGeneratingSubtitleSceneId] = useState<
@@ -1376,6 +1378,13 @@ export default function BatchOperations({
       return;
     }
 
+    const minSentenceCharactersForBatch = Math.max(
+      0,
+      Number.isFinite(transcribeApplyGenerateMinChars)
+        ? Math.floor(transcribeApplyGenerateMinChars)
+        : 0,
+    );
+
     const scenesInRealOrder = getScenesInRealOrder(data).filter((scene) => {
       const sceneId = Number(scene.id);
       return Number.isInteger(sceneId) && sceneId > 0;
@@ -1421,6 +1430,13 @@ export default function BatchOperations({
           if (!sentenceText) {
             console.info(
               `[Batch] Scene ${sceneId}: skipping because Sentence (field_6890) is empty.`,
+            );
+            continue;
+          }
+
+          if (sentenceText.length < minSentenceCharactersForBatch) {
+            console.info(
+              `[Batch] Scene ${sceneId}: skipping because Sentence (field_6890) length (${sentenceText.length}) is below minimum (${minSentenceCharactersForBatch}).`,
             );
             continue;
           }
@@ -5472,6 +5488,27 @@ export default function BatchOperations({
                         : 'Transcribe + Apply + Gen Clips'}
                     </span>
                   </button>
+
+                  <div className='mt-2'>
+                    <label className='block text-[11px] font-medium text-orange-900 mb-1'>
+                      Min chars in Sentence (6890)
+                    </label>
+                    <input
+                      type='number'
+                      min={0}
+                      step={1}
+                      value={transcribeApplyGenerateMinChars}
+                      onChange={(e) => {
+                        const parsed = Number.parseInt(e.target.value, 10);
+                        setTranscribeApplyGenerateMinChars(
+                          Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+                        );
+                      }}
+                      disabled={runningTranscribeApplyGenerateAllScenes}
+                      className='w-full h-9 px-2 bg-white border border-orange-300 rounded-lg text-sm text-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-orange-100 disabled:text-orange-500 disabled:cursor-not-allowed'
+                      title='Only scenes with Sentence (field_6890) length greater than or equal to this value will be processed in this batch action'
+                    />
+                  </div>
                 </div>
               </div>
             </section>
