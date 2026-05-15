@@ -10,7 +10,9 @@ interface SceneSeparationModalProps {
   captionsUrl: string | null;
   onClose: () => void;
   onApplySeparation?: (editedWords: CaptionWord[]) => Promise<void> | void;
+  onTranscribeApplyAndGenerateClips?: () => Promise<void> | void;
   isApplyingSeparation?: boolean;
+  isTranscribeApplyAndGenerateClipsRunning?: boolean;
   onRetranscribeOriginal?: () => Promise<void> | void;
   isRetranscribing?: boolean;
   isTranscribeBusy?: boolean;
@@ -63,7 +65,9 @@ export default function SceneSeparationModal({
   captionsUrl,
   onClose,
   onApplySeparation,
+  onTranscribeApplyAndGenerateClips,
   isApplyingSeparation = false,
+  isTranscribeApplyAndGenerateClipsRunning = false,
   onRetranscribeOriginal,
   isRetranscribing = false,
   isTranscribeBusy = false,
@@ -127,6 +131,30 @@ export default function SceneSeparationModal({
         error instanceof Error
           ? error.message
           : 'Failed to apply scene separation.';
+      setApplyError(message);
+    }
+  };
+
+  const handleTranscribeApplyAndGenerate = async () => {
+    if (!sceneId) {
+      setApplyError('No active scene selected.');
+      return;
+    }
+
+    if (!onTranscribeApplyAndGenerateClips) {
+      setApplyError('One-shot action is not available right now.');
+      return;
+    }
+
+    setApplyError(null);
+
+    try {
+      await onTranscribeApplyAndGenerateClips();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to run transcribe + apply + generate clips.';
       setApplyError(message);
     }
   };
@@ -365,7 +393,12 @@ export default function SceneSeparationModal({
               onClick={() => {
                 void onRetranscribeOriginal?.();
               }}
-              disabled={!sceneId || isTranscribeBusy || isApplyingSeparation}
+              disabled={
+                !sceneId ||
+                isTranscribeBusy ||
+                isApplyingSeparation ||
+                isTranscribeApplyAndGenerateClipsRunning
+              }
               className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 isRetranscribing
                   ? 'bg-cyan-100 text-cyan-700'
@@ -402,6 +435,7 @@ export default function SceneSeparationModal({
                   loadingWords ||
                   isRetranscribing ||
                   isApplyingSeparation ||
+                  isTranscribeApplyAndGenerateClipsRunning ||
                   !onApplySeparation
                 }
                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -422,8 +456,42 @@ export default function SceneSeparationModal({
               </button>
 
               <button
+                onClick={() => {
+                  void handleTranscribeApplyAndGenerate();
+                }}
+                disabled={
+                  !sceneId ||
+                  isRetranscribing ||
+                  isTranscribeBusy ||
+                  isApplyingSeparation ||
+                  isTranscribeApplyAndGenerateClipsRunning ||
+                  !onTranscribeApplyAndGenerateClips
+                }
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isTranscribeApplyAndGenerateClipsRunning
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
+                title='Transcribe original, apply separation, then generate clips for newly created scenes'
+              >
+                {isTranscribeApplyAndGenerateClipsRunning ? (
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                ) : (
+                  <span className='text-[11px] leading-none'>🎬</span>
+                )}
+                <span>
+                  {isTranscribeApplyAndGenerateClipsRunning
+                    ? 'Running...'
+                    : 'Transcribe + Apply + Gen Clips'}
+                </span>
+              </button>
+
+              <button
                 onClick={onClose}
-                disabled={isApplyingSeparation}
+                disabled={
+                  isApplyingSeparation ||
+                  isTranscribeApplyAndGenerateClipsRunning
+                }
                 className='px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 Close

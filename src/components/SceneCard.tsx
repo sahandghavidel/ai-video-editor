@@ -954,6 +954,10 @@ export default function SceneCard({
   // State for combining scenes
   const [combiningId, setCombiningId] = useState<number | null>(null);
   const [splittingId, setSplittingId] = useState<number | null>(null);
+  const [
+    transcribeApplyAndGenerateSceneId,
+    setTranscribeApplyAndGenerateSceneId,
+  ] = useState<number | null>(null);
 
   const clearedGeneratedFields: Record<string, unknown> = {
     field_6886: '', // Videos
@@ -1423,9 +1427,77 @@ export default function SceneCard({
     });
   };
 
-  const handleApplySceneSeparation = async (
+  const parsePositiveSceneIds = (value: unknown): number[] => {
+    if (!Array.isArray(value)) return [];
+
+    const unique = new Set<number>();
+
+    for (const entry of value) {
+      const parsed = Number.parseInt(String(entry ?? ''), 10);
+      if (!Number.isInteger(parsed) || parsed <= 0) continue;
+      unique.add(parsed);
+    }
+
+    return [...unique];
+  };
+
+  const normalizeCaptionWordsForSeparation = (
+    payload: unknown,
+  ): Array<{ word: string; start: number; end: number }> => {
+    if (!Array.isArray(payload)) return [];
+
+    const rawWords = payload
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+
+        const word =
+          typeof record.word === 'string'
+            ? record.word.trim()
+            : typeof record.text === 'string'
+              ? record.text.trim()
+              : '';
+
+        const start =
+          typeof record.start === 'number' && Number.isFinite(record.start)
+            ? record.start
+            : null;
+
+        const end =
+          typeof record.end === 'number' && Number.isFinite(record.end)
+            ? record.end
+            : start;
+
+        if (!word || start === null || end === null) return null;
+
+        return {
+          word,
+          start,
+          end: Math.max(start, end),
+        };
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          word: string;
+          start: number;
+          end: number;
+        } => item !== null,
+      );
+
+    return sanitizeCaptionWordTimestamps(rawWords);
+  };
+
+  const executeSceneSeparation = async (
     editedWords: Array<{ word: string; start: number; end: number }>,
-  ) => {
+    options?: {
+      closeModalOnSuccess?: boolean;
+      playSuccessSoundOnSuccess?: boolean;
+      refreshOnSuccess?: boolean;
+      playErrorSoundOnFailure?: boolean;
+    },
+  ): Promise<number[]> => {
     const activeSceneId = sceneSeparationModal.sceneId;
     if (activeSceneId === null) {
       throw new Error('No active scene selected for separation.');
@@ -1437,7 +1509,10 @@ export default function SceneCard({
       );
     }
 
-    const activeScene = data.find((scene) => scene.id === activeSceneId);
+    const activeScene =
+      data.find((scene) => scene.id === activeSceneId) ||
+      (await getSceneById(activeSceneId));
+
     if (!activeScene) {
       throw new Error(
         'Scene not found in current data. Please refresh and try again.',
@@ -1471,6 +1546,7 @@ export default function SceneCard({
 
       const payload = (await response.json().catch(() => null)) as {
         error?: unknown;
+        createdSceneIds?: unknown;
       } | null;
 
       if (!response.ok) {
@@ -1481,16 +1557,148 @@ export default function SceneCard({
         throw new Error(message);
       }
 
-      playSuccessSound();
-      handleCloseSceneSeparationModal();
-      refreshData?.();
+      const createdSceneIds = parsePositiveSceneIds(payload?.createdSceneIds);
+
+      if (options?.playSuccessSoundOnSuccess !== false) {
+        playSuccessSound();
+      }
+      if (options?.closeModalOnSuccess !== false) {
+        handleCloseSceneSeparationModal();
+      }
+      if (options?.refreshOnSuccess !== false) {
+        refreshData?.();
+      }
+
+      return createdSceneIds;
     } catch (error) {
-      playErrorSound();
+      if (options?.playErrorSoundOnFailure !== false) {
+        playErrorSound();
+      }
       throw error instanceof Error
         ? error
         : new Error('Failed to apply scene separation');
     } finally {
       setSplittingId(null);
+    }
+  };
+
+  const handleApplySceneSeparation = async (
+    editedWords: Array<{ word: string; start: number; end: number }>,
+  ) => {
+    await executeSceneSeparation(editedWords);
+  };
+
+  const handleTranscribeApplyAndGenerateClips = async () => {
+    const activeSceneId = sceneSeparationModal.sceneId;
+    if (activeSceneId === null) {
+      throw new Error('No active scene selected for separation.');
+    }
+
+    if (transcribeApplyAndGenerateSceneId !== null) {
+      return;
+    }
+
+    setTranscribeApplyAndGenerateSceneId(activeSceneId);
+
+    try {
+      const targetScene =
+        data.find((scene) => scene.id === activeSceneId) ||
+        (await getSceneById(activeSceneId));
+
+      if (!targetScene) {
+        throw new Error(
+          'Scene not found in current data. Please refresh and try again.',
+        );
+      }
+
+      await handleTranscribeScene(
+        activeSceneId,
+        targetScene,
+        'original',
+        false,
+        true,
+        true,
+        { captionsFieldKey: 'field_7120', throwOnError: true },
+      );
+
+      const refreshedScene = await getSceneById(activeSceneId);
+      const nextCaptionsUrl = String(refreshedScene?.field_7120 || '').trim();
+
+      if (!nextCaptionsUrl) {
+        throw new Error(
+          'Original transcription captions (field_7120) are missing after transcription.',
+        );
+      }
+
+      const separator = nextCaptionsUrl.includes('?') ? '&' : '?';
+      const captionsResponse = await fetch(
+        `${nextCaptionsUrl}${separator}t=${Date.now()}`,
+        {
+          cache: 'no-store',
+        },
+      );
+
+      if (!captionsResponse.ok) {
+        throw new Error(
+          `Failed to load original captions (${captionsResponse.status})`,
+        );
+      }
+
+      const captionsPayload = (await captionsResponse
+        .json()
+        .catch(() => null)) as unknown;
+      const transcribedWords =
+        normalizeCaptionWordsForSeparation(captionsPayload);
+
+      if (!transcribedWords.length) {
+        throw new Error(
+          'Transcription returned no usable words for separation.',
+        );
+      }
+
+      setSceneSeparationModal((prev) =>
+        prev.sceneId === activeSceneId
+          ? { ...prev, captionsUrl: nextCaptionsUrl }
+          : prev,
+      );
+
+      const createdSceneIds = await executeSceneSeparation(transcribedWords, {
+        closeModalOnSuccess: false,
+        playSuccessSoundOnSuccess: false,
+        refreshOnSuccess: false,
+        playErrorSoundOnFailure: false,
+      });
+
+      const clipSceneIds = parsePositiveSceneIds([
+        activeSceneId,
+        ...createdSceneIds,
+      ]);
+
+      for (const clipSceneId of clipSceneIds) {
+        const clipScene = await getSceneById(clipSceneId);
+        if (!clipScene) {
+          console.warn(
+            `Skipping clip generation for scene ${clipSceneId}: scene not found`,
+          );
+          continue;
+        }
+
+        await handleGenerateSingleClip(clipSceneId, clipScene, {
+          throwOnError: true,
+        });
+      }
+
+      playSuccessSound();
+      handleCloseSceneSeparationModal();
+      refreshData?.();
+    } catch (error) {
+      throw error instanceof Error
+        ? error
+        : new Error(
+            'Failed to transcribe, apply separation, and generate clips.',
+          );
+    } finally {
+      setTranscribeApplyAndGenerateSceneId(null);
     }
   };
 
@@ -2137,15 +2345,26 @@ export default function SceneCard({
   const handleGenerateSingleClip = async (
     sceneId: number,
     sceneData?: BaserowRow,
+    options?: { throwOnError?: boolean },
   ) => {
     const currentScene =
       sceneData || data.find((scene) => scene.id === sceneId);
-    if (!currentScene) return;
+    if (!currentScene) {
+      if (options?.throwOnError) {
+        throw new Error(`Scene ${sceneId} not found for clip generation.`);
+      }
+      return;
+    }
 
     const { generatingSingleClip } = clipGeneration;
 
     // Check if any scene is already generating (only one at a time)
     if (generatingSingleClip !== null) {
+      if (options?.throwOnError) {
+        throw new Error(
+          `Clip generation is currently busy for scene ${generatingSingleClip}.`,
+        );
+      }
       return;
     }
 
@@ -2209,6 +2428,10 @@ export default function SceneCard({
         errorMessage = error.message;
       }
       console.log(`Error: ${errorMessage}`);
+
+      if (options?.throwOnError) {
+        throw error instanceof Error ? error : new Error(errorMessage);
+      }
     } finally {
       setGeneratingSingleClip(null);
     }
@@ -7410,9 +7633,16 @@ export default function SceneCard({
           captionsUrl={sceneSeparationModal.captionsUrl}
           onClose={handleCloseSceneSeparationModal}
           onApplySeparation={handleApplySceneSeparation}
+          onTranscribeApplyAndGenerateClips={
+            handleTranscribeApplyAndGenerateClips
+          }
           isApplyingSeparation={
             sceneSeparationModal.sceneId !== null &&
             splittingId === sceneSeparationModal.sceneId
+          }
+          isTranscribeApplyAndGenerateClipsRunning={
+            sceneSeparationModal.sceneId !== null &&
+            transcribeApplyAndGenerateSceneId === sceneSeparationModal.sceneId
           }
           onRetranscribeOriginal={async () => {
             const activeSceneId = sceneSeparationModal.sceneId;
