@@ -347,10 +347,12 @@ export default function SceneCard({
     isOpen: boolean;
     sceneId: number | null;
     videoUrl: string | null;
+    captionsUrl: string | null;
   }>({
     isOpen: false,
     sceneId: null,
     videoUrl: null,
+    captionsUrl: null,
   });
   const [ttsWordReplacementsModalOpen, setTtsWordReplacementsModalOpen] =
     useState(false);
@@ -1349,6 +1351,9 @@ export default function SceneCard({
     if (!currentScene) return;
 
     const originalVideoUrl = String(currentScene.field_6888 || '').trim();
+    const originalCaptionsUrl = String(
+      currentScene.field_7120 || currentScene.field_6910 || '',
+    ).trim();
     if (!originalVideoUrl) {
       alert('No original video found for this scene.');
       return;
@@ -1358,6 +1363,7 @@ export default function SceneCard({
       isOpen: true,
       sceneId,
       videoUrl: originalVideoUrl,
+      captionsUrl: originalCaptionsUrl || null,
     });
   };
 
@@ -1366,6 +1372,7 @@ export default function SceneCard({
       isOpen: false,
       sceneId: null,
       videoUrl: null,
+      captionsUrl: null,
     });
   };
 
@@ -7282,16 +7289,18 @@ export default function SceneCard({
           isOpen={sceneSeparationModal.isOpen}
           sceneId={sceneSeparationModal.sceneId}
           videoUrl={sceneSeparationModal.videoUrl}
+          captionsUrl={sceneSeparationModal.captionsUrl}
           onClose={handleCloseSceneSeparationModal}
           onRetranscribeOriginal={async () => {
-            if (sceneSeparationModal.sceneId === null) return;
+            const activeSceneId = sceneSeparationModal.sceneId;
+            if (activeSceneId === null) return;
 
             const targetScene = data.find(
-              (scene) => scene.id === sceneSeparationModal.sceneId,
+              (scene) => scene.id === activeSceneId,
             );
 
             await handleTranscribeScene(
-              sceneSeparationModal.sceneId,
+              activeSceneId,
               targetScene,
               'original',
               false,
@@ -7299,6 +7308,22 @@ export default function SceneCard({
               true,
               { captionsFieldKey: 'field_7120' },
             );
+
+            const refreshedScene = useAppStore
+              .getState()
+              .data.find((scene) => scene.id === activeSceneId);
+
+            const nextCaptionsUrl = String(
+              refreshedScene?.field_7120 || refreshedScene?.field_6910 || '',
+            ).trim();
+
+            if (nextCaptionsUrl) {
+              setSceneSeparationModal((prev) =>
+                prev.sceneId === activeSceneId
+                  ? { ...prev, captionsUrl: nextCaptionsUrl }
+                  : prev,
+              );
+            }
           }}
           isRetranscribing={
             sceneSeparationModal.sceneId !== null &&

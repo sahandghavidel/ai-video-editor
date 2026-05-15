@@ -1,28 +1,99 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 
 interface SceneSeparationModalProps {
   isOpen: boolean;
   sceneId: number | null;
   videoUrl: string | null;
+  captionsUrl: string | null;
   onClose: () => void;
   onRetranscribeOriginal?: () => Promise<void> | void;
   isRetranscribing?: boolean;
   isTranscribeBusy?: boolean;
 }
 
+type CaptionWord = {
+  word: string;
+  start: number;
+  end: number;
+};
+
+const normalizeCaptionWords = (payload: unknown): CaptionWord[] => {
+  if (!Array.isArray(payload)) return [];
+
+  return payload
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const word =
+        typeof record.word === 'string'
+          ? record.word
+          : typeof record.text === 'string'
+            ? record.text
+            : '';
+      const start =
+        typeof record.start === 'number' && Number.isFinite(record.start)
+          ? record.start
+          : 0;
+      const end =
+        typeof record.end === 'number' && Number.isFinite(record.end)
+          ? record.end
+          : start;
+
+      const trimmedWord = word.trim();
+      if (!trimmedWord) return null;
+
+      return {
+        word: trimmedWord,
+        start,
+        end,
+      };
+    })
+    .filter((item): item is CaptionWord => item !== null);
+};
+
 export default function SceneSeparationModal({
   isOpen,
   sceneId,
   videoUrl,
+  captionsUrl,
   onClose,
   onRetranscribeOriginal,
   isRetranscribing = false,
   isTranscribeBusy = false,
 }: SceneSeparationModalProps) {
   const sceneSeparationVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [captionWords, setCaptionWords] = useState<CaptionWord[]>([]);
+  const [loadingWords, setLoadingWords] = useState(false);
+  const [wordsError, setWordsError] = useState<string | null>(null);
+  const [editingWordIndex, setEditingWordIndex] = useState<number | null>(null);
+  const [editingWordValue, setEditingWordValue] = useState('');
+
+  const commitWordEdit = () => {
+    if (editingWordIndex === null) return;
+
+    const nextWord = editingWordValue.trim();
+    if (!nextWord) {
+      setEditingWordIndex(null);
+      setEditingWordValue('');
+      return;
+    }
+
+    setCaptionWords((prev) =>
+      prev.map((word, index) =>
+        index === editingWordIndex ? { ...word, word: nextWord } : word,
+      ),
+    );
+    setEditingWordIndex(null);
+    setEditingWordValue('');
+  };
+
+  const cancelWordEdit = () => {
+    setEditingWordIndex(null);
+    setEditingWordValue('');
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -72,6 +143,65 @@ export default function SceneSeparationModal({
       document.removeEventListener('keydown', handleSceneSeparationKeydown);
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (!captionsUrl) {
+      setCaptionWords([]);
+      setWordsError(null);
+      setLoadingWords(false);
+      setEditingWordIndex(null);
+      setEditingWordValue('');
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCaptionWords = async () => {
+      setLoadingWords(true);
+      setWordsError(null);
+
+      try {
+        const separator = captionsUrl.includes('?') ? '&' : '?';
+        const response = await fetch(
+          `${captionsUrl}${separator}t=${Date.now()}`,
+          {
+            cache: 'no-store',
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to load captions (${response.status})`);
+        }
+
+        const payload = (await response.json()) as unknown;
+        if (cancelled) return;
+
+        setCaptionWords(normalizeCaptionWords(payload));
+        setEditingWordIndex(null);
+        setEditingWordValue('');
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Failed to load caption words.';
+        setWordsError(message);
+        setCaptionWords([]);
+      } finally {
+        if (!cancelled) {
+          setLoadingWords(false);
+        }
+      }
+    };
+
+    void loadCaptionWords();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, captionsUrl]);
+
   if (!isOpen) return null;
 
   return (
@@ -120,6 +250,75 @@ export default function SceneSeparationModal({
               Original video URL is missing for this scene.
             </div>
           )}
+
+          <div className='mt-4 rounded-lg border border-gray-200 overflow-hidden'>
+            <div className='px-3 py-2 bg-gray-50 border-b border-gray-200'>
+              <h4 className='text-xs sm:text-sm font-semibold text-gray-800'>
+                Original Video Caption for Scene (7120)
+              </h4>
+              <p className='text-[11px] sm:text-xs text-gray-500 mt-0.5'>
+                Click a word to edit it (for punctuation/dot adjustments).
+              </p>
+            </div>
+
+            <div className='p-3 max-h-56 overflow-y-auto'>
+              {loadingWords ? (
+                <div className='flex items-center gap-2 text-xs text-gray-500'>
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                  <span>Loading caption words...</span>
+                </div>
+              ) : wordsError ? (
+                <div className='rounded-md border border-amber-200 bg-amber-50 text-amber-800 text-xs px-2.5 py-2'>
+                  {wordsError}
+                </div>
+              ) : captionWords.length === 0 ? (
+                <div className='text-xs text-gray-500'>
+                  No caption words loaded yet. Re-transcribe original to load
+                  words.
+                </div>
+              ) : (
+                <div className='flex flex-wrap gap-2'>
+                  {captionWords.map((item, index) => {
+                    if (editingWordIndex === index) {
+                      return (
+                        <input
+                          key={`edit-${index}`}
+                          value={editingWordValue}
+                          onChange={(e) => setEditingWordValue(e.target.value)}
+                          onBlur={commitWordEdit}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              commitWordEdit();
+                            } else if (event.key === 'Escape') {
+                              event.preventDefault();
+                              cancelWordEdit();
+                            }
+                          }}
+                          autoFocus
+                          className='min-w-[64px] px-2 py-1 text-xs rounded border border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500'
+                        />
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={`${index}-${item.start}-${item.end}-${item.word}`}
+                        onClick={() => {
+                          setEditingWordIndex(index);
+                          setEditingWordValue(item.word);
+                        }}
+                        className='px-2 py-1 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors'
+                        title='Click to edit this word'
+                      >
+                        {item.word}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className='px-4 sm:px-5 pb-4 sm:pb-5 flex items-center justify-between gap-3'>
