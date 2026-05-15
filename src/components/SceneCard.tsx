@@ -960,6 +960,7 @@ export default function SceneCard({
     field_6888: '', // Video Clip URL
     field_6891: '', // TTS
     field_6910: '', // Captions URL for Scene
+    field_7105: '', // Fixed Sentence
     field_7094: '', // Image for Scene
     field_7098: '', // Video for Scene
     field_7095: '', // Upscaled Image for Scene

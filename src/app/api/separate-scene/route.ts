@@ -45,6 +45,7 @@ const CLEARED_GENERATED_FIELDS: Record<string, unknown> = {
   field_6891: '', // TTS
   field_6910: '', // Captions URL for Scene
   field_7120: '', // Original Video Caption for Scene
+  field_7105: '', // Fixed Sentence
   field_7094: '', // Image for Scene
   field_7098: '', // Video for Scene
   field_7095: '', // Upscaled Image for Scene
