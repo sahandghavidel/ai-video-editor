@@ -1101,15 +1101,24 @@ export default function SceneCard({
     // Prevent multiple simultaneous combines
     if (combiningId !== null) return;
 
-    const index = filteredAndSortedData.findIndex((s) => s.id === sceneId);
+    const currentScene = data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    const videoId = getVideoIdFromScene(currentScene);
+    if (videoId === null) {
+      alert('Video ID not found for this scene. Cannot combine scenes.');
+      return;
+    }
+
+    const scenesInRealOrder = getScenesInRealVideoOrder(videoId);
+    const index = scenesInRealOrder.findIndex((s) => s.id === sceneId);
     if (index === -1) return;
-    if (index === filteredAndSortedData.length - 1) {
+    if (index === scenesInRealOrder.length - 1) {
       alert('No next scene to combine with.');
       return;
     }
 
-    const currentScene = filteredAndSortedData[index];
-    const nextScene = filteredAndSortedData[index + 1];
+    const nextScene = scenesInRealOrder[index + 1];
     if (!currentScene || !nextScene) return;
 
     // Prepare new text fields
