@@ -1813,7 +1813,10 @@ export default function SceneCard({
       skipRefresh: boolean = false,
       skipSound: boolean = false,
       updateSentence: boolean = true,
-      opts?: { throwOnError?: boolean },
+      opts?: {
+        throwOnError?: boolean;
+        captionsFieldKey?: string;
+      },
     ) => {
       const currentScene =
         (sceneData as BaserowRow | undefined) ||
@@ -1910,11 +1913,13 @@ export default function SceneCard({
           .join(' ');
         console.log('Extracted full text from transcription:', fullText);
 
-        // Step 5: Update the scene record with the captions URL (field_6910) and optional sentence text (field_6890)
+        // Step 5: Update the scene record with the captions URL field and
+        // optional sentence text (field_6890).
+        const captionsFieldKey = opts?.captionsFieldKey || 'field_6910';
         const captionsUrl = uploadResult.url || uploadResult.file_url;
         if (captionsUrl) {
           const updateData: Record<string, unknown> = {
-            field_6910: captionsUrl, // Captions URL for Scene field
+            [captionsFieldKey]: captionsUrl,
           };
 
           // Only update the sentence if we have extracted text
@@ -1947,7 +1952,7 @@ export default function SceneCard({
             scene.id === sceneId
               ? {
                   ...scene,
-                  field_6910: captionsUrl,
+                  [captionsFieldKey]: captionsUrl,
                   ...(updateSentence && nextSentence
                     ? { field_6890: nextSentence }
                     : {}),
@@ -7278,6 +7283,28 @@ export default function SceneCard({
           sceneId={sceneSeparationModal.sceneId}
           videoUrl={sceneSeparationModal.videoUrl}
           onClose={handleCloseSceneSeparationModal}
+          onRetranscribeOriginal={async () => {
+            if (sceneSeparationModal.sceneId === null) return;
+
+            const targetScene = data.find(
+              (scene) => scene.id === sceneSeparationModal.sceneId,
+            );
+
+            await handleTranscribeScene(
+              sceneSeparationModal.sceneId,
+              targetScene,
+              'original',
+              false,
+              false,
+              true,
+              { captionsFieldKey: 'field_7120' },
+            );
+          }}
+          isRetranscribing={
+            sceneSeparationModal.sceneId !== null &&
+            sceneLoading.transcribingScene === sceneSeparationModal.sceneId
+          }
+          isTranscribeBusy={sceneLoading.transcribingScene !== null}
         />
       )}
     </div>

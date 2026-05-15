@@ -1,13 +1,16 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 
 interface SceneSeparationModalProps {
   isOpen: boolean;
   sceneId: number | null;
   videoUrl: string | null;
   onClose: () => void;
+  onRetranscribeOriginal?: () => Promise<void> | void;
+  isRetranscribing?: boolean;
+  isTranscribeBusy?: boolean;
 }
 
 export default function SceneSeparationModal({
@@ -15,6 +18,9 @@ export default function SceneSeparationModal({
   sceneId,
   videoUrl,
   onClose,
+  onRetranscribeOriginal,
+  isRetranscribing = false,
+  isTranscribeBusy = false,
 }: SceneSeparationModalProps) {
   const sceneSeparationVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -116,7 +122,35 @@ export default function SceneSeparationModal({
           )}
         </div>
 
-        <div className='px-4 sm:px-5 pb-4 sm:pb-5 flex justify-end'>
+        <div className='px-4 sm:px-5 pb-4 sm:pb-5 flex items-center justify-between gap-3'>
+          <button
+            onClick={() => {
+              void onRetranscribeOriginal?.();
+            }}
+            disabled={!sceneId || isTranscribeBusy}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              isRetranscribing
+                ? 'bg-cyan-100 text-cyan-700'
+                : 'bg-cyan-600 text-white hover:bg-cyan-700'
+            }`}
+            title={
+              isRetranscribing
+                ? 'Re-transcribing original scene video...'
+                : isTranscribeBusy
+                  ? 'Another scene transcription is already in progress'
+                  : 'Re-transcribe the original scene video (field 6888)'
+            }
+          >
+            {isRetranscribing ? (
+              <Loader2 className='h-3.5 w-3.5 animate-spin' />
+            ) : (
+              <span className='text-[11px] leading-none'>🎙️</span>
+            )}
+            <span>
+              {isRetranscribing ? 'Transcribing...' : 'Re-Transcribe Original'}
+            </span>
+          </button>
+
           <button
             onClick={onClose}
             className='px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors'
