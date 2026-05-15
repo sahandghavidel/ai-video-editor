@@ -954,6 +954,9 @@ export default function SceneCard({
   // State for combining scenes
   const [combiningId, setCombiningId] = useState<number | null>(null);
   const [splittingId, setSplittingId] = useState<number | null>(null);
+  const [applyAndGenerateSceneId, setApplyAndGenerateSceneId] = useState<
+    number | null
+  >(null);
   const [
     transcribeApplyAndGenerateSceneId,
     setTranscribeApplyAndGenerateSceneId,
@@ -1588,6 +1591,63 @@ export default function SceneCard({
     await executeSceneSeparation(editedWords);
   };
 
+  const handleApplySeparationAndGenerateClips = async (
+    editedWords: Array<{ word: string; start: number; end: number }>,
+  ) => {
+    const activeSceneId = sceneSeparationModal.sceneId;
+    if (activeSceneId === null) {
+      throw new Error('No active scene selected for separation.');
+    }
+
+    if (applyAndGenerateSceneId !== null) {
+      return;
+    }
+
+    if (transcribeApplyAndGenerateSceneId !== null) {
+      return;
+    }
+
+    setApplyAndGenerateSceneId(activeSceneId);
+
+    try {
+      const createdSceneIds = await executeSceneSeparation(editedWords, {
+        closeModalOnSuccess: false,
+        playSuccessSoundOnSuccess: false,
+        refreshOnSuccess: false,
+        playErrorSoundOnFailure: false,
+      });
+
+      const clipSceneIds = parsePositiveSceneIds([
+        activeSceneId,
+        ...createdSceneIds,
+      ]);
+
+      for (const clipSceneId of clipSceneIds) {
+        const clipScene = await getSceneById(clipSceneId);
+        if (!clipScene) {
+          console.warn(
+            `Skipping clip generation for scene ${clipSceneId}: scene not found`,
+          );
+          continue;
+        }
+
+        await handleGenerateSingleClip(clipSceneId, clipScene, {
+          throwOnError: true,
+        });
+      }
+
+      playSuccessSound();
+      handleCloseSceneSeparationModal();
+      refreshData?.();
+    } catch (error) {
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to apply separation and generate clips.');
+    } finally {
+      setApplyAndGenerateSceneId(null);
+    }
+  };
+
   const handleTranscribeApplyAndGenerateClips = async () => {
     const activeSceneId = sceneSeparationModal.sceneId;
     if (activeSceneId === null) {
@@ -1595,6 +1655,10 @@ export default function SceneCard({
     }
 
     if (transcribeApplyAndGenerateSceneId !== null) {
+      return;
+    }
+
+    if (applyAndGenerateSceneId !== null) {
       return;
     }
 
@@ -7633,12 +7697,19 @@ export default function SceneCard({
           captionsUrl={sceneSeparationModal.captionsUrl}
           onClose={handleCloseSceneSeparationModal}
           onApplySeparation={handleApplySceneSeparation}
+          onApplySeparationAndGenerateClips={
+            handleApplySeparationAndGenerateClips
+          }
           onTranscribeApplyAndGenerateClips={
             handleTranscribeApplyAndGenerateClips
           }
           isApplyingSeparation={
             sceneSeparationModal.sceneId !== null &&
             splittingId === sceneSeparationModal.sceneId
+          }
+          isApplySeparationAndGenerateClipsRunning={
+            sceneSeparationModal.sceneId !== null &&
+            applyAndGenerateSceneId === sceneSeparationModal.sceneId
           }
           isTranscribeApplyAndGenerateClipsRunning={
             sceneSeparationModal.sceneId !== null &&

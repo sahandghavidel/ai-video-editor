@@ -10,8 +10,12 @@ interface SceneSeparationModalProps {
   captionsUrl: string | null;
   onClose: () => void;
   onApplySeparation?: (editedWords: CaptionWord[]) => Promise<void> | void;
+  onApplySeparationAndGenerateClips?: (
+    editedWords: CaptionWord[],
+  ) => Promise<void> | void;
   onTranscribeApplyAndGenerateClips?: () => Promise<void> | void;
   isApplyingSeparation?: boolean;
+  isApplySeparationAndGenerateClipsRunning?: boolean;
   isTranscribeApplyAndGenerateClipsRunning?: boolean;
   onRetranscribeOriginal?: () => Promise<void> | void;
   isRetranscribing?: boolean;
@@ -65,8 +69,10 @@ export default function SceneSeparationModal({
   captionsUrl,
   onClose,
   onApplySeparation,
+  onApplySeparationAndGenerateClips,
   onTranscribeApplyAndGenerateClips,
   isApplyingSeparation = false,
+  isApplySeparationAndGenerateClipsRunning = false,
   isTranscribeApplyAndGenerateClipsRunning = false,
   onRetranscribeOriginal,
   isRetranscribing = false,
@@ -155,6 +161,39 @@ export default function SceneSeparationModal({
         error instanceof Error
           ? error.message
           : 'Failed to run transcribe + apply + generate clips.';
+      setApplyError(message);
+    }
+  };
+
+  const handleApplyAndGenerateClips = async () => {
+    if (!sceneId) {
+      setApplyError('No active scene selected.');
+      return;
+    }
+
+    if (!captionWords.length) {
+      setApplyError(
+        'No caption words available to split. Re-transcribe original first.',
+      );
+      return;
+    }
+
+    if (!onApplySeparationAndGenerateClips) {
+      setApplyError(
+        'Apply + generate clips action is not available right now.',
+      );
+      return;
+    }
+
+    setApplyError(null);
+
+    try {
+      await onApplySeparationAndGenerateClips(captionWords);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to run apply separation + generate clips.';
       setApplyError(message);
     }
   };
@@ -397,6 +436,7 @@ export default function SceneSeparationModal({
                 !sceneId ||
                 isTranscribeBusy ||
                 isApplyingSeparation ||
+                isApplySeparationAndGenerateClipsRunning ||
                 isTranscribeApplyAndGenerateClipsRunning
               }
               className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -435,6 +475,7 @@ export default function SceneSeparationModal({
                   loadingWords ||
                   isRetranscribing ||
                   isApplyingSeparation ||
+                  isApplySeparationAndGenerateClipsRunning ||
                   isTranscribeApplyAndGenerateClipsRunning ||
                   !onApplySeparation
                 }
@@ -457,6 +498,39 @@ export default function SceneSeparationModal({
 
               <button
                 onClick={() => {
+                  void handleApplyAndGenerateClips();
+                }}
+                disabled={
+                  !sceneId ||
+                  !captionWords.length ||
+                  loadingWords ||
+                  isRetranscribing ||
+                  isApplyingSeparation ||
+                  isApplySeparationAndGenerateClipsRunning ||
+                  isTranscribeApplyAndGenerateClipsRunning ||
+                  !onApplySeparationAndGenerateClips
+                }
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isApplySeparationAndGenerateClipsRunning
+                    ? 'bg-violet-100 text-violet-700'
+                    : 'bg-violet-600 text-white hover:bg-violet-700'
+                }`}
+                title='Apply separation using current edited words, then generate clips for resulting scenes'
+              >
+                {isApplySeparationAndGenerateClipsRunning ? (
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                ) : (
+                  <span className='text-[11px] leading-none'>🎞️</span>
+                )}
+                <span>
+                  {isApplySeparationAndGenerateClipsRunning
+                    ? 'Running...'
+                    : 'Apply + Gen Clips'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
                   void handleTranscribeApplyAndGenerate();
                 }}
                 disabled={
@@ -464,6 +538,7 @@ export default function SceneSeparationModal({
                   isRetranscribing ||
                   isTranscribeBusy ||
                   isApplyingSeparation ||
+                  isApplySeparationAndGenerateClipsRunning ||
                   isTranscribeApplyAndGenerateClipsRunning ||
                   !onTranscribeApplyAndGenerateClips
                 }
@@ -490,6 +565,7 @@ export default function SceneSeparationModal({
                 onClick={onClose}
                 disabled={
                   isApplyingSeparation ||
+                  isApplySeparationAndGenerateClipsRunning ||
                   isTranscribeApplyAndGenerateClipsRunning
                 }
                 className='px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
