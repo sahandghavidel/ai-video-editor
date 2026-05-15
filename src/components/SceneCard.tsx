@@ -1376,6 +1376,74 @@ export default function SceneCard({
     });
   };
 
+  const handleApplySceneSeparation = async (
+    editedWords: Array<{ word: string; start: number; end: number }>,
+  ) => {
+    const activeSceneId = sceneSeparationModal.sceneId;
+    if (activeSceneId === null) {
+      throw new Error('No active scene selected for separation.');
+    }
+
+    if (!Array.isArray(editedWords) || editedWords.length === 0) {
+      throw new Error(
+        'No caption words available to split. Re-transcribe the original scene first.',
+      );
+    }
+
+    const sceneExists = data.some((scene) => scene.id === activeSceneId);
+    if (!sceneExists) {
+      throw new Error(
+        'Scene not found in current data. Please refresh and try again.',
+      );
+    }
+
+    const filteredIndex = filteredAndSortedData.findIndex(
+      (scene) => scene.id === activeSceneId,
+    );
+    const nextSceneInOrder =
+      filteredIndex >= 0 ? filteredAndSortedData[filteredIndex + 1] : undefined;
+    const beforeSceneId = nextSceneInOrder?.id;
+
+    setSplittingId(activeSceneId);
+
+    try {
+      const response = await fetch('/api/separate-scene', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sceneId: activeSceneId,
+          beforeSceneId,
+          editedWords,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        error?: unknown;
+      } | null;
+
+      if (!response.ok) {
+        const message =
+          typeof payload?.error === 'string'
+            ? payload.error
+            : `Failed to separate scene (${response.status})`;
+        throw new Error(message);
+      }
+
+      playSuccessSound();
+      handleCloseSceneSeparationModal();
+      refreshData?.();
+    } catch (error) {
+      playErrorSound();
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to apply scene separation');
+    } finally {
+      setSplittingId(null);
+    }
+  };
+
   // Calculate dropdown position based on available space
   const calculateDropdownPosition = (sceneId: number) => {
     const dropdownRef = dropdownRefs.current[sceneId];
@@ -7291,6 +7359,11 @@ export default function SceneCard({
           videoUrl={sceneSeparationModal.videoUrl}
           captionsUrl={sceneSeparationModal.captionsUrl}
           onClose={handleCloseSceneSeparationModal}
+          onApplySeparation={handleApplySceneSeparation}
+          isApplyingSeparation={
+            sceneSeparationModal.sceneId !== null &&
+            splittingId === sceneSeparationModal.sceneId
+          }
           onRetranscribeOriginal={async () => {
             const activeSceneId = sceneSeparationModal.sceneId;
             if (activeSceneId === null) return;

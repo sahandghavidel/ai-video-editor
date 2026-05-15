@@ -9,6 +9,8 @@ interface SceneSeparationModalProps {
   videoUrl: string | null;
   captionsUrl: string | null;
   onClose: () => void;
+  onApplySeparation?: (editedWords: CaptionWord[]) => Promise<void> | void;
+  isApplyingSeparation?: boolean;
   onRetranscribeOriginal?: () => Promise<void> | void;
   isRetranscribing?: boolean;
   isTranscribeBusy?: boolean;
@@ -60,6 +62,8 @@ export default function SceneSeparationModal({
   videoUrl,
   captionsUrl,
   onClose,
+  onApplySeparation,
+  isApplyingSeparation = false,
   onRetranscribeOriginal,
   isRetranscribing = false,
   isTranscribeBusy = false,
@@ -68,6 +72,7 @@ export default function SceneSeparationModal({
   const [captionWords, setCaptionWords] = useState<CaptionWord[]>([]);
   const [loadingWords, setLoadingWords] = useState(false);
   const [wordsError, setWordsError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
   const [editingWordIndex, setEditingWordIndex] = useState<number | null>(null);
   const [editingWordValue, setEditingWordValue] = useState('');
 
@@ -93,6 +98,37 @@ export default function SceneSeparationModal({
   const cancelWordEdit = () => {
     setEditingWordIndex(null);
     setEditingWordValue('');
+  };
+
+  const handleApplySeparation = async () => {
+    if (!sceneId) {
+      setApplyError('No active scene selected.');
+      return;
+    }
+
+    if (!captionWords.length) {
+      setApplyError(
+        'No caption words available to split. Re-transcribe original first.',
+      );
+      return;
+    }
+
+    if (!onApplySeparation) {
+      setApplyError('Apply action is not available right now.');
+      return;
+    }
+
+    setApplyError(null);
+
+    try {
+      await onApplySeparation(captionWords);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to apply scene separation.';
+      setApplyError(message);
+    }
   };
 
   useEffect(() => {
@@ -150,6 +186,7 @@ export default function SceneSeparationModal({
       setCaptionWords([]);
       setWordsError(null);
       setLoadingWords(false);
+      setApplyError(null);
       setEditingWordIndex(null);
       setEditingWordValue('');
       return;
@@ -178,6 +215,7 @@ export default function SceneSeparationModal({
         if (cancelled) return;
 
         setCaptionWords(normalizeCaptionWords(payload));
+        setApplyError(null);
         setEditingWordIndex(null);
         setEditingWordValue('');
       } catch (error) {
@@ -321,41 +359,83 @@ export default function SceneSeparationModal({
           </div>
         </div>
 
-        <div className='px-4 sm:px-5 pb-4 sm:pb-5 flex items-center justify-between gap-3'>
-          <button
-            onClick={() => {
-              void onRetranscribeOriginal?.();
-            }}
-            disabled={!sceneId || isTranscribeBusy}
-            className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              isRetranscribing
-                ? 'bg-cyan-100 text-cyan-700'
-                : 'bg-cyan-600 text-white hover:bg-cyan-700'
-            }`}
-            title={
-              isRetranscribing
-                ? 'Re-transcribing original scene video...'
-                : isTranscribeBusy
-                  ? 'Another scene transcription is already in progress'
-                  : 'Re-transcribe the original scene video (field 6888)'
-            }
-          >
-            {isRetranscribing ? (
-              <Loader2 className='h-3.5 w-3.5 animate-spin' />
-            ) : (
-              <span className='text-[11px] leading-none'>🎙️</span>
-            )}
-            <span>
-              {isRetranscribing ? 'Transcribing...' : 'Re-Transcribe Original'}
-            </span>
-          </button>
+        <div className='px-4 sm:px-5 pb-4 sm:pb-5 space-y-2'>
+          <div className='flex items-center justify-between gap-3'>
+            <button
+              onClick={() => {
+                void onRetranscribeOriginal?.();
+              }}
+              disabled={!sceneId || isTranscribeBusy || isApplyingSeparation}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                isRetranscribing
+                  ? 'bg-cyan-100 text-cyan-700'
+                  : 'bg-cyan-600 text-white hover:bg-cyan-700'
+              }`}
+              title={
+                isRetranscribing
+                  ? 'Re-transcribing original scene video...'
+                  : isTranscribeBusy
+                    ? 'Another scene transcription is already in progress'
+                    : 'Re-transcribe the original scene video (field 6888)'
+              }
+            >
+              {isRetranscribing ? (
+                <Loader2 className='h-3.5 w-3.5 animate-spin' />
+              ) : (
+                <span className='text-[11px] leading-none'>🎙️</span>
+              )}
+              <span>
+                {isRetranscribing
+                  ? 'Transcribing...'
+                  : 'Re-Transcribe Original'}
+              </span>
+            </button>
 
-          <button
-            onClick={onClose}
-            className='px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors'
-          >
-            Close
-          </button>
+            <div className='flex items-center gap-2'>
+              <button
+                onClick={() => {
+                  void handleApplySeparation();
+                }}
+                disabled={
+                  !sceneId ||
+                  !captionWords.length ||
+                  loadingWords ||
+                  isRetranscribing ||
+                  isApplyingSeparation ||
+                  !onApplySeparation
+                }
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isApplyingSeparation
+                    ? 'bg-fuchsia-100 text-fuchsia-700'
+                    : 'bg-fuchsia-600 text-white hover:bg-fuchsia-700'
+                }`}
+                title='Apply split using edited words and create separated scenes'
+              >
+                {isApplyingSeparation ? (
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                ) : (
+                  <span className='text-[11px] leading-none'>✂️</span>
+                )}
+                <span>
+                  {isApplyingSeparation ? 'Applying...' : 'Apply Separation'}
+                </span>
+              </button>
+
+              <button
+                onClick={onClose}
+                disabled={isApplyingSeparation}
+                className='px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          {applyError ? (
+            <div className='rounded-md border border-rose-200 bg-rose-50 text-rose-700 text-xs px-2.5 py-2'>
+              {applyError}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
