@@ -1500,7 +1500,7 @@ export default function SceneCard({
       refreshOnSuccess?: boolean;
       playErrorSoundOnFailure?: boolean;
     },
-  ): Promise<number[]> => {
+  ): Promise<{ createdSceneIds: number[]; skippedNoSplit: boolean }> => {
     const activeSceneId = sceneSeparationModal.sceneId;
     if (activeSceneId === null) {
       throw new Error('No active scene selected for separation.');
@@ -1550,6 +1550,7 @@ export default function SceneCard({
       const payload = (await response.json().catch(() => null)) as {
         error?: unknown;
         createdSceneIds?: unknown;
+        skippedNoSplit?: unknown;
       } | null;
 
       if (!response.ok) {
@@ -1561,6 +1562,18 @@ export default function SceneCard({
       }
 
       const createdSceneIds = parsePositiveSceneIds(payload?.createdSceneIds);
+      const skippedNoSplit = payload?.skippedNoSplit === true;
+
+      if (skippedNoSplit) {
+        if (options?.closeModalOnSuccess !== false) {
+          handleCloseSceneSeparationModal();
+        }
+
+        return {
+          createdSceneIds: [],
+          skippedNoSplit: true,
+        };
+      }
 
       if (options?.playSuccessSoundOnSuccess !== false) {
         playSuccessSound();
@@ -1572,7 +1585,10 @@ export default function SceneCard({
         refreshData?.();
       }
 
-      return createdSceneIds;
+      return {
+        createdSceneIds,
+        skippedNoSplit: false,
+      };
     } catch (error) {
       if (options?.playErrorSoundOnFailure !== false) {
         playErrorSound();
@@ -1617,9 +1633,14 @@ export default function SceneCard({
         playErrorSoundOnFailure: false,
       });
 
+      if (createdSceneIds.skippedNoSplit) {
+        handleCloseSceneSeparationModal();
+        return;
+      }
+
       const clipSceneIds = parsePositiveSceneIds([
         activeSceneId,
-        ...createdSceneIds,
+        ...createdSceneIds.createdSceneIds,
       ]);
 
       for (const clipSceneId of clipSceneIds) {
@@ -1681,7 +1702,7 @@ export default function SceneCard({
         'original',
         false,
         true,
-        true,
+        false,
         { captionsFieldKey: 'field_7120', throwOnError: true },
       );
 
@@ -1733,9 +1754,14 @@ export default function SceneCard({
         playErrorSoundOnFailure: false,
       });
 
+      if (createdSceneIds.skippedNoSplit) {
+        handleCloseSceneSeparationModal();
+        return;
+      }
+
       const clipSceneIds = parsePositiveSceneIds([
         activeSceneId,
-        ...createdSceneIds,
+        ...createdSceneIds.createdSceneIds,
       ]);
 
       for (const clipSceneId of clipSceneIds) {

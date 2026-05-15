@@ -1228,6 +1228,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // No-op guard: if separation results in only one scene, keep source scene
+    // exactly as-is. Do not clear fields, update timings, create rows, or
+    // relink scene IDs.
+    if (absoluteSegments.length <= 1) {
+      return NextResponse.json({
+        success: true,
+        skippedNoSplit: true,
+        sceneId,
+        videoId,
+        segmentCount: absoluteSegments.length,
+        createdSceneIds: [],
+        linkedScenesUpdated: false,
+        linkedSceneIds: existingSceneIds,
+      });
+    }
+
     const currentSceneOrder = parseFiniteNumber(sourceScene.field_7104);
     const fallbackSceneOrder = parseFiniteNumber(sourceScene.order) ?? 1;
     const baseSceneOrder =
@@ -1309,6 +1325,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      skippedNoSplit: false,
       sceneId,
       videoId,
       segmentCount: segmentPayloads.length,
