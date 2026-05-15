@@ -28,6 +28,7 @@ import {
   isHasTextRecordFreshForImage,
   parseSceneHasTextField,
 } from '@/utils/sceneHasText';
+import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
 import {
   Loader2,
   Sparkles,
@@ -164,6 +165,14 @@ export default function BatchOperations({
   >(null);
   const [fittingFinalVideoDurations, setFittingFinalVideoDurations] =
     useState(false);
+  const [
+    runningTranscribeApplyGenerateAllScenes,
+    setRunningTranscribeApplyGenerateAllScenes,
+  ] = useState(false);
+  const [
+    transcribeApplyGenerateCurrentSceneId,
+    setTranscribeApplyGenerateCurrentSceneId,
+  ] = useState<number | null>(null);
 
   const [generatingAllSubtitles, setGeneratingAllSubtitles] = useState(false);
   const [generatingSubtitleSceneId, setGeneratingSubtitleSceneId] = useState<
@@ -1248,6 +1257,310 @@ export default function BatchOperations({
       setMergedVideo,
       selectedOriginalVideo.id,
     );
+  };
+
+  const parsePositiveSceneIds = (value: unknown): number[] => {
+    if (!Array.isArray(value)) return [];
+
+    const unique = new Set<number>();
+
+    for (const entry of value) {
+      const parsed = Number.parseInt(String(entry ?? ''), 10);
+      if (!Number.isInteger(parsed) || parsed <= 0) continue;
+      unique.add(parsed);
+    }
+
+    return [...unique];
+  };
+
+  const normalizeCaptionWordsForSeparation = (
+    payload: unknown,
+  ): Array<{ word: string; start: number; end: number }> => {
+    if (!Array.isArray(payload)) return [];
+
+    const rawWords = payload
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+
+        const word =
+          typeof record.word === 'string'
+            ? record.word.trim()
+            : typeof record.text === 'string'
+              ? record.text.trim()
+              : '';
+
+        const start =
+          typeof record.start === 'number' && Number.isFinite(record.start)
+            ? record.start
+            : null;
+
+        const end =
+          typeof record.end === 'number' && Number.isFinite(record.end)
+            ? record.end
+            : start;
+
+        if (!word || start === null || end === null) return null;
+
+        return {
+          word,
+          start,
+          end: Math.max(start, end),
+        };
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          word: string;
+          start: number;
+          end: number;
+        } => item !== null,
+      );
+
+    return sanitizeCaptionWordTimestamps(rawWords);
+  };
+
+  const parseFiniteOrderRank = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
+  };
+
+  const getScenesInRealOrder = (scenes: BaserowRow[]): BaserowRow[] => {
+    return [...scenes].sort((a, b) => {
+      const sceneOrderA =
+        parseFiniteOrderRank(a['field_7104']) ??
+        parseFiniteOrderRank((a as { field_7104?: unknown }).field_7104);
+      const sceneOrderB =
+        parseFiniteOrderRank(b['field_7104']) ??
+        parseFiniteOrderRank((b as { field_7104?: unknown }).field_7104);
+
+      if (
+        sceneOrderA !== null &&
+        sceneOrderB !== null &&
+        sceneOrderA !== sceneOrderB
+      ) {
+        return sceneOrderA - sceneOrderB;
+      }
+
+      const fallbackOrderA = parseFiniteOrderRank(a.order);
+      const fallbackOrderB = parseFiniteOrderRank(b.order);
+
+      if (
+        fallbackOrderA !== null &&
+        fallbackOrderB !== null &&
+        fallbackOrderA !== fallbackOrderB
+      ) {
+        return fallbackOrderA - fallbackOrderB;
+      }
+
+      return a.id - b.id;
+    });
+  };
+
+  const onTranscribeApplyGenerateClipsAllScenes = async () => {
+    if (runningTranscribeApplyGenerateAllScenes) return;
+
+    const selectedVideoId = Number(selectedOriginalVideo.id);
+    if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) {
+      return;
+    }
+
+    const scenesInRealOrder = getScenesInRealOrder(data).filter((scene) => {
+      const sceneId = Number(scene.id);
+      return Number.isInteger(sceneId) && sceneId > 0;
+    });
+
+    if (scenesInRealOrder.length === 0) {
+      playBatchDoneSound();
+      return;
+    }
+
+    const transcribeSceneWithOptions = handleTranscribeScene as unknown as (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      videoType?: 'original' | 'final',
+      skipRefresh?: boolean,
+      skipSound?: boolean,
+      updateSentence?: boolean,
+      opts?: {
+        throwOnError?: boolean;
+        captionsFieldKey?: string;
+      },
+    ) => Promise<void>;
+
+    setRunningTranscribeApplyGenerateAllScenes(true);
+    setTranscribeApplyGenerateCurrentSceneId(null);
+
+    try {
+      for (const scene of scenesInRealOrder) {
+        const sceneId = Number(scene.id);
+        if (!Number.isInteger(sceneId) || sceneId <= 0) {
+          continue;
+        }
+
+        setTranscribeApplyGenerateCurrentSceneId(sceneId);
+
+        try {
+          const targetScene = (await getSceneById(sceneId)) || scene;
+          const sentenceText = String(targetScene?.['field_6890'] ?? '').trim();
+
+          if (!sentenceText) {
+            console.info(
+              `[Batch] Scene ${sceneId}: skipping because Sentence (field_6890) is empty.`,
+            );
+            continue;
+          }
+
+          await transcribeSceneWithOptions(
+            sceneId,
+            targetScene,
+            'original',
+            true,
+            true,
+            false,
+            { captionsFieldKey: 'field_7120', throwOnError: true },
+          );
+
+          const refreshedScene = (await getSceneById(sceneId)) || targetScene;
+          const captionsUrl = String(refreshedScene?.field_7120 || '').trim();
+
+          if (!captionsUrl) {
+            console.warn(
+              `[Batch] Scene ${sceneId}: missing original captions URL (field_7120). Skipping separation.`,
+            );
+            continue;
+          }
+
+          const captionsResponse = await fetch(withCacheBust(captionsUrl), {
+            cache: 'no-store',
+          });
+
+          if (!captionsResponse.ok) {
+            const errorText = await captionsResponse.text().catch(() => '');
+            throw new Error(
+              `Failed to load original captions for scene ${sceneId} (${captionsResponse.status}) ${errorText}`,
+            );
+          }
+
+          const captionsPayload = (await captionsResponse
+            .json()
+            .catch(() => null)) as unknown;
+          const editedWords =
+            normalizeCaptionWordsForSeparation(captionsPayload);
+
+          if (!editedWords.length) {
+            console.warn(
+              `[Batch] Scene ${sceneId}: transcription produced no usable timed words. Skipping separation.`,
+            );
+            continue;
+          }
+
+          const separationResponse = await fetch('/api/separate-scene', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sceneId,
+              editedWords,
+            }),
+          });
+
+          const separationPayload = (await separationResponse
+            .json()
+            .catch(() => null)) as {
+            error?: unknown;
+            createdSceneIds?: unknown;
+            skippedNoSplit?: unknown;
+          } | null;
+
+          if (!separationResponse.ok) {
+            const message =
+              typeof separationPayload?.error === 'string'
+                ? separationPayload.error
+                : `Failed to separate scene ${sceneId} (${separationResponse.status})`;
+            throw new Error(message);
+          }
+
+          const skippedNoSplit = separationPayload?.skippedNoSplit === true;
+          if (skippedNoSplit) {
+            console.info(
+              `[Batch] Scene ${sceneId}: split skipped because transcription did not create additional scenes.`,
+            );
+            continue;
+          }
+
+          const createdSceneIds = parsePositiveSceneIds(
+            separationPayload?.createdSceneIds,
+          );
+          const clipSceneIds = parsePositiveSceneIds([
+            sceneId,
+            ...createdSceneIds,
+          ]);
+
+          for (const clipSceneId of clipSceneIds) {
+            const clipScene = await getSceneById(clipSceneId);
+            if (!clipScene) {
+              console.warn(
+                `[Batch] Scene ${clipSceneId}: not found before clip generation. Skipping clip.`,
+              );
+              continue;
+            }
+
+            const clipVideoId = extractLinkedVideoIdFromScene(clipScene);
+            const clipPayload: Record<string, unknown> = {
+              sceneId: clipSceneId,
+            };
+
+            if (clipVideoId !== null) {
+              clipPayload.videoId = clipVideoId;
+            }
+
+            const clipResponse = await fetch('/api/generate-single-clip', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(clipPayload),
+            });
+
+            if (!clipResponse.ok) {
+              const clipErrorText = await clipResponse.text().catch(() => '');
+              throw new Error(
+                `Failed to generate clip for scene ${clipSceneId} (${clipResponse.status}) ${clipErrorText}`,
+              );
+            }
+
+            await clipResponse.json().catch(() => null);
+            await new Promise((resolve) => setTimeout(resolve, 150));
+          }
+        } catch (sceneError) {
+          console.error(
+            `[Batch] Transcribe + Apply + Gen Clips failed for scene ${sceneId}:`,
+            sceneError,
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      onRefresh?.();
+      playBatchDoneSound();
+    } finally {
+      setRunningTranscribeApplyGenerateAllScenes(false);
+      setTranscribeApplyGenerateCurrentSceneId(null);
+    }
   };
 
   const onFixAllFinalTTS = async () => {
@@ -5117,6 +5430,36 @@ export default function BatchOperations({
                       {batchOperations.concatenatingVideos
                         ? 'Merging...'
                         : 'Merge All Scenes'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={onTranscribeApplyGenerateClipsAllScenes}
+                    disabled={
+                      !selectedOriginalVideo.id ||
+                      batchOperations.concatenatingVideos ||
+                      runningTranscribeApplyGenerateAllScenes
+                    }
+                    className='w-full mt-2 min-h-[44px] px-2 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-center leading-tight shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title={
+                      !selectedOriginalVideo.id
+                        ? 'Select an original video first'
+                        : runningTranscribeApplyGenerateAllScenes
+                          ? transcribeApplyGenerateCurrentSceneId !== null
+                            ? `Running Transcribe + Apply + Gen Clips for scene ${transcribeApplyGenerateCurrentSceneId}`
+                            : 'Running Transcribe + Apply + Gen Clips for all scenes...'
+                          : 'Transcribe original captions, apply separation, and generate clips for all scenes (skips clip generation when separation does not create additional scenes)'
+                    }
+                  >
+                    {runningTranscribeApplyGenerateAllScenes && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium whitespace-normal break-words'>
+                      {runningTranscribeApplyGenerateAllScenes
+                        ? transcribeApplyGenerateCurrentSceneId !== null
+                          ? `Scene #${transcribeApplyGenerateCurrentSceneId}`
+                          : 'Processing...'
+                        : 'Transcribe + Apply + Gen Clips'}
                     </span>
                   </button>
                 </div>
