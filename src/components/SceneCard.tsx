@@ -1400,9 +1400,7 @@ export default function SceneCard({
     if (!currentScene) return;
 
     const originalVideoUrl = String(currentScene.field_6888 || '').trim();
-    const originalCaptionsUrl = String(
-      currentScene.field_7120 || currentScene.field_6910 || '',
-    ).trim();
+    const originalCaptionsUrl = String(currentScene.field_7120 || '').trim();
     if (!originalVideoUrl) {
       alert('No original video found for this scene.');
       return;
@@ -7439,7 +7437,7 @@ export default function SceneCard({
               .data.find((scene) => scene.id === activeSceneId);
 
             const nextCaptionsUrl = String(
-              refreshedScene?.field_7120 || refreshedScene?.field_6910 || '',
+              refreshedScene?.field_7120 || '',
             ).trim();
 
             if (nextCaptionsUrl) {
