@@ -153,6 +153,14 @@ const LazyTTSWordReplacementsModal = dynamic(
   },
 );
 
+const LazySceneSeparationModal = dynamic(
+  () => import('./SceneSeparationModal'),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
+
 const extractFieldValueAsText = (field: unknown): string => {
   if (field === null || field === undefined) return '';
 
@@ -327,6 +335,15 @@ export default function SceneCard({
 
   // Image overlay modal state
   const [imageOverlayModal, setImageOverlayModal] = useState<{
+    isOpen: boolean;
+    sceneId: number | null;
+    videoUrl: string | null;
+  }>({
+    isOpen: false,
+    sceneId: null,
+    videoUrl: null,
+  });
+  const [sceneSeparationModal, setSceneSeparationModal] = useState<{
     isOpen: boolean;
     sceneId: number | null;
     videoUrl: string | null;
@@ -522,7 +539,12 @@ export default function SceneCard({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // When the image overlay modal is open, don't let homepage shortcuts run.
-      if (imageOverlayModal.isOpen || ttsWordReplacementsModalOpen) return;
+      if (
+        imageOverlayModal.isOpen ||
+        ttsWordReplacementsModalOpen ||
+        sceneSeparationModal.isOpen
+      )
+        return;
 
       // Only handle shortcuts when not typing in input fields
       if (
@@ -783,6 +805,7 @@ export default function SceneCard({
     shortTextCharLimitInput,
     showRecentlyModifiedTTS,
     ttsWordReplacementsModalOpen,
+    sceneSeparationModal.isOpen,
   ]);
 
   // Local wrapper for cycling through speeds
@@ -1315,6 +1338,35 @@ export default function SceneCard({
     } finally {
       setSplittingId(null);
     }
+  };
+
+  const handleOpenSceneSeparationModal = (
+    sceneId: number,
+    sceneData?: BaserowRow,
+  ) => {
+    const currentScene =
+      sceneData || data.find((scene) => scene.id === sceneId);
+    if (!currentScene) return;
+
+    const originalVideoUrl = String(currentScene.field_6888 || '').trim();
+    if (!originalVideoUrl) {
+      alert('No original video found for this scene.');
+      return;
+    }
+
+    setSceneSeparationModal({
+      isOpen: true,
+      sceneId,
+      videoUrl: originalVideoUrl,
+    });
+  };
+
+  const handleCloseSceneSeparationModal = () => {
+    setSceneSeparationModal({
+      isOpen: false,
+      sceneId: null,
+      videoUrl: null,
+    });
   };
 
   // Calculate dropdown position based on available space
@@ -6935,9 +6987,15 @@ export default function SceneCard({
                       </>
                     )}
 
-                  {/* Combine Next Scene Button */}
+                  {/* Separate Scene Button */}
                   <button
                     onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenSceneSeparationModal(scene.id, scene);
+                    }}
+                    onContextMenu={(e) => {
+                      // Temporary fallback: right-click keeps legacy immediate split.
+                      e.preventDefault();
                       e.stopPropagation();
                       void handleSplitSceneIntoSentences(scene.id);
                     }}
@@ -6949,7 +7007,7 @@ export default function SceneCard({
                           ? 'bg-gray-50 text-gray-400'
                           : 'bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    title='Split this scene into multiple scenes by sentence and redistribute timing'
+                    title='Open separation workspace (original video). Right-click: split immediately with current behavior.'
                   >
                     {splittingId === scene.id ? (
                       <Loader2 className='animate-spin h-3 w-3' />
@@ -7211,6 +7269,15 @@ export default function SceneCard({
           onApplied={() => {
             refreshData?.();
           }}
+        />
+      )}
+
+      {sceneSeparationModal.isOpen && (
+        <LazySceneSeparationModal
+          isOpen={sceneSeparationModal.isOpen}
+          sceneId={sceneSeparationModal.sceneId}
+          videoUrl={sceneSeparationModal.videoUrl}
+          onClose={handleCloseSceneSeparationModal}
         />
       )}
     </div>
