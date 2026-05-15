@@ -1414,10 +1414,20 @@ export default function BatchOperations({
         try {
           const targetScene = (await getSceneById(sceneId)) || scene;
           const sentenceText = String(targetScene?.['field_6890'] ?? '').trim();
+          const existingOriginalCaptionsUrl = String(
+            targetScene?.['field_7120'] ?? '',
+          ).trim();
 
           if (!sentenceText) {
             console.info(
               `[Batch] Scene ${sceneId}: skipping because Sentence (field_6890) is empty.`,
+            );
+            continue;
+          }
+
+          if (existingOriginalCaptionsUrl) {
+            console.info(
+              `[Batch] Scene ${sceneId}: skipping because Original Video Caption for Scene (field_7120) already exists.`,
             );
             continue;
           }
