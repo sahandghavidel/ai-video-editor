@@ -213,7 +213,7 @@ export default function SceneSeparationModal({
       aria-label={`Separate scene ${sceneId ?? ''}`.trim()}
     >
       <div
-        className='w-full max-w-5xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden'
+        className='w-full max-w-6xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden'
         onClick={(e) => e.stopPropagation()}
       >
         <div className='px-4 sm:px-5 py-3 border-b border-gray-200 flex items-center justify-between'>
@@ -241,7 +241,7 @@ export default function SceneSeparationModal({
               ref={sceneSeparationVideoRef}
               src={videoUrl}
               controls
-              className='w-full h-auto max-h-[70vh] rounded-lg bg-black'
+              className='w-full h-auto max-h-[48vh] rounded-lg bg-black'
             >
               Your browser does not support the video tag.
             </video>
@@ -261,18 +261,18 @@ export default function SceneSeparationModal({
               </p>
             </div>
 
-            <div className='p-3 max-h-56 overflow-y-auto'>
+            <div className='p-3 max-h-[9rem] overflow-y-auto'>
               {loadingWords ? (
-                <div className='flex items-center gap-2 text-xs text-gray-500'>
+                <div className='flex items-center gap-2 text-sm text-gray-500'>
                   <Loader2 className='h-3.5 w-3.5 animate-spin' />
                   <span>Loading caption words...</span>
                 </div>
               ) : wordsError ? (
-                <div className='rounded-md border border-amber-200 bg-amber-50 text-amber-800 text-xs px-2.5 py-2'>
+                <div className='rounded-md border border-amber-200 bg-amber-50 text-amber-800 text-sm px-2.5 py-2'>
                   {wordsError}
                 </div>
               ) : captionWords.length === 0 ? (
-                <div className='text-xs text-gray-500'>
+                <div className='text-sm text-gray-500'>
                   No caption words loaded yet. Re-transcribe original to load
                   words.
                 </div>
@@ -296,7 +296,7 @@ export default function SceneSeparationModal({
                             }
                           }}
                           autoFocus
-                          className='min-w-[64px] px-2 py-1 text-xs rounded border border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500'
+                          className='min-w-[72px] px-2.5 py-1.5 text-sm rounded border border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500'
                         />
                       );
                     }
@@ -308,7 +308,7 @@ export default function SceneSeparationModal({
                           setEditingWordIndex(index);
                           setEditingWordValue(item.word);
                         }}
-                        className='px-2 py-1 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors'
+                        className='px-2.5 py-1.5 text-sm rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors'
                         title='Click to edit this word'
                       >
                         {item.word}
