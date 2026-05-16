@@ -792,9 +792,10 @@ function splitParenthesisJoinedWordsInPlainSegment(segment: string): {
 
   // Insert a space when a word-like token is directly followed by
   // an opening parenthesis containing a word-like token.
+  // Also handles quoted args like ById("form") -> ById ("form").
   // Example: console.log(age) -> console.log (age)
   const text = segment.replace(
-    /([A-Za-z0-9_.])\((?=[A-Za-z0-9_])/g,
+    /([A-Za-z0-9_.])\((?=(?:[`"'“”„‟«»＂]\s*)?[A-Za-z0-9_])/g,
     (_match, leftChar: string) => {
       parenthesisSplitCount += 1;
       return `${leftChar} (`;
