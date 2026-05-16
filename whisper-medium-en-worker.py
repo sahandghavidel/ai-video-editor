@@ -93,7 +93,13 @@ def download_and_convert_media(url: str) -> str:
     return wav_path
 
 
-def transcribe_with_model(model: Any, audio_path: str) -> dict[str, Any]:
+def transcribe_with_model(
+    model: Any,
+    audio_path: str,
+    align_model: Any | None = None,
+    align_metadata: Any | None = None,
+    align_device: str = "cpu",
+) -> dict[str, Any]:
     """Transcribe audio using a preloaded Whisper medium.en model."""
     result = model.transcribe(
         audio_path,
@@ -104,27 +110,60 @@ def transcribe_with_model(model: Any, audio_path: str) -> dict[str, Any]:
     )
 
     transcription = result["text"].strip()
+    segments_source = result["segments"]
+
+    if align_model is not None and align_metadata is not None:
+        try:
+            import whisperx
+
+            original_stdout = sys.stdout
+            sys.stdout = sys.stderr
+            try:
+                audio = whisperx.load_audio(audio_path)
+                aligned_result = whisperx.align(
+                    result["segments"],
+                    align_model,
+                    align_metadata,
+                    audio,
+                    align_device,
+                    return_char_alignments=False,
+                )
+            finally:
+                sys.stdout = original_stdout
+
+            if (
+                isinstance(aligned_result, dict)
+                and isinstance(aligned_result.get("segments"), list)
+            ):
+                segments_source = aligned_result["segments"]
+        except Exception as exc:  # pylint: disable=broad-except
+            log(
+                "alignment failed, using native medium.en timestamps: "
+                f"{exc}"
+            )
+
     segments: list[dict[str, Any]] = []
     word_timestamps: list[dict[str, Any]] = []
 
-    for segment in result["segments"]:
+    for segment in segments_source:
         segment_words: list[dict[str, Any]] = []
 
         if "words" in segment:
             for word_info in segment["words"]:
-                word_data = {
-                    "word": word_info["word"].strip(),
-                    "start": round(word_info["start"], 2),
-                    "end": round(word_info["end"], 2),
-                }
-                word_timestamps.append(word_data)
-                segment_words.append(word_data)
+                if "start" in word_info and "end" in word_info:
+                    word_data = {
+                        "word": word_info["word"].strip(),
+                        "start": float(word_info["start"]),
+                        "end": float(word_info["end"]),
+                    }
+                    word_timestamps.append(word_data)
+                    segment_words.append(word_data)
 
         segments.append(
             {
-                "start": round(segment["start"], 2),
-                "end": round(segment["end"], 2),
-                "text": segment["text"].strip(),
+                "start": float(segment.get("start", 0)),
+                "end": float(segment.get("end", 0)),
+                "text": segment.get("text", "").strip(),
                 "words": segment_words,
             }
         )
@@ -134,7 +173,7 @@ def transcribe_with_model(model: Any, audio_path: str) -> dict[str, Any]:
         import torchaudio
 
         waveform, sample_rate = torchaudio.load(audio_path)
-        audio_duration = round(waveform.shape[1] / sample_rate, 2)
+        audio_duration = float(waveform.shape[1] / sample_rate)
     except Exception:  # pylint: disable=broad-except
         if segments:
             audio_duration = segments[-1]["end"]
@@ -161,9 +200,26 @@ def transcribe_with_model(model: Any, audio_path: str) -> dict[str, Any]:
 def main() -> int:
     try:
         import whisper
+        import torch
 
         log("loading medium.en model...")
         model = whisper.load_model("medium.en")
+        align_model = None
+        align_metadata = None
+        align_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        try:
+            import whisperx
+
+            log(f"loading alignment model on {align_device}...")
+            align_model, align_metadata = whisperx.load_align_model(
+                language_code="en",
+                device=align_device,
+            )
+            log("alignment model loaded")
+        except Exception as exc:  # pylint: disable=broad-except
+            log(f"alignment unavailable, using native medium.en timestamps: {exc}")
+
         log("model loaded")
         emit({"ready": True, "model": "medium.en"})
     except Exception as exc:  # pylint: disable=broad-except
@@ -195,7 +251,13 @@ def main() -> int:
             wav_path = download_and_convert_media(media_url)
 
             log(f"job={job_id} scene={scene_id or 'unknown'} transcribing")
-            result = transcribe_with_model(model, wav_path)
+            result = transcribe_with_model(
+                model,
+                wav_path,
+                align_model,
+                align_metadata,
+                align_device,
+            )
 
             emit({"id": job_id, "ok": True, "result": result})
             log(f"job={job_id} scene={scene_id or 'unknown'} done")

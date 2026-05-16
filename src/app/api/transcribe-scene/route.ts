@@ -244,7 +244,15 @@ function handleMediumEnWorkerLine(line: string) {
 }
 
 function ensureMediumEnWorker(pythonCommand: string, scriptPath: string) {
-  const workerKey = `${pythonCommand}::${scriptPath}`;
+  const scriptMtimeMs = (() => {
+    try {
+      return fs.statSync(scriptPath).mtimeMs;
+    } catch {
+      return 0;
+    }
+  })();
+
+  const workerKey = `${pythonCommand}::${scriptPath}::${scriptMtimeMs}`;
 
   if (
     mediumEnState.worker &&

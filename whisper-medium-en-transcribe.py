@@ -83,6 +83,35 @@ def transcribe_with_whisper_medium_en(audio_path: str) -> dict:
             word_timestamps=True
         )
 
+        # Optional alignment refinement for higher timestamp precision
+        # while keeping the transcription model as native medium.en Whisper.
+        segments_source = result["segments"]
+        align_device = "cuda" if torch.cuda.is_available() else "cpu"
+        try:
+            import whisperx
+
+            audio = whisperx.load_audio(audio_path)
+            model_a, metadata = whisperx.load_align_model(
+                language_code="en",
+                device=align_device,
+            )
+            aligned_result = whisperx.align(
+                result["segments"],
+                model_a,
+                metadata,
+                audio,
+                align_device,
+                return_char_alignments=False,
+            )
+            if (
+                isinstance(aligned_result, dict)
+                and isinstance(aligned_result.get("segments"), list)
+            ):
+                segments_source = aligned_result["segments"]
+        except Exception:
+            # Fall back to native Whisper word timestamps if alignment is unavailable
+            segments_source = result["segments"]
+
         # Restore stdout
         sys.stdout = original_stdout
 
@@ -93,25 +122,26 @@ def transcribe_with_whisper_medium_en(audio_path: str) -> dict:
         segments = []
         word_timestamps = []
 
-        for segment in result["segments"]:
+        for segment in segments_source:
             segment_words = []
 
             # Extract word-level timestamps if available
             if "words" in segment:
                 for word_info in segment["words"]:
-                    word_data = {
-                        "word": word_info["word"].strip(),
-                        "start": round(word_info["start"], 2),
-                        "end": round(word_info["end"], 2)
-                    }
-                    word_timestamps.append(word_data)
-                    segment_words.append(word_data)
+                    if "start" in word_info and "end" in word_info:
+                        word_data = {
+                            "word": word_info["word"].strip(),
+                            "start": float(word_info["start"]),
+                            "end": float(word_info["end"])
+                        }
+                        word_timestamps.append(word_data)
+                        segment_words.append(word_data)
 
             # Create segment
             segments.append({
-                "start": round(segment["start"], 2),
-                "end": round(segment["end"], 2),
-                "text": segment["text"].strip(),
+                "start": float(segment.get("start", 0)),
+                "end": float(segment.get("end", 0)),
+                "text": segment.get("text", "").strip(),
                 "words": segment_words
             })
 
@@ -120,7 +150,7 @@ def transcribe_with_whisper_medium_en(audio_path: str) -> dict:
         audio_duration = None
         try:
             waveform, sample_rate = torchaudio.load(audio_path)
-            audio_duration = round(waveform.shape[1] / sample_rate, 2)
+            audio_duration = float(waveform.shape[1] / sample_rate)
         except:
             # If torchaudio fails, try to get from segments
             if segments:
