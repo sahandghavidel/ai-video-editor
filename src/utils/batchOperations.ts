@@ -21,11 +21,6 @@ export type GenerateAllVideosBatchOptions = {
   skipAlreadySyncedBySignature?: boolean;
 };
 
-export type TranscribeAllFinalScenesBatchOptions = {
-  includeScenesWithExistingCaptions?: boolean;
-  perSceneDelayMs?: number;
-};
-
 const normalizeMediaUrl = (value: unknown): string =>
   typeof value === 'string' ? value.trim() : '';
 
@@ -568,42 +563,22 @@ export const handleTranscribeAllFinalScenes = async (
   completeBatchOperation: (operation: 'transcribingAllFinalScenes') => void,
   setTranscribingScene: (sceneId: number | null) => void,
   onRefresh?: () => void,
-  options?: TranscribeAllFinalScenesBatchOptions,
 ) => {
   startBatchOperation('transcribingAllFinalScenes');
   try {
-    const includeScenesWithExistingCaptions =
-      options?.includeScenesWithExistingCaptions === true;
-    const perSceneDelayMs =
-      typeof options?.perSceneDelayMs === 'number' &&
-      Number.isFinite(options.perSceneDelayMs) &&
-      options.perSceneDelayMs >= 0
-        ? options.perSceneDelayMs
-        : 2000;
-
     // Filter scenes that have final videos (field_6886) and missing captions (field_6910)
     const scenesToTranscribe = data.filter((scene) => {
       const finalVideo = scene['field_6886'];
       const captions = scene['field_6910'];
-      const hasFinalVideo = typeof finalVideo === 'string' && finalVideo.trim();
-
-      if (!hasFinalVideo) {
-        return false;
-      }
-
-      if (includeScenesWithExistingCaptions) {
-        return true;
-      }
-
-      return !captions || (typeof captions === 'string' && !captions.trim());
+      return (
+        typeof finalVideo === 'string' &&
+        finalVideo.trim() &&
+        (!captions || (typeof captions === 'string' && !captions.trim()))
+      );
     });
 
     if (scenesToTranscribe.length === 0) {
-      console.log(
-        includeScenesWithExistingCaptions
-          ? 'No final scene videos found to transcribe'
-          : 'No final scene videos found that need transcription',
-      );
+      console.log('No final scene videos found that need transcription');
       return;
     }
 
@@ -612,9 +587,7 @@ export const handleTranscribeAllFinalScenes = async (
       try {
         await handleTranscribeScene(scene.id, scene, 'final', true, true);
         // Short delay between transcriptions to avoid rate limits
-        if (perSceneDelayMs > 0) {
-          await wait(perSceneDelayMs);
-        }
+        await wait(2000);
       } catch (error) {
         console.error(`Failed to transcribe scene ${scene.id}:`, error);
       } finally {

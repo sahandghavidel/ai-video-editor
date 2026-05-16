@@ -7,7 +7,6 @@ import {
   handleImproveAllSentences,
   handleGenerateAllTTS,
   handleGenerateAllVideos,
-  handleTranscribeAllFinalScenes,
   handleConcatenateAllVideos,
   handleSpeedUpAllVideos,
   cycleSpeed as cycleThroughSpeeds,
@@ -21,7 +20,6 @@ import {
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
 import { fetchFlaggedScenesForVideo } from '@/features/fix-tts-flagged/fetchFlaggedScenesForVideo';
-import TranscribeAllScenesButton from '@/components/TranscribeAllScenesButton';
 import { FixFlaggedOnlyButton } from '@/components/fix-tts/FixFlaggedOnlyButton';
 import { FixIntroQaButton } from '@/components/fix-tts/FixIntroQaButton';
 import { playSuccessSound } from '@/utils/soundManager';
@@ -1239,21 +1237,6 @@ export default function BatchOperations({
       startBatchOperation,
       completeBatchOperation,
       setProducingTTS,
-    );
-  };
-
-  const onTranscribeAllScenes = () => {
-    handleTranscribeAllFinalScenes(
-      data,
-      handleTranscribeScene,
-      startBatchOperation,
-      completeBatchOperation,
-      setTranscribingScene,
-      onRefresh,
-      {
-        includeScenesWithExistingCaptions: true,
-        perSceneDelayMs: 1200,
-      },
     );
   };
 
@@ -4744,18 +4727,6 @@ export default function BatchOperations({
                           : 'Generate All'}
                     </span>
                   </button>
-
-                  <TranscribeAllScenesButton
-                    onClick={onTranscribeAllScenes}
-                    disabled={
-                      !selectedOriginalVideo.id ||
-                      batchOperations.transcribingAllFinalScenes ||
-                      sceneLoading.transcribingScene !== null
-                    }
-                    hasSelectedVideo={Boolean(selectedOriginalVideo.id)}
-                    isRunning={batchOperations.transcribingAllFinalScenes}
-                    currentSceneId={sceneLoading.transcribingScene}
-                  />
                 </div>
 
                 {/* Generate Videos */}
