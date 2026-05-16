@@ -206,6 +206,8 @@ export interface PipelineConfig {
   combinePairsSkipD: number;
   deleteEmpty: boolean;
   generateClips: boolean;
+  transcribeApplyGenClips: boolean;
+  transcribeApplyGenClipsMinChars: number;
   speedUp: boolean;
   fixLanguageAll: boolean;
   improve: boolean;
@@ -642,6 +644,8 @@ const defaultPipelineConfig: PipelineConfig = {
   combinePairsSkipD: 120,
   deleteEmpty: true,
   generateClips: true,
+  transcribeApplyGenClips: false,
+  transcribeApplyGenClipsMinChars: 150,
   speedUp: true,
   fixLanguageAll: true,
   improve: true,

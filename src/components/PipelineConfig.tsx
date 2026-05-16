@@ -171,6 +171,11 @@ export default function PipelineConfig({
       label: 'Generate Clips',
       color: 'text-cyan-500',
     },
+    {
+      key: 'transcribeApplyGenClips' as const,
+      label: 'Transcribe + Apply + Gen Clips',
+      color: 'text-orange-500',
+    },
     { key: 'speedUp' as const, label: 'Speed Up', color: 'text-yellow-500' },
     {
       key: 'fixLanguageAll' as const,
@@ -668,6 +673,77 @@ export default function PipelineConfig({
             {/* Steps 13+: deleteEmpty onwards */}
             {steps.slice(8).map((step, index) => {
               const isEnabled = pipelineConfig[step.key];
+
+              if (step.key === 'transcribeApplyGenClips') {
+                const minChars = Math.max(
+                  0,
+                  Math.floor(pipelineConfig.transcribeApplyGenClipsMinChars),
+                );
+
+                return (
+                  <div
+                    key={step.key}
+                    className={`relative flex flex-col items-center justify-between gap-1 p-2 rounded-md border-2 transition-all ${
+                      isEnabled
+                        ? 'border-orange-500 bg-orange-50 shadow-sm'
+                        : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <button
+                      type='button'
+                      onClick={() => togglePipelineStep(step.key)}
+                      className='flex items-center justify-center'
+                    >
+                      {isEnabled ? (
+                        <CheckCircle2
+                          className='w-5 h-5 text-orange-500'
+                          strokeWidth={2.5}
+                        />
+                      ) : (
+                        <Circle className='w-5 h-5 text-gray-300' />
+                      )}
+                    </button>
+
+                    <span className='text-[11px] font-medium leading-tight text-gray-900 text-center'>
+                      Trans Apply Gen
+                    </span>
+
+                    <div className='flex items-center gap-1'>
+                      <span className='text-[10px] font-semibold text-orange-600 uppercase tracking-wide'>
+                        Min
+                      </span>
+                      <input
+                        type='number'
+                        min={0}
+                        step={1}
+                        value={minChars}
+                        onChange={(e) => {
+                          const raw = parseInt(e.target.value, 10);
+                          updatePipelineConfig({
+                            transcribeApplyGenClipsMinChars:
+                              !isNaN(raw) && raw >= 0 ? raw : 0,
+                          });
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        disabled={!isEnabled}
+                        className='w-14 h-6 text-center text-[11px] font-medium border border-orange-300 rounded px-1 bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-500'
+                        title='Only scenes with Sentence (6890) length greater than or equal to this value are processed'
+                      />
+                    </div>
+
+                    <span
+                      className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                        isEnabled
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-gray-200 text-gray-500'
+                      }`}
+                    >
+                      {13 + index}
+                    </span>
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={step.key}
