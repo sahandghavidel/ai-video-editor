@@ -33,37 +33,6 @@ function resolvePythonCommand(options: {
   };
 }
 
-function parseBooleanFlag(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value;
-
-  if (typeof value === 'number') {
-    if (value === 1) return true;
-    if (value === 0) return false;
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
-    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
-  }
-
-  return null;
-}
-
-function resolveMediumEnAlignmentFlag(
-  requestValue: unknown,
-  defaultValue = false,
-): boolean {
-  const parsedRequest = parseBooleanFlag(requestValue);
-  if (parsedRequest !== null) return parsedRequest;
-
-  const parsedEnv = parseBooleanFlag(process.env.MEDIUM_EN_USE_ALIGNMENT);
-  if (parsedEnv !== null) return parsedEnv;
-
-  return defaultValue;
-}
-
 type MediumEnPendingJob = {
   resolve: (value: Record<string, unknown>) => void;
   reject: (reason: Error) => void;
@@ -274,11 +243,7 @@ function handleMediumEnWorkerLine(line: string) {
   scheduleMediumEnIdleShutdown();
 }
 
-function ensureMediumEnWorker(
-  pythonCommand: string,
-  scriptPath: string,
-  useAlignment: boolean,
-) {
+function ensureMediumEnWorker(pythonCommand: string, scriptPath: string) {
   const scriptMtimeMs = (() => {
     try {
       return fs.statSync(scriptPath).mtimeMs;
@@ -287,7 +252,7 @@ function ensureMediumEnWorker(
     }
   })();
 
-  const workerKey = `${pythonCommand}::${scriptPath}::${scriptMtimeMs}::align=${useAlignment ? '1' : '0'}`;
+  const workerKey = `${pythonCommand}::${scriptPath}::${scriptMtimeMs}`;
 
   if (
     mediumEnState.worker &&
@@ -312,15 +277,11 @@ function ensureMediumEnWorker(
   mediumEnState.lastStderrLine = null;
 
   console.log(
-    `[SCENE_TRANSCRIBE] Starting persistent medium.en worker with python: ${pythonCommand} (alignment=${useAlignment})`,
+    `[SCENE_TRANSCRIBE] Starting persistent medium.en worker with python: ${pythonCommand}`,
   );
 
   const worker = spawn(pythonCommand, [scriptPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      MEDIUM_EN_USE_ALIGNMENT: useAlignment ? 'true' : 'false',
-    },
   });
   mediumEnState.worker = worker;
 
@@ -384,13 +345,8 @@ function transcribeWithWarmMediumEn(options: {
   scriptPath: string;
   mediaUrl: string;
   sceneId: string;
-  useAlignment: boolean;
 }) {
-  ensureMediumEnWorker(
-    options.pythonCommand,
-    options.scriptPath,
-    options.useAlignment,
-  );
+  ensureMediumEnWorker(options.pythonCommand, options.scriptPath);
   clearMediumEnIdleTimer();
 
   return new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -414,18 +370,7 @@ function transcribeWithWarmMediumEn(options: {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      media_url,
-      model = 'parakeet',
-      scene_id,
-      use_alignment,
-      medium_en_use_alignment,
-    } = body;
-
-    const mediumEnUseAlignment = resolveMediumEnAlignmentFlag(
-      use_alignment ?? medium_en_use_alignment,
-      false,
-    );
+    const { media_url, model = 'parakeet', scene_id } = body;
 
     if (!media_url) {
       return NextResponse.json(
@@ -854,9 +799,7 @@ export async function POST(request: NextRequest) {
       console.log(
         `[SCENE_TRANSCRIBE] Using Whisper python: ${pythonCommand} (${pythonSource})`,
       );
-      console.log(
-        `[SCENE_TRANSCRIBE] medium.en alignment enabled: ${mediumEnUseAlignment}`,
-      );
+      console.log('[SCENE_TRANSCRIBE] medium.en alignment: required');
 
       // Reuse persistent medium.en worker and keep it warm for 2 minutes after each job
       transcriptionPromise = transcribeWithWarmMediumEn({
@@ -864,7 +807,6 @@ export async function POST(request: NextRequest) {
         scriptPath,
         mediaUrl: media_url,
         sceneId: String(scene_id),
-        useAlignment: mediumEnUseAlignment,
       });
     } else if (model === 'whisperx') {
       // Path to the WhisperX transcription script

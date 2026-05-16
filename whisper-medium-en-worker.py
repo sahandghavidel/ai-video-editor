@@ -96,8 +96,8 @@ def download_and_convert_media(url: str) -> str:
 def transcribe_with_model(
     model: Any,
     audio_path: str,
-    align_model: Any | None = None,
-    align_metadata: Any | None = None,
+    align_model: Any,
+    align_metadata: Any,
     align_device: str = "cpu",
 ) -> dict[str, Any]:
     """Transcribe audio using a preloaded Whisper medium.en model."""
@@ -112,35 +112,30 @@ def transcribe_with_model(
     transcription = result["text"].strip()
     segments_source = result["segments"]
 
-    if align_model is not None and align_metadata is not None:
-        try:
-            import whisperx
+    import whisperx
 
-            original_stdout = sys.stdout
-            sys.stdout = sys.stderr
-            try:
-                audio = whisperx.load_audio(audio_path)
-                aligned_result = whisperx.align(
-                    result["segments"],
-                    align_model,
-                    align_metadata,
-                    audio,
-                    align_device,
-                    return_char_alignments=False,
-                )
-            finally:
-                sys.stdout = original_stdout
+    original_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        audio = whisperx.load_audio(audio_path)
+        aligned_result = whisperx.align(
+            result["segments"],
+            align_model,
+            align_metadata,
+            audio,
+            align_device,
+            return_char_alignments=False,
+        )
+    finally:
+        sys.stdout = original_stdout
 
-            if (
-                isinstance(aligned_result, dict)
-                and isinstance(aligned_result.get("segments"), list)
-            ):
-                segments_source = aligned_result["segments"]
-        except Exception as exc:  # pylint: disable=broad-except
-            log(
-                "alignment failed, using native medium.en timestamps: "
-                f"{exc}"
-            )
+    if isinstance(aligned_result, dict) and isinstance(
+        aligned_result.get("segments"),
+        list,
+    ):
+        segments_source = aligned_result["segments"]
+    else:
+        raise RuntimeError("WhisperX alignment returned no segments")
 
     segments: list[dict[str, Any]] = []
     word_timestamps: list[dict[str, Any]] = []
@@ -201,24 +196,18 @@ def main() -> int:
     try:
         import whisper
         import torch
+        import whisperx
 
         log("loading medium.en model...")
         model = whisper.load_model("medium.en")
-        align_model = None
-        align_metadata = None
         align_device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        try:
-            import whisperx
-
-            log(f"loading alignment model on {align_device}...")
-            align_model, align_metadata = whisperx.load_align_model(
-                language_code="en",
-                device=align_device,
-            )
-            log("alignment model loaded")
-        except Exception as exc:  # pylint: disable=broad-except
-            log(f"alignment unavailable, using native medium.en timestamps: {exc}")
+        log(f"loading alignment model on {align_device}...")
+        align_model, align_metadata = whisperx.load_align_model(
+            language_code="en",
+            device=align_device,
+        )
+        log("alignment model loaded")
 
         log("model loaded")
         emit({"ready": True, "model": "medium.en"})
