@@ -81,6 +81,25 @@ function parsePositiveInt(value: unknown): number | null {
   return null;
 }
 
+function hasPopulatedCaptionUrl(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasPopulatedCaptionUrl(entry));
+  }
+
+  if (value && typeof value === 'object') {
+    const rec = value as Record<string, unknown>;
+    return hasPopulatedCaptionUrl(
+      rec.url ?? rec.value ?? rec.name ?? rec.text ?? rec.file,
+    );
+  }
+
+  return false;
+}
+
 function extractLinkedVideoId(videoIdField: unknown): number | null {
   if (typeof videoIdField === 'number') {
     return Number.isFinite(videoIdField) ? videoIdField : null;
@@ -1262,7 +1281,7 @@ export async function POST(request: NextRequest) {
       ...CLEARED_GENERATED_FIELDS,
     }));
 
-    const updatedSourceScene = await patchTableRow(
+    let updatedSourceScene = await patchTableRow(
       baserowUrl,
       SCENES_TABLE_ID,
       sceneId,
@@ -1291,6 +1310,44 @@ export async function POST(request: NextRequest) {
     const createdSceneIds = normalizeSceneIdList(
       createdRows.map((row) => row.id),
     );
+
+    const sceneIdsNeedingCaptionClear = new Set<number>();
+
+    if (hasPopulatedCaptionUrl(updatedSourceScene.field_6910)) {
+      sceneIdsNeedingCaptionClear.add(sceneId);
+    }
+
+    for (const row of createdRows) {
+      const createdRowId = parsePositiveInt(row.id);
+      if (createdRowId === null) continue;
+
+      if (hasPopulatedCaptionUrl(row.field_6910)) {
+        sceneIdsNeedingCaptionClear.add(createdRowId);
+      }
+    }
+
+    for (const targetSceneId of sceneIdsNeedingCaptionClear) {
+      const clearedScene = await patchTableRow(
+        baserowUrl,
+        SCENES_TABLE_ID,
+        targetSceneId,
+        { field_6910: '' },
+        token,
+      );
+
+      if (targetSceneId === sceneId) {
+        updatedSourceScene = clearedScene;
+        continue;
+      }
+
+      const createdRowIndex = createdRows.findIndex((row) => {
+        return parsePositiveInt(row.id) === targetSceneId;
+      });
+
+      if (createdRowIndex >= 0) {
+        createdRows[createdRowIndex] = clearedScene;
+      }
+    }
 
     let linkedScenesUpdated = false;
     let linkedSceneIds: number[] = [];
