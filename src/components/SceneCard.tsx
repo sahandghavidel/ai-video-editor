@@ -3121,7 +3121,7 @@ export default function SceneCard({
         const audioUrl = result.audioUrl;
 
         // Update the Baserow field with the MinIO URL
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6891: audioUrl,
         });
 
@@ -3134,9 +3134,14 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server to ensure consistency
+        let refreshedScene: BaserowRow | null = null;
+
+        // Refresh scene from server to ensure consistency (fallback to full refresh)
         if (!opts?.suppressRefreshes) {
-          refreshDataRef.current?.();
+          refreshedScene = await refreshSceneInLocalCache(sceneId);
+          if (!onDataUpdateRef.current || !refreshedScene) {
+            refreshDataRef.current?.();
+          }
         }
 
         // Auto-generate video if option is enabled
@@ -3147,6 +3152,7 @@ export default function SceneCard({
           // Use sceneData if provided (from batch operation), otherwise look up in dataRef
           const currentScene =
             (typedSceneData as BaserowRow | undefined) ||
+            refreshedScene ||
             dataRef.current.find((scene) => scene.id === sceneId);
           const videoUrl = currentScene?.field_6888;
 
@@ -3178,7 +3184,11 @@ export default function SceneCard({
         setProducingTTS(null);
       }
     },
-    [setProducingTTS, videoSettings.autoGenerateVideo],
+    [
+      setProducingTTS,
+      videoSettings.autoGenerateVideo,
+      refreshSceneInLocalCache,
+    ],
   );
 
   const handleVideoGenerate = useCallback(
