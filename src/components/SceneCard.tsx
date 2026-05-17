@@ -3823,11 +3823,23 @@ export default function SceneCard({
         throw new Error(`${res.status} ${t}`.trim());
       }
 
+      const updatedData = dataRef.current.map((scene) =>
+        scene.id === sceneId
+          ? { ...scene, field_7096: 'confirmed', field_7106: '' }
+          : scene,
+      );
+      dataRef.current = updatedData;
+      onDataUpdateRef.current?.(updatedData);
+
       setAutoFixMismatchStatus((prev) => ({
         ...prev,
         [sceneId]: 'Marked as confirmed. Fix TTS batch will skip this scene.',
       }));
-      refreshDataRef.current?.();
+
+      // Fallback for usages that don't provide local update callback.
+      if (!onDataUpdateRef.current) {
+        refreshDataRef.current?.();
+      }
     } catch (error) {
       console.error(`Failed to set confirmed for scene ${sceneId}:`, error);
       setAutoFixMismatchStatus((prev) => ({
