@@ -805,10 +805,7 @@ export default function BatchOperations({
 
     const mappedScenes = [...data]
       .map((scene) => {
-        const sentence = String(scene['field_6890'] ?? '').trim();
-        const original = String(
-          scene['field_6901'] ?? scene['field_6900'] ?? '',
-        ).trim();
+        const text = String(scene['field_6890'] ?? '').trim();
         const fixedSentenceConfirmation = String(
           scene['field_7105'] ?? '',
         ).trim();
@@ -816,7 +813,7 @@ export default function BatchOperations({
 
         return {
           scene,
-          text: sentence || original,
+          text,
           alreadyFixed,
         };
       })
