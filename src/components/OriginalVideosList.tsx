@@ -5066,6 +5066,7 @@ export default function OriginalVideosList({
             seedOverride?: number;
             throwOnError?: boolean;
             skipAutoSyncAfterTtsGeneration?: boolean;
+            suppressRefreshes?: boolean;
           },
         ) => Promise<void>;
 
@@ -5077,7 +5078,7 @@ export default function OriginalVideosList({
           sceneData?: BaserowRow,
           zoomLevel?: number,
           panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom',
-          opts?: { throwOnError?: boolean },
+          opts?: { throwOnError?: boolean; suppressRefreshes?: boolean },
         ) => Promise<void>;
 
       const transcribeSceneWithOptions =
@@ -5861,6 +5862,7 @@ export default function OriginalVideosList({
                   seedOverride: seed,
                   throwOnError: true,
                   skipAutoSyncAfterTtsGeneration: true,
+                  suppressRefreshes: true,
                 },
               );
 
@@ -5936,7 +5938,7 @@ export default function OriginalVideosList({
               freshBeforeSync,
               0,
               'none',
-              { throwOnError: true },
+              { throwOnError: true, suppressRefreshes: true },
             );
 
             const sceneForTranscribe =

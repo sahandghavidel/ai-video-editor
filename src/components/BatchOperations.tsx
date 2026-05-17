@@ -1781,6 +1781,7 @@ export default function BatchOperations({
         seedOverride?: number;
         throwOnError?: boolean;
         skipAutoSyncAfterTtsGeneration?: boolean;
+        suppressRefreshes?: boolean;
       },
     ) => Promise<void>;
 
@@ -1791,7 +1792,7 @@ export default function BatchOperations({
       sceneData?: BaserowRow,
       zoomLevel?: number,
       panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom',
-      opts?: { throwOnError?: boolean },
+      opts?: { throwOnError?: boolean; suppressRefreshes?: boolean },
     ) => Promise<void>;
 
     const transcribeSceneWithOptions = handleTranscribeScene as unknown as (
@@ -2661,6 +2662,7 @@ export default function BatchOperations({
                   seedOverride: seed,
                   throwOnError: true,
                   skipAutoSyncAfterTtsGeneration: true,
+                  suppressRefreshes: true,
                 },
               );
 
@@ -2762,7 +2764,7 @@ export default function BatchOperations({
               freshBeforeSync,
               0,
               'none',
-              { throwOnError: true },
+              { throwOnError: true, suppressRefreshes: true },
             );
 
             const sceneForTranscribe =
