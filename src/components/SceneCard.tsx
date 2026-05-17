@@ -4550,14 +4550,19 @@ export default function SceneCard({
 
       // Refresh data from server to ensure consistency (skip if requested)
       if (!skipRefresh) {
-        refreshDataRef.current?.();
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
       }
 
       // Auto-generate TTS if option is enabled
       if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
         // Wait a moment to ensure the text is properly updated
+        const sceneForTts =
+          sceneData || dataRef.current.find((scene) => scene.id === sceneId);
         setTimeout(() => {
-          handleTTSProduce(sceneId, improvedSentence, sceneData);
+          handleTTSProduce(sceneId, improvedSentence, sceneForTts);
         }, 1000);
       }
 
@@ -4567,6 +4572,7 @@ export default function SceneCard({
       setImprovingSentence,
       modelSelection.selectedModel,
       modelSelection.enforceLongerSentences,
+      refreshSceneInLocalCache,
       videoSettings.autoGenerateTTS,
     ],
   );
