@@ -3297,7 +3297,10 @@ export default function SceneCard({
 
         // Only refresh from server if it's NOT a cache hit (to avoid wasteful refetch)
         if (!isCached && !opts?.suppressRefreshes) {
-          refreshDataRef.current?.();
+          const refreshedScene = await refreshSceneInLocalCache(sceneId);
+          if (!onDataUpdateRef.current || !refreshedScene) {
+            refreshDataRef.current?.();
+          }
         }
       } catch (error) {
         console.error('Error generating synchronized video:', error);
@@ -3310,7 +3313,7 @@ export default function SceneCard({
         setGeneratingVideo(null);
       }
     },
-    [setGeneratingVideo],
+    [setGeneratingVideo, refreshSceneInLocalCache],
   );
 
   const replaceStandaloneDotOrPeriodWithSymbol = useCallback((text: string) => {
