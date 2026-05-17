@@ -1137,6 +1137,11 @@ export default function SceneCard({
     const nextScene = scenesInRealOrder[index + 1];
     if (!currentScene || !nextScene) return;
 
+    const shouldCombine = window.confirm(
+      `Combine scene ${sceneId} with scene ${nextScene.id}? This will delete scene ${nextScene.id} and cannot be undone.`,
+    );
+    if (!shouldCombine) return;
+
     // Prepare new text fields
     const currSentence = String(currentScene.field_6890 || '').trim();
     const nextSentence = String(
