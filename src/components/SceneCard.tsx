@@ -473,6 +473,33 @@ export default function SceneCard({
     }
   };
 
+  const refreshSceneInLocalCache = useCallback(async (sceneId: number) => {
+    try {
+      const freshScene = await getSceneById(sceneId);
+      if (!freshScene) return null;
+
+      const hasSceneInLocalData = dataRef.current.some(
+        (scene) => scene.id === sceneId,
+      );
+      if (!hasSceneInLocalData) {
+        return freshScene;
+      }
+
+      const updatedData = dataRef.current.map((scene) =>
+        scene.id === sceneId
+          ? ({ ...scene, ...freshScene } as BaserowRow)
+          : scene,
+      );
+      dataRef.current = updatedData;
+      onDataUpdateRef.current?.(updatedData);
+
+      return freshScene;
+    } catch (error) {
+      console.warn(`Failed to refresh scene ${sceneId} for replay:`, error);
+      return null;
+    }
+  }, []);
+
   const handleProducedVideoPlay = useCallback(
     async (sceneId: number, videoUrl: string) => {
       try {
@@ -539,7 +566,7 @@ export default function SceneCard({
 
   // Keyboard shortcuts for player speed
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = async (event: KeyboardEvent) => {
       // When the image overlay modal is open, don't let homepage shortcuts run.
       if (
         imageOverlayModal.isOpen ||
@@ -742,21 +769,32 @@ export default function SceneCard({
       }
 
       if (newSpeed !== null) {
-        // For speed 1x, refresh data first to get the newest created content
-        if (newSpeed === 1 && refreshDataRef.current) {
-          refreshDataRef.current();
+        let refreshedSceneForReplay: BaserowRow | null = null;
+
+        // For speed 1x, refresh only the active scene to get the newest created content.
+        if (newSpeed === 1) {
+          const activeSceneIdForReplay =
+            mediaPlayer.playingVideoId ?? mediaPlayer.playingProducedVideoId;
+
+          if (activeSceneIdForReplay) {
+            refreshedSceneForReplay = await refreshSceneInLocalCache(
+              activeSceneIdForReplay,
+            );
+          }
         }
 
         // Restart currently playing video with new speed (temporary change)
         const restartVideo = (
           video: HTMLVideoElement | null,
           sceneId: number,
+          refreshedScene?: BaserowRow | null,
         ) => {
           if (video) {
             // Find the current scene data to get the latest URL
-            const currentScene = dataRef.current.find(
-              (scene) => scene.id === sceneId,
-            );
+            const currentScene =
+              refreshedScene && refreshedScene.id === sceneId
+                ? refreshedScene
+                : dataRef.current.find((scene) => scene.id === sceneId);
             if (currentScene) {
               // Update video source with the latest URL
               const videoUrl =
@@ -780,11 +818,19 @@ export default function SceneCard({
         // Check if there's a video currently playing and restart it
         if (mediaPlayer.playingVideoId) {
           const video = videoRefs.current[mediaPlayer.playingVideoId];
-          restartVideo(video, mediaPlayer.playingVideoId);
+          restartVideo(
+            video,
+            mediaPlayer.playingVideoId,
+            refreshedSceneForReplay,
+          );
         } else if (mediaPlayer.playingProducedVideoId) {
           const video =
             producedVideoRefs.current[mediaPlayer.playingProducedVideoId];
-          restartVideo(video, mediaPlayer.playingProducedVideoId);
+          restartVideo(
+            video,
+            mediaPlayer.playingProducedVideoId,
+            refreshedSceneForReplay,
+          );
         }
       }
     };
@@ -797,6 +843,7 @@ export default function SceneCard({
     mediaPlayer.playingProducedVideoId,
     imageOverlayModal.isOpen,
     handleProducedVideoPlay,
+    refreshSceneInLocalCache,
     data,
     showOnlyFlagged,
     showOnlyEmptyText,
