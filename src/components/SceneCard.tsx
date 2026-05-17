@@ -909,6 +909,14 @@ export default function SceneCard({
     const sceneExists = data.some((scene) => scene.id === sceneId);
     if (!sceneExists) return;
 
+    const shouldDelete = window.confirm(
+      `Delete scene ${sceneId}? This action cannot be undone.`,
+    );
+    if (!shouldDelete) {
+      setLeftHoverDeleteSceneId(null);
+      return;
+    }
+
     setDeletingSceneId(sceneId);
 
     if (mediaPlayer.playingAudioId === sceneId) {
