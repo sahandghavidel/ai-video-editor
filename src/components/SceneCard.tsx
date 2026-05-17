@@ -894,7 +894,10 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
     try {
       await updateSceneRow(sceneId, { field_6890: originalSentence });
-      refreshData?.();
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshData?.();
+      }
     } catch (error) {
       console.error('Failed to revert sentence:', error);
       // Revert optimistic update on error
@@ -918,7 +921,10 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
     try {
       await updateSceneRow(sceneId, { field_6891: '' });
-      refreshData?.();
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshData?.();
+      }
     } catch (error) {
       console.error('Failed to remove TTS:', error);
       // Revert optimistic update on error
@@ -942,11 +948,16 @@ export default function SceneCard({
     onDataUpdate?.(optimisticData);
     try {
       await updateSceneRow(sceneId, { field_6886: '' });
-      refreshData?.();
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshData?.();
+      }
     } catch (error) {
       console.error('Failed to clear video:', error);
       // Revert optimistic update on error
       onDataUpdate?.(data);
+    } finally {
+      setClearingVideoId(null);
     }
   };
 
@@ -2264,7 +2275,10 @@ export default function SceneCard({
 
         // Refresh data from server to ensure consistency (skip in batch mode)
         if (!skipRefresh) {
-          refreshData?.();
+          const refreshedScene = await refreshSceneInLocalCache(sceneId);
+          if (!onDataUpdateRef.current || !refreshedScene) {
+            refreshData?.();
+          }
         }
       } catch (error) {
         console.error('Error speeding up video:', error);
@@ -2283,6 +2297,7 @@ export default function SceneCard({
       videoSettings.muteAudio,
       setSpeedingUpVideo,
       onDataUpdate,
+      refreshSceneInLocalCache,
       refreshData,
     ],
   );
@@ -2618,20 +2633,23 @@ export default function SceneCard({
 
     try {
       // updateSceneRow returns the updated row data directly or throws an error
-      const updatedRow = await updateSceneRow(sceneId, {
+      await updateSceneRow(sceneId, {
         field_6890: editingText,
       });
 
       setEditingId(null);
       setEditingText('');
 
-      // Refresh data from server to ensure consistency
-      refreshData?.();
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshData?.();
+      }
 
       // Auto-generate TTS if option is enabled and text was actually changed
       if (videoSettings.autoGenerateTTS && editingText.trim()) {
         // Wait a moment to ensure the text is properly updated
-        const sceneData = data.find((s) => s.id === sceneId);
+        const sceneData =
+          refreshedScene || dataRef.current.find((s) => s.id === sceneId);
         setTimeout(() => {
           handleTTSProduce(sceneId, editingText, sceneData);
         }, 500);
@@ -2671,15 +2689,17 @@ export default function SceneCard({
 
     try {
       // updateSceneRow returns the updated row data directly or throws an error
-      const updatedRow = await updateSceneRow(sceneId, {
+      await updateSceneRow(sceneId, {
         field_6890: editingText,
       });
 
       setEditingId(null);
       setEditingText('');
 
-      // Refresh data from server to ensure consistency
-      refreshData?.();
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshData?.();
+      }
 
       // Note: TTS generation is skipped for this save operation
     } catch (error) {
@@ -2723,7 +2743,10 @@ export default function SceneCard({
         setEditingId(null);
         setEditingText('');
 
-        refreshData?.();
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshData?.();
+        }
       } catch (error) {
         console.error('Failed to clear sentence field:', error);
         // Revert optimistic update on error
@@ -2732,7 +2755,7 @@ export default function SceneCard({
         setIsUpdating(false);
       }
     },
-    [data, onDataUpdate, refreshData, isUpdating],
+    [data, onDataUpdate, refreshData, isUpdating, refreshSceneInLocalCache],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent, sceneId: number) => {
