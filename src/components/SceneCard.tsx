@@ -5070,8 +5070,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         if (playSound) {
           playSuccessSound();
@@ -5088,7 +5091,7 @@ export default function SceneCard({
         setNormalizingAudio(null);
       }
     },
-    [setNormalizingAudio],
+    [setNormalizingAudio, refreshSceneInLocalCache],
   );
 
   // Normalize original video handler
@@ -5171,8 +5174,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         if (playSound) {
           playSuccessSound();
@@ -5189,7 +5195,7 @@ export default function SceneCard({
         setNormalizingAudio(null);
       }
     },
-    [setNormalizingAudio],
+    [setNormalizingAudio, refreshSceneInLocalCache],
   );
 
   // Normalize final video handler
@@ -5270,8 +5276,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         if (playSound) {
           playSuccessSound();
@@ -5288,7 +5297,7 @@ export default function SceneCard({
         setNormalizingAudio(null);
       }
     },
-    [setNormalizingAudio],
+    [setNormalizingAudio, refreshSceneInLocalCache],
   );
 
   // Optimize silence handler
