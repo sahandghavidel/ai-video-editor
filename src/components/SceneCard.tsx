@@ -4760,7 +4760,7 @@ export default function SceneCard({
 
         // Update the Baserow field with the CFR video URL
         // For scenes, we update the synced/processed video field (field_6886)
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6886: cfrVideoUrl,
         });
 
@@ -4773,8 +4773,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         playSuccessSound();
       } catch (error) {
@@ -4785,7 +4788,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo],
+    [setConvertingToCFRVideo, refreshSceneInLocalCache],
   );
 
   // Convert original video to CFR handler
@@ -4860,7 +4863,7 @@ export default function SceneCard({
         }
 
         // Update the Baserow field with the CFR video URL for original video
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6888: cfrVideoUrl,
         });
 
@@ -4873,8 +4876,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         if (playSound) {
           playSuccessSound();
@@ -4891,7 +4897,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo],
+    [setConvertingToCFRVideo, refreshSceneInLocalCache],
   );
 
   // Convert final video to CFR handler
@@ -4966,7 +4972,7 @@ export default function SceneCard({
         }
 
         // Update the Baserow field with the CFR video URL for final video
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6886: cfrVideoUrl,
         });
 
@@ -4979,8 +4985,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         if (playSound) {
           playSuccessSound();
@@ -4997,7 +5006,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo],
+    [setConvertingToCFRVideo, refreshSceneInLocalCache],
   );
 
   // Normalize audio handler
