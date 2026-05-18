@@ -2727,9 +2727,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOriginalVideoUrl(newUrl);
       onUpdateModalVideoUrl?.(newUrl);
 
-      if (!useAppStore.getState().batchOperations.transcribingAllFinalScenes) {
-        setRefetchTrigger((prev) => prev + 1);
-      }
+      // Keep modal URL in sync without forcing an immediate transcription refetch.
     } catch (err) {
       console.error('Failed to apply subtitle highlight:', err);
       alert(
@@ -3183,9 +3181,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOriginalVideoUrl(newUrl);
       onUpdateModalVideoUrl?.(newUrl);
 
-      // Trigger a refetch so anything derived from the scene can refresh.
-      setRefetchTrigger((prev) => prev + 1);
-
       setApplyEnhancedSceneVideoStatus('Applied');
       window.setTimeout(() => setApplyEnhancedSceneVideoStatus(null), 3500);
     } catch (error) {
@@ -3309,7 +3304,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       setOriginalVideoUrl(newUrl);
       onUpdateModalVideoUrl?.(newUrl);
-      setRefetchTrigger((prev) => prev + 1);
 
       setApplyUpscaledSceneImageStatus('Applied');
       window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
@@ -3557,9 +3551,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           // ignore
         }
       }
-
-      // Refresh transcription/modal data for the restored scene.
-      setRefetchTrigger((prev) => prev + 1);
     } catch (err) {
       console.error('Failed to return to previous video URL:', err);
       alert('Failed to return to previous video URL');
@@ -3618,43 +3609,56 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return `${u}${sep}t=${Date.now()}`;
   }, []);
 
-  // Fetch transcription data
+  // Modal initialization when opened / scene changes.
+  useEffect(() => {
+    if (!(isOpen && sceneId)) return;
+
+    setIsTintSectionOpen(false);
+    setIsTextStylingSectionOpen(false);
+
+    // Clear any leftover preview state when modal opens.
+    setPreviewUrl(null);
+    setIsPreviewLoading(false);
+
+    const normalizedVideoUrl =
+      typeof videoUrl === 'string' ? videoUrl.trim() : '';
+
+    if (!normalizedVideoUrl) {
+      setOriginalVideoUrl(null);
+      setPreviousVideoUrl(null);
+      return;
+    }
+
+    setOriginalVideoUrl(normalizedVideoUrl);
+
+    // Load previous URL for undo if present.
+    if (typeof window !== 'undefined') {
+      try {
+        const undoKey = `scene-undo-video-url:${sceneId}`;
+        const saved = localStorage.getItem(undoKey);
+        setPreviousVideoUrl(saved && saved.trim() ? saved : null);
+      } catch {
+        setPreviousVideoUrl(null);
+      }
+    }
+
+    // Best-effort: warm server-side cache so previews don't repeatedly
+    // download/stream from MinIO across requests.
+    void fetch('/api/warm-video-cache', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoUrl: normalizedVideoUrl }),
+    }).catch(() => {
+      // ignore
+    });
+  }, [isOpen, sceneId, videoUrl]);
+
+  // Fetch transcription data.
   useEffect(() => {
     const seq = (transcriptionFetchSeqRef.current += 1);
     let cancelled = false;
 
     if (isOpen && sceneId) {
-      setIsTintSectionOpen(false);
-      setIsTextStylingSectionOpen(false);
-      // Clear any leftover preview state when modal opens
-      setPreviewUrl(null);
-      setIsPreviewLoading(false);
-      // Set the original video URL when we have a valid video URL
-      if (videoUrl && videoUrl.trim() !== '') {
-        setOriginalVideoUrl(videoUrl);
-
-        // Load previous URL for undo if present.
-        if (typeof window !== 'undefined') {
-          try {
-            const undoKey = `scene-undo-video-url:${sceneId}`;
-            const saved = localStorage.getItem(undoKey);
-            setPreviousVideoUrl(saved && saved.trim() ? saved : null);
-          } catch {
-            setPreviousVideoUrl(null);
-          }
-        }
-
-        // Best-effort: warm the server-side cache so previews don't repeatedly
-        // download/stream from MinIO across requests.
-        void fetch('/api/warm-video-cache', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoUrl }),
-        }).catch(() => {
-          // ignore
-        });
-      }
-
       const fetchTranscription = async () => {
         try {
           if (cancelled || transcriptionFetchSeqRef.current !== seq) return;
@@ -3743,7 +3747,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, sceneId, refetchTrigger, videoUrl, withCacheBust]);
+  }, [isOpen, sceneId, refetchTrigger, withCacheBust]);
 
   // Handle keyboard controls
   useEffect(() => {
