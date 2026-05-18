@@ -2468,7 +2468,10 @@ export default function SceneCard({
 
         // Refresh data from server to ensure consistency only when not skipped
         if (!skipRefresh) {
-          refreshData?.();
+          const refreshedScene = await refreshSceneInLocalCache(sceneId);
+          if (!onDataUpdateRef.current || !refreshedScene) {
+            refreshData?.();
+          }
         }
 
         // Play success sound (optional - suppress in batch)
@@ -2500,6 +2503,7 @@ export default function SceneCard({
       transcriptionSettings.selectedVideoType,
       setTranscribingScene,
       onDataUpdate,
+      refreshSceneInLocalCache,
       refreshData,
       playSuccessSound,
       playErrorSound,
