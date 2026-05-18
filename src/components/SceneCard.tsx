@@ -2589,7 +2589,10 @@ export default function SceneCard({
       onDataUpdate?.(optimisticData);
 
       // Refresh data from server to ensure consistency
-      refreshData?.();
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshData?.();
+      }
     } catch (error) {
       console.error('Error generating single clip:', error);
       let errorMessage = 'Failed to generate clip';
