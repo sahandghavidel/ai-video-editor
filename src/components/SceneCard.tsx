@@ -4665,7 +4665,7 @@ export default function SceneCard({
         const typingEffectVideoUrl = result.videoUrl;
 
         // Update the Baserow field with the typing effect video URL
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6886: typingEffectVideoUrl,
         });
 
@@ -4678,8 +4678,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only this scene from server (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         playSuccessSound();
       } catch (error) {
@@ -4690,7 +4693,7 @@ export default function SceneCard({
         setCreatingTypingEffect(null);
       }
     },
-    [setCreatingTypingEffect],
+    [setCreatingTypingEffect, refreshSceneInLocalCache],
   );
 
   const handleConvertToCFR = useCallback(
