@@ -318,7 +318,7 @@ interface ImageOverlayModalProps {
     overlaySound?: string | null,
     overlayAnimation?: OverlayAnimation,
     gifLoop?: boolean,
-  ) => Promise<void>;
+  ) => Promise<{ videoUrl?: string } | void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
     sceneId: number,
@@ -2505,7 +2505,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           : null;
 
       // Apply overlay to the CURRENT video playing in the modal
-      await onApply(
+      const applyResult = await onApply(
         sceneId,
         overlayFile,
         overlayText,
@@ -2524,23 +2524,25 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         loopGif,
       );
 
-      // After applying, fetch the scene from the DB to get the updated video URL
-      // Retry a few times in case the DB update hasn't fully propagated
-      const maxRetries = 6;
-      let attempts = 0;
-      let sceneData: { field_6886?: unknown } | null = null;
-      let newUrl: string | undefined;
-      while (attempts < maxRetries) {
-        sceneData = (await getSceneById(sceneId)) as {
+      // Prefer the URL returned by onApply to avoid repeated scene polling.
+      let newUrl =
+        applyResult &&
+        typeof applyResult === 'object' &&
+        'videoUrl' in applyResult &&
+        typeof applyResult.videoUrl === 'string'
+          ? applyResult.videoUrl.trim()
+          : '';
+
+      // Fallback: one scene fetch when callback return payload is unavailable.
+      if (!newUrl) {
+        const sceneData = (await getSceneById(sceneId)) as {
           field_6886?: unknown;
         } | null;
+
         newUrl =
           typeof sceneData?.field_6886 === 'string'
-            ? sceneData.field_6886
-            : undefined;
-        if (newUrl && newUrl !== urlBeforeApply) break;
-        await new Promise((res) => setTimeout(res, 500));
-        attempts++;
+            ? sceneData.field_6886.trim()
+            : '';
       }
 
       if (newUrl) {
@@ -2561,13 +2563,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         if (onUpdateModalVideoUrl) {
           onUpdateModalVideoUrl(newUrl);
         }
-      }
-
-      // Force a refetch of transcription and other modal data
-      // but avoid triggering this refetch during batch operations to prevent
-      // per-loop data refreshes that lead to UI flicker.
-      if (!useAppStore.getState().batchOperations.transcribingAllFinalScenes) {
-        setRefetchTrigger((prev) => prev + 1);
       }
 
       // Reset overlay state to defaults (like opening a fresh modal) but keep it open

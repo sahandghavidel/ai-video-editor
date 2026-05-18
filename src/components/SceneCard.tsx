@@ -3013,10 +3013,16 @@ export default function SceneCard({
       }
 
       const result = await response.json();
+      const updatedVideoUrl =
+        typeof result?.url === 'string' ? result.url.trim() : '';
+
+      if (!updatedVideoUrl) {
+        throw new Error('Add image overlay returned no video URL');
+      }
 
       // Update the scene with the new video URL
       await updateBaserowRow(sceneId, {
-        field_6886: result.url, // Update the final video field
+        field_6886: updatedVideoUrl, // Update the final video field
       });
 
       // Refresh only the updated scene (fallback to full refresh if needed)
@@ -3026,6 +3032,7 @@ export default function SceneCard({
       }
 
       playSuccessSound();
+      return { videoUrl: updatedVideoUrl };
     } catch (error) {
       console.error('Error adding image overlay:', error);
       playErrorSound();
