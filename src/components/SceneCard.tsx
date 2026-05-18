@@ -1454,16 +1454,21 @@ export default function SceneCard({
         nextData.splice(currentIndexInData + 1, 0, ...sanitizedCreatedScenes);
       }
 
-      onDataUpdate?.(nextData);
+      dataRef.current = nextData;
+      onDataUpdateRef.current?.(nextData);
       setData(nextData);
 
       playSuccessSound();
-      refreshData?.();
+      // Fallback refresh only when local parent merge callback is unavailable.
+      if (!onDataUpdateRef.current) {
+        refreshDataRef.current?.();
+      }
     } catch (error) {
       console.error('Failed to split scene into sentences:', error);
       playErrorSound();
       alert('Failed to split scene. Please try again.');
-      refreshData?.();
+      // Recover from any partial writes by reloading from server.
+      refreshDataRef.current?.();
     } finally {
       setSplittingId(null);
     }
