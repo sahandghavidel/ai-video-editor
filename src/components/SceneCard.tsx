@@ -3016,9 +3016,10 @@ export default function SceneCard({
         field_6886: result.url, // Update the final video field
       });
 
-      // Refresh data to show the updated video
-      if (refreshDataRef.current) {
-        refreshDataRef.current();
+      // Refresh only the updated scene (fallback to full refresh if needed)
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshDataRef.current?.();
       }
 
       playSuccessSound();
