@@ -5364,7 +5364,7 @@ export default function SceneCard({
         }
 
         // Update the Baserow field with the optimized video URL
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6886: optimizedVideoUrl,
         });
 
@@ -5377,8 +5377,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         playSuccessSound();
       } catch (error) {
@@ -5389,7 +5392,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo],
+    [setConvertingToCFRVideo, refreshSceneInLocalCache],
   );
 
   // Optimize silence for original video handler
@@ -5465,7 +5468,7 @@ export default function SceneCard({
         }
 
         // Update the Baserow field with the optimized video URL for original video
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6888: optimizedVideoUrl,
         });
 
@@ -5478,8 +5481,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         if (playSound) {
           playSuccessSound();
@@ -5496,7 +5502,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo],
+    [setConvertingToCFRVideo, refreshSceneInLocalCache],
   );
 
   // Optimize silence for final video handler
@@ -5570,7 +5576,7 @@ export default function SceneCard({
         }
 
         // Update the Baserow field with the optimized video URL for final video
-        const updatedRow = await updateSceneRow(sceneId, {
+        await updateSceneRow(sceneId, {
           field_6886: optimizedVideoUrl,
         });
 
@@ -5583,8 +5589,11 @@ export default function SceneCard({
         });
         onDataUpdateRef.current?.(updatedData);
 
-        // Refresh data from server
-        refreshDataRef.current?.();
+        // Refresh only the updated scene (fallback to full refresh if needed)
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
 
         if (playSound) {
           playSuccessSound();
@@ -5601,7 +5610,7 @@ export default function SceneCard({
         setConvertingToCFRVideo(null);
       }
     },
-    [setConvertingToCFRVideo],
+    [setConvertingToCFRVideo, refreshSceneInLocalCache],
   );
 
   // Keep auto-fix handler reference live without forcing parent state churn.
