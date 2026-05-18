@@ -1982,16 +1982,19 @@ export default function SceneCard({
 
       console.log('Scene update successful');
 
-      // Refresh data from server to ensure consistency
-      refreshData?.();
-
       // Update local state as well for immediate UI feedback
-      const updatedData = data.map((scene) =>
+      const updatedData = dataRef.current.map((scene) =>
         scene.id === sceneId
           ? { ...scene, field_6886: processedUrl, field_6888: processedUrl }
           : scene,
       );
-      onDataUpdate?.(updatedData);
+      onDataUpdateRef.current?.(updatedData);
+
+      // Refresh only the updated scene (fallback to full refresh if needed)
+      const refreshedScene = await refreshSceneInLocalCache(sceneId);
+      if (!onDataUpdateRef.current || !refreshedScene) {
+        refreshDataRef.current?.();
+      }
 
       // Play success sound
       playSuccessSound();
@@ -3966,6 +3969,15 @@ export default function SceneCard({
             : 2;
         const suppressRefreshes = options?.suppressRefreshes === true;
 
+        const refreshSceneAfterFixFlow = async () => {
+          if (suppressRefreshes) return;
+
+          const refreshedScene = await refreshSceneInLocalCache(sceneId);
+          if (!onDataUpdateRef.current || !refreshedScene) {
+            refreshDataRef.current?.();
+          }
+        };
+
         const updateFixTtsStatus = async (
           status: 'true' | null,
           mismatchReason?: string | null,
@@ -4295,9 +4307,7 @@ export default function SceneCard({
         ) {
           await clearFlagged();
           setStatus('Match — nothing to do.');
-          if (!suppressRefreshes) {
-            refreshDataRef.current?.();
-          }
+          await refreshSceneAfterFixFlow();
           return;
         }
 
@@ -4440,9 +4450,7 @@ export default function SceneCard({
           ) {
             await clearFlagged();
             setStatus(`Fixed — match after ${attempt}/${maxAttempts}.`);
-            if (!suppressRefreshes) {
-              refreshDataRef.current?.();
-            }
+            await refreshSceneAfterFixFlow();
             return;
           }
         }
@@ -4458,9 +4466,7 @@ export default function SceneCard({
         setStatus(
           `Still mismatched after ${maxAttempts} attempts. (Flagged=true) ${mismatchReason}`,
         );
-        if (!suppressRefreshes) {
-          refreshDataRef.current?.();
-        }
+        await refreshSceneAfterFixFlow();
       } catch (err) {
         console.error('Auto-fix mismatch failed:', err);
         setStatus(
@@ -4483,6 +4489,7 @@ export default function SceneCard({
       getStoredMismatchReason,
       buildMismatchReasonForTooltip,
       normalizeSpeechTextForCompare,
+      refreshSceneInLocalCache,
       sleep,
       waitForCaptionsWordsFromUrl,
       waitForCaptionsWords,
