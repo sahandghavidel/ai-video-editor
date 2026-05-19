@@ -721,10 +721,11 @@ async function loadWordReplacementsFromApi(
   }
 }
 
-// Strip quote-like chars/backticks, hash signs, and angle brackets before synthesis.
+// Strip quote-like chars/backticks, hash signs, angle brackets, and arrows before synthesis.
 const OMNIVOICE_QUOTE_CHAR_REGEX = /[`"“”„‟«»＂]/g;
 const OMNIVOICE_HASH_CHAR_REGEX = /#/g;
 const OMNIVOICE_ANGLE_BRACKET_CHAR_REGEX = /[<>]/g;
+const OMNIVOICE_ARROW_CHAR_REGEX = /→/g;
 
 function stripOmniVoiceQuoteChars(text: string): {
   sanitizedText: string;
@@ -769,6 +770,21 @@ function stripOmniVoiceAngleBracketChars(text: string): {
     .trim();
 
   return { sanitizedText, removedAngleBracketCount };
+}
+
+function stripOmniVoiceArrowChars(text: string): {
+  sanitizedText: string;
+  removedArrowCount: number;
+} {
+  const matches = text.match(OMNIVOICE_ARROW_CHAR_REGEX);
+  const removedArrowCount = matches ? matches.length : 0;
+
+  const sanitizedText = text
+    .replace(OMNIVOICE_ARROW_CHAR_REGEX, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return { sanitizedText, removedArrowCount };
 }
 
 function splitHyphenSeparatedWordsInPlainSegment(segment: string): {
@@ -1332,21 +1348,27 @@ export async function POST(request: NextRequest) {
     const { sanitizedText: textWithoutHashes, removedHashCount } =
       stripOmniVoiceHashChars(textWithoutQuotes);
 
-    const { sanitizedText: text, removedAngleBracketCount } =
-      stripOmniVoiceAngleBracketChars(textWithoutHashes);
+    const {
+      sanitizedText: textWithoutAngleBrackets,
+      removedAngleBracketCount,
+    } = stripOmniVoiceAngleBracketChars(textWithoutHashes);
+
+    const { sanitizedText: text, removedArrowCount } = stripOmniVoiceArrowChars(
+      textWithoutAngleBrackets,
+    );
 
     if (!text) {
       return NextResponse.json(
         {
           error:
-            'Text is empty after removing quote/backtick/hash/angle-bracket characters for OmniVoice TTS.',
+            'Text is empty after removing quote/backtick/hash/angle-bracket/arrow characters for OmniVoice TTS.',
         },
         { status: 400 },
       );
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -1582,6 +1604,7 @@ export async function POST(request: NextRequest) {
         removedQuoteCount,
         removedHashCount,
         removedAngleBracketCount,
+        removedArrowCount,
         hyphenWordsSplit: hyphenSplitCount,
         parenthesisWordsSplit: parenthesisSplitCount,
         camelCaseWordsSplit: splitWordCount,
