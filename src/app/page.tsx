@@ -17,7 +17,7 @@ import SubtitleGenerationSettings from '@/components/SubtitleGenerationSettings'
 import CombineScenesSettings from '@/components/CombineScenesSettings';
 import SceneVideoGenerationSettings from '@/components/SceneVideoGenerationSettings';
 import OriginalVideosList from '@/components/OriginalVideosList';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { AlertCircle, Loader2, RefreshCw, Settings } from 'lucide-react';
 
@@ -54,8 +54,14 @@ const defaultGlobalSettingsSectionsExpanded: Record<
 };
 
 export default function Home() {
-  const { error, setData, setError, getFilteredData, selectedOriginalVideo } =
-    useAppStore();
+  const {
+    data: allSceneData,
+    error,
+    setData,
+    setError,
+    getFilteredData,
+    selectedOriginalVideo,
+  } = useAppStore();
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isGlobalSettingsExpanded, setIsGlobalSettingsExpanded] =
@@ -64,6 +70,7 @@ export default function Home() {
     useState<Record<GlobalSettingsSectionKey, boolean>>(
       defaultGlobalSettingsSectionsExpanded,
     );
+  const latestRefreshRequestRef = useRef(0);
 
   // Get filtered data based on selected original video
   const filteredData = getFilteredData();
@@ -122,16 +129,32 @@ export default function Home() {
   }, [setData, setError]);
 
   const refreshDataSilently = useCallback(async () => {
+    const requestId = latestRefreshRequestRef.current + 1;
+    latestRefreshRequestRef.current = requestId;
+
     setRefreshing(true);
+
     try {
       const fetchedData = await getBaserowData();
+
+      // Ignore stale responses from earlier overlapping refresh calls.
+      if (requestId !== latestRefreshRequestRef.current) {
+        return;
+      }
+
       setData(fetchedData);
       setError(null);
     } catch (err) {
+      if (requestId !== latestRefreshRequestRef.current) {
+        return;
+      }
+
       setError(err instanceof Error ? err.message : 'Failed to refresh data');
       console.error('Error refreshing Baserow data:', err);
     } finally {
-      setRefreshing(false);
+      if (requestId === latestRefreshRequestRef.current) {
+        setRefreshing(false);
+      }
     }
   }, [setData, setError]);
 
@@ -139,9 +162,75 @@ export default function Home() {
     void loadData();
   }, [loadData]);
 
-  const handleDataUpdate = (updatedData: BaserowRow[]) => {
-    setData(updatedData);
-  };
+  const extractLinkedVideoId = useCallback((videoIdField: unknown) => {
+    if (typeof videoIdField === 'number' && Number.isFinite(videoIdField)) {
+      return videoIdField;
+    }
+
+    if (typeof videoIdField === 'string') {
+      const parsed = parseInt(videoIdField, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (Array.isArray(videoIdField) && videoIdField.length > 0) {
+      const first = videoIdField[0];
+
+      if (typeof first === 'number' && Number.isFinite(first)) return first;
+
+      if (typeof first === 'string') {
+        const parsed = parseInt(first, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      if (typeof first === 'object' && first !== null) {
+        const rec = first as Record<string, unknown>;
+        const candidate = rec.id ?? rec.value;
+        const parsed = parseInt(String(candidate ?? ''), 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+    }
+
+    if (typeof videoIdField === 'object' && videoIdField !== null) {
+      const rec = videoIdField as Record<string, unknown>;
+      const candidate = rec.id ?? rec.value;
+      const parsed = parseInt(String(candidate ?? ''), 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  }, []);
+
+  const handleDataUpdate = useCallback(
+    (updatedData: BaserowRow[]) => {
+      const selectedVideoId = selectedOriginalVideo.id;
+
+      if (!selectedVideoId) {
+        setData(updatedData);
+        return;
+      }
+
+      // SceneCard emits scoped updates for the selected video.
+      // Merge those into the global cache instead of replacing everything,
+      // so background pipeline tasks don't wipe scenes from other videos/projects.
+      const isScopedToSelectedVideo = updatedData.every((scene) => {
+        const linkedVideoId = extractLinkedVideoId(scene.field_6889);
+        return linkedVideoId === selectedVideoId;
+      });
+
+      if (!isScopedToSelectedVideo) {
+        setData(updatedData);
+        return;
+      }
+
+      const retainedScenes = allSceneData.filter((scene) => {
+        const linkedVideoId = extractLinkedVideoId(scene.field_6889);
+        return linkedVideoId !== selectedVideoId;
+      });
+
+      setData([...retainedScenes, ...updatedData]);
+    },
+    [allSceneData, extractLinkedVideoId, selectedOriginalVideo.id, setData],
+  );
 
   const handleSceneHandlersReady = useCallback(
     (handlers: {
