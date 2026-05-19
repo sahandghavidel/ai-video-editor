@@ -473,6 +473,47 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     [],
   );
 
+  const localSceneSnapshotRef = useRef<Record<string, unknown> | null>(
+    (sceneData ?? null) as Record<string, unknown> | null,
+  );
+
+  useEffect(() => {
+    localSceneSnapshotRef.current = (sceneData ?? null) as Record<
+      string,
+      unknown
+    > | null;
+  }, [isOpen, sceneId, sceneData]);
+
+  const getLocalSceneSnapshot = useCallback(
+    (): Record<string, unknown> | null =>
+      localSceneSnapshotRef.current ??
+      ((sceneData ?? null) as Record<string, unknown> | null),
+    [sceneData],
+  );
+
+  const mergeLocalSceneSnapshot = useCallback(
+    (updates: Record<string, unknown>) => {
+      const base = getLocalSceneSnapshot() ?? {};
+      localSceneSnapshotRef.current = { ...base, ...updates };
+    },
+    [getLocalSceneSnapshot],
+  );
+
+  const fetchLatestSceneData = useCallback(async () => {
+    if (!sceneId) return null;
+
+    const latestSceneData = (await getSceneById(sceneId)) as Record<
+      string,
+      unknown
+    > | null;
+
+    if (latestSceneData) {
+      localSceneSnapshotRef.current = latestSceneData;
+    }
+
+    return latestSceneData;
+  }, [sceneId]);
+
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
@@ -561,14 +602,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     (async () => {
       try {
         let preferred =
-          getSceneStringField(sceneData, 'field_7095') ||
-          getSceneStringField(sceneData, 'field_7094');
+          getSceneStringField(getLocalSceneSnapshot(), 'field_7095') ||
+          getSceneStringField(getLocalSceneSnapshot(), 'field_7094');
 
         if (!preferred) {
-          const latestSceneData = (await getSceneById(sceneId)) as Record<
-            string,
-            unknown
-          > | null;
+          const latestSceneData = await fetchLatestSceneData();
           if (cancelled) return;
 
           preferred =
@@ -591,10 +629,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     isOpen,
     sceneId,
-    sceneData,
     overlayImage,
     overlayImageUrl,
+    getLocalSceneSnapshot,
     getSceneStringField,
+    fetchLatestSceneData,
     loadOverlayFromRemoteUrl,
   ]);
 
@@ -2553,14 +2592,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       // Fallback: one scene fetch when callback return payload is unavailable.
       if (!newUrl) {
-        const sceneData = (await getSceneById(sceneId)) as {
-          field_6886?: unknown;
-        } | null;
-
-        newUrl =
-          typeof sceneData?.field_6886 === 'string'
-            ? sceneData.field_6886.trim()
-            : '';
+        const latestSceneData = await fetchLatestSceneData();
+        newUrl = getSceneStringField(latestSceneData, 'field_6886');
       }
 
       if (newUrl) {
@@ -2581,6 +2614,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         if (onUpdateModalVideoUrl) {
           onUpdateModalVideoUrl(newUrl);
         }
+        mergeLocalSceneSnapshot({ field_6886: newUrl });
       }
 
       // Reset overlay state to defaults (like opening a fresh modal) but keep it open
@@ -2657,6 +2691,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     onApply,
     onUpdateModalVideoUrl,
     originalVideoUrl,
+    fetchLatestSceneData,
+    getSceneStringField,
+    mergeLocalSceneSnapshot,
   ]);
 
   const handleApplySubtitleHighlight = useCallback(async () => {
@@ -2679,13 +2716,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       // Best-effort: prefer rendering punctuation from the scene sentence text
       // (field_6890) while keeping timing from transcription words.
-      let displayText = getSceneStringField(sceneData, 'field_6890');
+      let displayText = getSceneStringField(
+        getLocalSceneSnapshot(),
+        'field_6890',
+      );
       if (!displayText) {
         try {
-          const latestSceneData = (await getSceneById(sceneId)) as Record<
-            string,
-            unknown
-          > | null;
+          const latestSceneData = await fetchLatestSceneData();
           displayText = getSceneStringField(latestSceneData, 'field_6890');
         } catch {
           // ignore best-effort
@@ -2741,6 +2778,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       setOriginalVideoUrl(newUrl);
       onUpdateModalVideoUrl?.(newUrl);
+      mergeLocalSceneSnapshot({ field_6886: newUrl });
 
       // Keep modal URL in sync without forcing an immediate transcription refetch.
     } catch (err) {
@@ -2762,9 +2800,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     textOverlayPosition,
     textOverlaySize.height,
     textStyling?.fontFamily,
-    sceneData,
+    getLocalSceneSnapshot,
     getSceneStringField,
+    fetchLatestSceneData,
     onUpdateModalVideoUrl,
+    mergeLocalSceneSnapshot,
   ]);
 
   const handleGenerateScenePrompt = useCallback(async () => {
@@ -2876,6 +2916,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Load generated image into the overlay slot as well.
       await loadOverlayFromRemoteUrl(imageUrl);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      mergeLocalSceneSnapshot({ field_7094: imageUrl });
 
       setSceneImageStatus('Saved');
       window.setTimeout(() => setSceneImageStatus(null), 2500);
@@ -2887,7 +2928,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } finally {
       setIsGeneratingSceneImage(false);
     }
-  }, [sceneId, loadOverlayFromRemoteUrl]);
+  }, [sceneId, loadOverlayFromRemoteUrl, mergeLocalSceneSnapshot]);
 
   const handleUpscaleSceneImage = useCallback(async () => {
     if (!sceneId) return;
@@ -2930,6 +2971,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Load upscaled image into the overlay slot as well.
       await loadOverlayFromRemoteUrl(imageUrl);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      mergeLocalSceneSnapshot({ field_7095: imageUrl });
 
       setSceneUpscaleStatus(`Saved (x${effectiveScale})`);
       window.setTimeout(() => setSceneUpscaleStatus(null), 2500);
@@ -2941,7 +2983,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } finally {
       setIsUpscalingSceneImage(false);
     }
-  }, [sceneId, loadOverlayFromRemoteUrl, sceneUpscaleScale]);
+  }, [
+    sceneId,
+    loadOverlayFromRemoteUrl,
+    sceneUpscaleScale,
+    mergeLocalSceneSnapshot,
+  ]);
 
   const handleGenerateSceneVideo = useCallback(async () => {
     if (!sceneId) return;
@@ -3004,6 +3051,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       if (!videoUrl) {
         throw new Error('Video generation returned empty videoUrl');
       }
+      mergeLocalSceneSnapshot({ field_7098: videoUrl });
 
       const taskId =
         typeof data?.taskId === 'string' && data.taskId.trim()
@@ -3029,7 +3077,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } finally {
       setIsGeneratingSceneVideo(false);
     }
-  }, [sceneId, isApplying, isGeneratingSceneVideo]);
+  }, [sceneId, isApplying, isGeneratingSceneVideo, mergeLocalSceneSnapshot]);
 
   const handleEnhanceSceneVideo = useCallback(async () => {
     if (!sceneId) return;
@@ -3093,6 +3141,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       if (!videoUrl) {
         throw new Error('Video enhance returned empty videoUrl');
       }
+      mergeLocalSceneSnapshot({ field_7098: videoUrl });
 
       const durationMs =
         typeof data?.durationMs === 'number' && Number.isFinite(data.durationMs)
@@ -3119,7 +3168,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } finally {
       setIsEnhancingSceneVideo(false);
     }
-  }, [sceneId, isApplying, isGeneratingSceneVideo, isEnhancingSceneVideo]);
+  }, [
+    sceneId,
+    isApplying,
+    isGeneratingSceneVideo,
+    isEnhancingSceneVideo,
+    mergeLocalSceneSnapshot,
+  ]);
 
   const handleApplyEnhancedSceneVideo = useCallback(async () => {
     if (!sceneId) return;
@@ -3197,6 +3252,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       setOriginalVideoUrl(newUrl);
       onUpdateModalVideoUrl?.(newUrl);
+      mergeLocalSceneSnapshot({ field_6886: newUrl });
 
       setApplyEnhancedSceneVideoStatus('Applied');
       window.setTimeout(() => setApplyEnhancedSceneVideoStatus(null), 3500);
@@ -3214,6 +3270,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     isApplyingEnhancedSceneVideo,
     originalVideoUrl,
     onUpdateModalVideoUrl,
+    mergeLocalSceneSnapshot,
   ]);
 
   const handleApplyUpscaledSceneImage = useCallback(async () => {
@@ -3230,9 +3287,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     try {
       // Quick client-side warning if there's no upscaled image.
       try {
-        const contextUpscaled = getSceneStringField(sceneData, 'field_7095');
+        const localScene = getLocalSceneSnapshot();
+        const contextUpscaled = getSceneStringField(localScene, 'field_7095');
         const contextFinalUrl =
-          getSceneStringField(sceneData, 'field_6886') ||
+          getSceneStringField(localScene, 'field_6886') ||
           (typeof originalVideoUrl === 'string' ? originalVideoUrl.trim() : '');
 
         if (contextUpscaled) {
@@ -3245,7 +3303,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             return;
           }
         } else {
-          const latestSceneData = (await getSceneById(sceneId)) as {
+          const latestSceneData = (await fetchLatestSceneData()) as {
             field_7095?: unknown;
             field_6886?: unknown;
           } | null;
@@ -3344,6 +3402,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       setOriginalVideoUrl(newUrl);
       onUpdateModalVideoUrl?.(newUrl);
+      mergeLocalSceneSnapshot({ field_6886: newUrl });
 
       setApplyUpscaledSceneImageStatus('Applied');
       window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
@@ -3360,9 +3419,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     isApplying,
     isApplyingUpscaledSceneImage,
     originalVideoUrl,
-    sceneData,
+    getLocalSceneSnapshot,
     getSceneStringField,
+    fetchLatestSceneData,
     onUpdateModalVideoUrl,
+    mergeLocalSceneSnapshot,
   ]);
 
   const handleDetectSceneImageText = useCallback(async () => {
@@ -3376,10 +3437,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     try {
       // IMPORTANT: This button detects text on the stored "Image for Scene" (7094)
       // (not necessarily the currently loaded overlay image).
-      const sceneData = (await getSceneById(sceneId)) as Record<
-        string,
-        unknown
-      > | null;
+      let latestSceneData = getLocalSceneSnapshot();
 
       const extractUrl = (raw: unknown): string => {
         if (typeof raw === 'string') return raw.trim();
@@ -3394,7 +3452,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         return String(raw).trim();
       };
 
-      const imageUrl7094 = extractUrl(sceneData?.['field_7094']);
+      let imageUrl7094 = extractUrl(latestSceneData?.['field_7094']);
+      if (!imageUrl7094) {
+        latestSceneData = await fetchLatestSceneData();
+        imageUrl7094 = extractUrl(latestSceneData?.['field_7094']);
+      }
+
       if (!imageUrl7094) {
         setSceneHasTextStatus('No Image for Scene (7094) found for this scene');
         window.setTimeout(() => setSceneHasTextStatus(null), 3000);
@@ -3404,7 +3467,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // If hasText (7099) already contains a fresh record for this exact 7094 URL,
       // don't re-run OCR.
       {
-        const parsed = parseSceneHasTextField(sceneData?.['field_7099']);
+        const parsed = parseSceneHasTextField(latestSceneData?.['field_7099']);
         const isFresh = isHasTextRecordFreshForImage({
           parsed,
           imageUrl: imageUrl7094,
@@ -3509,6 +3572,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             `Failed to save hasText (7099): ${patchRes.status} ${t}`,
           );
         }
+
+        mergeLocalSceneSnapshot({
+          field_7094: imageUrl7094,
+          field_7099: value,
+        });
       }
 
       if (hasText) {
@@ -3544,7 +3612,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } finally {
       setIsDetectingSceneImageText(false);
     }
-  }, [sceneId, isApplying, isDetectingSceneImageText]);
+  }, [
+    sceneId,
+    isApplying,
+    isDetectingSceneImageText,
+    getLocalSceneSnapshot,
+    fetchLatestSceneData,
+    mergeLocalSceneSnapshot,
+  ]);
 
   const handleReturnToPreviousUrl = useCallback(async () => {
     if (!sceneId) return;
@@ -3583,6 +3658,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       setOriginalVideoUrl(previousVideoUrl);
       onUpdateModalVideoUrl?.(previousVideoUrl);
+      mergeLocalSceneSnapshot({ field_6886: previousVideoUrl });
 
       // Clear undo state after returning.
       setPreviousVideoUrl(null);
@@ -3597,7 +3673,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       console.error('Failed to return to previous video URL:', err);
       alert('Failed to return to previous video URL');
     }
-  }, [sceneId, previousVideoUrl, isApplying, onUpdateModalVideoUrl]);
+  }, [
+    sceneId,
+    previousVideoUrl,
+    isApplying,
+    onUpdateModalVideoUrl,
+    mergeLocalSceneSnapshot,
+  ]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -3758,13 +3840,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             return null;
           };
 
-          let captionsUrl = resolveCaptionsUrl(sceneData ?? null);
+          let captionsUrl = resolveCaptionsUrl(getLocalSceneSnapshot());
 
           if (!captionsUrl) {
-            const latestSceneData = (await getSceneById(sceneId)) as Record<
-              string,
-              unknown
-            > | null;
+            const latestSceneData = await fetchLatestSceneData();
 
             if (cancelled || transcriptionFetchSeqRef.current !== seq) return;
 
@@ -3804,7 +3883,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, sceneId, sceneData, refetchTrigger, withCacheBust]);
+  }, [
+    isOpen,
+    sceneId,
+    refetchTrigger,
+    withCacheBust,
+    getLocalSceneSnapshot,
+    fetchLatestSceneData,
+  ]);
 
   // Handle keyboard controls
   useEffect(() => {
