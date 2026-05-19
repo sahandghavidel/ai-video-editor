@@ -301,6 +301,7 @@ interface ImageOverlayModalProps {
   onClose: () => void;
   videoUrl: string;
   sceneId: number;
+  sceneData?: Record<string, unknown> | null;
   onApply: (
     sceneId: number,
     overlayImage: File | null,
@@ -337,6 +338,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   onClose,
   videoUrl,
   sceneId,
+  sceneData,
   onApply,
   isApplying = false,
   handleTranscribeScene,
@@ -460,6 +462,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     y: 50,
   }); // percentage
 
+  const getSceneStringField = useCallback(
+    (
+      source: Record<string, unknown> | null | undefined,
+      key: string,
+    ): string => {
+      const value = source?.[key];
+      return typeof value === 'string' ? value.trim() : '';
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
@@ -547,19 +560,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     let cancelled = false;
     (async () => {
       try {
-        const sceneData = await getSceneById(sceneId);
-        if (cancelled) return;
+        let preferred =
+          getSceneStringField(sceneData, 'field_7095') ||
+          getSceneStringField(sceneData, 'field_7094');
 
-        const upscaled =
-          typeof sceneData?.['field_7095'] === 'string'
-            ? sceneData['field_7095']
-            : '';
-        const base =
-          typeof sceneData?.['field_7094'] === 'string'
-            ? sceneData['field_7094']
-            : '';
+        if (!preferred) {
+          const latestSceneData = (await getSceneById(sceneId)) as Record<
+            string,
+            unknown
+          > | null;
+          if (cancelled) return;
 
-        const preferred = upscaled.trim() ? upscaled : base.trim() ? base : '';
+          preferred =
+            getSceneStringField(latestSceneData, 'field_7095') ||
+            getSceneStringField(latestSceneData, 'field_7094');
+        }
+
         if (!preferred) return;
 
         didAutoLoadSceneOverlayRef.current = true;
@@ -575,8 +591,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     isOpen,
     sceneId,
+    sceneData,
     overlayImage,
     overlayImageUrl,
+    getSceneStringField,
     loadOverlayFromRemoteUrl,
   ]);
 
@@ -2661,20 +2679,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       // Best-effort: prefer rendering punctuation from the scene sentence text
       // (field_6890) while keeping timing from transcription words.
-      let displayText = '';
-      try {
-        const sceneData = (await getSceneById(sceneId)) as {
-          field_6890?: unknown;
-          [k: string]: unknown;
-        } | null;
-        displayText =
-          sceneData && typeof sceneData.field_6890 === 'string'
-            ? sceneData.field_6890.trim()
-            : typeof sceneData?.['field_6890'] === 'string'
-              ? String(sceneData['field_6890']).trim()
-              : '';
-      } catch {
-        // ignore best-effort
+      let displayText = getSceneStringField(sceneData, 'field_6890');
+      if (!displayText) {
+        try {
+          const latestSceneData = (await getSceneById(sceneId)) as Record<
+            string,
+            unknown
+          > | null;
+          displayText = getSceneStringField(latestSceneData, 'field_6890');
+        } catch {
+          // ignore best-effort
+        }
       }
 
       const res = await fetch('/api/create-subtitle-highlight', {
@@ -2747,6 +2762,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     textOverlayPosition,
     textOverlaySize.height,
     textStyling?.fontFamily,
+    sceneData,
+    getSceneStringField,
     onUpdateModalVideoUrl,
   ]);
 
@@ -3213,30 +3230,53 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     try {
       // Quick client-side warning if there's no upscaled image.
       try {
-        const sceneData = (await getSceneById(sceneId)) as {
-          field_7095?: unknown;
-          field_6886?: unknown;
-        } | null;
-        const upscaled =
-          typeof sceneData?.field_7095 === 'string'
-            ? sceneData.field_7095.trim()
-            : '';
-        if (!upscaled) {
-          setApplyUpscaledSceneImageStatus(
-            'No upscaled image for this scene (7095). Click Upscale first.',
-          );
-          window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
-          return;
-        }
+        const contextUpscaled = getSceneStringField(sceneData, 'field_7095');
+        const contextFinalUrl =
+          getSceneStringField(sceneData, 'field_6886') ||
+          (typeof originalVideoUrl === 'string' ? originalVideoUrl.trim() : '');
 
-        const finalUrl =
-          typeof sceneData?.field_6886 === 'string'
-            ? sceneData.field_6886.trim()
-            : '';
-        if (finalUrl && finalUrl.includes('_applied_')) {
-          setApplyUpscaledSceneImageStatus('Already applied (image/video)');
-          window.setTimeout(() => setApplyUpscaledSceneImageStatus(null), 3500);
-          return;
+        if (contextUpscaled) {
+          if (contextFinalUrl && contextFinalUrl.includes('_applied_')) {
+            setApplyUpscaledSceneImageStatus('Already applied (image/video)');
+            window.setTimeout(
+              () => setApplyUpscaledSceneImageStatus(null),
+              3500,
+            );
+            return;
+          }
+        } else {
+          const latestSceneData = (await getSceneById(sceneId)) as {
+            field_7095?: unknown;
+            field_6886?: unknown;
+          } | null;
+
+          const upscaled =
+            typeof latestSceneData?.field_7095 === 'string'
+              ? latestSceneData.field_7095.trim()
+              : '';
+          if (!upscaled) {
+            setApplyUpscaledSceneImageStatus(
+              'No upscaled image for this scene (7095). Click Upscale first.',
+            );
+            window.setTimeout(
+              () => setApplyUpscaledSceneImageStatus(null),
+              3500,
+            );
+            return;
+          }
+
+          const finalUrl =
+            typeof latestSceneData?.field_6886 === 'string'
+              ? latestSceneData.field_6886.trim()
+              : '';
+          if (finalUrl && finalUrl.includes('_applied_')) {
+            setApplyUpscaledSceneImageStatus('Already applied (image/video)');
+            window.setTimeout(
+              () => setApplyUpscaledSceneImageStatus(null),
+              3500,
+            );
+            return;
+          }
         }
       } catch {
         // best-effort only
@@ -3320,6 +3360,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     isApplying,
     isApplyingUpscaledSceneImage,
     originalVideoUrl,
+    sceneData,
+    getSceneStringField,
     onUpdateModalVideoUrl,
   ]);
 
@@ -3663,35 +3705,37 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         try {
           if (cancelled || transcriptionFetchSeqRef.current !== seq) return;
 
-          // Fetch scene data from Baserow to get the Captions URL
-          const sceneData = await getSceneById(sceneId);
+          const resolveCaptionsUrl = (
+            row: Record<string, unknown> | null,
+          ): string | null => {
+            if (!row) return null;
 
-          if (cancelled || transcriptionFetchSeqRef.current !== seq) return;
+            // First try the specific field that contains captions URL.
+            const direct = row['field_6910'];
+            if (
+              typeof direct === 'string' &&
+              (direct.startsWith('http') || direct.includes('.json'))
+            ) {
+              return direct;
+            }
 
-          // Try different possible field names and specific field IDs
-          let captionsUrl = null;
+            // Then try other possible field names.
+            const namedCandidates = [
+              row['Captions URL'],
+              row['captions_url'],
+              row['CaptionsURL'],
+              row['captions URL'],
+            ];
+            for (const candidate of namedCandidates) {
+              if (
+                typeof candidate === 'string' &&
+                (candidate.startsWith('http') || candidate.includes('.json'))
+              ) {
+                return candidate;
+              }
+            }
 
-          // First try the specific field that contains captions URL
-          if (
-            sceneData?.['field_6910'] &&
-            typeof sceneData['field_6910'] === 'string' &&
-            (sceneData['field_6910'].startsWith('http') ||
-              sceneData['field_6910'].includes('.json'))
-          ) {
-            captionsUrl = sceneData['field_6910'];
-          }
-
-          // Then try other possible field names
-          if (!captionsUrl) {
-            captionsUrl =
-              sceneData?.['Captions URL'] ||
-              sceneData?.['captions_url'] ||
-              sceneData?.['CaptionsURL'] ||
-              sceneData?.['captions URL'];
-          }
-
-          // Finally try other field IDs that might contain captions (only if they look like URLs)
-          if (!captionsUrl) {
+            // Finally try other field IDs that might contain captions.
             const possibleFields = [
               'field_6892',
               'field_6893',
@@ -3702,16 +3746,29 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               'field_6899',
             ];
             for (const field of possibleFields) {
-              const value = sceneData?.[field];
+              const value = row[field];
               if (
-                value &&
                 typeof value === 'string' &&
                 (value.startsWith('http') || value.includes('.json'))
               ) {
-                captionsUrl = value;
-                break;
+                return value;
               }
             }
+
+            return null;
+          };
+
+          let captionsUrl = resolveCaptionsUrl(sceneData ?? null);
+
+          if (!captionsUrl) {
+            const latestSceneData = (await getSceneById(sceneId)) as Record<
+              string,
+              unknown
+            > | null;
+
+            if (cancelled || transcriptionFetchSeqRef.current !== seq) return;
+
+            captionsUrl = resolveCaptionsUrl(latestSceneData);
           }
 
           if (captionsUrl) {
@@ -3747,7 +3804,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, sceneId, refetchTrigger, withCacheBust]);
+  }, [isOpen, sceneId, sceneData, refetchTrigger, withCacheBust]);
 
   // Handle keyboard controls
   useEffect(() => {

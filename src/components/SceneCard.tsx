@@ -7881,6 +7881,11 @@ export default function SceneCard({
           }
           videoUrl={imageOverlayModal.videoUrl || ''}
           sceneId={imageOverlayModal.sceneId || 0}
+          sceneData={
+            data.find(
+              (scene) => scene.id === (imageOverlayModal.sceneId || -1),
+            ) || null
+          }
           onApply={handleApplyImageOverlay}
           onUpdateModalVideoUrl={(newUrl) =>
             setImageOverlayModal((prev) => ({
