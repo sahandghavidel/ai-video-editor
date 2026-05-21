@@ -144,7 +144,6 @@ export async function POST(request: NextRequest) {
 
 Rules:
 - Return ONLY chapter lines in this exact format: M:SS - Chapter Title
-- First line must be exactly: 0:00 - Intro
 - Minimum 6 chapters
 - Timestamps must be strictly increasing and realistic for the content flow
 - Chapter titles should be short (2 to 6 words), specific, and clickable
