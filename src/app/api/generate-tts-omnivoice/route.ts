@@ -945,6 +945,48 @@ function normalizeParenthesisJoinedWordsForOmniVoice(text: string): {
   return { normalizedText, parenthesisSplitCount };
 }
 
+function splitNumberPercentInPlainSegment(segment: string): {
+  text: string;
+  percentSignsSpaced: number;
+} {
+  let percentSignsSpaced = 0;
+
+  // Add a spoken pause boundary before % when attached to numeric values.
+  // Example: -50% -> -50 %
+  const text = segment.replace(/(\d)%/g, (_match, numberPart: string) => {
+    percentSignsSpaced += 1;
+    return `${numberPart} %`;
+  });
+
+  return { text, percentSignsSpaced };
+}
+
+function normalizePercentSignsForOmniVoice(text: string): {
+  normalizedText: string;
+  percentSignsSpaced: number;
+} {
+  const bracketTagRegex = /\[[^\]\r\n]*\]/g;
+  let normalizedText = '';
+  let percentSignsSpaced = 0;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(bracketTagRegex)) {
+    const index = match.index ?? 0;
+    const before = text.slice(lastIndex, index);
+    const converted = splitNumberPercentInPlainSegment(before);
+    normalizedText += converted.text;
+    percentSignsSpaced += converted.percentSignsSpaced;
+    normalizedText += match[0];
+    lastIndex = index + match[0].length;
+  }
+
+  const tail = splitNumberPercentInPlainSegment(text.slice(lastIndex));
+  normalizedText += tail.text;
+  percentSignsSpaced += tail.percentSignsSpaced;
+
+  return { normalizedText, percentSignsSpaced };
+}
+
 function splitCamelCaseInPlainSegment(segment: string): {
   text: string;
   splitWordCount: number;
@@ -1397,8 +1439,11 @@ export async function POST(request: NextRequest) {
       parenthesisSplitCount,
     } = normalizeParenthesisJoinedWordsForOmniVoice(textWithHyphenWordsSplit);
 
+    const { normalizedText: textWithPercentSignsSpaced, percentSignsSpaced } =
+      normalizePercentSignsForOmniVoice(textWithParenthesisWordsSplit);
+
     const { normalizedText: textWithCamelCaseSplit, splitWordCount } =
-      splitCamelCaseForOmniVoice(textWithParenthesisWordsSplit);
+      splitCamelCaseForOmniVoice(textWithPercentSignsSpaced);
 
     const { normalizedText: textWithDotSeparatedWords, movedDotCount } =
       normalizeDotSeparatedWordsForOmniVoice(textWithCamelCaseSplit);
@@ -1434,7 +1479,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -1673,6 +1718,7 @@ export async function POST(request: NextRequest) {
         removedArrowCount,
         hyphenWordsSplit: hyphenSplitCount,
         parenthesisWordsSplit: parenthesisSplitCount,
+        percentSignsSpaced,
         camelCaseWordsSplit: splitWordCount,
         dotPrefixesMoved: movedDotCount,
         wordReplacementsApplied: replacementSubstitutions,
