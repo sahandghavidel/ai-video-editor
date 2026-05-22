@@ -1,9 +1,105 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import path from 'path';
 import { readFile, access, unlink } from 'fs/promises';
 
-const execAsync = promisify(exec);
+const FFMPEG_TIMEOUT_MS = 600000; // 10 minutes
+const FFMPEG_STDERR_TAIL_MAX_CHARS = 8000;
+
+function appendTail(current: string, chunk: string, maxChars: number): string {
+  const combined = `${current}${chunk}`;
+  return combined.length > maxChars
+    ? combined.slice(combined.length - maxChars)
+    : combined;
+}
+
+function formatCommandForLog(command: string, args: string[]): string {
+  const formattedArgs = args.map((arg) => {
+    if (/\s/.test(arg)) {
+      return `"${arg.replace(/"/g, '\\"')}"`;
+    }
+    return arg;
+  });
+
+  return [command, ...formattedArgs].join(' ');
+}
+
+async function runFfmpegStreaming(args: string[]): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let stderrTail = '';
+
+    const ffmpegProcess = spawn('ffmpeg', args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+
+    const timeoutHandle = setTimeout(() => {
+      ffmpegProcess.kill('SIGTERM');
+
+      const forcedKillTimeout = setTimeout(() => {
+        ffmpegProcess.kill('SIGKILL');
+      }, 5000);
+      forcedKillTimeout.unref();
+
+      const trimmedTail = stderrTail.trim();
+
+      finalize(
+        new Error(
+          trimmedTail
+            ? `FFmpeg timed out after ${FFMPEG_TIMEOUT_MS}ms. stderr tail:\n${trimmedTail}`
+            : `FFmpeg timed out after ${FFMPEG_TIMEOUT_MS}ms`,
+        ),
+      );
+    }, FFMPEG_TIMEOUT_MS);
+
+    const finalize = (error?: Error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeoutHandle);
+
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    };
+
+    ffmpegProcess.stderr?.on('data', (chunk: Buffer | string) => {
+      stderrTail = appendTail(
+        stderrTail,
+        chunk.toString(),
+        FFMPEG_STDERR_TAIL_MAX_CHARS,
+      );
+    });
+
+    ffmpegProcess.on('error', (error) => {
+      finalize(new Error(`Failed to start FFmpeg: ${error.message}`));
+    });
+
+    ffmpegProcess.on('close', (code, signal) => {
+      if (code === 0) {
+        finalize();
+        return;
+      }
+
+      const closeReason = signal
+        ? `FFmpeg exited due to signal ${signal}`
+        : `FFmpeg exited with code ${code ?? 'unknown'}`;
+      const trimmedTail = stderrTail.trim();
+
+      finalize(
+        new Error(
+          trimmedTail
+            ? `${closeReason}. stderr tail:\n${trimmedTail}`
+            : closeReason,
+        ),
+      );
+    });
+  });
+}
 
 export interface ConvertToCFROptions {
   inputUrl: string;
@@ -15,7 +111,7 @@ export interface ConvertToCFROptions {
  * Convert video to Constant Frame Rate (CFR) using FFmpeg
  */
 export async function convertToCFR(
-  options: ConvertToCFROptions
+  options: ConvertToCFROptions,
 ): Promise<string> {
   const { inputUrl, outputPath, framerate = 30 } = options;
 
@@ -33,11 +129,10 @@ export async function convertToCFR(
     // -r sets the framerate
     // -vsync cfr forces constant frame rate
     // -pix_fmt yuv420p ensures compatibility
-    const cfrCommand = [
-      'ffmpeg',
+    const cfrArgs = [
       '-y',
       '-i',
-      `"${inputUrl}"`,
+      inputUrl,
       '-r',
       framerate.toString(),
       '-vsync',
@@ -58,16 +153,14 @@ export async function convertToCFR(
       '48000',
       '-ac',
       '2',
-      `"${fullOutputPath}"`,
+      fullOutputPath,
     ];
 
-    const cfrCommandString = cfrCommand.join(' ');
+    const cfrCommandString = formatCommandForLog('ffmpeg', cfrArgs);
     console.log(`Running CFR conversion command: ${cfrCommandString}`);
 
     const execStartTime = Date.now();
-    const { stdout, stderr } = await execAsync(cfrCommandString, {
-      timeout: 600000, // 10 minute timeout for conversion
-    });
+    await runFfmpegStreaming(cfrArgs);
 
     const execEndTime = Date.now();
     console.log(`CFR conversion completed in ${execEndTime - execStartTime}ms`);
@@ -83,14 +176,14 @@ export async function convertToCFR(
     // Clean up output file if it exists
     try {
       await unlink(fullOutputPath);
-    } catch (cleanupError) {
+    } catch {
       // Ignore cleanup errors
     }
 
     throw new Error(
       `CFR conversion failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -101,7 +194,7 @@ export async function convertToCFR(
 export async function uploadToMinio(
   filePath: string,
   filename?: string,
-  contentType: string = 'video/mp4'
+  contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
     // Read the file as Buffer (which works with fetch)
@@ -137,7 +230,7 @@ export async function uploadToMinio(
     throw new Error(
       `MinIO upload failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -150,7 +243,7 @@ export async function convertToCFRWithUpload(
     videoId?: string;
     sceneId?: string;
     cleanup?: boolean;
-  }
+  },
 ): Promise<{ localPath: string; uploadUrl: string }> {
   const { videoId, sceneId, cleanup = true, ...cfrOptions } = options;
 
@@ -166,8 +259,8 @@ export async function convertToCFRWithUpload(
       videoId && sceneId
         ? `video_${videoId}_scene_${sceneId}_cfr_${timestamp}.mp4`
         : videoId
-        ? `video_${videoId}_cfr_${timestamp}.mp4`
-        : `cfr_${timestamp}.mp4`;
+          ? `video_${videoId}_cfr_${timestamp}.mp4`
+          : `cfr_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
@@ -191,7 +284,7 @@ export async function convertToCFRWithUpload(
     if (localPath) {
       try {
         await unlink(localPath);
-      } catch (cleanupError) {
+      } catch {
         // Ignore cleanup errors
       }
     }

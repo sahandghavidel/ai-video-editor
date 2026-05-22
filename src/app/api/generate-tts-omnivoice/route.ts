@@ -71,6 +71,7 @@ const OMNIVOICE_JOB_TIMEOUT_MS = Math.max(
 );
 const OMNIVOICE_WORKER_PROTOCOL_VERSION = '2';
 const WORD_CHAR_CLASS = 'A-Za-z0-9_';
+const WORD_CHAR_TEST_REGEX = /^[A-Za-z0-9_]$/;
 const OMNIVOICE_FFMPEG_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 const OMNIVOICE_RIGHT_CLICK_TRIM_THRESHOLD_DB = Math.min(
   -5,
@@ -583,6 +584,10 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function isWordLikeChar(value: string | undefined): boolean {
+  return typeof value === 'string' && WORD_CHAR_TEST_REGEX.test(value);
+}
+
 function prepareWordReplacements(entries: unknown): PreparedWordReplacement[] {
   if (!Array.isArray(entries)) return [];
 
@@ -598,11 +603,24 @@ function prepareWordReplacements(entries: unknown): PreparedWordReplacement[] {
 
     if (!word.trim() || !replacement.trim()) continue;
 
+    const escapedWord = escapeRegExp(word);
+    const firstChar = word.charAt(0);
+    const lastChar = word.charAt(word.length - 1);
+    const requiresLeftBoundary = isWordLikeChar(firstChar);
+    const requiresRightBoundary = isWordLikeChar(lastChar);
+
+    const leftBoundary = requiresLeftBoundary
+      ? `(^|[^${WORD_CHAR_CLASS}])`
+      : '()';
+    const rightBoundary = requiresRightBoundary
+      ? `(?=$|[^${WORD_CHAR_CLASS}])`
+      : '';
+
     prepared.push({
       word,
       replacement,
       pattern: new RegExp(
-        `(^|[^${WORD_CHAR_CLASS}])(${escapeRegExp(word)})(?=$|[^${WORD_CHAR_CLASS}])`,
+        `${leftBoundary}(${escapedWord})${rightBoundary}`,
         'g',
       ),
       preserveAsSingleToken: word.trim() === replacement.trim(),
@@ -620,10 +638,57 @@ function applyWordReplacements(
   let substitutions = 0;
 
   for (const replacement of replacements) {
-    updated = updated.replace(replacement.pattern, (_match, prefix: string) => {
-      substitutions += 1;
-      return `${prefix}${replacement.replacement}`;
-    });
+    updated = updated.replace(
+      replacement.pattern,
+      (
+        _match,
+        prefix: string,
+        matchedToken: string,
+        offset: number,
+        sourceText: string,
+      ) => {
+        substitutions += 1;
+
+        const tokenStart = offset + prefix.length;
+        const tokenEnd = tokenStart + matchedToken.length;
+        const prevChar = tokenStart > 0 ? sourceText[tokenStart - 1] : undefined;
+        const nextChar =
+          tokenEnd < sourceText.length ? sourceText[tokenEnd] : undefined;
+
+        const tokenStartsWithWord = isWordLikeChar(matchedToken.charAt(0));
+        const tokenEndsWithWord = isWordLikeChar(
+          matchedToken.charAt(matchedToken.length - 1),
+        );
+        const replacementStartsWithWord = isWordLikeChar(
+          replacement.replacement.charAt(0),
+        );
+        const replacementEndsWithWord = isWordLikeChar(
+          replacement.replacement.charAt(replacement.replacement.length - 1),
+        );
+
+        let replacementText = replacement.replacement;
+
+        if (
+          !tokenStartsWithWord &&
+          replacementStartsWithWord &&
+          isWordLikeChar(prevChar) &&
+          !/^\s/.test(replacementText)
+        ) {
+          replacementText = ` ${replacementText}`;
+        }
+
+        if (
+          !tokenEndsWithWord &&
+          replacementEndsWithWord &&
+          isWordLikeChar(nextChar) &&
+          !/\s$/.test(replacementText)
+        ) {
+          replacementText = `${replacementText} `;
+        }
+
+        return `${prefix}${replacementText}`;
+      },
+    );
   }
 
   return { text: updated, substitutions };
@@ -839,11 +904,12 @@ function splitParenthesisJoinedWordsInPlainSegment(segment: string): {
   let parenthesisSplitCount = 0;
 
   // Insert a space when a word-like token is directly followed by
-  // an opening parenthesis containing a word-like token.
+  // an opening parenthesis containing a word-like token, signed token
+  // (like -50%), or an empty call ().
   // Also handles quoted args like ById("form") -> ById ("form").
   // Example: console.log(age) -> console.log (age)
   const text = segment.replace(
-    /([A-Za-z0-9_.])\((?=(?:[`"'“”„‟«»＂]\s*)?[A-Za-z0-9_])/g,
+    /([A-Za-z0-9_.])\((?=(?:[`"'“”„‟«»＂]\s*)?(?:[A-Za-z0-9_]|[+-])|\))/g,
     (_match, leftChar: string) => {
       parenthesisSplitCount += 1;
       return `${leftChar} (`;
