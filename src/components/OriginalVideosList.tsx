@@ -6372,44 +6372,65 @@ export default function OriginalVideosList({
         text: string;
       };
 
-      const candidateScenes = (freshScenesData || [])
-        .map((scene) => {
-          const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
-          if (!videoId || isNaN(videoId) || !processingVideoIds.has(videoId)) {
-            return null;
-          }
+      const candidateScenesByVideo = new Map<number, CandidateScene[]>();
 
-          const text = String(scene['field_6890'] ?? '').trim();
-          const fixedSentenceConfirmation = String(
-            scene['field_7105'] ?? '',
-          ).trim();
-          const alreadyFixed = Boolean(fixedSentenceConfirmation);
+      for (const scene of freshScenesData || []) {
+        const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
+        if (!videoId || isNaN(videoId) || !processingVideoIds.has(videoId)) {
+          continue;
+        }
 
-          if (!text || alreadyFixed) {
-            return null;
-          }
+        const text = String(scene['field_6890'] ?? '').trim();
+        const fixedSentenceConfirmation = String(
+          scene['field_7105'] ?? '',
+        ).trim();
+        const alreadyFixed = Boolean(fixedSentenceConfirmation);
 
-          return {
-            scene,
-            sceneId: scene.id,
-            videoId,
-            text,
-          } satisfies CandidateScene;
-        })
-        .filter((item): item is CandidateScene => item !== null)
-        .sort((a, b) => {
-          const videoOrderA = processingVideoOrderById.get(a.videoId) ?? 0;
-          const videoOrderB = processingVideoOrderById.get(b.videoId) ?? 0;
-          if (videoOrderA !== videoOrderB) return videoOrderA - videoOrderB;
+        if (!text || alreadyFixed) {
+          continue;
+        }
 
+        const candidate = {
+          scene,
+          sceneId: scene.id,
+          videoId,
+          text,
+        } satisfies CandidateScene;
+
+        const bucket = candidateScenesByVideo.get(videoId) || [];
+        bucket.push(candidate);
+        candidateScenesByVideo.set(videoId, bucket);
+      }
+
+      for (const scenes of candidateScenesByVideo.values()) {
+        scenes.sort((a, b) => {
           const orderA = Number(a.scene.order) || 0;
           const orderB = Number(b.scene.order) || 0;
           if (orderA !== orderB) return orderA - orderB;
-
           return a.scene.id - b.scene.id;
         });
+      }
 
-      if (candidateScenes.length === 0) {
+      const videoPlans = processingVideos
+        .map((video) => {
+          const videoId = video.id;
+          const scenes = candidateScenesByVideo.get(videoId) || [];
+          return {
+            videoId,
+            videoOrder: processingVideoOrderById.get(videoId) ?? videoId,
+            scenes,
+            totalBatches: Math.ceil(scenes.length / batchSize),
+          };
+        })
+        .filter((plan) => plan.scenes.length > 0)
+        .sort((a, b) => a.videoOrder - b.videoOrder);
+
+      const totalEligibleScenes = videoPlans.reduce(
+        (sum, plan) => sum + plan.scenes.length,
+        0,
+      );
+
+      if (totalEligibleScenes === 0) {
         if (playSound) {
           await notifyBatchOperationCompleted(
             'Fix Language All (no eligible scenes)',
@@ -6418,239 +6439,285 @@ export default function OriginalVideosList({
         return;
       }
 
-      const totalBatches = Math.ceil(candidateScenes.length / batchSize);
+      const totalBatches = videoPlans.reduce(
+        (sum, plan) => sum + plan.totalBatches,
+        0,
+      );
       let updatedScenesCount = 0;
       const failedBatches: Array<{
+        videoId: number;
+        batchInVideo: number;
+        globalBatchNumber: number;
         batchNumber: number;
         sceneIds: number[];
         error: string;
       }> = [];
+      let processedBatchCount = 0;
 
       console.info(`${logPrefix} Run started.`, {
         selectedModel: modelSelection.selectedModel,
-        processingVideos: processingVideos.length,
-        totalEligibleScenes: candidateScenes.length,
+        processingVideosWithEligibleScenes: videoPlans.length,
+        totalEligibleScenes,
         totalBatches,
       });
 
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
-        const batchNumber = batchIndex + 1;
-        const selectedBatch = candidateScenes.slice(
-          batchIndex * batchSize,
-          (batchIndex + 1) * batchSize,
-        );
+      for (
+        let videoPlanIndex = 0;
+        videoPlanIndex < videoPlans.length;
+        videoPlanIndex += 1
+      ) {
+        const videoPlan = videoPlans[videoPlanIndex];
+        const isLastVideoPlan = videoPlanIndex === videoPlans.length - 1;
 
-        const expectedSceneIds = selectedBatch.map((item) => item.sceneId);
-        const expectedSceneIdSet = new Set(expectedSceneIds);
-        const expectedTextBySceneId = new Map<number, string>(
-          selectedBatch.map((item) => [item.sceneId, item.text]),
-        );
-        const selectedBatchBySceneId = new Map<number, CandidateScene>(
-          selectedBatch.map((item) => [item.sceneId, item]),
-        );
-        const shouldUnloadAfterThisBatch =
-          modelSelection.provider === 'local' && batchNumber === totalBatches;
+        setCurrentProcessingVideoId(videoPlan.videoId);
 
-        try {
-          const res = await fetch('/api/fix-language-scenes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              provider: modelSelection.provider,
-              localEndpoint: modelSelection.localEndpoint,
-              localApiKey: modelSelection.localApiKey,
-              localAdminApiKey: modelSelection.localAdminApiKey,
-              unloadModelAfter: shouldUnloadAfterThisBatch,
-              model: modelSelection.selectedModel,
-              scenes: selectedBatch.map((item) => ({
-                sceneId: item.sceneId,
-                text: item.text,
-              })),
-            }),
-          });
+        console.info(`${logPrefix} Starting video language-fix run.`, {
+          videoId: videoPlan.videoId,
+          scenesInVideo: videoPlan.scenes.length,
+          batchesInVideo: videoPlan.totalBatches,
+          videoOrder: videoPlan.videoOrder,
+        });
 
-          let apiRequestId: string | null = null;
+        for (
+          let batchIndex = 0;
+          batchIndex < videoPlan.totalBatches;
+          batchIndex += 1
+        ) {
+          processedBatchCount += 1;
+          const batchNumber = batchIndex + 1;
+          const globalBatchNumber = processedBatchCount;
 
-          if (!res.ok) {
-            let message = `Language fix failed: ${res.status}`;
-            try {
-              const json = (await res.json().catch(() => null)) as {
-                error?: unknown;
-                requestId?: unknown;
-              } | null;
+          const selectedBatch = videoPlan.scenes.slice(
+            batchIndex * batchSize,
+            (batchIndex + 1) * batchSize,
+          );
 
-              apiRequestId =
-                typeof json?.requestId === 'string' ? json.requestId : null;
+          const expectedSceneIds = selectedBatch.map((item) => item.sceneId);
+          const expectedSceneIdSet = new Set(expectedSceneIds);
+          const expectedTextBySceneId = new Map<number, string>(
+            selectedBatch.map((item) => [item.sceneId, item.text]),
+          );
+          const selectedBatchBySceneId = new Map<number, CandidateScene>(
+            selectedBatch.map((item) => [item.sceneId, item]),
+          );
 
-              if (typeof json?.error === 'string' && json.error.trim()) {
-                message = json.error;
+          const shouldUnloadAfterThisBatch =
+            modelSelection.provider === 'local' &&
+            isLastVideoPlan &&
+            batchNumber === videoPlan.totalBatches;
+
+          try {
+            const res = await fetch('/api/fix-language-scenes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                provider: modelSelection.provider,
+                localEndpoint: modelSelection.localEndpoint,
+                localApiKey: modelSelection.localApiKey,
+                localAdminApiKey: modelSelection.localAdminApiKey,
+                unloadModelAfter: shouldUnloadAfterThisBatch,
+                model: modelSelection.selectedModel,
+                scenes: selectedBatch.map((item) => ({
+                  sceneId: item.sceneId,
+                  text: item.text,
+                })),
+              }),
+            });
+
+            let apiRequestId: string | null = null;
+
+            if (!res.ok) {
+              let message = `Language fix failed: ${res.status}`;
+              try {
+                const json = (await res.json().catch(() => null)) as {
+                  error?: unknown;
+                  requestId?: unknown;
+                } | null;
+
+                apiRequestId =
+                  typeof json?.requestId === 'string' ? json.requestId : null;
+
+                if (typeof json?.error === 'string' && json.error.trim()) {
+                  message = json.error;
+                }
+              } catch {
+                const t = await res.text().catch(() => '');
+                if (t) {
+                  message = `${message} ${t}`;
+                }
               }
-            } catch {
-              const t = await res.text().catch(() => '');
-              if (t) {
-                message = `${message} ${t}`;
+
+              throw new Error(
+                `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} (global ${globalBatchNumber}/${totalBatches}) failed (apiRequestId=${apiRequestId ?? 'n/a'}): ${message}`,
+              );
+            }
+
+            const payload = (await res.json().catch(() => null)) as {
+              sentences?: unknown;
+              requestId?: unknown;
+            } | null;
+
+            apiRequestId =
+              typeof payload?.requestId === 'string' ? payload.requestId : null;
+
+            if (!Array.isArray(payload?.sentences)) {
+              throw new Error(
+                `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} response is missing "sentences" array.`,
+              );
+            }
+
+            if (payload.sentences.length !== selectedBatch.length) {
+              throw new Error(
+                `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} must return exactly ${selectedBatch.length} sentences, received ${payload.sentences.length}.`,
+              );
+            }
+
+            const normalizedSentences = payload.sentences.map((item, index) => {
+              if (!item || typeof item !== 'object') {
+                throw new Error(
+                  `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} has invalid response item at index ${index}.`,
+                );
               }
+
+              const sceneId = Number((item as { sceneId?: unknown }).sceneId);
+              const sourceTextRaw = (item as { sourceText?: unknown })
+                .sourceText;
+              const fixedSentenceRaw = (item as { fixedSentence?: unknown })
+                .fixedSentence;
+
+              const sourceText =
+                typeof sourceTextRaw === 'string' ? sourceTextRaw.trim() : '';
+              const fixedSentence =
+                typeof fixedSentenceRaw === 'string'
+                  ? fixedSentenceRaw.trim()
+                  : '';
+
+              if (!Number.isFinite(sceneId) || sceneId <= 0) {
+                throw new Error(
+                  `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} has invalid sceneId at response index ${index}.`,
+                );
+              }
+
+              if (!expectedSceneIdSet.has(sceneId)) {
+                throw new Error(
+                  `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} returned unexpected sceneId ${sceneId}.`,
+                );
+              }
+
+              if (!fixedSentence) {
+                throw new Error(
+                  `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} returned empty fixed sentence for scene ${sceneId}.`,
+                );
+              }
+
+              if (!sourceText) {
+                throw new Error(
+                  `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} returned empty sourceText for scene ${sceneId}.`,
+                );
+              }
+
+              const expectedText = expectedTextBySceneId.get(sceneId) || '';
+              const expectedNormalized =
+                normalizeTextForComparison(expectedText);
+              const returnedNormalized = normalizeTextForComparison(sourceText);
+
+              if (!expectedText || expectedNormalized !== returnedNormalized) {
+                throw new Error(
+                  `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} sourceText mismatch for scene ${sceneId}.`,
+                );
+              }
+
+              return { sceneId, sourceText, fixedSentence };
+            });
+
+            const seenIds = new Set<number>();
+            for (const item of normalizedSentences) {
+              if (seenIds.has(item.sceneId)) {
+                throw new Error(
+                  `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} returned duplicate sceneId: ${item.sceneId}.`,
+                );
+              }
+              seenIds.add(item.sceneId);
             }
 
-            throw new Error(
-              `Batch ${batchNumber}/${totalBatches} failed (apiRequestId=${apiRequestId ?? 'n/a'}): ${message}`,
+            const missingIds = expectedSceneIds.filter(
+              (id) => !seenIds.has(id),
             );
-          }
-
-          const payload = (await res.json().catch(() => null)) as {
-            sentences?: unknown;
-            requestId?: unknown;
-          } | null;
-
-          apiRequestId =
-            typeof payload?.requestId === 'string' ? payload.requestId : null;
-
-          if (!Array.isArray(payload?.sentences)) {
-            throw new Error(
-              `Batch ${batchNumber}/${totalBatches} response is missing "sentences" array.`,
-            );
-          }
-
-          if (payload.sentences.length !== selectedBatch.length) {
-            throw new Error(
-              `Batch ${batchNumber}/${totalBatches} must return exactly ${selectedBatch.length} sentences, received ${payload.sentences.length}.`,
-            );
-          }
-
-          const normalizedSentences = payload.sentences.map((item, index) => {
-            if (!item || typeof item !== 'object') {
+            if (missingIds.length > 0) {
               throw new Error(
-                `Batch ${batchNumber}/${totalBatches} has invalid response item at index ${index}.`,
+                `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.totalBatches} response is missing scene IDs: ${missingIds.join(', ')}.`,
               );
             }
 
-            const sceneId = Number((item as { sceneId?: unknown }).sceneId);
-            const sourceTextRaw = (item as { sourceText?: unknown }).sourceText;
-            const fixedSentenceRaw = (item as { fixedSentence?: unknown })
-              .fixedSentence;
+            for (const item of normalizedSentences) {
+              const sceneMeta = selectedBatchBySceneId.get(item.sceneId);
+              setFixingLanguageProcessingSceneId(item.sceneId);
 
-            const sourceText =
-              typeof sourceTextRaw === 'string' ? sourceTextRaw.trim() : '';
-            const fixedSentence =
-              typeof fixedSentenceRaw === 'string'
-                ? fixedSentenceRaw.trim()
-                : '';
+              if (sceneMeta?.videoId && !isNaN(sceneMeta.videoId)) {
+                setCurrentProcessingVideoId(sceneMeta.videoId);
+              }
 
-            if (!Number.isFinite(sceneId) || sceneId <= 0) {
-              throw new Error(
-                `Batch ${batchNumber}/${totalBatches} has invalid sceneId at response index ${index}.`,
+              const patchRes = await fetch(
+                `/api/baserow/scenes/${item.sceneId}`,
+                {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    field_7105: item.fixedSentence,
+                    field_6890: item.fixedSentence,
+                  }),
+                },
               );
+
+              if (!patchRes.ok) {
+                const t = await patchRes.text().catch(() => '');
+                throw new Error(
+                  `Failed to save fixed sentence for scene ${item.sceneId}: ${patchRes.status} ${t}`,
+                );
+              }
+
+              updatedScenesCount += 1;
+              await new Promise((resolve) => setTimeout(resolve, 150));
             }
 
-            if (!expectedSceneIdSet.has(sceneId)) {
-              throw new Error(
-                `Batch ${batchNumber}/${totalBatches} returned unexpected sceneId ${sceneId}.`,
-              );
-            }
-
-            if (!fixedSentence) {
-              throw new Error(
-                `Batch ${batchNumber}/${totalBatches} returned empty fixed sentence for scene ${sceneId}.`,
-              );
-            }
-
-            if (!sourceText) {
-              throw new Error(
-                `Batch ${batchNumber}/${totalBatches} returned empty sourceText for scene ${sceneId}.`,
-              );
-            }
-
-            const expectedText = expectedTextBySceneId.get(sceneId) || '';
-            const expectedNormalized = normalizeTextForComparison(expectedText);
-            const returnedNormalized = normalizeTextForComparison(sourceText);
-
-            if (!expectedText || expectedNormalized !== returnedNormalized) {
-              throw new Error(
-                `Batch ${batchNumber}/${totalBatches} sourceText mismatch for scene ${sceneId}.`,
-              );
-            }
-
-            return { sceneId, sourceText, fixedSentence };
-          });
-
-          const seenIds = new Set<number>();
-          for (const item of normalizedSentences) {
-            if (seenIds.has(item.sceneId)) {
-              throw new Error(
-                `Batch ${batchNumber}/${totalBatches} returned duplicate sceneId: ${item.sceneId}.`,
-              );
-            }
-            seenIds.add(item.sceneId);
-          }
-
-          const missingIds = expectedSceneIds.filter((id) => !seenIds.has(id));
-          if (missingIds.length > 0) {
-            throw new Error(
-              `Batch ${batchNumber}/${totalBatches} response is missing scene IDs: ${missingIds.join(', ')}.`,
-            );
-          }
-
-          for (const item of normalizedSentences) {
-            const sceneMeta = selectedBatchBySceneId.get(item.sceneId);
-            setFixingLanguageProcessingSceneId(item.sceneId);
-
-            if (sceneMeta?.videoId && !isNaN(sceneMeta.videoId)) {
-              setCurrentProcessingVideoId(sceneMeta.videoId);
-            }
-
-            const patchRes = await fetch(
-              `/api/baserow/scenes/${item.sceneId}`,
-              {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  field_7105: item.fixedSentence,
-                  field_6890: item.fixedSentence,
-                }),
-              },
-            );
-
-            if (!patchRes.ok) {
-              const t = await patchRes.text().catch(() => '');
-              throw new Error(
-                `Failed to save fixed sentence for scene ${item.sceneId}: ${patchRes.status} ${t}`,
-              );
-            }
-
-            updatedScenesCount += 1;
-            await new Promise((resolve) => setTimeout(resolve, 150));
-          }
-
-          console.info(
-            `${logPrefix} Batch ${batchNumber}/${totalBatches} completed successfully.`,
-            {
+            console.info(`${logPrefix} Batch completed successfully.`, {
+              videoId: videoPlan.videoId,
+              batchInVideo: `${batchNumber}/${videoPlan.totalBatches}`,
+              globalBatch: `${globalBatchNumber}/${totalBatches}`,
               apiRequestId,
               updatedInBatch: normalizedSentences.length,
               totalUpdatedSoFar: updatedScenesCount,
-            },
-          );
-        } catch (batchError) {
-          const errorMessage =
-            batchError instanceof Error
-              ? batchError.message
-              : String(batchError);
+              shouldUnloadAfterThisBatch,
+            });
+          } catch (batchError) {
+            const errorMessage =
+              batchError instanceof Error
+                ? batchError.message
+                : String(batchError);
 
-          failedBatches.push({
-            batchNumber,
-            sceneIds: expectedSceneIds,
-            error: errorMessage,
-          });
-
-          console.error(
-            `${logPrefix} Batch ${batchNumber}/${totalBatches} failed. Continuing with next batch.`,
-            {
-              error: errorMessage,
+            failedBatches.push({
+              videoId: videoPlan.videoId,
+              batchInVideo: batchNumber,
+              globalBatchNumber,
+              batchNumber,
               sceneIds: expectedSceneIds,
-            },
-          );
-        }
+              error: errorMessage,
+            });
 
-        await new Promise((resolve) => setTimeout(resolve, 200));
+            console.error(
+              `${logPrefix} Video batch failed. Continuing with next batch/video.`,
+              {
+                videoId: videoPlan.videoId,
+                batchInVideo: `${batchNumber}/${videoPlan.totalBatches}`,
+                globalBatch: `${globalBatchNumber}/${totalBatches}`,
+                error: errorMessage,
+                sceneIds: expectedSceneIds,
+              },
+            );
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
       }
 
       await handleRefresh();
@@ -6670,7 +6737,7 @@ export default function OriginalVideosList({
       }
 
       console.info(`${logPrefix} Run completed.`, {
-        totalEligibleScenes: candidateScenes.length,
+        totalEligibleScenes,
         updatedScenesCount,
         failedBatchCount: failedBatches.length,
         durationMs: Date.now() - startedAt,
