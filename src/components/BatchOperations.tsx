@@ -901,6 +901,10 @@ export default function BatchOperations({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              provider: modelSelection.provider,
+              localEndpoint: modelSelection.localEndpoint,
+              localApiKey: modelSelection.localApiKey,
+              localAdminApiKey: modelSelection.localAdminApiKey,
               model: modelSelection.selectedModel,
               scenes: selectedBatch.map((item) => ({
                 sceneId: item.scene.id,

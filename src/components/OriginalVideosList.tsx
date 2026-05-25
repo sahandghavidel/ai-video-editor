@@ -6448,12 +6448,19 @@ export default function OriginalVideosList({
         const selectedBatchBySceneId = new Map<number, CandidateScene>(
           selectedBatch.map((item) => [item.sceneId, item]),
         );
+        const shouldUnloadAfterThisBatch =
+          modelSelection.provider === 'local' && batchNumber === totalBatches;
 
         try {
           const res = await fetch('/api/fix-language-scenes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              provider: modelSelection.provider,
+              localEndpoint: modelSelection.localEndpoint,
+              localApiKey: modelSelection.localApiKey,
+              localAdminApiKey: modelSelection.localAdminApiKey,
+              unloadModelAfter: shouldUnloadAfterThisBatch,
               model: modelSelection.selectedModel,
               scenes: selectedBatch.map((item) => ({
                 sceneId: item.sceneId,

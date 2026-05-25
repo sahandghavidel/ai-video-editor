@@ -1,5 +1,9 @@
 import OpenAI from 'openai';
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import {
+  resolveAIProviderConfig,
+  resolveOpenAIClient,
+  unloadLocalModel,
+} from '@/lib/ai-provider';
 
 type InputScene = {
   sceneId: number;
@@ -45,6 +49,10 @@ function extractReturnedSceneIds(parsed: unknown): number[] | null {
 
 function normalizeTextForComparison(text: string): string {
   return String(text).replace(/\s+/g, ' ').trim();
+}
+
+function isTruthyFlag(value: unknown): boolean {
+  return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 function stripCodeFences(raw: string): string {
@@ -240,7 +248,11 @@ export async function POST(request: Request) {
       provider?: unknown;
       localEndpoint?: unknown;
       localApiKey?: unknown;
+      localAdminApiKey?: unknown;
+      unloadModelAfter?: unknown;
     } | null;
+
+    const providerConfig = resolveAIProviderConfig(request, body);
 
     const {
       client: openaiClient,
@@ -293,12 +305,15 @@ export async function POST(request: Request) {
         ? body.model.trim()
         : DEFAULT_MODEL;
 
+    const unloadModelAfter = isTruthyFlag(body?.unloadModelAfter);
+
     const sceneIds = scenes.map((scene) => scene.sceneId);
 
     console.info(`${logPrefix} Input validated.`, {
       model,
       sceneCount: scenes.length,
       sceneIds,
+      unloadModelAfter,
       scenes: summarizeScenesForLog(scenes),
     });
 
@@ -526,7 +541,40 @@ ${scenesPayload}`;
         durationMs: Date.now() - startedAt,
       });
 
-      const successPayload = { sentences, requestId, attemptsUsed: attempt };
+      let unloadResult: Awaited<ReturnType<typeof unloadLocalModel>> | null =
+        null;
+
+      if (provider === 'local' && unloadModelAfter) {
+        unloadResult = await unloadLocalModel({
+          modelId: model,
+          localBaseUrl: providerConfig.localEndpoint,
+          localApiKey: providerConfig.localApiKey,
+          localAdminApiKey: providerConfig.localAdminApiKey,
+        });
+
+        if (unloadResult.ok) {
+          console.info(`${logPrefix} Local model unloaded successfully.`, {
+            endpoint: unloadResult.endpoint,
+            status: unloadResult.status,
+            model,
+          });
+        } else {
+          console.warn(`${logPrefix} Local model unload failed.`, {
+            endpoint: unloadResult.endpoint,
+            status: unloadResult.status,
+            model,
+            message: unloadResult.message,
+          });
+        }
+      }
+
+      const successPayload = {
+        sentences,
+        requestId,
+        attemptsUsed: attempt,
+        unloadModelAfter,
+        unloadResult,
+      };
       console.info(`${logPrefix} API return value (success):`, successPayload);
       return Response.json(successPayload);
     }

@@ -131,6 +131,7 @@ export type AIModelProvider = 'online' | 'local';
 const AI_PROVIDER_COOKIE_NAME = 'uve_ai_provider';
 const AI_LOCAL_ENDPOINT_COOKIE_NAME = 'uve_ai_local_endpoint';
 const AI_LOCAL_API_KEY_COOKIE_NAME = 'uve_ai_local_api_key';
+const AI_LOCAL_ADMIN_API_KEY_COOKIE_NAME = 'uve_ai_local_admin_api_key';
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 const setBrowserCookie = (name: string, value: string) => {
@@ -147,6 +148,7 @@ const syncAIProviderCookies = (modelSelection: {
   provider: AIModelProvider;
   localEndpoint: string;
   localApiKey: string;
+  localAdminApiKey: string;
 }) => {
   if (typeof document === 'undefined') return;
 
@@ -164,6 +166,13 @@ const syncAIProviderCookies = (modelSelection: {
     setBrowserCookie(AI_LOCAL_API_KEY_COOKIE_NAME, localApiKey);
   } else {
     clearBrowserCookie(AI_LOCAL_API_KEY_COOKIE_NAME);
+  }
+
+  const localAdminApiKey = modelSelection.localAdminApiKey.trim();
+  if (localAdminApiKey) {
+    setBrowserCookie(AI_LOCAL_ADMIN_API_KEY_COOKIE_NAME, localAdminApiKey);
+  } else {
+    clearBrowserCookie(AI_LOCAL_ADMIN_API_KEY_COOKIE_NAME);
   }
 };
 
@@ -183,6 +192,7 @@ export interface ModelSelectionState {
   localModelSearch: string;
   localEndpoint: string;
   localApiKey: string;
+  localAdminApiKey: string;
   enforceLongerSentences: boolean;
 }
 
@@ -449,6 +459,7 @@ interface AppState {
   setLocalModelSearch: (search: string) => void;
   setLocalEndpoint: (endpoint: string) => void;
   setLocalApiKey: (apiKey: string) => void;
+  setLocalAdminApiKey: (apiKey: string) => void;
   setEnforceLongerSentences: (enforce: boolean) => void;
   fetchModels: () => Promise<void>;
   fetchLocalModels: () => Promise<void>;
@@ -648,6 +659,7 @@ const defaultModelSelection: ModelSelectionState = {
   localModelSearch: '',
   localEndpoint: 'http://127.0.0.1:9573/v1',
   localApiKey: '',
+  localAdminApiKey: '',
   enforceLongerSentences: false,
 };
 
@@ -1266,6 +1278,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { modelSelection: newModelSelection };
     }),
 
+  setLocalAdminApiKey: (apiKey) =>
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        localAdminApiKey: apiKey,
+      };
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      syncAIProviderCookies(newModelSelection);
+      return { modelSelection: newModelSelection };
+    }),
+
   setEnforceLongerSentences: (enforce: boolean) =>
     set((state) => {
       const newModelSelection = {
@@ -1788,6 +1811,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         localModelSearch: state.modelSelection.localModelSearch,
         localEndpoint: state.modelSelection.localEndpoint,
         localApiKey: state.modelSelection.localApiKey,
+        localAdminApiKey: state.modelSelection.localAdminApiKey,
         enforceLongerSentences: state.modelSelection.enforceLongerSentences,
       },
       selectedOriginalVideo: state.selectedOriginalVideo,
@@ -1879,6 +1903,10 @@ export const useAppStore = create<AppState>((set, get) => ({
               typeof persistedModelSelection.localApiKey === 'string'
                 ? persistedModelSelection.localApiKey
                 : state.modelSelection.localApiKey,
+            localAdminApiKey:
+              typeof persistedModelSelection.localAdminApiKey === 'string'
+                ? persistedModelSelection.localAdminApiKey
+                : state.modelSelection.localAdminApiKey,
             enforceLongerSentences:
               typeof persistedModelSelection.enforceLongerSentences ===
               'boolean'
@@ -2208,6 +2236,10 @@ export const useAppStore = create<AppState>((set, get) => ({
               selectedLocalModel:
                 settings?.selectedLocalModel ??
                 state.modelSelection.selectedLocalModel,
+              localAdminApiKey:
+                typeof settings?.localAdminApiKey === 'string'
+                  ? settings.localAdminApiKey
+                  : state.modelSelection.localAdminApiKey,
               selectedModel:
                 (settings?.provider === 'local'
                   ? settings?.selectedLocalModel
@@ -2280,6 +2312,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           localModelSearch: defaultModelSelection.localModelSearch,
           localEndpoint: defaultModelSelection.localEndpoint,
           localApiKey: defaultModelSelection.localApiKey,
+          localAdminApiKey: defaultModelSelection.localAdminApiKey,
           enforceLongerSentences: defaultModelSelection.enforceLongerSentences,
         },
         selectedOriginalVideo: defaultSelectedOriginalVideo,

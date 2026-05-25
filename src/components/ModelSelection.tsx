@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 export default function ModelSelection() {
   const [showLocalApiKey, setShowLocalApiKey] = useState(false);
+  const [showLocalAdminApiKey, setShowLocalAdminApiKey] = useState(false);
 
   const {
     modelSelection,
@@ -16,6 +17,7 @@ export default function ModelSelection() {
     setLocalModelSearch,
     setLocalEndpoint,
     setLocalApiKey,
+    setLocalAdminApiKey,
     setEnforceLongerSentences,
     fetchModels,
     fetchLocalModels,
@@ -189,6 +191,35 @@ export default function ModelSelection() {
                 title={showLocalApiKey ? 'Hide API key' : 'Show API key'}
               >
                 {showLocalApiKey ? (
+                  <EyeOff className='w-3.5 h-3.5' />
+                ) : (
+                  <Eye className='w-3.5 h-3.5' />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className='space-y-1'>
+            <label className='text-xs text-gray-600'>Admin API Key</label>
+            <div className='relative'>
+              <input
+                type={showLocalAdminApiKey ? 'text' : 'password'}
+                value={modelSelection.localAdminApiKey}
+                onChange={(e) => setLocalAdminApiKey(e.target.value)}
+                className='w-full px-2 py-1.5 pr-9 text-xs border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors'
+                placeholder='Optional (used for /admin model unload auth)'
+              />
+              <button
+                type='button'
+                onClick={() => setShowLocalAdminApiKey((prev) => !prev)}
+                className='absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600'
+                title={
+                  showLocalAdminApiKey
+                    ? 'Hide admin API key'
+                    : 'Show admin API key'
+                }
+              >
+                {showLocalAdminApiKey ? (
                   <EyeOff className='w-3.5 h-3.5' />
                 ) : (
                   <Eye className='w-3.5 h-3.5' />
