@@ -128,9 +128,49 @@ export interface MediaPlayerState {
 
 export type AIModelProvider = 'online' | 'local';
 
+const AI_PROVIDER_COOKIE_NAME = 'uve_ai_provider';
+const AI_LOCAL_ENDPOINT_COOKIE_NAME = 'uve_ai_local_endpoint';
+const AI_LOCAL_API_KEY_COOKIE_NAME = 'uve_ai_local_api_key';
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+const setBrowserCookie = (name: string, value: string) => {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${ONE_YEAR_SECONDS}; SameSite=Lax`;
+};
+
+const clearBrowserCookie = (name: string) => {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+};
+
+const syncAIProviderCookies = (modelSelection: {
+  provider: AIModelProvider;
+  localEndpoint: string;
+  localApiKey: string;
+}) => {
+  if (typeof document === 'undefined') return;
+
+  setBrowserCookie(AI_PROVIDER_COOKIE_NAME, modelSelection.provider);
+
+  const localEndpoint = modelSelection.localEndpoint.trim();
+  if (localEndpoint) {
+    setBrowserCookie(AI_LOCAL_ENDPOINT_COOKIE_NAME, localEndpoint);
+  } else {
+    clearBrowserCookie(AI_LOCAL_ENDPOINT_COOKIE_NAME);
+  }
+
+  const localApiKey = modelSelection.localApiKey.trim();
+  if (localApiKey) {
+    setBrowserCookie(AI_LOCAL_API_KEY_COOKIE_NAME, localApiKey);
+  } else {
+    clearBrowserCookie(AI_LOCAL_API_KEY_COOKIE_NAME);
+  }
+};
+
 // Model selection state interface
 export interface ModelSelectionState {
   provider: AIModelProvider;
+  selectedOnlineModel: string | null;
   selectedModel: string | null;
   models: Model[];
   modelsLoading: boolean;
@@ -595,6 +635,7 @@ const defaultMediaPlayer: MediaPlayerState = {
 // Default model selection state
 const defaultModelSelection: ModelSelectionState = {
   provider: 'online',
+  selectedOnlineModel: 'deepseek/deepseek-v3.2-exp',
   selectedModel: 'deepseek/deepseek-v3.2-exp',
   models: [],
   modelsLoading: false,
@@ -1097,19 +1138,33 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Model Selection Actions
   setModelProvider: (provider) =>
     set((state) => {
+      const nextSelectedModel =
+        provider === 'local'
+          ? state.modelSelection.selectedLocalModel
+          : state.modelSelection.selectedOnlineModel;
+
       const newModelSelection = {
         ...state.modelSelection,
         provider,
+        selectedModel: nextSelectedModel,
       };
+
       localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      syncAIProviderCookies(newModelSelection);
       return { modelSelection: newModelSelection };
     }),
 
   setSelectedModel: (modelId) =>
     set((state) => {
+      const shouldUpdateActiveModel =
+        state.modelSelection.provider === 'online';
+
       const newModelSelection = {
         ...state.modelSelection,
-        selectedModel: modelId,
+        selectedOnlineModel: modelId,
+        selectedModel: shouldUpdateActiveModel
+          ? modelId
+          : state.modelSelection.selectedModel,
       };
       // Save to localStorage whenever updated
       localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
@@ -1144,10 +1199,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSelectedLocalModel: (modelId) =>
     set((state) => {
+      const shouldUpdateActiveModel = state.modelSelection.provider === 'local';
+
       const newModelSelection = {
         ...state.modelSelection,
         selectedLocalModel: modelId,
+        selectedModel: shouldUpdateActiveModel
+          ? modelId
+          : state.modelSelection.selectedModel,
       };
+
       localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
       return { modelSelection: newModelSelection };
     }),
@@ -1190,6 +1251,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         localEndpoint: endpoint,
       };
       localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      syncAIProviderCookies(newModelSelection);
       return { modelSelection: newModelSelection };
     }),
 
@@ -1200,6 +1262,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         localApiKey: apiKey,
       };
       localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      syncAIProviderCookies(newModelSelection);
       return { modelSelection: newModelSelection };
     }),
 
@@ -1230,7 +1293,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       setModels(models);
 
       // Set default model if not set and models exist
-      const currentSelection = get().modelSelection.selectedModel;
+      const currentSelection = get().modelSelection.selectedOnlineModel;
       if (!currentSelection && models.length > 0) {
         setSelectedModel(models[0].id);
       }
@@ -1718,6 +1781,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       sceneVideoGenerationSettings: state.sceneVideoGenerationSettings,
       modelSelection: {
         provider: state.modelSelection.provider,
+        selectedOnlineModel: state.modelSelection.selectedOnlineModel,
         selectedModel: state.modelSelection.selectedModel,
         modelSearch: state.modelSelection.modelSearch,
         selectedLocalModel: state.modelSelection.selectedLocalModel,
@@ -1791,9 +1855,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             ...state.modelSelection,
             provider:
               persistedModelSelection.provider === 'local' ? 'local' : 'online',
-            selectedModel:
+            selectedOnlineModel:
+              persistedModelSelection.selectedOnlineModel ??
               persistedModelSelection.selectedModel ??
-              state.modelSelection.selectedModel,
+              state.modelSelection.selectedOnlineModel,
             modelSearch:
               typeof persistedModelSelection.modelSearch === 'string'
                 ? persistedModelSelection.modelSearch
@@ -1819,6 +1884,14 @@ export const useAppStore = create<AppState>((set, get) => ({
               'boolean'
                 ? persistedModelSelection.enforceLongerSentences
                 : state.modelSelection.enforceLongerSentences,
+            selectedModel:
+              (persistedModelSelection.provider === 'local'
+                ? persistedModelSelection.selectedLocalModel
+                : (persistedModelSelection.selectedOnlineModel ??
+                  persistedModelSelection.selectedModel)) ??
+              (persistedModelSelection.provider === 'local'
+                ? state.modelSelection.selectedLocalModel
+                : state.modelSelection.selectedOnlineModel),
           },
           selectedOriginalVideo: settings.selectedOriginalVideo
             ? {
@@ -2120,9 +2193,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       const savedModelSelection = localStorage.getItem('modelSelection');
       if (savedModelSelection) {
         try {
-          const settings = JSON.parse(savedModelSelection);
+          const settings = JSON.parse(
+            savedModelSelection,
+          ) as Partial<ModelSelectionState> | null;
           set((state) => ({
-            modelSelection: { ...state.modelSelection, ...settings },
+            modelSelection: {
+              ...state.modelSelection,
+              ...settings,
+              provider: settings?.provider === 'local' ? 'local' : 'online',
+              selectedOnlineModel:
+                settings?.selectedOnlineModel ??
+                settings?.selectedModel ??
+                state.modelSelection.selectedOnlineModel,
+              selectedLocalModel:
+                settings?.selectedLocalModel ??
+                state.modelSelection.selectedLocalModel,
+              selectedModel:
+                (settings?.provider === 'local'
+                  ? settings?.selectedLocalModel
+                  : (settings?.selectedOnlineModel ??
+                    settings?.selectedModel)) ??
+                (settings?.provider === 'local'
+                  ? state.modelSelection.selectedLocalModel
+                  : state.modelSelection.selectedOnlineModel),
+            },
           }));
         } catch (e) {
           console.error('Failed to parse modelSelection:', e);
@@ -2154,6 +2248,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           console.error('Failed to parse advancedAudioSettings:', e);
         }
       }
+
+      syncAIProviderCookies(get().modelSelection);
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);
     }
@@ -2177,6 +2273,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         modelSelection: {
           ...get().modelSelection,
           provider: defaultModelSelection.provider,
+          selectedOnlineModel: defaultModelSelection.selectedOnlineModel,
           selectedModel: defaultModelSelection.selectedModel,
           modelSearch: defaultModelSelection.modelSearch,
           selectedLocalModel: defaultModelSelection.selectedLocalModel,
@@ -2189,6 +2286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         pipelineConfig: defaultPipelineConfig,
         pipelineTemplates: defaultPipelineTemplates,
       });
+      syncAIProviderCookies(defaultModelSelection);
       console.log('Settings cleared from localStorage');
     } catch (error) {
       console.error('Failed to clear settings from localStorage:', error);

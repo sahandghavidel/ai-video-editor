@@ -1,40 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const getOpenRouterClient = () => {
-  const apiKey =
-    process.env.OPENROUTER_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim();
-
-  if (!apiKey) {
-    return null;
-  }
-
-  return new OpenAI({
-    apiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: {
-      'HTTP-Referer': 'https://ultimate-video-editor.com',
-      'X-Title': 'Ultimate Video Editor',
-    },
-  });
-};
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 export async function POST(request: NextRequest) {
   try {
-    const openai = getOpenRouterClient();
-    if (!openai) {
+    const body = await request.json();
+
+    const {
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
       return NextResponse.json(
         {
           error:
-            'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.',
+            provider === 'online'
+              ? 'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.'
+              : 'Failed to initialize local AI provider client.',
         },
         { status: 500 },
       );
     }
 
-    const { transcriptionText, model = 'openai/gpt-4o-mini' } =
-      await request.json();
+    const { transcriptionText, model = 'openai/gpt-4o-mini' } = body;
 
     if (!transcriptionText) {
       return NextResponse.json(
@@ -57,7 +46,7 @@ Transcription: ${transcriptionText}
 
 Return only the tags separated by commas, nothing else.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model: model,
       messages: [
         {
@@ -96,7 +85,7 @@ Return only the tags separated by commas, nothing else.`;
       return NextResponse.json(
         {
           error:
-            'OpenRouter authentication failed (401 User not found). Check OPENROUTER_API_KEY in .env.local, then restart the app.',
+            'Provider authentication failed (401). Check your active provider credentials and try again.',
         },
         { status: 401 },
       );

@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 type BaserowField = {
   id: number;
@@ -10,15 +10,6 @@ type BaserowRow = {
   id: number;
   [key: string]: unknown;
 };
-
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
 
 const SCENES_TABLE_ID = 714;
 const DEFAULT_PROMPT_FIELD_ID = 7091;
@@ -122,7 +113,7 @@ function extractLinkedVideoId(value: unknown): number | null {
 function getSceneText(scene: BaserowRow): string {
   const sentence = String(scene['field_6890'] ?? '').trim();
   const original = String(
-    scene['field_6901'] ?? scene['field_6900'] ?? ''
+    scene['field_6901'] ?? scene['field_6900'] ?? '',
   ).trim();
   return sentence || original;
 }
@@ -150,7 +141,7 @@ function normalizePromptOutput(raw: string): string {
   text = text
     .replace(
       /^\*\*\s*(prompt\s*for\s*scene|scene\s*prompt)\s*[^\n]*\*\*\s*\n+/i,
-      ''
+      '',
     )
     .replace(/^(prompt\s*for\s*scene|scene\s*prompt)\s*[^\n]*:\s*/i, '')
     .trim();
@@ -184,7 +175,7 @@ async function resolvePromptFieldKey(): Promise<{
 }> {
   try {
     const fields = await baserowGetJson<BaserowField[]>(
-      `/database/fields/table/${SCENES_TABLE_ID}/`
+      `/database/fields/table/${SCENES_TABLE_ID}/`,
     );
 
     const byId = fields.find((f) => f.id === DEFAULT_PROMPT_FIELD_ID) ?? null;
@@ -214,7 +205,28 @@ export async function POST(request: Request) {
       sceneId?: unknown;
       model?: unknown;
       resolveOnly?: unknown;
+      provider?: unknown;
+      localEndpoint?: unknown;
+      localApiKey?: unknown;
     } | null;
+
+    const {
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
+      return Response.json(
+        {
+          error:
+            provider === 'online'
+              ? 'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.'
+              : 'Failed to initialize local AI provider client.',
+        },
+        { status: 500 },
+      );
+    }
 
     const sceneId = Number(body?.sceneId);
     const model = typeof body?.model === 'string' ? body.model : null;
@@ -232,7 +244,7 @@ export async function POST(request: Request) {
             promptFieldKey,
             promptFieldType: promptField.type,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -253,13 +265,13 @@ export async function POST(request: Request) {
           promptFieldKey,
           promptFieldType: promptField.type,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Fetch current scene.
     const currentScene = await baserowGetJson<BaserowRow>(
-      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`
+      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
     );
 
     const videoId = extractLinkedVideoId(currentScene['field_6889']);
@@ -272,7 +284,7 @@ export async function POST(request: Request) {
         {
           [`filter__field_6889__equal`]: String(videoId),
           size: '200',
-        }
+        },
       );
       videoScenes = Array.isArray(page?.results) ? page.results : [];
     }
@@ -288,25 +300,30 @@ export async function POST(request: Request) {
           error: 'Current scene is empty; cannot generate prompt',
           promptFieldKey,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Exclude empty scenes from the context we send to the model.
     const contextScenes = orderedScenes.filter((scene) =>
-      Boolean(getSceneText(scene).trim())
+      Boolean(getSceneText(scene).trim()),
     );
     const fullScript = contextScenes.map(formatScriptLine).join(' ');
+    const scriptContext = fullScript
+      ? `\nFull script context (all scenes for this video):\n${fullScript}\n`
+      : '';
 
     const prompt = `You are a Professional Video Storyboard Artist and AI Prompt Engineer. Your task is to analyze the trading script I provide and break it down into a visual image prompt. GLOBAL CHARACTER RULES (Must be in every prompt): Do not just show the character talking; show the character interacting, very detailed prompt and use descriptive language to create vivid imagery. Avoid generic descriptions; be specific about the setting, mood, and actions. Just return the prompt for the current scene nothing else: 
-      
+    ${scriptContext}
     current scene: ${sceneId} ${currentText}`;
 
     // User requested: log the EXACT prompt being sent.
-    console.log('generate-scene-prompt: sending prompt to OpenRouter');
+    console.log(
+      `generate-scene-prompt: sending prompt using ${provider} provider`,
+    );
     console.log(prompt);
 
-    const completion = await openai.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model: model || 'deepseek/deepseek-v3.2-exp',
       messages: [
         {
@@ -327,7 +344,7 @@ export async function POST(request: Request) {
     if (!scenePrompt) {
       return Response.json(
         { error: 'Model returned empty prompt', promptFieldKey },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -338,7 +355,7 @@ export async function POST(request: Request) {
       {
         error: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

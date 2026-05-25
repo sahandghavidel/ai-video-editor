@@ -1,24 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1',
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 type Body = {
   title?: unknown;
   expectedDuration?: unknown;
   model?: unknown;
+  provider?: unknown;
+  localEndpoint?: unknown;
+  localApiKey?: unknown;
 };
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as Body | null;
+
+    const {
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
+      return NextResponse.json(
+        {
+          error:
+            provider === 'online'
+              ? 'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.'
+              : 'Failed to initialize local AI provider client.',
+        },
+        { status: 500 },
+      );
+    }
 
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
     const expectedDurationRaw = Number(body?.expectedDuration);
@@ -36,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     const prompt = `Write a complete video narration script from this title:\n\n"${title}"\n\nRequirements:\n- Target spoken duration: about ${expectedDuration} minutes.\n- Return a clean, production-ready narration script in plain text easy for TTS reader to read.\n- Keep it coherent, engaging, and focused on the title.\n- Do NOT return markdown, bullets, headings, explanations, or any other formatting like dashes, asterisks, or numbers.\n- Return ONLY the script text.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model,
       messages: [
         {

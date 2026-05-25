@@ -1,22 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1',
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+
     const {
-      transcriptionText,
-      model = 'openai/gpt-4o-mini',
-      count = 1,
-    } = await request.json();
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
+      return NextResponse.json(
+        {
+          error:
+            provider === 'online'
+              ? 'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.'
+              : 'Failed to initialize local AI provider client.',
+        },
+        { status: 500 },
+      );
+    }
+
+    const { transcriptionText, model = 'openai/gpt-4o-mini', count = 1 } = body;
 
     const requestedCount = Math.min(
       5,
@@ -59,7 +66,7 @@ Transcription: ${transcriptionText}
 
 Return only the title, nothing else.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model: model,
       messages: [
         {

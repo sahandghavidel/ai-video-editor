@@ -1,19 +1,11 @@
 import OpenAI from 'openai';
 import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 interface ExtendedChatCompletionMessage
   extends OpenAI.Chat.Completions.ChatCompletionMessage {
   reasoning?: string;
 }
-
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
 
 // Helper function to fetch scenes from Baserow table 714
 async function getScenesFromTable(): Promise<BaserowRow[]> {
@@ -33,6 +25,25 @@ async function getScenesFromTable(): Promise<BaserowRow[]> {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    const {
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
+      return Response.json(
+        {
+          error:
+            provider === 'online'
+              ? 'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.'
+              : 'Failed to initialize local AI provider client.',
+        },
+        { status: 500 },
+      );
+    }
+
     const {
       currentSentence,
       sceneId,
@@ -54,7 +65,7 @@ export async function POST(request: Request) {
     console.log(
       `Improving sentence for scene ${sceneId}: "${currentSentence}"`,
     );
-    console.log('Making OpenAI API call to OpenRouter...');
+    console.log(`Making OpenAI API call using ${provider} provider...`);
 
     // Fetch all scenes from table 714
     const allScenes = await getScenesFromTable();
@@ -240,7 +251,7 @@ Return only the improved sentence, nothing else.`;
       console.log(`Attempt ${attempt}/${maxAttempts}...`);
 
       // Use the original DeepSeek model that was working
-      const completion = await openai.chat.completions.create({
+      const completion = await openaiClient.chat.completions.create({
         model:
           model ||
           'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',

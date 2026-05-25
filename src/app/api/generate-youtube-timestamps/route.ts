@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
 import { parseCaptionFileTimedData } from '@/utils/captions-parser';
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 interface WordSegment {
   word: string;
@@ -19,15 +19,6 @@ interface TimedChunk {
   end: number;
   text: string;
 }
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1',
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
 
 function formatTimestamp(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds));
@@ -96,7 +87,27 @@ function buildTimedTranscript(words: WordSegment[]): TimedChunk[] {
 
 export async function POST(request: NextRequest) {
   try {
-    const { captionsUrl, model = 'openai/gpt-4o-mini' } = await request.json();
+    const body = await request.json();
+
+    const {
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
+      return NextResponse.json(
+        {
+          error:
+            provider === 'online'
+              ? 'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.'
+              : 'Failed to initialize local AI provider client.',
+        },
+        { status: 500 },
+      );
+    }
+
+    const { captionsUrl, model = 'openai/gpt-4o-mini' } = body;
 
     if (!captionsUrl || typeof captionsUrl !== 'string') {
       return NextResponse.json(
@@ -152,7 +163,7 @@ Rules:
 Timed transcript:
 ${transcriptForPrompt}`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model,
       messages: [
         {

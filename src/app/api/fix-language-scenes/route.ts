@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 type InputScene = {
   sceneId: number;
@@ -13,15 +14,6 @@ type ParsedSentence = {
 
 const MAX_BATCH_SIZE = 30;
 const DEFAULT_MODEL = 'deepseek/deepseek-v3.2-exp';
-
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
 
 function createRequestId(): string {
   return `fls-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -242,18 +234,36 @@ export async function POST(request: Request) {
   try {
     console.info(`${logPrefix} Incoming request.`);
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      console.error(`${logPrefix} OPENROUTER_API_KEY is not configured.`);
-      return Response.json(
-        { error: 'OPENROUTER_API_KEY is not configured', requestId },
-        { status: 500 },
-      );
-    }
-
     const body = (await request.json().catch(() => null)) as {
       scenes?: unknown;
       model?: unknown;
+      provider?: unknown;
+      localEndpoint?: unknown;
+      localApiKey?: unknown;
     } | null;
+
+    const {
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
+      const errorMessage =
+        provider === 'online'
+          ? 'OPENROUTER_API_KEY is not configured'
+          : 'Failed to initialize local AI provider client';
+
+      console.error(`${logPrefix} ${errorMessage}.`);
+
+      return Response.json(
+        {
+          error: errorMessage,
+          requestId,
+        },
+        { status: 500 },
+      );
+    }
 
     const incomingSceneCount = Array.isArray(body?.scenes)
       ? body.scenes.length
@@ -356,7 +366,7 @@ ${scenesPayload}`;
         ],
       };
 
-      console.info(`${logPrefix} Calling OpenRouter model.`, {
+      console.info(`${logPrefix} Calling ${provider} model.`, {
         model,
         strictJsonMode: true,
         attempt: `${attempt}/${maxAttempts}`,
@@ -365,7 +375,7 @@ ${scenesPayload}`;
 
       let completion: OpenAI.Chat.Completions.ChatCompletion;
       try {
-        completion = await openai.chat.completions.create({
+        completion = await openaiClient.chat.completions.create({
           ...baseCompletionPayload,
           response_format: { type: 'json_object' },
         });
@@ -379,7 +389,7 @@ ${scenesPayload}`;
         );
 
         try {
-          completion = await openai.chat.completions.create(
+          completion = await openaiClient.chat.completions.create(
             baseCompletionPayload,
           );
         } catch (fallbackError) {

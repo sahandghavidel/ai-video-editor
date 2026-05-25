@@ -1,21 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1',
-  defaultHeaders: {
-    'HTTP-Referer': 'https://ultimate-video-editor.com',
-    'X-Title': 'Ultimate Video Editor',
-  },
-});
+import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as {
       transcriptionText?: unknown;
       model?: unknown;
+      provider?: unknown;
+      localEndpoint?: unknown;
+      localApiKey?: unknown;
     } | null;
+
+    const {
+      client: openaiClient,
+      provider,
+      missingApiKey,
+    } = resolveOpenAIClient(request, body);
+
+    if (!openaiClient || missingApiKey) {
+      return NextResponse.json(
+        {
+          error:
+            provider === 'online'
+              ? 'Missing OpenRouter API key. Set OPENROUTER_API_KEY in .env.local and restart the dev server.'
+              : 'Failed to initialize local AI provider client.',
+        },
+        { status: 500 },
+      );
+    }
 
     const transcriptionText =
       typeof body?.transcriptionText === 'string'
@@ -53,7 +65,7 @@ Transcript: ${transcriptionText}
 
 Return only the final description text.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model: model,
       messages: [
         {
