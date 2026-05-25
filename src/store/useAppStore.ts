@@ -126,13 +126,23 @@ export interface MediaPlayerState {
   playingProducedVideoId: number | null;
 }
 
+export type AIModelProvider = 'online' | 'local';
+
 // Model selection state interface
 export interface ModelSelectionState {
+  provider: AIModelProvider;
   selectedModel: string | null;
   models: Model[];
   modelsLoading: boolean;
   modelsError: string | null;
   modelSearch: string;
+  selectedLocalModel: string | null;
+  localModels: Model[];
+  localModelsLoading: boolean;
+  localModelsError: string | null;
+  localModelSearch: string;
+  localEndpoint: string;
+  localApiKey: string;
   enforceLongerSentences: boolean;
 }
 
@@ -386,13 +396,22 @@ interface AppState {
   stopAllMedia: () => void;
 
   // Model Selection Actions
+  setModelProvider: (provider: AIModelProvider) => void;
   setSelectedModel: (model: string | null) => void;
   setModels: (models: { id: string; name: string }[]) => void;
   setModelsLoading: (loading: boolean) => void;
   setModelsError: (error: string | null) => void;
   setModelSearch: (search: string) => void;
+  setSelectedLocalModel: (model: string | null) => void;
+  setLocalModels: (models: { id: string; name: string }[]) => void;
+  setLocalModelsLoading: (loading: boolean) => void;
+  setLocalModelsError: (error: string | null) => void;
+  setLocalModelSearch: (search: string) => void;
+  setLocalEndpoint: (endpoint: string) => void;
+  setLocalApiKey: (apiKey: string) => void;
   setEnforceLongerSentences: (enforce: boolean) => void;
   fetchModels: () => Promise<void>;
+  fetchLocalModels: () => Promise<void>;
 
   // Scene Loading Actions
   setProducingTTS: (sceneId: number | null) => void;
@@ -575,11 +594,19 @@ const defaultMediaPlayer: MediaPlayerState = {
 
 // Default model selection state
 const defaultModelSelection: ModelSelectionState = {
+  provider: 'online',
   selectedModel: 'deepseek/deepseek-v3.2-exp',
   models: [],
   modelsLoading: false,
   modelsError: null,
   modelSearch: 'free',
+  selectedLocalModel: null,
+  localModels: [],
+  localModelsLoading: false,
+  localModelsError: null,
+  localModelSearch: '',
+  localEndpoint: 'http://127.0.0.1:9573/v1',
+  localApiKey: '',
   enforceLongerSentences: false,
 };
 
@@ -992,12 +1019,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       const clampNonNeg = (n: number) => Math.max(0, n);
 
       // Avoid spreading raw string min/max into the typed settings object.
-      const {
-        minDurationSec: _min,
-        maxDurationSec: _max,
-        ...rest
-      } = updates as SceneVideoGenerationSettingsUpdates &
-        Record<string, unknown>;
+      const rest = {
+        ...(updates as SceneVideoGenerationSettingsUpdates &
+          Record<string, unknown>),
+      };
+      delete rest.minDurationSec;
+      delete rest.maxDurationSec;
 
       const next: SceneVideoGenerationSettings = {
         ...state.sceneVideoGenerationSettings,
@@ -1059,7 +1086,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   stopAllMedia: () =>
-    set((state) => ({
+    set(() => ({
       mediaPlayer: {
         playingAudioId: null,
         playingVideoId: null,
@@ -1068,6 +1095,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   // Model Selection Actions
+  setModelProvider: (provider) =>
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        provider,
+      };
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
+
   setSelectedModel: (modelId) =>
     set((state) => {
       const newModelSelection = {
@@ -1101,6 +1138,67 @@ export const useAppStore = create<AppState>((set, get) => ({
         modelSearch: search,
       };
       // Save to localStorage whenever updated
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
+
+  setSelectedLocalModel: (modelId) =>
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        selectedLocalModel: modelId,
+      };
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
+
+  setLocalModels: (models) =>
+    set((state) => ({
+      modelSelection: { ...state.modelSelection, localModels: models },
+    })),
+
+  setLocalModelsLoading: (loading) =>
+    set((state) => ({
+      modelSelection: {
+        ...state.modelSelection,
+        localModelsLoading: loading,
+      },
+    })),
+
+  setLocalModelsError: (error) =>
+    set((state) => ({
+      modelSelection: {
+        ...state.modelSelection,
+        localModelsError: error,
+      },
+    })),
+
+  setLocalModelSearch: (search) =>
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        localModelSearch: search,
+      };
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
+
+  setLocalEndpoint: (endpoint) =>
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        localEndpoint: endpoint,
+      };
+      localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
+      return { modelSelection: newModelSelection };
+    }),
+
+  setLocalApiKey: (apiKey) =>
+    set((state) => {
+      const newModelSelection = {
+        ...state.modelSelection,
+        localApiKey: apiKey,
+      };
       localStorage.setItem('modelSelection', JSON.stringify(newModelSelection));
       return { modelSelection: newModelSelection };
     }),
@@ -1141,6 +1239,52 @@ export const useAppStore = create<AppState>((set, get) => ({
       setModels([]);
     } finally {
       setModelsLoading(false);
+    }
+  },
+
+  fetchLocalModels: async () => {
+    const {
+      setLocalModelsLoading,
+      setLocalModelsError,
+      setLocalModels,
+      setSelectedLocalModel,
+      modelSelection,
+    } = get();
+
+    setLocalModelsLoading(true);
+    setLocalModelsError(null);
+
+    try {
+      const res = await fetch('/api/local-models', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          baseUrl: modelSelection.localEndpoint,
+          apiKey: modelSelection.localApiKey,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Local model fetch failed: ${res.status}`);
+      }
+
+      const json = await res.json();
+      const models = Array.isArray(json.data) ? json.data : [];
+
+      setLocalModels(models);
+
+      const currentLocalSelection = get().modelSelection.selectedLocalModel;
+      if (!currentLocalSelection && models.length > 0) {
+        setSelectedLocalModel(models[0].id);
+      }
+    } catch (err) {
+      setLocalModelsError(err instanceof Error ? err.message : String(err));
+      setLocalModels([]);
+    } finally {
+      setLocalModelsLoading(false);
     }
   },
 
@@ -1573,8 +1717,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       combineScenesSettings: state.combineScenesSettings,
       sceneVideoGenerationSettings: state.sceneVideoGenerationSettings,
       modelSelection: {
+        provider: state.modelSelection.provider,
         selectedModel: state.modelSelection.selectedModel,
         modelSearch: state.modelSelection.modelSearch,
+        selectedLocalModel: state.modelSelection.selectedLocalModel,
+        localModelSearch: state.modelSelection.localModelSearch,
+        localEndpoint: state.modelSelection.localEndpoint,
+        localApiKey: state.modelSelection.localApiKey,
+        enforceLongerSentences: state.modelSelection.enforceLongerSentences,
       },
       selectedOriginalVideo: state.selectedOriginalVideo,
     };
@@ -1598,6 +1748,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         const persistedTTSSettings =
           (settings?.ttsSettings as Partial<TTSSettings> | undefined) || {};
+        const persistedModelSelection =
+          (settings?.modelSelection as
+            | Partial<ModelSelectionState>
+            | undefined) || {};
 
         set((state) => ({
           ttsSettings: {
@@ -1635,12 +1789,36 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
           modelSelection: {
             ...state.modelSelection,
+            provider:
+              persistedModelSelection.provider === 'local' ? 'local' : 'online',
             selectedModel:
-              settings.modelSelection?.selectedModel ||
+              persistedModelSelection.selectedModel ??
               state.modelSelection.selectedModel,
             modelSearch:
-              settings.modelSelection?.modelSearch ||
-              state.modelSelection.modelSearch,
+              typeof persistedModelSelection.modelSearch === 'string'
+                ? persistedModelSelection.modelSearch
+                : state.modelSelection.modelSearch,
+            selectedLocalModel:
+              persistedModelSelection.selectedLocalModel ??
+              state.modelSelection.selectedLocalModel,
+            localModelSearch:
+              typeof persistedModelSelection.localModelSearch === 'string'
+                ? persistedModelSelection.localModelSearch
+                : state.modelSelection.localModelSearch,
+            localEndpoint:
+              typeof persistedModelSelection.localEndpoint === 'string' &&
+              persistedModelSelection.localEndpoint.trim()
+                ? persistedModelSelection.localEndpoint
+                : state.modelSelection.localEndpoint,
+            localApiKey:
+              typeof persistedModelSelection.localApiKey === 'string'
+                ? persistedModelSelection.localApiKey
+                : state.modelSelection.localApiKey,
+            enforceLongerSentences:
+              typeof persistedModelSelection.enforceLongerSentences ===
+              'boolean'
+                ? persistedModelSelection.enforceLongerSentences
+                : state.modelSelection.enforceLongerSentences,
           },
           selectedOriginalVideo: settings.selectedOriginalVideo
             ? {
@@ -1998,8 +2176,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         sceneVideoGenerationSettings: defaultSceneVideoGenerationSettings,
         modelSelection: {
           ...get().modelSelection,
+          provider: defaultModelSelection.provider,
           selectedModel: defaultModelSelection.selectedModel,
           modelSearch: defaultModelSelection.modelSearch,
+          selectedLocalModel: defaultModelSelection.selectedLocalModel,
+          localModelSearch: defaultModelSelection.localModelSearch,
+          localEndpoint: defaultModelSelection.localEndpoint,
+          localApiKey: defaultModelSelection.localApiKey,
+          enforceLongerSentences: defaultModelSelection.enforceLongerSentences,
         },
         selectedOriginalVideo: defaultSelectedOriginalVideo,
         pipelineConfig: defaultPipelineConfig,
