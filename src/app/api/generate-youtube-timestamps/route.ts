@@ -154,9 +154,11 @@ export async function POST(request: NextRequest) {
     const prompt = `Create YouTube chapter timestamps from this timed transcript.
 
 Rules:
-- Return ONLY chapter lines in this exact format: M:SS - Chapter Title
-- Minimum 6 chapters
+- Return ONLY chapter lines in this exact format: MM:SS - Chapter Title
+- The first timestamp must be exactly 00:00
+- At least 3 chapter lines must be listed
 - Timestamps must be strictly increasing and realistic for the content flow
+- The minimum chapter length is 10 seconds (each next timestamp must be at least 10 seconds later)
 - Chapter titles should be short (2 to 6 words), specific, and clickable
 - Do not include markdown, numbering, bullets, or extra commentary
 
