@@ -1,6 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveOpenAIClient } from '@/lib/ai-provider';
 
+const MAX_TAG_CHARACTERS = 500;
+
+function enforceTagCharacterLimit(rawTags: string): string {
+  const normalized = rawTags
+    .replace(/[\r\n]+/g, ', ')
+    .replace(/[•·]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return '';
+  }
+
+  const tags = normalized
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  if (tags.length === 0) {
+    return normalized.slice(0, MAX_TAG_CHARACTERS).trim();
+  }
+
+  const selectedTags: string[] = [];
+
+  for (const tag of tags) {
+    const candidate =
+      selectedTags.length > 0 ? `${selectedTags.join(', ')}, ${tag}` : tag;
+
+    if (candidate.length > MAX_TAG_CHARACTERS) {
+      break;
+    }
+
+    selectedTags.push(tag);
+  }
+
+  if (selectedTags.length > 0) {
+    return selectedTags.join(', ');
+  }
+
+  // Fallback when the first individual tag exceeds the limit.
+  return tags[0]
+    .slice(0, MAX_TAG_CHARACTERS)
+    .trim()
+    .replace(/[\s,]+$/g, '');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -39,7 +85,7 @@ export async function POST(request: NextRequest) {
 • Include a mix of broad and specific keywords
 • Optimized for YouTube's search algorithm
 • Natural and commonly searched terms
-• Maximum 500 characters total
+• STRICT hard limit: maximum 500 characters total (including commas and spaces)
 • Separate each tag with a comma
 
 Transcription: ${transcriptionText}
@@ -66,8 +112,17 @@ Return only the tags separated by commas, nothing else.`;
       );
     }
 
+    const safeTags = enforceTagCharacterLimit(generatedTags);
+
+    if (!safeTags) {
+      return NextResponse.json(
+        { error: 'Failed to generate tags' },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({
-      tags: generatedTags,
+      tags: safeTags,
       success: true,
     });
   } catch (error: unknown) {
