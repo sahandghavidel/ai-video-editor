@@ -588,6 +588,10 @@ function isWordLikeChar(value: string | undefined): boolean {
   return typeof value === 'string' && WORD_CHAR_TEST_REGEX.test(value);
 }
 
+function isSingleQuoteChar(value: string | undefined): boolean {
+  return value === "'" || value === '’';
+}
+
 function prepareWordReplacements(entries: unknown): PreparedWordReplacement[] {
   if (!Array.isArray(entries)) return [];
 
@@ -787,8 +791,8 @@ async function loadWordReplacementsFromApi(
   }
 }
 
-// Strip quote-like chars/backticks, hash signs, angle brackets, arrows,
-// and parenthesis chars before synthesis.
+// Strip quote-like chars/backticks, standalone single quotes,
+// hash signs, angle brackets, arrows, and parenthesis chars before synthesis.
 const OMNIVOICE_QUOTE_CHAR_REGEX = /[`"“”„‟«»＂]/g;
 const OMNIVOICE_HASH_CHAR_REGEX = /#/g;
 const OMNIVOICE_ANGLE_BRACKET_CHAR_REGEX = /[<>]/g;
@@ -808,6 +812,38 @@ function stripOmniVoiceQuoteChars(text: string): {
     .trim();
 
   return { sanitizedText, removedQuoteCount };
+}
+
+function stripOmniVoiceStandaloneSingleQuoteChars(text: string): {
+  sanitizedText: string;
+  removedStandaloneSingleQuoteCount: number;
+} {
+  let removedStandaloneSingleQuoteCount = 0;
+  let rewritten = '';
+
+  for (let index = 0; index < text.length; index += 1) {
+    const currentChar = text.charAt(index);
+
+    if (!isSingleQuoteChar(currentChar)) {
+      rewritten += currentChar;
+      continue;
+    }
+
+    const prevChar = index > 0 ? text.charAt(index - 1) : undefined;
+    const nextChar =
+      index + 1 < text.length ? text.charAt(index + 1) : undefined;
+    const shouldPreserve = isWordLikeChar(prevChar) && isWordLikeChar(nextChar);
+
+    if (shouldPreserve) {
+      rewritten += currentChar;
+    } else {
+      removedStandaloneSingleQuoteCount += 1;
+    }
+  }
+
+  const sanitizedText = rewritten.replace(/\s{2,}/g, ' ').trim();
+
+  return { sanitizedText, removedStandaloneSingleQuoteCount };
 }
 
 function stripOmniVoiceHashChars(text: string): {
@@ -1481,8 +1517,13 @@ export async function POST(request: NextRequest) {
     const { sanitizedText: textWithoutQuotes, removedQuoteCount } =
       stripOmniVoiceQuoteChars(textWithProtectedWordsRestored);
 
+    const {
+      sanitizedText: textWithoutStandaloneSingleQuotes,
+      removedStandaloneSingleQuoteCount,
+    } = stripOmniVoiceStandaloneSingleQuoteChars(textWithoutQuotes);
+
     const { sanitizedText: textWithoutHashes, removedHashCount } =
-      stripOmniVoiceHashChars(textWithoutQuotes);
+      stripOmniVoiceHashChars(textWithoutStandaloneSingleQuotes);
 
     const {
       sanitizedText: textWithoutAngleBrackets,
@@ -1499,14 +1540,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Text is empty after removing quote/backtick/hash/angle-bracket/arrow/parenthesis characters for OmniVoice TTS.',
+            'Text is empty after removing quote/backtick/standalone-single-quote/hash/angle-bracket/arrow/parenthesis characters for OmniVoice TTS.',
         },
         { status: 400 },
       );
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -1740,6 +1781,7 @@ export async function POST(request: NextRequest) {
         speed,
         language,
         removedQuoteCount,
+        removedStandaloneSingleQuoteCount,
         removedHashCount,
         removedAngleBracketCount,
         removedArrowCount,
