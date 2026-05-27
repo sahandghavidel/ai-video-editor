@@ -16,7 +16,7 @@ type ParsedSentence = {
   fixedSentence: string;
 };
 
-const MAX_BATCH_SIZE = 30;
+const MAX_BATCH_SIZE = 100;
 const DEFAULT_MODEL = 'deepseek/deepseek-v3.2-exp';
 
 function createRequestId(): string {
