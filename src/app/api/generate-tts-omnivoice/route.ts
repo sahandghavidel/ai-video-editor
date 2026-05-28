@@ -792,11 +792,13 @@ async function loadWordReplacementsFromApi(
 }
 
 // Strip quote-like chars/backticks, standalone single quotes,
-// hash signs, angle brackets, arrows, and parenthesis chars before synthesis.
+// hash signs, angle brackets, arrows, square-bracket chars,
+// and parenthesis chars before synthesis.
 const OMNIVOICE_QUOTE_CHAR_REGEX = /[`"“”„‟«»＂]/g;
 const OMNIVOICE_HASH_CHAR_REGEX = /#/g;
 const OMNIVOICE_ANGLE_BRACKET_CHAR_REGEX = /[<>]/g;
 const OMNIVOICE_ARROW_CHAR_REGEX = /→/g;
+const OMNIVOICE_SQUARE_BRACKET_CHAR_REGEX = /[\[\]［］]/g;
 const OMNIVOICE_PARENTHESIS_CHAR_REGEX = /[()（）]/g;
 
 function stripOmniVoiceQuoteChars(text: string): {
@@ -889,6 +891,21 @@ function stripOmniVoiceArrowChars(text: string): {
     .trim();
 
   return { sanitizedText, removedArrowCount };
+}
+
+function stripOmniVoiceSquareBracketChars(text: string): {
+  sanitizedText: string;
+  removedSquareBracketCount: number;
+} {
+  const matches = text.match(OMNIVOICE_SQUARE_BRACKET_CHAR_REGEX);
+  const removedSquareBracketCount = matches ? matches.length : 0;
+
+  const sanitizedText = text
+    .replace(OMNIVOICE_SQUARE_BRACKET_CHAR_REGEX, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return { sanitizedText, removedSquareBracketCount };
 }
 
 function stripOmniVoiceParenthesisChars(text: string): {
@@ -1004,6 +1021,44 @@ function normalizeParenthesisJoinedWordsForOmniVoice(text: string): {
   parenthesisSplitCount += tail.parenthesisSplitCount;
 
   return { normalizedText, parenthesisSplitCount };
+}
+
+function splitSquareBracketJoinedWordsInPlainSegment(segment: string): {
+  text: string;
+  squareBracketSplitCount: number;
+} {
+  let squareBracketSplitCount = 0;
+
+  // Insert a space when a word-like token is directly followed by
+  // an opening bracket containing a word-like token, signed token
+  // (like -50), or an empty bracket pair [].
+  // Example: arr[index] -> arr [index], items[] -> items []
+  let text = segment.replace(
+    /([A-Za-z0-9_.])([［\[])(?=(?:[`"'“”„‟«»＂]\s*)?(?:[A-Za-z0-9_]|[+-])|[］\]])/g,
+    (_match, leftChar: string, openBracket: string) => {
+      squareBracketSplitCount += 1;
+      return `${leftChar} ${openBracket}`;
+    },
+  );
+
+  // Safety: insert a space when a closing bracket is directly followed
+  // by a word-like token so a[b]c normalizes to a [b] c before stripping.
+  text = text.replace(/([］\]])(?=[A-Za-z0-9_])/g, (match: string) => {
+    squareBracketSplitCount += 1;
+    return `${match} `;
+  });
+
+  return { text, squareBracketSplitCount };
+}
+
+function normalizeSquareBracketJoinedWordsForOmniVoice(text: string): {
+  normalizedText: string;
+  squareBracketSplitCount: number;
+} {
+  const { text: normalizedText, squareBracketSplitCount } =
+    splitSquareBracketJoinedWordsInPlainSegment(text);
+
+  return { normalizedText, squareBracketSplitCount };
 }
 
 function splitNumberPercentInPlainSegment(segment: string): {
@@ -1500,8 +1555,15 @@ export async function POST(request: NextRequest) {
       parenthesisSplitCount,
     } = normalizeParenthesisJoinedWordsForOmniVoice(textWithHyphenWordsSplit);
 
+    const {
+      normalizedText: textWithSquareBracketWordsSplit,
+      squareBracketSplitCount,
+    } = normalizeSquareBracketJoinedWordsForOmniVoice(
+      textWithParenthesisWordsSplit,
+    );
+
     const { normalizedText: textWithPercentSignsSpaced, percentSignsSpaced } =
-      normalizePercentSignsForOmniVoice(textWithParenthesisWordsSplit);
+      normalizePercentSignsForOmniVoice(textWithSquareBracketWordsSplit);
 
     const { normalizedText: textWithCamelCaseSplit, splitWordCount } =
       splitCamelCaseForOmniVoice(textWithPercentSignsSpaced);
@@ -1533,21 +1595,26 @@ export async function POST(request: NextRequest) {
     const { sanitizedText: textWithoutArrows, removedArrowCount } =
       stripOmniVoiceArrowChars(textWithoutAngleBrackets);
 
+    const {
+      sanitizedText: textWithoutSquareBrackets,
+      removedSquareBracketCount,
+    } = stripOmniVoiceSquareBracketChars(textWithoutArrows);
+
     const { sanitizedText: text, removedParenthesisCount } =
-      stripOmniVoiceParenthesisChars(textWithoutArrows);
+      stripOmniVoiceParenthesisChars(textWithoutSquareBrackets);
 
     if (!text) {
       return NextResponse.json(
         {
           error:
-            'Text is empty after removing quote/backtick/standalone-single-quote/hash/angle-bracket/arrow/parenthesis characters for OmniVoice TTS.',
+            'Text is empty after removing quote/backtick/standalone-single-quote/hash/angle-bracket/arrow/square-bracket/parenthesis characters for OmniVoice TTS.',
         },
         { status: 400 },
       );
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -1785,9 +1852,11 @@ export async function POST(request: NextRequest) {
         removedHashCount,
         removedAngleBracketCount,
         removedArrowCount,
+        removedSquareBracketCount,
         removedParenthesisCount,
         hyphenWordsSplit: hyphenSplitCount,
         parenthesisWordsSplit: parenthesisSplitCount,
+        squareBracketWordsSplit: squareBracketSplitCount,
         percentSignsSpaced,
         camelCaseWordsSplit: splitWordCount,
         dotPrefixesMoved: movedDotCount,
