@@ -310,6 +310,9 @@ export default function SceneCard({
     useState<boolean>(false);
   const [shortTextCharLimitInput, setShortTextCharLimitInput] =
     useState<string>('10');
+  const [showLongTextOnly, setShowLongTextOnly] = useState<boolean>(false);
+  const [longTextCharMinInput, setLongTextCharMinInput] =
+    useState<string>('150');
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null,
   );
@@ -656,6 +659,21 @@ export default function SceneCard({
           });
         }
 
+        // Filter by minimum sentence length
+        if (showLongTextOnly) {
+          const parsedMin = parseInt(longTextCharMinInput, 10);
+          const minChars =
+            Number.isFinite(parsedMin) && parsedMin > 0 ? parsedMin : 150;
+
+          filtered = filtered.filter((scene) => {
+            const sentence = String(
+              scene['field_6890'] || scene.field_6890 || '',
+            ).trim();
+
+            return sentence.length >= minChars;
+          });
+        }
+
         // Filter by short sentence text and include one previous/next scene for context.
         if (showShortWithNeighbors) {
           const parsedLimit = parseInt(shortTextCharLimitInput, 10);
@@ -850,6 +868,8 @@ export default function SceneCard({
     showOnlyNotEmptyText,
     sortByDuration,
     sortByLastModified,
+    showLongTextOnly,
+    longTextCharMinInput,
     showShortWithNeighbors,
     shortTextCharLimitInput,
     showRecentlyModifiedTTS,
@@ -5731,6 +5751,21 @@ export default function SceneCard({
       });
     }
 
+    // Filter by minimum sentence length
+    if (showLongTextOnly) {
+      const parsedMin = parseInt(longTextCharMinInput, 10);
+      const minChars =
+        Number.isFinite(parsedMin) && parsedMin > 0 ? parsedMin : 150;
+
+      filtered = filtered.filter((scene) => {
+        const sentence = String(
+          scene['field_6890'] || scene.field_6890 || '',
+        ).trim();
+
+        return sentence.length >= minChars;
+      });
+    }
+
     // Filter by short sentence text and include one previous/next scene for context.
     if (showShortWithNeighbors) {
       const parsedLimit = parseInt(shortTextCharLimitInput, 10);
@@ -5811,6 +5846,8 @@ export default function SceneCard({
     showOnlyFlagged,
     showOnlyEmptyText,
     showOnlyNotEmptyText,
+    showLongTextOnly,
+    longTextCharMinInput,
     showShortWithNeighbors,
     shortTextCharLimitInput,
     sortByDuration,
@@ -5863,14 +5900,14 @@ export default function SceneCard({
   return (
     <div className='w-full'>
       {/* Filter Controls */}
-      <div className='mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200'>
-        <div className='flex flex-col gap-3'>
+      <div className='mb-6 bg-gray-50 rounded-lg p-3 border border-gray-200'>
+        <div className='flex flex-col gap-2'>
           {/* Sort Controls Row */}
-          <div className='flex flex-col sm:flex-row sm:flex-wrap sm:justify-between gap-2 sm:gap-3'>
-            <div className='flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3'>
+          <div className='flex flex-col sm:flex-row sm:flex-wrap sm:justify-between gap-1.5 sm:gap-2'>
+            <div className='flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2'>
               {/* Duration Sort */}
-              <div className='flex items-center gap-2'>
-                <label className='text-xs font-medium text-gray-600 whitespace-nowrap'>
+              <div className='flex items-center gap-1.5'>
+                <label className='text-[11px] font-medium text-gray-600 whitespace-nowrap'>
                   Duration:
                 </label>
                 <div className='flex gap-1'>
@@ -5878,7 +5915,7 @@ export default function SceneCard({
                     onClick={() =>
                       setSortByDuration(sortByDuration === 'asc' ? null : 'asc')
                     }
-                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                    className={`px-1.5 py-0.5 text-[11px] rounded transition-colors ${
                       sortByDuration === 'asc'
                         ? 'bg-blue-500 text-white'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -5892,7 +5929,7 @@ export default function SceneCard({
                         sortByDuration === 'desc' ? null : 'desc',
                       )
                     }
-                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                    className={`px-1.5 py-0.5 text-[11px] rounded transition-colors ${
                       sortByDuration === 'desc'
                         ? 'bg-blue-500 text-white'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -5904,8 +5941,8 @@ export default function SceneCard({
               </div>
 
               {/* Last Modified Sort */}
-              <div className='flex items-center gap-2'>
-                <label className='text-xs font-medium text-gray-600 whitespace-nowrap'>
+              <div className='flex items-center gap-1.5'>
+                <label className='text-[11px] font-medium text-gray-600 whitespace-nowrap'>
                   Modified:
                 </label>
                 <div className='flex gap-1'>
@@ -5915,7 +5952,7 @@ export default function SceneCard({
                         sortByLastModified === 'asc' ? null : 'asc',
                       )
                     }
-                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                    className={`px-1.5 py-0.5 text-[11px] rounded transition-colors ${
                       sortByLastModified === 'asc'
                         ? 'bg-blue-500 text-white'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -5929,7 +5966,7 @@ export default function SceneCard({
                         sortByLastModified === 'desc' ? null : 'desc',
                       )
                     }
-                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                    className={`px-1.5 py-0.5 text-[11px] rounded transition-colors ${
                       sortByLastModified === 'desc'
                         ? 'bg-blue-500 text-white'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -5944,7 +5981,7 @@ export default function SceneCard({
               <div className='hidden sm:block w-px bg-gray-300 self-stretch'></div>
 
               {/* Filter Buttons */}
-              <div className='flex flex-wrap items-center gap-2'>
+              <div className='flex flex-wrap items-center gap-1'>
                 <div className='flex items-center gap-1'>
                   <input
                     type='number'
@@ -5955,7 +5992,7 @@ export default function SceneCard({
                       const sanitized = e.target.value.replace(/[^0-9]/g, '');
                       setShortTextCharLimitInput(sanitized);
                     }}
-                    className='w-16 px-2 py-1 text-xs rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                    className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
                     title='Maximum character count used by Short ±1 filter'
                     aria-label='Short text max characters'
                   />
@@ -5963,7 +6000,7 @@ export default function SceneCard({
                     onClick={() =>
                       setShowShortWithNeighbors(!showShortWithNeighbors)
                     }
-                    className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                    className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
                       showShortWithNeighbors
                         ? 'bg-cyan-600 text-white'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -5973,9 +6010,35 @@ export default function SceneCard({
                     {showShortWithNeighbors ? '✓ ' : ''}Short ±1
                   </button>
                 </div>
+                <div className='flex items-center gap-1'>
+                  <input
+                    type='number'
+                    min={1}
+                    step={1}
+                    value={longTextCharMinInput}
+                    onChange={(e) => {
+                      const sanitized = e.target.value.replace(/[^0-9]/g, '');
+                      setLongTextCharMinInput(sanitized);
+                    }}
+                    className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                    title='Minimum character count used by Long+ filter'
+                    aria-label='Long text minimum characters'
+                  />
+                  <button
+                    onClick={() => setShowLongTextOnly(!showLongTextOnly)}
+                    className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
+                      showLongTextOnly
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                    title='Show scenes with sentence length greater than or equal to input'
+                  >
+                    {showLongTextOnly ? '✓ ' : ''}Long+
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowOnlyFlagged(!showOnlyFlagged)}
-                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                  className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
                     showOnlyFlagged
                       ? 'bg-red-500 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -5990,7 +6053,7 @@ export default function SceneCard({
                     if (!showOnlyEmptyText) setShowOnlyNotEmptyText(false);
                     setShowOnlyEmptyText(!showOnlyEmptyText);
                   }}
-                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                  className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
                     showOnlyEmptyText
                       ? 'bg-green-500 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -6005,7 +6068,7 @@ export default function SceneCard({
                     setShowOnlyNotEmptyText(!showOnlyNotEmptyText);
                   }}
                   title='Show scenes where either original (field_6901) or field_6900 has value'
-                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                  className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
                     showOnlyNotEmptyText
                       ? 'bg-purple-500 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -6017,7 +6080,7 @@ export default function SceneCard({
                   onClick={() =>
                     setShowRecentlyModifiedTTS(!showRecentlyModifiedTTS)
                   }
-                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap ${
+                  className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
                     showRecentlyModifiedTTS
                       ? 'bg-blue-500 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -6053,7 +6116,7 @@ export default function SceneCard({
                       scrollCardToTop(mostRecentScene.id);
                     }
                   }}
-                  className='px-2.5 py-1 text-xs rounded-full transition-colors bg-orange-500 text-white hover:bg-orange-600 whitespace-nowrap'
+                  className='px-2 py-0.5 text-[11px] rounded-full transition-colors bg-orange-500 text-white hover:bg-orange-600 whitespace-nowrap'
                   title='Scroll to most recently modified scene'
                 >
                   📍 Recent
@@ -6061,7 +6124,7 @@ export default function SceneCard({
                 <button
                   onClick={handleToggleProcessingScenesAllVideos}
                   disabled={loadingProcessingScenesData}
-                  className={`px-2.5 py-1 text-xs rounded-full transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
+                  className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap inline-flex items-center gap-1 ${
                     showProcessingScenesAllVideos
                       ? 'bg-emerald-600 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
@@ -6069,7 +6132,7 @@ export default function SceneCard({
                   title='Show scenes for all videos where status is Processing'
                 >
                   {loadingProcessingScenesData ? (
-                    <Loader2 className='w-3 h-3 animate-spin' />
+                    <Loader2 className='w-2.5 h-2.5 animate-spin' />
                   ) : null}
                   <span>
                     {showProcessingScenesAllVideos ? '✓ ' : ''}Processing All
@@ -6079,13 +6142,13 @@ export default function SceneCard({
             </div>
 
             {/* Results Count - Right Side on Desktop */}
-            <div className='text-xs text-gray-500 flex items-center'>
+            <div className='text-[11px] text-gray-500 flex items-center'>
               Showing{' '}
-              <span className='font-semibold text-gray-700 mx-1'>
+              <span className='font-semibold text-gray-700 mx-0.5'>
                 {filteredAndSortedData.length}
               </span>{' '}
               of{' '}
-              <span className='font-semibold text-gray-700 mx-1'>
+              <span className='font-semibold text-gray-700 mx-0.5'>
                 {data.length}
               </span>{' '}
               scenes
