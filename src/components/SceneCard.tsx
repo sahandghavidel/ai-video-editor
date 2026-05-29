@@ -313,6 +313,8 @@ export default function SceneCard({
   const [showLongTextOnly, setShowLongTextOnly] = useState<boolean>(false);
   const [longTextCharMinInput, setLongTextCharMinInput] =
     useState<string>('150');
+  const [showFirstNScenes, setShowFirstNScenes] = useState<boolean>(false);
+  const [firstNScenesInput, setFirstNScenesInput] = useState<string>('50');
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null,
   );
@@ -735,6 +737,15 @@ export default function SceneCard({
           });
         }
 
+        // Limit to first N scenes in the current filtered/sorted view
+        if (showFirstNScenes) {
+          const parsedCount = parseInt(firstNScenesInput, 10);
+          const maxScenes =
+            Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 50;
+
+          filtered = filtered.slice(0, maxScenes);
+        }
+
         // Find the current scene index in filtered and sorted data
         const currentIndex = filtered.findIndex(
           (scene) => scene.id === currentPlayingSceneId,
@@ -870,6 +881,8 @@ export default function SceneCard({
     sortByLastModified,
     showLongTextOnly,
     longTextCharMinInput,
+    showFirstNScenes,
+    firstNScenesInput,
     showShortWithNeighbors,
     shortTextCharLimitInput,
     showRecentlyModifiedTTS,
@@ -5840,6 +5853,15 @@ export default function SceneCard({
       });
     }
 
+    // Limit to first N scenes in the current filtered/sorted view
+    if (showFirstNScenes) {
+      const parsedCount = parseInt(firstNScenesInput, 10);
+      const maxScenes =
+        Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 50;
+
+      filtered = filtered.slice(0, maxScenes);
+    }
+
     return filtered;
   }, [
     data,
@@ -5848,6 +5870,8 @@ export default function SceneCard({
     showOnlyNotEmptyText,
     showLongTextOnly,
     longTextCharMinInput,
+    showFirstNScenes,
+    firstNScenesInput,
     showShortWithNeighbors,
     shortTextCharLimitInput,
     sortByDuration,
@@ -6034,6 +6058,32 @@ export default function SceneCard({
                     title='Show scenes with sentence length greater than or equal to input'
                   >
                     {showLongTextOnly ? '✓ ' : ''}Long+
+                  </button>
+                </div>
+                <div className='flex items-center gap-1'>
+                  <input
+                    type='number'
+                    min={1}
+                    step={1}
+                    value={firstNScenesInput}
+                    onChange={(e) => {
+                      const sanitized = e.target.value.replace(/[^0-9]/g, '');
+                      setFirstNScenesInput(sanitized);
+                    }}
+                    className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                    title='Maximum number of scenes shown by First N filter'
+                    aria-label='First N scenes count'
+                  />
+                  <button
+                    onClick={() => setShowFirstNScenes(!showFirstNScenes)}
+                    className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
+                      showFirstNScenes
+                        ? 'bg-slate-700 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                    title='Show only the first N scenes from the current filtered/sorted list'
+                  >
+                    {showFirstNScenes ? '✓ ' : ''}First N
                   </button>
                 </div>
                 <button
