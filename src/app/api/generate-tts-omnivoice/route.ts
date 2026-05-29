@@ -6,6 +6,10 @@ import path from 'path';
 import { promises as fsp } from 'fs';
 import os from 'os';
 import { promisify } from 'util';
+import {
+  loadTtsAudioReferencesStore,
+  type TtsAudioReferenceEntry,
+} from '@/lib/ttsAudioReferencesStore';
 
 export const runtime = 'nodejs';
 export const maxDuration = 900;
@@ -144,6 +148,93 @@ function normalizeRefAudioName(value: unknown): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed;
+}
+
+function extractPathLeaf(value: string): string {
+  const normalized = value.trim().replace(/\\/g, '/');
+  const lastSlashIndex = normalized.lastIndexOf('/');
+  return lastSlashIndex >= 0
+    ? normalized.slice(lastSlashIndex + 1)
+    : normalized;
+}
+
+function removeLeafExtension(value: string): string {
+  const leaf = extractPathLeaf(value);
+  const lastDotIndex = leaf.lastIndexOf('.');
+  return lastDotIndex > 0 ? leaf.slice(0, lastDotIndex) : leaf;
+}
+
+function buildReferenceMatchTokens(value: string): string[] {
+  const normalizedValue = value.trim().toLowerCase();
+  if (!normalizedValue) return [];
+
+  const normalizedLeaf = extractPathLeaf(value).trim().toLowerCase();
+  const normalizedLeafWithoutExt = removeLeafExtension(value)
+    .trim()
+    .toLowerCase();
+
+  return Array.from(
+    new Set(
+      [normalizedValue, normalizedLeaf, normalizedLeafWithoutExt].filter(
+        (token) => token.length > 0,
+      ),
+    ),
+  );
+}
+
+function entryMatchesReferenceSelector(
+  entry: TtsAudioReferenceEntry,
+  referenceAudioName: string,
+): boolean {
+  const selectorTokens = new Set(buildReferenceMatchTokens(referenceAudioName));
+  if (selectorTokens.size === 0) return false;
+
+  const candidateTokens = new Set<string>();
+  const addCandidate = (value: string | null | undefined) => {
+    if (typeof value !== 'string') return;
+    for (const token of buildReferenceMatchTokens(value)) {
+      candidateTokens.add(token);
+    }
+  };
+
+  addCandidate(entry.filename);
+  addCandidate(entry.id);
+  addCandidate(entry.name);
+  for (const tag of entry.tags) {
+    addCandidate(tag);
+  }
+
+  for (const token of selectorTokens) {
+    if (candidateTokens.has(token)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function resolveReferencePresetByAudioName(
+  referenceAudioName: string,
+): Promise<TtsAudioReferenceEntry | null> {
+  try {
+    const { entries } = await loadTtsAudioReferencesStore();
+
+    const enabledEntries = entries.filter(
+      (entry) => entry.enabled && entry.filename.trim().length > 0,
+    );
+
+    const matchedEntry = enabledEntries.find((entry) =>
+      entryMatchesReferenceSelector(entry, referenceAudioName),
+    );
+
+    return matchedEntry || null;
+  } catch (error) {
+    console.warn(
+      '[OmniVoice] Failed to resolve reference preset for selected audio name:',
+      error,
+    );
+    return null;
+  }
 }
 
 function hasIdValue(value: unknown): boolean {
@@ -1620,26 +1711,42 @@ export async function POST(request: NextRequest) {
     const omniVoice = body.ttsSettings?.omniVoice || {};
 
     const modelId = (omniVoice.modelId || 'k2-fsa/OmniVoice').trim();
-    const deviceMap = resolveDeviceMap(omniVoice.deviceMap);
-    const dtype = resolveDType(omniVoice.dtype);
-    const numStep = Math.max(
+    const configuredDeviceMap = resolveDeviceMap(omniVoice.deviceMap);
+    const configuredDType = resolveDType(omniVoice.dtype);
+    const configuredNumStep = Math.max(
       8,
       Math.min(64, toPositiveInt(omniVoice.numStep, 32)),
     );
-    const speed = Math.max(
+    const configuredSpeed = Math.max(
       0.5,
       Math.min(2.0, toFiniteNumber(omniVoice.speed, 1.0)),
     );
-    const referenceText =
+    const hasConfiguredDeviceMap =
+      omniVoice.deviceMap === 'cpu' ||
+      omniVoice.deviceMap === 'auto' ||
+      omniVoice.deviceMap === 'mps';
+    const hasConfiguredDType =
+      omniVoice.dtype === 'float16' ||
+      omniVoice.dtype === 'float32' ||
+      omniVoice.dtype === 'bfloat16';
+    const hasConfiguredNumStep = Number.isFinite(Number(omniVoice.numStep));
+    const hasConfiguredSpeed = Number.isFinite(Number(omniVoice.speed));
+    const configuredReferenceText =
       typeof omniVoice.referenceText === 'string'
         ? omniVoice.referenceText.trim()
         : '';
-    const language =
+    const configuredLanguage =
       typeof omniVoice.language === 'string' ? omniVoice.language.trim() : '';
 
+    const explicitReferenceAudioName = normalizeRefAudioName(
+      body.referenceAudioFilename,
+    );
     const referenceAudioName =
-      normalizeRefAudioName(body.referenceAudioFilename) ||
+      explicitReferenceAudioName ||
       normalizeRefAudioName(body.ttsSettings?.reference_audio_filename);
+    const hasExplicitReferenceAudioOverride = Boolean(
+      explicitReferenceAudioName,
+    );
 
     if (!referenceAudioName) {
       return NextResponse.json(
@@ -1650,6 +1757,64 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    const matchedReferencePreset =
+      await resolveReferencePresetByAudioName(referenceAudioName);
+
+    const usePresetReferenceText =
+      Boolean(matchedReferencePreset) &&
+      (hasExplicitReferenceAudioOverride || !configuredReferenceText);
+    const usePresetLanguage =
+      Boolean(matchedReferencePreset) &&
+      (hasExplicitReferenceAudioOverride || !configuredLanguage);
+    const usePresetDeviceMap =
+      Boolean(matchedReferencePreset) &&
+      (hasExplicitReferenceAudioOverride || !hasConfiguredDeviceMap);
+    const usePresetDType =
+      Boolean(matchedReferencePreset) &&
+      (hasExplicitReferenceAudioOverride || !hasConfiguredDType);
+    const usePresetNumStep =
+      Boolean(matchedReferencePreset) &&
+      (hasExplicitReferenceAudioOverride || !hasConfiguredNumStep);
+    const usePresetSpeed =
+      Boolean(matchedReferencePreset) &&
+      (hasExplicitReferenceAudioOverride || !hasConfiguredSpeed);
+
+    const deviceMap = usePresetDeviceMap
+      ? resolveDeviceMap(matchedReferencePreset?.deviceMap)
+      : configuredDeviceMap;
+
+    const dtype = usePresetDType
+      ? resolveDType(matchedReferencePreset?.dtype)
+      : configuredDType;
+
+    const numStep = usePresetNumStep
+      ? Math.max(
+          8,
+          Math.min(
+            64,
+            toPositiveInt(matchedReferencePreset?.numStep, configuredNumStep),
+          ),
+        )
+      : configuredNumStep;
+
+    const speed = usePresetSpeed
+      ? Math.max(
+          0.5,
+          Math.min(
+            2.0,
+            toFiniteNumber(matchedReferencePreset?.speed, configuredSpeed),
+          ),
+        )
+      : configuredSpeed;
+
+    const referenceText = usePresetReferenceText
+      ? (matchedReferencePreset?.referenceText || '').trim()
+      : configuredReferenceText;
+
+    const language = usePresetLanguage
+      ? (matchedReferencePreset?.language || '').trim()
+      : configuredLanguage;
 
     const referenceAudioResolution = resolveReferenceAudioPath({
       filenameOrPath: referenceAudioName,
@@ -1865,6 +2030,20 @@ export async function POST(request: NextRequest) {
         noSplitReplacementEntries: noSplitProtection.protectedEntryCount,
         noSplitMatchesProtected: noSplitProtection.protectedMatchCount,
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
+        referencePresetMatched: Boolean(matchedReferencePreset),
+        referencePresetId: matchedReferencePreset?.id || null,
+        referencePresetName: matchedReferencePreset?.name || null,
+        referencePresetLanguage: matchedReferencePreset?.language || null,
+        referencePresetDeviceMap: matchedReferencePreset?.deviceMap || null,
+        referencePresetDType: matchedReferencePreset?.dtype || null,
+        referencePresetNumStep: matchedReferencePreset?.numStep ?? null,
+        referencePresetSpeed: matchedReferencePreset?.speed ?? null,
+        referencePresetAppliedText: usePresetReferenceText,
+        referencePresetAppliedLanguage: usePresetLanguage,
+        referencePresetAppliedDeviceMap: usePresetDeviceMap,
+        referencePresetAppliedDType: usePresetDType,
+        referencePresetAppliedNumStep: usePresetNumStep,
+        referencePresetAppliedSpeed: usePresetSpeed,
         pythonSource,
         sampleRate: runResult.sampleRate,
         cacheHit: runResult.cacheHit,

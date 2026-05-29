@@ -28,7 +28,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-13T03:44:17.522Z"
+      "updatedAt": "2026-05-29T05:23:51.947Z"
     },
     {
       "id": "en-default",
@@ -58,7 +58,57 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-13T03:44:17.522Z"
+      "updatedAt": "2026-05-29T05:23:51.947Z"
+    },
+    {
+      "id": "audio-ref-local-1780026550517-h1zb4v7e",
+      "name": "Best english voice",
+      "filename": "nice.wav",
+      "language": "en",
+      "referenceText": "I guess It's a decent model, and the point of this is that you can mock up a design. So, I might make this video with Veo 3.1 Lite, and then once I get it right and sort of storyboard it, then I can use a better video generation model like Veo 3.1 Quality for the final product.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7112",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7113",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7110",
+        "sceneDubbedAudioFieldKey": "field_7111"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 64,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-05-29T05:23:51.947Z"
+    },
+    {
+      "id": "audio-ref-local-1780026828239-v5e6497h",
+      "name": "Best english voice but short",
+      "filename": "nice-shorter.wav",
+      "language": "en",
+      "referenceText": "Welcome back to another exciting project.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7112",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7113",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7110",
+        "sceneDubbedAudioFieldKey": "field_7111"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 16,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": false,
+      "enabled": true,
+      "updatedAt": "2026-05-29T05:23:51.947Z"
     }
   ]
 }
