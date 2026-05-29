@@ -9299,7 +9299,7 @@ export default function OriginalVideosList({
   };
 
   // Run Full Pipeline:
-  // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Transcribe+Apply+Gen Clips -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Fix Flagged (Processing) -> Fix Intro QA (Processing) -> Prompt Scenes (Processing)
+  // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Transcribe+Apply+Gen Clips (A->D) -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Fix Flagged (Processing) -> Fix Intro QA (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
   // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails -> Download ZIP All
   const handleRunFullPipeline = async () => {
@@ -9761,19 +9761,44 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Generate Clips (disabled in config)');
       }
 
-      // Step: Transcribe + Apply + Gen Clips (Processing scenes only)
-      if (pipelineConfig.transcribeApplyGenClips) {
+      // Steps: Transcribe + Apply + Gen Clips A → B → C → D (Processing scenes only)
+      for (const pass of [
+        {
+          label: 'A',
+          enabled: pipelineConfig.transcribeApplyGenClips,
+          minChars: pipelineConfig.transcribeApplyGenClipsMinChars,
+        },
+        {
+          label: 'B',
+          enabled: pipelineConfig.transcribeApplyGenClipsEnabledB,
+          minChars: pipelineConfig.transcribeApplyGenClipsMinCharsB,
+        },
+        {
+          label: 'C',
+          enabled: pipelineConfig.transcribeApplyGenClipsEnabledC,
+          minChars: pipelineConfig.transcribeApplyGenClipsMinCharsC,
+        },
+        {
+          label: 'D',
+          enabled: pipelineConfig.transcribeApplyGenClipsEnabledD,
+          minChars: pipelineConfig.transcribeApplyGenClipsMinCharsD,
+        },
+      ]) {
+        if (!pass.enabled) {
+          console.log(
+            `⊘ Skipping Step: Transcribe + Apply + Gen Clips ${pass.label} (disabled in config)`,
+          );
+          continue;
+        }
+
         stepNumber++;
-        const minChars = Math.max(
-          0,
-          Math.floor(pipelineConfig.transcribeApplyGenClipsMinChars),
-        );
+        const minChars = Math.max(0, Math.floor(pass.minChars));
 
         setPipelineStep(
-          `Step ${stepNumber}: Transcribing + applying separation + generating clips for Processing scenes (min chars ${minChars})...`,
+          `Step ${stepNumber}: Transcribing + applying separation + generating clips for Processing scenes (Pass ${pass.label}, min chars ${minChars})...`,
         );
         console.log(
-          `Step ${stepNumber}: Transcribing + applying separation + generating clips for Processing scenes (min chars ${minChars})`,
+          `Step ${stepNumber}: Transcribing + applying separation + generating clips for Processing scenes (Pass ${pass.label}, min chars ${minChars})`,
         );
 
         try {
@@ -9782,7 +9807,7 @@ export default function OriginalVideosList({
             minChars,
           );
           console.log(
-            `✓ Step ${stepNumber} Complete: Transcribe + Apply + Gen Clips finished`,
+            `✓ Step ${stepNumber} Complete: Transcribe + Apply + Gen Clips ${pass.label} finished`,
           );
 
           console.log(
@@ -9799,19 +9824,15 @@ export default function OriginalVideosList({
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
-            `✗ Step ${stepNumber} Failed: Transcribe + Apply + Gen Clips error`,
+            `✗ Step ${stepNumber} Failed: Transcribe + Apply + Gen Clips ${pass.label} error`,
             error,
           );
           throw new Error(
-            `Transcribe + Apply + Gen Clips failed: ${
+            `Transcribe + Apply + Gen Clips ${pass.label} failed: ${
               error instanceof Error ? error.message : 'Unknown error'
             }`,
           );
         }
-      } else {
-        console.log(
-          '⊘ Skipping Step: Transcribe + Apply + Gen Clips (disabled in config)',
-        );
       }
 
       // Step 4: Speed Up All
@@ -11096,7 +11117,7 @@ export default function OriginalVideosList({
                   ? 'Scene handlers not ready. Please wait...'
                   : runningFullPipeline
                     ? pipelineStep
-                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Download ZIP All'
+                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Download ZIP All'
               }
             />
           </div>
@@ -12094,7 +12115,7 @@ export default function OriginalVideosList({
                             ? transcribeApplyGenClipsSceneId !== null
                               ? `Running Transcribe + Apply + Gen Clips for scene ${transcribeApplyGenClipsSceneId}`
                               : 'Running Transcribe + Apply + Gen Clips for Processing scenes...'
-                            : `Transcribe original captions, apply scene separation, and generate clips for resulting scenes in Processing videos (min chars from Pipeline: ${Math.max(0, Math.floor(pipelineConfig.transcribeApplyGenClipsMinChars))})`
+                            : `Transcribe original captions, apply scene separation, and generate clips for resulting scenes in Processing videos (min chars from Pipeline A: ${Math.max(0, Math.floor(pipelineConfig.transcribeApplyGenClipsMinChars))})`
                       }
                     >
                       <Wand2

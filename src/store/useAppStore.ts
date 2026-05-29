@@ -268,6 +268,12 @@ export interface PipelineConfig {
   generateClips: boolean;
   transcribeApplyGenClips: boolean;
   transcribeApplyGenClipsMinChars: number;
+  transcribeApplyGenClipsEnabledB: boolean;
+  transcribeApplyGenClipsEnabledC: boolean;
+  transcribeApplyGenClipsEnabledD: boolean;
+  transcribeApplyGenClipsMinCharsB: number;
+  transcribeApplyGenClipsMinCharsC: number;
+  transcribeApplyGenClipsMinCharsD: number;
   speedUp: boolean;
   fixLanguageAll: boolean;
   improve: boolean;
@@ -726,6 +732,12 @@ const defaultPipelineConfig: PipelineConfig = {
   generateClips: true,
   transcribeApplyGenClips: false,
   transcribeApplyGenClipsMinChars: 150,
+  transcribeApplyGenClipsEnabledB: false,
+  transcribeApplyGenClipsEnabledC: false,
+  transcribeApplyGenClipsEnabledD: false,
+  transcribeApplyGenClipsMinCharsB: 150,
+  transcribeApplyGenClipsMinCharsC: 150,
+  transcribeApplyGenClipsMinCharsD: 150,
   speedUp: true,
   fixLanguageAll: true,
   improve: true,

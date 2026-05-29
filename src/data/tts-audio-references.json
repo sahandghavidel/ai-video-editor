@@ -18,7 +18,7 @@
       },
       "deviceMap": "mps",
       "dtype": "float16",
-      "numStep": 8,
+      "numStep": 32,
       "speed": 1,
       "description": "Default Persian reference voice used for FA dubbing.",
       "tags": [
@@ -28,7 +28,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-29T05:23:51.947Z"
+      "updatedAt": "2026-05-29T08:35:00.638Z"
     },
     {
       "id": "en-default",
@@ -58,7 +58,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-29T05:23:51.947Z"
+      "updatedAt": "2026-05-29T08:35:00.638Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -77,20 +77,70 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 64,
+      "numStep": 32,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-05-29T05:23:51.947Z"
+      "updatedAt": "2026-05-29T08:35:00.638Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
       "name": "Best english voice but short",
       "filename": "nice-shorter.wav",
       "language": "en",
-      "referenceText": "Welcome back to another exciting project.",
+      "referenceText": "Today I will explain each step clearly, calmly, and at a steady pace.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7112",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7113",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7110",
+        "sceneDubbedAudioFieldKey": "field_7111"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 32,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": false,
+      "enabled": true,
+      "updatedAt": "2026-05-29T08:35:00.638Z"
+    },
+    {
+      "id": "audio-ref-local-1780034310693-oxerpe2d",
+      "name": "Best english voice but midium",
+      "filename": "nice-msize.wav",
+      "language": "en",
+      "referenceText": "Hi there, thanks for joining me today. I’ll explain each step clearly and keep the pace smooth, natural, and easy to follow.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7112",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7113",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7110",
+        "sceneDubbedAudioFieldKey": "field_7111"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 32,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": false,
+      "enabled": true,
+      "updatedAt": "2026-05-29T08:35:00.638Z"
+    },
+    {
+      "id": "audio-ref-local-1780035086218-80nf7ni6",
+      "name": "Best english voice but small",
+      "filename": "nice-ssize.wav",
+      "language": "en",
+      "referenceText": "Follow along as I explain each part with precise words and steady timing.",
       "baserowFields": {
         "videoSrtFieldKey": "field_7112",
         "videoReferenceSrtFieldKey": "field_6872",
@@ -108,7 +158,32 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-05-29T05:23:51.947Z"
+      "updatedAt": "2026-05-29T08:35:00.638Z"
+    },
+    {
+      "id": "audio-ref-local-1780035965933-kphossuu",
+      "name": "Best english voice but x small",
+      "filename": "nice-xssize.wav",
+      "language": "en",
+      "referenceText": "I sound warm and friendly.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7112",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7113",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7110",
+        "sceneDubbedAudioFieldKey": "field_7111"
+      },
+      "deviceMap": "mps",
+      "dtype": "float16",
+      "numStep": 16,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": false,
+      "enabled": true,
+      "updatedAt": "2026-05-29T08:35:00.638Z"
     }
   ]
 }

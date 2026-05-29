@@ -63,3 +63,4 @@ omnivoice-env/lib/python3.10/site-packages/omnivoice/*
 !omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/
 omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/*
 !omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/audio.py
+src/data/tts-audio-references.json
