@@ -454,7 +454,11 @@ function rejectAllTinyJobs(error: Error) {
 }
 
 function dispatchTinyQueue() {
-  if (!tinyState.worker || tinyState.inFlightJobId || tinyState.jobQueue.length === 0) {
+  if (
+    !tinyState.worker ||
+    tinyState.inFlightJobId ||
+    tinyState.jobQueue.length === 0
+  ) {
     return;
   }
 
@@ -556,7 +560,9 @@ function handleTinyWorkerLine(line: string) {
     pending.resolve(payload.result as Record<string, unknown>);
   } else {
     const workerError =
-      typeof payload.error === 'string' ? payload.error : 'Unknown tiny worker error';
+      typeof payload.error === 'string'
+        ? payload.error
+        : 'Unknown tiny worker error';
     pending.reject(new Error(workerError));
   }
 
