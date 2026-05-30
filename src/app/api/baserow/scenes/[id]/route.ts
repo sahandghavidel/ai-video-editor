@@ -33,6 +33,9 @@ let cachedFlaggedTrueOptionIdAt = 0;
 let cachedHasTextTrueOptionId: number | null = null;
 let cachedHasTextTrueOptionIdAt = 0;
 
+let cachedJwtToken: string | null = null;
+let cachedJwtTokenExpiry = 0;
+
 async function resolveFlaggedTrueOptionId(
   baserowUrl: string,
   token: string,
@@ -183,13 +186,27 @@ function coerceTextFieldValue(value: unknown): string {
 }
 
 // Helper function to get JWT token for Baserow API
-async function getJWTToken(): Promise<string> {
+async function getJWTToken(forceRefresh = false): Promise<string> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const email = process.env.BASEROW_EMAIL;
   const password = process.env.BASEROW_PASSWORD;
 
   if (!baserowUrl || !email || !password) {
     throw new Error('Missing Baserow configuration');
+  }
+
+  // Keep a 5-minute safety buffer before token expiry.
+  if (
+    !forceRefresh &&
+    cachedJwtToken &&
+    Date.now() < cachedJwtTokenExpiry - 300_000
+  ) {
+    return cachedJwtToken;
+  }
+
+  if (forceRefresh) {
+    cachedJwtToken = null;
+    cachedJwtTokenExpiry = 0;
   }
 
   const response = await fetch(`${baserowUrl}/user/token-auth/`, {
@@ -204,7 +221,51 @@ async function getJWTToken(): Promise<string> {
   }
 
   const data = await response.json();
-  return data.token;
+  const token = typeof data?.token === 'string' ? data.token : '';
+
+  if (!token) {
+    throw new Error('Authentication failed: missing token');
+  }
+
+  cachedJwtToken = token;
+  // JWTs are typically valid for ~1h; cache for 50 minutes.
+  cachedJwtTokenExpiry = Date.now() + 50 * 60 * 1000;
+
+  return token;
+}
+
+async function makeBaserowRequest(
+  baserowUrl: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  async function execute(token: string) {
+    const response = await fetch(`${baserowUrl}${path}`, {
+      ...init,
+      headers: {
+        ...(init.headers ?? {}),
+        Authorization: `JWT ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      throw new Error('TOKEN_EXPIRED');
+    }
+
+    return response;
+  }
+
+  try {
+    const token = await getJWTToken();
+    return await execute(token);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'TOKEN_EXPIRED') {
+      const freshToken = await getJWTToken(true);
+      return execute(freshToken);
+    }
+
+    throw error;
+  }
 }
 
 export async function GET(
@@ -226,15 +287,11 @@ export async function GET(
       );
     }
 
-    const token = await getJWTToken();
-
-    const response = await fetch(
-      `${baserowUrl}/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
+    const response = await makeBaserowRequest(
+      baserowUrl,
+      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
       {
         method: 'GET',
-        headers: {
-          Authorization: `JWT ${token}`,
-        },
         cache: 'no-store',
       },
     );
@@ -321,13 +378,11 @@ export async function PATCH(
 
     // If sentence text (field_6890) actually changes, invalidate generated TTS (field_6891).
     if (Object.prototype.hasOwnProperty.call(body, SENTENCE_FIELD_KEY)) {
-      const currentSceneRes = await fetch(
-        `${baserowUrl}/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
+      const currentSceneRes = await makeBaserowRequest(
+        baserowUrl,
+        `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
         {
           method: 'GET',
-          headers: {
-            Authorization: `JWT ${token}`,
-          },
           cache: 'no-store',
         },
       );
@@ -360,13 +415,13 @@ export async function PATCH(
     }
 
     // Update the scene in Baserow
-    const response = await fetch(
-      `${baserowUrl}/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
+    const response = await makeBaserowRequest(
+      baserowUrl,
+      `/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
       {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `JWT ${token}`,
         },
         body: JSON.stringify(body),
       },
@@ -413,17 +468,12 @@ export async function DELETE(
       );
     }
 
-    // Get JWT token
-    const token = await getJWTToken();
-
     // Delete the scene in Baserow
-    const response = await fetch(
-      `${baserowUrl}/database/rows/table/${scenesTableId}/${sceneId}/`,
+    const response = await makeBaserowRequest(
+      baserowUrl,
+      `/database/rows/table/${scenesTableId}/${sceneId}/`,
       {
         method: 'DELETE',
-        headers: {
-          Authorization: `JWT ${token}`,
-        },
       },
     );
 

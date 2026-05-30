@@ -6350,6 +6350,157 @@ export default function OriginalVideosList({
     };
     const normalizeTextForComparison = (value: string) =>
       String(value).replace(/\s+/g, ' ').trim();
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const saveConcurrency = 6;
+    const saveMaxAttempts = 3;
+    const retryableSaveStatuses = new Set([429, 500, 502, 503, 504]);
+    const getSaveRetryDelayMs = (attempt: number, status?: number) => {
+      const safeAttempt = Math.max(1, attempt);
+      const baseDelay = status === 429 ? 350 : 150;
+      const jitterMs = Math.floor(Math.random() * 125);
+      return baseDelay * 2 ** (safeAttempt - 1) + jitterMs;
+    };
+
+    type SaveFixedSentenceInput = {
+      sceneId: number;
+      fixedSentence: string;
+      videoId: number | null;
+    };
+
+    type SaveFixedSentenceResult = {
+      sceneId: number;
+      ok: boolean;
+      attemptsUsed: number;
+      rateLimitRetries: number;
+      error?: string;
+    };
+
+    const saveFixedSentenceWithRetry = async (
+      input: SaveFixedSentenceInput,
+    ): Promise<SaveFixedSentenceResult> => {
+      let attemptsUsed = 0;
+      let rateLimitRetries = 0;
+
+      while (attemptsUsed < saveMaxAttempts) {
+        attemptsUsed += 1;
+
+        setFixingLanguageProcessingSceneId(input.sceneId);
+        if (input.videoId !== null && !Number.isNaN(input.videoId)) {
+          setCurrentProcessingVideoId(input.videoId);
+        }
+
+        try {
+          const patchRes = await fetch(`/api/baserow/scenes/${input.sceneId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              field_7105: input.fixedSentence,
+              field_6890: input.fixedSentence,
+            }),
+          });
+
+          if (patchRes.ok) {
+            return {
+              sceneId: input.sceneId,
+              ok: true,
+              attemptsUsed,
+              rateLimitRetries,
+            };
+          }
+
+          const status = patchRes.status;
+          const responseText = await patchRes.text().catch(() => '');
+          const canRetry =
+            retryableSaveStatuses.has(status) && attemptsUsed < saveMaxAttempts;
+
+          if (canRetry) {
+            if (status === 429) {
+              rateLimitRetries += 1;
+            }
+            await sleep(getSaveRetryDelayMs(attemptsUsed, status));
+            continue;
+          }
+
+          return {
+            sceneId: input.sceneId,
+            ok: false,
+            attemptsUsed,
+            rateLimitRetries,
+            error: `Failed to save fixed sentence for scene ${input.sceneId}: ${status} ${responseText}`,
+          };
+        } catch (error) {
+          if (attemptsUsed < saveMaxAttempts) {
+            await sleep(getSaveRetryDelayMs(attemptsUsed));
+            continue;
+          }
+
+          return {
+            sceneId: input.sceneId,
+            ok: false,
+            attemptsUsed,
+            rateLimitRetries,
+            error: `Failed to save fixed sentence for scene ${input.sceneId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          };
+        }
+      }
+
+      return {
+        sceneId: input.sceneId,
+        ok: false,
+        attemptsUsed: saveMaxAttempts,
+        rateLimitRetries,
+        error: `Failed to save fixed sentence for scene ${input.sceneId}: exhausted retries`,
+      };
+    };
+
+    const saveFixedSentencesInParallel = async (
+      inputs: SaveFixedSentenceInput[],
+    ) => {
+      const startedAt = Date.now();
+      const workerCount = Math.max(1, Math.min(saveConcurrency, inputs.length));
+
+      const results: SaveFixedSentenceResult[] = [];
+      let cursor = 0;
+
+      const workers = Array.from({ length: workerCount }, () =>
+        (async () => {
+          while (true) {
+            const currentIndex = cursor;
+            cursor += 1;
+
+            if (currentIndex >= inputs.length) {
+              return;
+            }
+
+            const result = await saveFixedSentenceWithRetry(
+              inputs[currentIndex],
+            );
+            results.push(result);
+          }
+        })(),
+      );
+
+      await Promise.all(workers);
+
+      const totalAttempts = results.reduce(
+        (sum, item) => sum + item.attemptsUsed,
+        0,
+      );
+      const rateLimitRetries = results.reduce(
+        (sum, item) => sum + item.rateLimitRetries,
+        0,
+      );
+
+      return {
+        results,
+        durationMs: Date.now() - startedAt,
+        totalAttempts,
+        rateLimitRetries,
+      };
+    };
 
     if (fixingLanguageProcessingScenesAllVideos) {
       console.info(
@@ -6469,6 +6620,7 @@ export default function OriginalVideosList({
         (sum, plan) => sum + plan.maxTotalBatches,
         0,
       );
+      const updatedSceneIds = new Set<number>();
       let updatedScenesCount = 0;
       const failedBatches: Array<{
         videoId: number;
@@ -6479,6 +6631,11 @@ export default function OriginalVideosList({
         error: string;
       }> = [];
       let processedBatchCount = 0;
+      let totalModelDurationMs = 0;
+      let totalSaveDurationMs = 0;
+      let totalSaveAttempts = 0;
+      let totalSaveRateLimitRetries = 0;
+      let refreshDurationMs = 0;
 
       console.info(`${logPrefix} Run started.`, {
         selectedModel: modelSelection.selectedModel,
@@ -6554,6 +6711,7 @@ export default function OriginalVideosList({
               sceneCursor + currentBatchSize >= videoPlan.scenes.length;
 
             try {
+              const modelRequestStartedAt = Date.now();
               const res = await fetch('/api/fix-language-scenes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -6708,35 +6866,55 @@ export default function OriginalVideosList({
                 );
               }
 
-              for (const item of normalizedSentences) {
-                const sceneMeta = selectedBatchBySceneId.get(item.sceneId);
-                setFixingLanguageProcessingSceneId(item.sceneId);
+              const modelDurationMs = Date.now() - modelRequestStartedAt;
+              totalModelDurationMs += modelDurationMs;
 
-                if (sceneMeta?.videoId && !isNaN(sceneMeta.videoId)) {
-                  setCurrentProcessingVideoId(sceneMeta.videoId);
-                }
+              const saveInputs: SaveFixedSentenceInput[] =
+                normalizedSentences.map((item) => {
+                  const sceneMeta = selectedBatchBySceneId.get(item.sceneId);
+                  const sceneVideoId =
+                    sceneMeta?.videoId !== undefined &&
+                    Number.isFinite(sceneMeta.videoId)
+                      ? sceneMeta.videoId
+                      : null;
 
-                const patchRes = await fetch(
-                  `/api/baserow/scenes/${item.sceneId}`,
-                  {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      field_7105: item.fixedSentence,
-                      field_6890: item.fixedSentence,
-                    }),
-                  },
+                  return {
+                    sceneId: item.sceneId,
+                    fixedSentence: item.fixedSentence,
+                    videoId: sceneVideoId,
+                  };
+                });
+
+              const saveSummary =
+                await saveFixedSentencesInParallel(saveInputs);
+              totalSaveDurationMs += saveSummary.durationMs;
+              totalSaveAttempts += saveSummary.totalAttempts;
+              totalSaveRateLimitRetries += saveSummary.rateLimitRetries;
+
+              const failedSaves = saveSummary.results.filter(
+                (item) => !item.ok,
+              );
+              const successfulSaves = saveSummary.results.filter(
+                (item) => item.ok,
+              );
+
+              for (const success of successfulSaves) {
+                updatedSceneIds.add(success.sceneId);
+              }
+              updatedScenesCount = updatedSceneIds.size;
+
+              if (failedSaves.length > 0) {
+                const failurePreview = failedSaves
+                  .slice(0, 3)
+                  .map(
+                    (item) =>
+                      `scene ${item.sceneId}: ${item.error || 'unknown error'}`,
+                  )
+                  .join(' | ');
+
+                throw new Error(
+                  `Failed to save ${failedSaves.length}/${saveInputs.length} scene updates (${failurePreview}).`,
                 );
-
-                if (!patchRes.ok) {
-                  const t = await patchRes.text().catch(() => '');
-                  throw new Error(
-                    `Failed to save fixed sentence for scene ${item.sceneId}: ${patchRes.status} ${t}`,
-                  );
-                }
-
-                updatedScenesCount += 1;
-                await new Promise((resolve) => setTimeout(resolve, 150));
               }
 
               console.info(`${logPrefix} Batch completed successfully.`, {
@@ -6749,6 +6927,11 @@ export default function OriginalVideosList({
                 apiRequestId,
                 updatedInBatch: normalizedSentences.length,
                 totalUpdatedSoFar: updatedScenesCount,
+                modelDurationMs,
+                saveDurationMs: saveSummary.durationMs,
+                saveAttempts: saveSummary.totalAttempts,
+                saveRateLimitRetries: saveSummary.rateLimitRetries,
+                saveConcurrency,
                 shouldUnloadAfterThisAttempt,
               });
 
@@ -6807,15 +6990,19 @@ export default function OriginalVideosList({
 
             sceneCursor += plannedBatchSize;
           }
-
-          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
 
+      const refreshStartedAt = Date.now();
       await handleRefresh();
+      refreshDurationMs = Date.now() - refreshStartedAt;
       if (refreshScenesData) {
         refreshScenesData();
       }
+
+      console.info(`${logPrefix} Refresh completed.`, {
+        refreshDurationMs,
+      });
 
       if (playSound) {
         await playSuccessAndNotifyBatchCompletion('Fix Language All');
@@ -6832,6 +7019,11 @@ export default function OriginalVideosList({
         totalEligibleScenes,
         updatedScenesCount,
         failedBatchCount: failedBatches.length,
+        totalModelDurationMs,
+        totalSaveDurationMs,
+        totalSaveAttempts,
+        totalSaveRateLimitRetries,
+        refreshDurationMs,
         durationMs: Date.now() - startedAt,
       });
     } catch (error) {
@@ -9880,17 +10072,9 @@ export default function OriginalVideosList({
         try {
           await handleFixLanguageProcessingScenesAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: Fix language finished`);
-
-          console.log('Refreshing data after fix language...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
-
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
-          console.log('Wait complete, proceeding to next step');
+          console.log(
+            'Fix language handler already completed persistence and refresh; proceeding to next step without extra wait.',
+          );
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Fix language error`,

@@ -786,6 +786,152 @@ export default function BatchOperations({
     const batchSize = 30;
     const normalizeTextForComparison = (value: string) =>
       String(value).replace(/\s+/g, ' ').trim();
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const saveConcurrency = 6;
+    const saveMaxAttempts = 3;
+    const retryableSaveStatuses = new Set([429, 500, 502, 503, 504]);
+    const getSaveRetryDelayMs = (attempt: number, status?: number) => {
+      const safeAttempt = Math.max(1, attempt);
+      const baseDelay = status === 429 ? 350 : 150;
+      const jitterMs = Math.floor(Math.random() * 125);
+      return baseDelay * 2 ** (safeAttempt - 1) + jitterMs;
+    };
+
+    type SaveFixedSentenceInput = {
+      sceneId: number;
+      fixedSentence: string;
+    };
+
+    type SaveFixedSentenceResult = {
+      sceneId: number;
+      ok: boolean;
+      attemptsUsed: number;
+      rateLimitRetries: number;
+      error?: string;
+    };
+
+    const saveFixedSentenceWithRetry = async (
+      input: SaveFixedSentenceInput,
+    ): Promise<SaveFixedSentenceResult> => {
+      let attemptsUsed = 0;
+      let rateLimitRetries = 0;
+
+      while (attemptsUsed < saveMaxAttempts) {
+        attemptsUsed += 1;
+        setFixingLanguageSceneId(input.sceneId);
+
+        try {
+          const patchRes = await fetch(`/api/baserow/scenes/${input.sceneId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              field_7105: input.fixedSentence,
+              field_6890: input.fixedSentence,
+            }),
+          });
+
+          if (patchRes.ok) {
+            return {
+              sceneId: input.sceneId,
+              ok: true,
+              attemptsUsed,
+              rateLimitRetries,
+            };
+          }
+
+          const status = patchRes.status;
+          const responseText = await patchRes.text().catch(() => '');
+          const canRetry =
+            retryableSaveStatuses.has(status) && attemptsUsed < saveMaxAttempts;
+
+          if (canRetry) {
+            if (status === 429) {
+              rateLimitRetries += 1;
+            }
+            await sleep(getSaveRetryDelayMs(attemptsUsed, status));
+            continue;
+          }
+
+          return {
+            sceneId: input.sceneId,
+            ok: false,
+            attemptsUsed,
+            rateLimitRetries,
+            error: `Failed to save fixed sentence for scene ${input.sceneId}: ${status} ${responseText}`,
+          };
+        } catch (error) {
+          if (attemptsUsed < saveMaxAttempts) {
+            await sleep(getSaveRetryDelayMs(attemptsUsed));
+            continue;
+          }
+
+          return {
+            sceneId: input.sceneId,
+            ok: false,
+            attemptsUsed,
+            rateLimitRetries,
+            error: `Failed to save fixed sentence for scene ${input.sceneId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          };
+        }
+      }
+
+      return {
+        sceneId: input.sceneId,
+        ok: false,
+        attemptsUsed: saveMaxAttempts,
+        rateLimitRetries,
+        error: `Failed to save fixed sentence for scene ${input.sceneId}: exhausted retries`,
+      };
+    };
+
+    const saveFixedSentencesInParallel = async (
+      inputs: SaveFixedSentenceInput[],
+    ) => {
+      const startedAt = Date.now();
+      const workerCount = Math.max(1, Math.min(saveConcurrency, inputs.length));
+
+      const results: SaveFixedSentenceResult[] = [];
+      let cursor = 0;
+
+      const workers = Array.from({ length: workerCount }, () =>
+        (async () => {
+          while (true) {
+            const currentIndex = cursor;
+            cursor += 1;
+
+            if (currentIndex >= inputs.length) {
+              return;
+            }
+
+            const result = await saveFixedSentenceWithRetry(
+              inputs[currentIndex],
+            );
+            results.push(result);
+          }
+        })(),
+      );
+
+      await Promise.all(workers);
+
+      const totalAttempts = results.reduce(
+        (sum, item) => sum + item.attemptsUsed,
+        0,
+      );
+      const rateLimitRetries = results.reduce(
+        (sum, item) => sum + item.rateLimitRetries,
+        0,
+      );
+
+      return {
+        results,
+        durationMs: Date.now() - startedAt,
+        totalAttempts,
+        rateLimitRetries,
+      };
+    };
 
     if (fixingLanguageTenScenes) {
       console.info(
@@ -856,8 +1002,13 @@ export default function BatchOperations({
     setFixingLanguageSceneId(null);
 
     try {
+      const updatedSceneIds = new Set<number>();
       let processedSceneCount = 0;
       let updatedScenesCount = 0;
+      let totalModelDurationMs = 0;
+      let totalSaveDurationMs = 0;
+      let totalSaveAttempts = 0;
+      let totalSaveRateLimitRetries = 0;
       const failedBatches: Array<{
         batchNumber: number;
         sceneIds: number[];
@@ -886,6 +1037,7 @@ export default function BatchOperations({
         );
 
         try {
+          const modelRequestStartedAt = Date.now();
           console.info(
             `${logPrefix} Sending batch ${batchNumber}/${totalBatches} to /api/fix-language-scenes...`,
             {
@@ -1061,47 +1213,42 @@ export default function BatchOperations({
             );
           }
 
-          for (let i = 0; i < normalizedSentences.length; i += 1) {
-            const item = normalizedSentences[i];
-            setFixingLanguageSceneId(item.sceneId);
+          const modelDurationMs = Date.now() - modelRequestStartedAt;
+          totalModelDurationMs += modelDurationMs;
 
-            console.info(`${logPrefix} Saving scene text...`, {
-              batch: `${batchNumber}/${totalBatches}`,
-              batchProgress: `${i + 1}/${normalizedSentences.length}`,
-              overallProgress: `${processedSceneCount + 1}/${candidateScenes.length}`,
+          const saveInputs: SaveFixedSentenceInput[] = normalizedSentences.map(
+            (item) => ({
               sceneId: item.sceneId,
-              fixedSentencePreview: item.fixedSentence.slice(0, 80),
-              saveFields: ['field_7105', 'field_6890'],
-            });
+              fixedSentence: item.fixedSentence,
+            }),
+          );
 
-            const patchRes = await fetch(
-              `/api/baserow/scenes/${item.sceneId}`,
-              {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  field_7105: item.fixedSentence,
-                  field_6890: item.fixedSentence,
-                }),
-              },
+          const saveSummary = await saveFixedSentencesInParallel(saveInputs);
+          totalSaveDurationMs += saveSummary.durationMs;
+          totalSaveAttempts += saveSummary.totalAttempts;
+          totalSaveRateLimitRetries += saveSummary.rateLimitRetries;
+
+          const failedSaves = saveSummary.results.filter((item) => !item.ok);
+          const successfulSaves = saveSummary.results.filter((item) => item.ok);
+
+          for (const success of successfulSaves) {
+            updatedSceneIds.add(success.sceneId);
+          }
+          processedSceneCount = updatedSceneIds.size;
+          updatedScenesCount = updatedSceneIds.size;
+
+          if (failedSaves.length > 0) {
+            const failurePreview = failedSaves
+              .slice(0, 3)
+              .map(
+                (item) =>
+                  `scene ${item.sceneId}: ${item.error || 'unknown error'}`,
+              )
+              .join(' | ');
+
+            throw new Error(
+              `Failed to save ${failedSaves.length}/${saveInputs.length} scene updates (${failurePreview}).`,
             );
-
-            if (!patchRes.ok) {
-              const t = await patchRes.text().catch(() => '');
-              console.error(`${logPrefix} Failed while saving scene text.`, {
-                batch: `${batchNumber}/${totalBatches}`,
-                sceneId: item.sceneId,
-                status: patchRes.status,
-                responseText: t,
-              });
-              throw new Error(
-                `Failed to save fixed sentence for scene ${item.sceneId}: ${patchRes.status} ${t}`,
-              );
-            }
-
-            processedSceneCount += 1;
-            updatedScenesCount += 1;
-            await new Promise((resolve) => setTimeout(resolve, 150));
           }
 
           console.info(
@@ -1110,6 +1257,11 @@ export default function BatchOperations({
               updatedInBatch: normalizedSentences.length,
               processedSceneCount,
               totalScenesPlanned: candidateScenes.length,
+              modelDurationMs,
+              saveDurationMs: saveSummary.durationMs,
+              saveAttempts: saveSummary.totalAttempts,
+              saveRateLimitRetries: saveSummary.rateLimitRetries,
+              saveConcurrency,
             },
           );
         } catch (batchError) {
@@ -1132,8 +1284,6 @@ export default function BatchOperations({
             },
           );
         }
-
-        await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
       playBatchDoneSound();
@@ -1150,6 +1300,10 @@ export default function BatchOperations({
         updatedScenes: updatedScenesCount,
         totalEligibleScenes: candidateScenes.length,
         failedBatchCount: failedBatches.length,
+        totalModelDurationMs,
+        totalSaveDurationMs,
+        totalSaveAttempts,
+        totalSaveRateLimitRetries,
         durationMs: Date.now() - startedAt,
       });
     } catch (error) {
