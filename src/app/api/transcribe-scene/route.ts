@@ -56,11 +56,37 @@ type MediumEnWorkerState = {
   lastStderrLine: string | null;
 };
 
+type TinyPendingJob = {
+  resolve: (value: Record<string, unknown>) => void;
+  reject: (reason: Error) => void;
+  timeout: NodeJS.Timeout | null;
+};
+
+type TinyQueuedJob = {
+  id: string;
+  mediaUrl: string;
+  sceneId: string;
+};
+
+type TinyWorkerState = {
+  worker: ChildProcessWithoutNullStreams | null;
+  workerKey: string | null;
+  idleTimer: NodeJS.Timeout | null;
+  stdoutBuffer: string;
+  inFlightJobId: string | null;
+  pendingJobs: Map<string, TinyPendingJob>;
+  jobQueue: TinyQueuedJob[];
+  lastStderrLine: string | null;
+};
+
 const MEDIUM_EN_KEEP_WARM_MS = 2 * 60 * 1000;
 const MEDIUM_EN_JOB_TIMEOUT_MS = 15 * 60 * 1000;
+const TINY_KEEP_WARM_MS = 2 * 60 * 1000;
+const TINY_JOB_TIMEOUT_MS = 15 * 60 * 1000;
 
 const mediumEnGlobal = globalThis as typeof globalThis & {
   __mediumEnWorkerState?: MediumEnWorkerState;
+  __tinyWorkerState?: TinyWorkerState;
 };
 
 const mediumEnState: MediumEnWorkerState =
@@ -72,6 +98,19 @@ const mediumEnState: MediumEnWorkerState =
     stdoutBuffer: '',
     inFlightJobId: null,
     pendingJobs: new Map<string, MediumEnPendingJob>(),
+    jobQueue: [],
+    lastStderrLine: null,
+  });
+
+const tinyState: TinyWorkerState =
+  mediumEnGlobal.__tinyWorkerState ??
+  (mediumEnGlobal.__tinyWorkerState = {
+    worker: null,
+    workerKey: null,
+    idleTimer: null,
+    stdoutBuffer: '',
+    inFlightJobId: null,
+    pendingJobs: new Map<string, TinyPendingJob>(),
     jobQueue: [],
     lastStderrLine: null,
   });
@@ -367,6 +406,286 @@ function transcribeWithWarmMediumEn(options: {
   });
 }
 
+function clearTinyIdleTimer() {
+  if (tinyState.idleTimer) {
+    clearTimeout(tinyState.idleTimer);
+    tinyState.idleTimer = null;
+  }
+}
+
+function scheduleTinyIdleShutdown() {
+  clearTinyIdleTimer();
+  if (
+    !tinyState.worker ||
+    tinyState.inFlightJobId ||
+    tinyState.jobQueue.length > 0 ||
+    tinyState.pendingJobs.size > 0
+  ) {
+    return;
+  }
+
+  tinyState.idleTimer = setTimeout(() => {
+    if (
+      !tinyState.worker ||
+      tinyState.inFlightJobId ||
+      tinyState.jobQueue.length > 0 ||
+      tinyState.pendingJobs.size > 0
+    ) {
+      return;
+    }
+
+    console.log(
+      '[SCENE_TRANSCRIBE] tiny worker idle for 2 minutes, unloading model',
+    );
+    tinyState.worker.kill('SIGTERM');
+  }, TINY_KEEP_WARM_MS);
+}
+
+function rejectAllTinyJobs(error: Error) {
+  for (const [jobId, pending] of tinyState.pendingJobs.entries()) {
+    if (pending.timeout) {
+      clearTimeout(pending.timeout);
+    }
+    pending.reject(error);
+    tinyState.pendingJobs.delete(jobId);
+  }
+  tinyState.jobQueue.length = 0;
+  tinyState.inFlightJobId = null;
+}
+
+function dispatchTinyQueue() {
+  if (!tinyState.worker || tinyState.inFlightJobId || tinyState.jobQueue.length === 0) {
+    return;
+  }
+
+  const nextJob = tinyState.jobQueue.shift();
+  if (!nextJob) {
+    return;
+  }
+
+  const pending = tinyState.pendingJobs.get(nextJob.id);
+  if (!pending) {
+    dispatchTinyQueue();
+    return;
+  }
+
+  try {
+    tinyState.worker.stdin.write(
+      JSON.stringify({
+        id: nextJob.id,
+        media_url: nextJob.mediaUrl,
+        scene_id: nextJob.sceneId,
+      }) + '\n',
+    );
+    tinyState.inFlightJobId = nextJob.id;
+
+    pending.timeout = setTimeout(() => {
+      const timedOutJob = tinyState.pendingJobs.get(nextJob.id);
+      if (!timedOutJob) {
+        return;
+      }
+
+      tinyState.pendingJobs.delete(nextJob.id);
+      if (tinyState.inFlightJobId === nextJob.id) {
+        tinyState.inFlightJobId = null;
+      }
+
+      timedOutJob.reject(
+        new Error(
+          `Scene Whisper tiny transcription timed out after ${TINY_JOB_TIMEOUT_MS}ms`,
+        ),
+      );
+
+      if (tinyState.worker) {
+        tinyState.worker.kill('SIGTERM');
+      }
+      scheduleTinyIdleShutdown();
+    }, TINY_JOB_TIMEOUT_MS);
+  } catch (error) {
+    tinyState.pendingJobs.delete(nextJob.id);
+    pending.reject(
+      new Error(
+        `Failed to dispatch tiny transcription job: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+    tinyState.inFlightJobId = null;
+    if (tinyState.worker) {
+      tinyState.worker.kill('SIGTERM');
+    }
+  }
+}
+
+function handleTinyWorkerLine(line: string) {
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    console.warn('[SCENE_TRANSCRIBE] tiny worker emitted non-JSON line:', line);
+    return;
+  }
+
+  if (payload.ready === true) {
+    console.log('[SCENE_TRANSCRIBE] tiny worker ready (model loaded)');
+    return;
+  }
+
+  const jobId = typeof payload.id === 'string' ? payload.id : null;
+  if (!jobId) {
+    return;
+  }
+
+  const pending = tinyState.pendingJobs.get(jobId);
+  if (!pending) {
+    return;
+  }
+
+  tinyState.pendingJobs.delete(jobId);
+  if (pending.timeout) {
+    clearTimeout(pending.timeout);
+  }
+
+  if (tinyState.inFlightJobId === jobId) {
+    tinyState.inFlightJobId = null;
+  }
+
+  if (
+    payload.ok === true &&
+    payload.result &&
+    typeof payload.result === 'object'
+  ) {
+    pending.resolve(payload.result as Record<string, unknown>);
+  } else {
+    const workerError =
+      typeof payload.error === 'string' ? payload.error : 'Unknown tiny worker error';
+    pending.reject(new Error(workerError));
+  }
+
+  dispatchTinyQueue();
+  scheduleTinyIdleShutdown();
+}
+
+function ensureTinyWorker(pythonCommand: string, scriptPath: string) {
+  const scriptMtimeMs = (() => {
+    try {
+      return fs.statSync(scriptPath).mtimeMs;
+    } catch {
+      return 0;
+    }
+  })();
+
+  const workerKey = `${pythonCommand}::${scriptPath}::${scriptMtimeMs}`;
+
+  if (
+    tinyState.worker &&
+    tinyState.worker.exitCode === null &&
+    tinyState.workerKey === workerKey
+  ) {
+    clearTinyIdleTimer();
+    return;
+  }
+
+  if (
+    tinyState.worker &&
+    tinyState.worker.exitCode === null &&
+    tinyState.workerKey !== workerKey
+  ) {
+    tinyState.worker.kill('SIGTERM');
+  }
+
+  clearTinyIdleTimer();
+  tinyState.stdoutBuffer = '';
+  tinyState.workerKey = workerKey;
+  tinyState.lastStderrLine = null;
+
+  console.log(
+    `[SCENE_TRANSCRIBE] Starting persistent tiny worker with python: ${pythonCommand}`,
+  );
+
+  const worker = spawn(pythonCommand, [scriptPath], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  tinyState.worker = worker;
+
+  worker.stdout.on('data', (data) => {
+    tinyState.stdoutBuffer += data.toString();
+
+    let newlineIndex = tinyState.stdoutBuffer.indexOf('\n');
+    while (newlineIndex >= 0) {
+      const line = tinyState.stdoutBuffer.slice(0, newlineIndex).trim();
+      tinyState.stdoutBuffer = tinyState.stdoutBuffer.slice(newlineIndex + 1);
+      if (line) {
+        handleTinyWorkerLine(line);
+      }
+      newlineIndex = tinyState.stdoutBuffer.indexOf('\n');
+    }
+  });
+
+  worker.stderr.on('data', (data) => {
+    const stderrText = data.toString().trim();
+    if (stderrText.length > 0 && stderrText !== tinyState.lastStderrLine) {
+      tinyState.lastStderrLine = stderrText;
+      console.log(`[SCENE_TRANSCRIBE][tiny worker] ${stderrText}`);
+    }
+  });
+
+  worker.on('close', (code, signal) => {
+    const shouldRejectPending =
+      tinyState.pendingJobs.size > 0 ||
+      tinyState.jobQueue.length > 0 ||
+      tinyState.inFlightJobId !== null;
+
+    tinyState.worker = null;
+    tinyState.workerKey = null;
+    tinyState.stdoutBuffer = '';
+    tinyState.inFlightJobId = null;
+    tinyState.lastStderrLine = null;
+    clearTinyIdleTimer();
+
+    if (shouldRejectPending) {
+      rejectAllTinyJobs(
+        new Error(
+          `tiny worker exited unexpectedly (code=${code ?? 'null'}, signal=${signal ?? 'null'})`,
+        ),
+      );
+    }
+
+    console.log(
+      `[SCENE_TRANSCRIBE] tiny worker stopped (code=${code ?? 'null'}, signal=${signal ?? 'null'})`,
+    );
+  });
+
+  worker.on('error', (error) => {
+    console.error('[SCENE_TRANSCRIBE] tiny worker process error:', error);
+  });
+}
+
+function transcribeWithWarmTiny(options: {
+  pythonCommand: string;
+  scriptPath: string;
+  mediaUrl: string;
+  sceneId: string;
+}) {
+  ensureTinyWorker(options.pythonCommand, options.scriptPath);
+  clearTinyIdleTimer();
+
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
+    const id = randomUUID();
+    tinyState.pendingJobs.set(id, {
+      resolve,
+      reject,
+      timeout: null,
+    });
+
+    tinyState.jobQueue.push({
+      id,
+      mediaUrl: options.mediaUrl,
+      sceneId: options.sceneId,
+    });
+
+    dispatchTinyQueue();
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -574,7 +893,7 @@ export async function POST(request: NextRequest) {
       });
     } else if (model === 'tiny') {
       // Path to the Whisper tiny transcription script
-      const scriptPath = path.join(process.cwd(), 'whisper-tiny-transcribe.py');
+      const scriptPath = path.join(process.cwd(), 'whisper-tiny-worker.py');
       const { command: pythonCommand, source: pythonSource } =
         resolvePythonCommand({
           envVarName: 'WHISPER_PYTHON',
@@ -591,53 +910,14 @@ export async function POST(request: NextRequest) {
       console.log(
         `[SCENE_TRANSCRIBE] Using Whisper python: ${pythonCommand} (${pythonSource})`,
       );
+      console.log('[SCENE_TRANSCRIBE] tiny alignment: not required');
 
-      // Run the Whisper tiny transcription script
-      transcriptionPromise = new Promise((resolve, reject) => {
-        const pythonProcess = spawn(pythonCommand, [scriptPath, media_url], {
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        pythonProcess.stdout.on('data', (data) => {
-          stdout += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        pythonProcess.on('close', (code) => {
-          if (code === 0) {
-            try {
-              // Parse the JSON output from the Python script
-              const result = JSON.parse(stdout);
-              resolve(result);
-            } catch (parseError) {
-              reject(
-                new Error(
-                  `Failed to parse scene transcription result: ${parseError}`,
-                ),
-              );
-            }
-          } else {
-            reject(
-              new Error(
-                `Scene Whisper tiny transcription failed with code ${code}: ${stderr}`,
-              ),
-            );
-          }
-        });
-
-        pythonProcess.on('error', (error) => {
-          reject(
-            new Error(
-              `Failed to start scene Whisper tiny transcription process: ${error.message}`,
-            ),
-          );
-        });
+      // Reuse persistent tiny worker and keep it warm for 2 minutes after each job
+      transcriptionPromise = transcribeWithWarmTiny({
+        pythonCommand,
+        scriptPath,
+        mediaUrl: media_url,
+        sceneId: String(scene_id),
       });
     } else if (model === 'turbo') {
       // Path to the Whisper turbo transcription script
