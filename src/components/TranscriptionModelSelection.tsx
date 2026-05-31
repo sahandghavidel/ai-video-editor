@@ -27,7 +27,7 @@ export default function TranscriptionModelSelection() {
     },
     {
       id: 'tiny',
-      name: 'Tiny',
+      name: 'Tiny.en',
       description: '',
       recommended: false,
     },

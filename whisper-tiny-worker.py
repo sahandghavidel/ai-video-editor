@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persistent Whisper tiny worker.
+"""Persistent Whisper tiny.en worker.
 
 Loads model once and serves multiple scene transcription jobs over stdin/stdout JSONL.
 Each input line must be JSON with fields:
@@ -94,7 +94,7 @@ def download_and_convert_media(url: str) -> str:
 
 
 def transcribe_with_model(model: Any, audio_path: str) -> dict[str, Any]:
-    """Transcribe audio using a preloaded Whisper tiny model."""
+    """Transcribe audio using a preloaded Whisper tiny.en model."""
     result = model.transcribe(
         audio_path,
         language="en",
@@ -164,10 +164,10 @@ def main() -> int:
     try:
         import whisper
 
-        log("loading tiny model...")
-        model = whisper.load_model("tiny")
+        log("loading tiny.en model...")
+        model = whisper.load_model("tiny.en")
         log("model loaded")
-        emit({"ready": True, "model": "tiny"})
+        emit({"ready": True, "model": "tiny.en"})
     except Exception as exc:  # pylint: disable=broad-except
         emit({"ready": False, "error": f"Worker init failed: {exc}"})
         return 1
@@ -206,7 +206,7 @@ def main() -> int:
                 {
                     "id": job_id,
                     "ok": False,
-                    "error": f"Whisper tiny transcription failed: {exc}",
+                    "error": f"Whisper tiny.en transcription failed: {exc}",
                 }
             )
             if job_id:

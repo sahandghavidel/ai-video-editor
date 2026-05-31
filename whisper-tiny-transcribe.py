@@ -2,7 +2,7 @@
 """
 Whisper Tiny transcription script that can be called from Node.js
 Takes a media URL as argument and returns JSON transcription
-Uses the tiny Whisper model for faster, lighter transcription
+Uses the tiny.en Whisper model for faster, lighter English transcription
 """
 
 import sys
@@ -57,7 +57,7 @@ def download_and_convert_media(url: str) -> str:
         return wav_path
 
 def transcribe_with_whisper_tiny(audio_path: str) -> dict:
-    """Transcribe audio using Whisper tiny model"""
+    """Transcribe audio using Whisper tiny.en model"""
 
     # Redirect stdout to stderr temporarily to avoid logs in JSON output
     original_stdout = sys.stdout
@@ -67,8 +67,8 @@ def transcribe_with_whisper_tiny(audio_path: str) -> dict:
         import whisper
         import torch
 
-        # Load the tiny model (much smaller and faster than base/large)
-        model = whisper.load_model("tiny")
+        # Load the tiny.en model (English-only and faster by skipping detection)
+        model = whisper.load_model("tiny.en")
 
         # Transcribe with word-level timestamps
         result = model.transcribe(
@@ -160,7 +160,7 @@ def main():
         # Download and convert media
         audio_path = download_and_convert_media(media_url)
 
-        # Transcribe with Whisper tiny
+        # Transcribe with Whisper tiny.en
         result = transcribe_with_whisper_tiny(audio_path)
 
         # Clean up
