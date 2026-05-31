@@ -1,6 +1,10 @@
 'use client';
 
-import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
+import {
+  getBaserowData,
+  getBaserowDataForOriginalVideo,
+  BaserowRow,
+} from '@/lib/baserow-actions';
 import { type FixTtsAutoFixOptions } from '@/utils/fixTtsBatch';
 import SceneCard from '@/components/SceneCard';
 import BatchOperations from '@/components/BatchOperations';
@@ -200,6 +204,60 @@ export default function Home() {
     return null;
   }, []);
 
+  const refreshSelectedVideoDataSilently = useCallback(async () => {
+    const selectedVideoId = selectedOriginalVideo.id;
+
+    if (!selectedVideoId) {
+      await refreshDataSilently();
+      return;
+    }
+
+    const requestId = latestRefreshRequestRef.current + 1;
+    latestRefreshRequestRef.current = requestId;
+
+    setRefreshing(true);
+
+    try {
+      const scopedScenes =
+        await getBaserowDataForOriginalVideo(selectedVideoId);
+
+      // Ignore stale responses from earlier overlapping refresh calls.
+      if (requestId !== latestRefreshRequestRef.current) {
+        return;
+      }
+
+      const retainedScenes = allSceneData.filter((scene) => {
+        const linkedVideoId = extractLinkedVideoId(scene.field_6889);
+        return linkedVideoId !== selectedVideoId;
+      });
+
+      setData([...retainedScenes, ...scopedScenes]);
+      setError(null);
+    } catch (err) {
+      if (requestId !== latestRefreshRequestRef.current) {
+        return;
+      }
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to refresh selected video scenes',
+      );
+      console.error('Error refreshing selected video scenes:', err);
+    } finally {
+      if (requestId === latestRefreshRequestRef.current) {
+        setRefreshing(false);
+      }
+    }
+  }, [
+    allSceneData,
+    extractLinkedVideoId,
+    refreshDataSilently,
+    selectedOriginalVideo.id,
+    setData,
+    setError,
+  ]);
+
   const handleDataUpdate = useCallback(
     (updatedData: BaserowRow[]) => {
       const selectedVideoId = selectedOriginalVideo.id;
@@ -275,7 +333,11 @@ export default function Home() {
   );
 
   const refreshData = () => {
-    refreshDataSilently();
+    void refreshDataSilently();
+  };
+
+  const refreshSelectedVideoData = () => {
+    void refreshSelectedVideoDataSilently();
   };
 
   const globalSettingsSections: Array<{
@@ -619,6 +681,7 @@ export default function Home() {
               <SceneCard
                 data={displayData}
                 refreshData={refreshData}
+                refreshSelectedVideoData={refreshSelectedVideoData}
                 refreshing={refreshing}
                 onDataUpdate={handleDataUpdate}
                 onHandlersReady={handleSceneHandlersReady}

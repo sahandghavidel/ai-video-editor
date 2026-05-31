@@ -162,6 +162,73 @@ export async function getBaserowData(): Promise<BaserowRow[]> {
   }
 }
 
+export async function getBaserowDataForOriginalVideo(
+  originalVideoId: number,
+): Promise<BaserowRow[]> {
+  const baserowUrl = process.env.BASEROW_API_URL;
+  const tableId = process.env.BASEROW_TABLE_ID;
+
+  if (!baserowUrl || !tableId) {
+    throw new Error(
+      'Missing Baserow configuration. Please check your environment variables.',
+    );
+  }
+
+  if (!Number.isInteger(originalVideoId) || originalVideoId <= 0) {
+    throw new Error('Invalid original video ID for scoped scene fetch.');
+  }
+
+  try {
+    const pageSize = 200;
+    let allRows: BaserowRow[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const url = `${baserowUrl}/database/rows/table/${tableId}/?filter__field_6889__equal=${originalVideoId}&size=${pageSize}&page=${page}`;
+
+      const response = await makeAuthenticatedRequest(url, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `Scoped scene fetch failed for video ${originalVideoId}:`,
+          errorText,
+        );
+        throw new Error(
+          `Baserow API error: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      allRows = allRows.concat(results);
+      hasMore = data.next !== null;
+      page += 1;
+
+      console.log(
+        `Fetched scoped scenes page ${page - 1} for video ${originalVideoId}: ${results.length} rows, Total so far: ${allRows.length}`,
+      );
+    }
+
+    console.log(
+      `Total scoped scenes fetched for video ${originalVideoId}: ${allRows.length}`,
+    );
+
+    return allRows;
+  } catch (error) {
+    console.error(
+      `Error fetching scoped scenes for video ${originalVideoId}:`,
+      error,
+    );
+    throw error;
+  }
+}
+
 export async function getOriginalVideosData(): Promise<BaserowRow[]> {
   const baserowUrl = process.env.BASEROW_API_URL;
   const originalVideosTableId = '713'; // Original videos table ID

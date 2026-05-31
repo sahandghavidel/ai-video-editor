@@ -49,6 +49,7 @@ import {
 interface SceneCardProps {
   data: BaserowRow[];
   refreshData?: () => void;
+  refreshSelectedVideoData?: () => void;
   refreshing?: boolean;
   onDataUpdate?: (updatedData: BaserowRow[]) => void;
   onHandlersReady?: (handlers: {
@@ -190,6 +191,7 @@ const extractFieldValueAsText = (field: unknown): string => {
 export default function SceneCard({
   data: selectedVideoData,
   refreshData,
+  refreshSelectedVideoData,
   refreshing = false,
   onDataUpdate,
   onHandlersReady,
@@ -286,13 +288,15 @@ export default function SceneCard({
   const dataRef = useRef(data);
   const onDataUpdateRef = useRef(onDataUpdate);
   const refreshDataRef = useRef(refreshData);
+  const refreshSelectedVideoDataRef = useRef(refreshSelectedVideoData);
 
   // Update refs when props change
   useEffect(() => {
     dataRef.current = data;
     onDataUpdateRef.current = onDataUpdate;
     refreshDataRef.current = refreshData;
-  }, [data, onDataUpdate, refreshData]);
+    refreshSelectedVideoDataRef.current = refreshSelectedVideoData;
+  }, [data, onDataUpdate, refreshData, refreshSelectedVideoData]);
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
 
   // Filter and sort states
@@ -598,7 +602,14 @@ export default function SceneCard({
         event.preventDefault();
 
         if (!event.repeat) {
-          refreshDataRef.current?.();
+          const scopedRefresh = refreshSelectedVideoDataRef.current;
+
+          if (scopedRefresh) {
+            scopedRefresh();
+          } else {
+            refreshDataRef.current?.();
+          }
+
           scrollToFirstSceneButtonRef.current?.click();
         }
 
