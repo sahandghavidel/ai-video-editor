@@ -9604,6 +9604,11 @@ export default function OriginalVideosList({
       console.log('Pipeline Configuration:', pipelineConfig);
       console.log('========================================');
 
+      // Keep SceneCard visually stable during full-pipeline execution.
+      // This intentionally suppresses all step-level scene refresh callbacks
+      // in this function scope (including the final callback refresh).
+      const refreshScenesData = () => {};
+
       let stepNumber = 0;
 
       // Step: Script From Title (Processing only, where script is empty and title exists)
