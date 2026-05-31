@@ -390,7 +390,6 @@ export default function SceneCard({
     updateTTSSettings,
     updateVideoSettings,
     updateTranscriptionSettings,
-    batchOperations,
     startBatchOperation,
     completeBatchOperation,
     mediaPlayer,
@@ -2357,12 +2356,15 @@ export default function SceneCard({
         throwOnError?: boolean;
         captionsFieldKey?: string;
         suppressLocalDataUpdates?: boolean;
+        suppressBusyStateUpdates?: boolean;
       },
     ) => {
       const currentScene =
         (sceneData as BaserowRow | undefined) ||
         data.find((scene) => scene.id === sceneId);
       if (!currentScene) return;
+
+      const shouldSetBusyState = opts?.suppressBusyStateUpdates !== true;
 
       // Determine which video URL to use
       const videoUrl =
@@ -2379,7 +2381,9 @@ export default function SceneCard({
         return;
       }
 
-      setTranscribingScene(sceneId);
+      if (shouldSetBusyState) {
+        setTranscribingScene(sceneId);
+      }
 
       try {
         console.log(
@@ -2539,7 +2543,9 @@ export default function SceneCard({
           throw error;
         }
       } finally {
-        setTranscribingScene(null);
+        if (shouldSetBusyState) {
+          setTranscribingScene(null);
+        }
       }
     },
     [
@@ -3096,10 +3102,14 @@ export default function SceneCard({
         skipAutoSyncAfterTtsGeneration?: boolean;
         suppressRefreshes?: boolean;
         suppressLocalDataUpdates?: boolean;
+        suppressBusyStateUpdates?: boolean;
       },
     ) => {
+      const shouldSetBusyState = opts?.suppressBusyStateUpdates !== true;
       try {
-        setProducingTTS(sceneId);
+        if (shouldSetBusyState) {
+          setProducingTTS(sceneId);
+        }
 
         // Extract video ID from scene data
         let videoId: number | null = null;
@@ -3230,11 +3240,18 @@ export default function SceneCard({
                 currentScene,
                 undefined,
                 undefined,
-                opts?.suppressRefreshes
+                opts?.suppressRefreshes ||
+                  opts?.suppressLocalDataUpdates ||
+                  opts?.suppressBusyStateUpdates
                   ? {
-                      suppressRefreshes: true,
+                      ...(opts?.suppressRefreshes
+                        ? { suppressRefreshes: true }
+                        : {}),
                       ...(opts?.suppressLocalDataUpdates
                         ? { suppressLocalDataUpdates: true }
+                        : {}),
+                      ...(opts?.suppressBusyStateUpdates
+                        ? { suppressBusyStateUpdates: true }
                         : {}),
                     }
                   : undefined,
@@ -3250,7 +3267,9 @@ export default function SceneCard({
           throw error;
         }
       } finally {
-        setProducingTTS(null);
+        if (shouldSetBusyState) {
+          setProducingTTS(null);
+        }
       }
     },
     [
@@ -3272,10 +3291,14 @@ export default function SceneCard({
         throwOnError?: boolean;
         suppressRefreshes?: boolean;
         suppressLocalDataUpdates?: boolean;
+        suppressBusyStateUpdates?: boolean;
       },
     ) => {
+      const shouldSetBusyState = opts?.suppressBusyStateUpdates !== true;
       try {
-        setGeneratingVideo(sceneId);
+        if (shouldSetBusyState) {
+          setGeneratingVideo(sceneId);
+        }
 
         // Extract video ID from scene data
         let videoId: number | null = null;
@@ -3386,7 +3409,9 @@ export default function SceneCard({
           throw error;
         }
       } finally {
-        setGeneratingVideo(null);
+        if (shouldSetBusyState) {
+          setGeneratingVideo(null);
+        }
       }
     },
     [setGeneratingVideo, refreshSceneInLocalCache],
@@ -4217,6 +4242,7 @@ export default function SceneCard({
             skipAutoSyncAfterTtsGeneration: true,
             suppressRefreshes,
             suppressLocalDataUpdates: suppressLiveSceneUpdates,
+            suppressBusyStateUpdates: suppressLiveSceneUpdates,
           });
 
           const afterTtsScene =
@@ -4255,6 +4281,7 @@ export default function SceneCard({
               throwOnError: true,
               suppressRefreshes,
               suppressLocalDataUpdates: suppressLiveSceneUpdates,
+              suppressBusyStateUpdates: suppressLiveSceneUpdates,
             },
           );
 
@@ -4298,6 +4325,7 @@ export default function SceneCard({
             {
               throwOnError: true,
               suppressLocalDataUpdates: suppressLiveSceneUpdates,
+              suppressBusyStateUpdates: suppressLiveSceneUpdates,
             },
           );
 
@@ -4353,6 +4381,7 @@ export default function SceneCard({
               {
                 throwOnError: true,
                 suppressLocalDataUpdates: suppressLiveSceneUpdates,
+                suppressBusyStateUpdates: suppressLiveSceneUpdates,
               },
             );
 
@@ -4426,6 +4455,7 @@ export default function SceneCard({
             skipAutoSyncAfterTtsGeneration: true,
             suppressRefreshes,
             suppressLocalDataUpdates: suppressLiveSceneUpdates,
+            suppressBusyStateUpdates: suppressLiveSceneUpdates,
           });
 
           const afterTtsScene =
@@ -4462,6 +4492,7 @@ export default function SceneCard({
               throwOnError: true,
               suppressRefreshes,
               suppressLocalDataUpdates: suppressLiveSceneUpdates,
+              suppressBusyStateUpdates: suppressLiveSceneUpdates,
             },
           );
 
@@ -4506,6 +4537,7 @@ export default function SceneCard({
             {
               throwOnError: true,
               suppressLocalDataUpdates: suppressLiveSceneUpdates,
+              suppressBusyStateUpdates: suppressLiveSceneUpdates,
             },
           );
 
@@ -4600,8 +4632,15 @@ export default function SceneCard({
       sceneData?: BaserowRow,
       skipRefresh = false,
       enforceLongerSentences?: boolean,
+      opts?: {
+        suppressLocalDataUpdates?: boolean;
+        suppressBusyStateUpdates?: boolean;
+      },
     ) => {
-      setImprovingSentence(sceneId);
+      const shouldSetBusyState = opts?.suppressBusyStateUpdates !== true;
+      if (shouldSetBusyState) {
+        setImprovingSentence(sceneId);
+      }
 
       console.log(
         `Improving sentence for scene ${sceneId}: "${currentSentence}"`,
@@ -4657,19 +4696,21 @@ export default function SceneCard({
       }
 
       // Update the local data optimistically
-      const updatedData = dataRef.current.map((scene) => {
-        if (scene.id === sceneId) {
-          const sentenceChanged =
-            String(scene.field_6890 ?? '') !== improvedSentence;
-          return {
-            ...scene,
-            field_6890: improvedSentence,
-            ...(sentenceChanged ? { field_6891: '' } : {}),
-          };
-        }
-        return scene;
-      });
-      onDataUpdateRef.current?.(updatedData);
+      if (!opts?.suppressLocalDataUpdates) {
+        const updatedData = dataRef.current.map((scene) => {
+          if (scene.id === sceneId) {
+            const sentenceChanged =
+              String(scene.field_6890 ?? '') !== improvedSentence;
+            return {
+              ...scene,
+              field_6890: improvedSentence,
+              ...(sentenceChanged ? { field_6891: '' } : {}),
+            };
+          }
+          return scene;
+        });
+        onDataUpdateRef.current?.(updatedData);
+      }
 
       // Refresh data from server to ensure consistency (skip if requested)
       if (!skipRefresh) {
@@ -4680,7 +4721,11 @@ export default function SceneCard({
       }
 
       // Auto-generate TTS if option is enabled
-      if (videoSettings.autoGenerateTTS && improvedSentence.trim()) {
+      if (
+        videoSettings.autoGenerateTTS &&
+        improvedSentence.trim() &&
+        !opts?.suppressBusyStateUpdates
+      ) {
         // Wait a moment to ensure the text is properly updated
         const sceneForTts =
           sceneData || dataRef.current.find((scene) => scene.id === sceneId);
@@ -4689,7 +4734,9 @@ export default function SceneCard({
         }, 1000);
       }
 
-      setImprovingSentence(null);
+      if (shouldSetBusyState) {
+        setImprovingSentence(null);
+      }
     },
     [
       setImprovingSentence,
@@ -7005,15 +7052,12 @@ export default function SceneCard({
                                   setShowTimeAdjustment(null); // Close dropdown
                                 }}
                                 disabled={
-                                  sceneLoading.creatingTypingEffect !== null ||
-                                  batchOperations.generatingAllVideos
+                                  sceneLoading.creatingTypingEffect !== null
                                 }
                                 className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded w-full text-left ${
                                   sceneLoading.creatingTypingEffect === scene.id
                                     ? 'opacity-50 cursor-not-allowed'
-                                    : sceneLoading.creatingTypingEffect !==
-                                          null ||
-                                        batchOperations.generatingAllVideos
+                                    : sceneLoading.creatingTypingEffect !== null
                                       ? 'opacity-50 cursor-not-allowed'
                                       : ''
                                 }`}
@@ -7022,9 +7066,7 @@ export default function SceneCard({
                                     ? 'Creating typing effect for this scene...'
                                     : sceneLoading.creatingTypingEffect !== null
                                       ? `Typing effect is being created for scene ${sceneLoading.creatingTypingEffect}`
-                                      : batchOperations.generatingAllVideos
-                                        ? 'Batch video generation is in progress'
-                                        : 'Create typing effect video with animated text overlay'
+                                      : 'Create typing effect video with animated text overlay'
                                 }
                               >
                                 {sceneLoading.creatingTypingEffect ===
@@ -7037,9 +7079,7 @@ export default function SceneCard({
                                   {sceneLoading.creatingTypingEffect ===
                                   scene.id
                                     ? 'Creating Typing Effect...'
-                                    : sceneLoading.creatingTypingEffect !==
-                                          null ||
-                                        batchOperations.generatingAllVideos
+                                    : sceneLoading.creatingTypingEffect !== null
                                       ? 'Typing Effect Busy'
                                       : 'Create Typing Effect'}
                                 </span>
@@ -7195,7 +7235,6 @@ export default function SceneCard({
                     }}
                     disabled={
                       sceneLoading.producingTTS !== null ||
-                      batchOperations.generatingAllTTS ||
                       !String(
                         scene['field_6890'] || scene.field_6890 || '',
                       ).trim()
@@ -7203,8 +7242,7 @@ export default function SceneCard({
                     className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                       sceneLoading.producingTTS === scene.id
                         ? 'bg-gray-100 text-gray-500'
-                        : sceneLoading.producingTTS !== null ||
-                            batchOperations.generatingAllTTS
+                        : sceneLoading.producingTTS !== null
                           ? 'bg-gray-50 text-gray-400'
                           : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -7213,9 +7251,7 @@ export default function SceneCard({
                         ? 'Generating TTS for this scene...'
                         : sceneLoading.producingTTS !== null
                           ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
-                          : batchOperations.generatingAllTTS
-                            ? 'Batch TTS generation is in progress'
-                            : 'Generate TTS from sentence (right-click: random seed)'
+                          : 'Generate TTS from sentence (right-click: random seed)'
                     }
                   >
                     {sceneLoading.producingTTS === scene.id ? (
@@ -7267,8 +7303,7 @@ export default function SceneCard({
                     <span>
                       {sceneLoading.producingTTS === scene.id
                         ? 'Prod...'
-                        : sceneLoading.producingTTS !== null ||
-                            batchOperations.generatingAllTTS
+                        : sceneLoading.producingTTS !== null
                           ? 'TTS'
                           : typeof scene['field_6891'] === 'string' &&
                               scene['field_6891']
@@ -7288,7 +7323,6 @@ export default function SceneCard({
                     }
                     disabled={
                       sceneLoading.improvingSentence !== null ||
-                      batchOperations.improvingAll ||
                       !String(
                         scene['field_6890'] || scene.field_6890 || '',
                       ).trim()
@@ -7296,8 +7330,7 @@ export default function SceneCard({
                     className={`flex items-center justify-center space-x-1 px-1 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
                       sceneLoading.improvingSentence === scene.id
                         ? 'bg-gray-100 text-gray-500'
-                        : sceneLoading.improvingSentence !== null ||
-                            batchOperations.improvingAll
+                        : sceneLoading.improvingSentence !== null
                           ? 'bg-gray-50 text-gray-400'
                           : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -7306,11 +7339,9 @@ export default function SceneCard({
                         ? 'Improving this sentence...'
                         : sceneLoading.improvingSentence !== null
                           ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
-                          : batchOperations.improvingAll
-                            ? 'Batch AI improvement is in progress'
-                            : modelSelection.selectedModel
-                              ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
-                              : 'Improve sentence with AI (no model selected)'
+                          : modelSelection.selectedModel
+                            ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
+                            : 'Improve sentence with AI (no model selected)'
                     }
                   >
                     {sceneLoading.improvingSentence === scene.id ? (
@@ -7342,8 +7373,7 @@ export default function SceneCard({
                     <span>
                       {sceneLoading.improvingSentence === scene.id
                         ? 'Imp...'
-                        : sceneLoading.improvingSentence !== null ||
-                            batchOperations.improvingAll
+                        : sceneLoading.improvingSentence !== null
                           ? 'Busy'
                           : 'AI'}
                     </span>
@@ -7391,15 +7421,11 @@ export default function SceneCard({
                     scene['field_6888'] && (
                       <button
                         onClick={() => handleSpeedUpVideo(scene.id, scene)}
-                        disabled={
-                          sceneLoading.speedingUpVideo !== null ||
-                          batchOperations.speedingUpAllVideos
-                        }
+                        disabled={sceneLoading.speedingUpVideo !== null}
                         className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
                           sceneLoading.speedingUpVideo === scene.id
                             ? 'bg-gray-100 text-gray-500'
-                            : sceneLoading.speedingUpVideo !== null ||
-                                batchOperations.speedingUpAllVideos
+                            : sceneLoading.speedingUpVideo !== null
                               ? 'bg-gray-50 text-gray-400'
                               : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                         }`}
@@ -7408,13 +7434,11 @@ export default function SceneCard({
                             ? 'Speed up video processing for this scene...'
                             : sceneLoading.speedingUpVideo !== null
                               ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
-                              : batchOperations.speedingUpAllVideos
-                                ? 'Batch video speed-up is in progress'
-                                : `Speed up video ${
-                                    videoSettings.selectedSpeed
-                                  }x and ${
-                                    videoSettings.muteAudio ? 'mute' : 'keep'
-                                  } audio (saves to field 6886)`
+                              : `Speed up video ${
+                                  videoSettings.selectedSpeed
+                                }x and ${
+                                  videoSettings.muteAudio ? 'mute' : 'keep'
+                                } audio (saves to field 6886)`
                         }
                       >
                         {sceneLoading.speedingUpVideo === scene.id ? (
@@ -7454,8 +7478,7 @@ export default function SceneCard({
                         <span>
                           {sceneLoading.speedingUpVideo === scene.id
                             ? 'Pro...'
-                            : sceneLoading.speedingUpVideo !== null ||
-                                batchOperations.speedingUpAllVideos
+                            : sceneLoading.speedingUpVideo !== null
                               ? 'Spe..'
                               : 'Speed'}
                         </span>
@@ -7542,15 +7565,11 @@ export default function SceneCard({
                             syncPanMode,
                           )
                         }
-                        disabled={
-                          sceneLoading.generatingVideo !== null ||
-                          batchOperations.generatingAllVideos
-                        }
+                        disabled={sceneLoading.generatingVideo !== null}
                         className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[90px] rounded-full text-xs font-medium transition-colors ${
                           sceneLoading.generatingVideo === scene.id
                             ? 'bg-gray-100 text-gray-500'
-                            : sceneLoading.generatingVideo !== null ||
-                                batchOperations.generatingAllVideos
+                            : sceneLoading.generatingVideo !== null
                               ? 'bg-gray-50 text-gray-400'
                               : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -7559,13 +7578,11 @@ export default function SceneCard({
                             ? 'Generating synchronized video for this scene...'
                             : sceneLoading.generatingVideo !== null
                               ? `Video is being generated for scene ${sceneLoading.generatingVideo}`
-                              : batchOperations.generatingAllVideos
-                                ? 'Batch video generation is in progress'
-                                : `Generate synchronized video (Zoom: ${syncZoomLevel}%${
-                                    syncPanMode !== 'none'
-                                      ? ` ${syncPanMode}`
-                                      : ''
-                                  })`
+                              : `Generate synchronized video (Zoom: ${syncZoomLevel}%${
+                                  syncPanMode !== 'none'
+                                    ? ` ${syncPanMode}`
+                                    : ''
+                                })`
                         }
                       >
                         {sceneLoading.generatingVideo === scene.id ? (
@@ -7676,9 +7693,7 @@ export default function SceneCard({
                             ? 'Gen..'
                             : sceneLoading.generatingVideo !== null
                               ? 'Busy'
-                              : batchOperations.generatingAllVideos
-                                ? 'Busy'
-                                : 'Sync'}
+                              : 'Sync'}
                         </span>
                       </button>
                     )}

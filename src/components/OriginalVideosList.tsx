@@ -427,15 +427,11 @@ export default function OriginalVideosList({
     combineScenesSettings,
     modelSelection,
     sceneLoading,
-    setImprovingSentence,
     setCurrentlyProcessingVideo,
     setCurrentlyProcessingScene,
     batchOperations,
     startBatchOperation,
     completeBatchOperation,
-    setProducingTTS,
-    setSpeedingUpVideo,
-    setGeneratingVideo,
     setOptimizingSilenceVideo,
     setNormalizingAudioVideo,
     setConvertingToCFRVideo,
@@ -4203,13 +4199,39 @@ export default function OriginalVideosList({
         `Starting AI improvement for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
       );
 
+      const handleSentenceImprovementWithOptions =
+        sceneHandlers.handleSentenceImprovement as unknown as (
+          sceneId: number,
+          sentence: string,
+          model?: string,
+          sceneData?: BaserowRow,
+          skipRefresh?: boolean,
+          enforceLongerSentences?: boolean,
+          opts?: {
+            suppressLocalDataUpdates?: boolean;
+            suppressBusyStateUpdates?: boolean;
+          },
+        ) => Promise<void>;
+
       await handleImproveAllSentencesForAllVideos(
         scenesToProcess,
-        sceneHandlers.handleSentenceImprovement,
+        (sceneId, sentence, model, sceneData, skipRefresh) =>
+          handleSentenceImprovementWithOptions(
+            sceneId,
+            sentence,
+            model,
+            sceneData,
+            skipRefresh,
+            undefined,
+            {
+              suppressLocalDataUpdates: true,
+              suppressBusyStateUpdates: true,
+            },
+          ),
         modelSelection.selectedModel,
         setImprovingAllVideosScenes,
         setCurrentProcessingVideoId,
-        setImprovingSentence,
+        () => {},
         playSound,
       );
 
@@ -4314,12 +4336,29 @@ export default function OriginalVideosList({
         }
       }
 
+      const handleTTSProduceWithOptions =
+        sceneHandlers.handleTTSProduce as unknown as (
+          sceneId: number,
+          text: string,
+          sceneData?: BaserowRow,
+          opts?: {
+            suppressRefreshes?: boolean;
+            suppressLocalDataUpdates?: boolean;
+            suppressBusyStateUpdates?: boolean;
+          },
+        ) => Promise<void>;
+
       await generateAllTTSForAllVideosUtil(
         scenesToProcess,
-        sceneHandlers.handleTTSProduce,
+        (sceneId, text, sceneData) =>
+          handleTTSProduceWithOptions(sceneId, text, sceneData, {
+            suppressRefreshes: true,
+            suppressLocalDataUpdates: true,
+            suppressBusyStateUpdates: true,
+          }),
         setGeneratingAllTTSForAllVideos,
         setCurrentProcessingVideoId,
-        setProducingTTS,
+        () => {},
         playSound,
         ttsVoiceByVideoId,
         {
@@ -4330,9 +4369,9 @@ export default function OriginalVideosList({
 
       console.log('Batch TTS generation completed for all videos');
 
-      if (refreshScenesData) {
-        refreshScenesData();
-      }
+      console.log(
+        'TTS All completed in isolated mode; skipping automatic scene refresh to keep SceneCard stable.',
+      );
 
       // Refresh the original videos list to show any updates
       await handleRefresh();
@@ -4425,18 +4464,41 @@ export default function OriginalVideosList({
         `Starting video generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
       );
 
+      const handleVideoGenerateWithOptions =
+        sceneHandlers.handleVideoGenerate as unknown as (
+          sceneId: number,
+          videoUrl: string,
+          audioUrl: string,
+          sceneData?: BaserowRow,
+          zoomLevel?: number,
+          panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom',
+          opts?: {
+            suppressRefreshes?: boolean;
+            suppressLocalDataUpdates?: boolean;
+            suppressBusyStateUpdates?: boolean;
+          },
+        ) => Promise<void>;
+
       await handleGenerateAllVideos(
         scenesToProcess,
-        sceneHandlers.handleVideoGenerate,
+        (sceneId, videoUrl, audioUrl, sceneData) =>
+          handleVideoGenerateWithOptions(
+            sceneId,
+            videoUrl,
+            audioUrl,
+            sceneData,
+            0,
+            'none',
+            {
+              suppressRefreshes: true,
+              suppressLocalDataUpdates: true,
+              suppressBusyStateUpdates: true,
+            },
+          ),
         () => {}, // startBatchOperation (not used in OriginalVideosList)
         () => {}, // completeBatchOperation (not used in OriginalVideosList)
-        setGeneratingVideo,
-        async () => {
-          // Refresh only scenes data, not the entire page
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-        },
+        () => {},
+        undefined,
         playSound,
         {
           suppressRefreshes: true,
@@ -4532,13 +4594,8 @@ export default function OriginalVideosList({
         videoSettings,
         setSpeedingUpAllVideos,
         setCurrentProcessingVideoId,
-        setSpeedingUpVideo,
-        async () => {
-          // Refresh only scenes data, not the entire page
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-        },
+        () => {},
+        undefined,
         playSound,
         {
           suppressRefreshes: true,
@@ -4814,7 +4871,7 @@ export default function OriginalVideosList({
     const comparisonAliases = await loadComparisonAliasesOnce();
     const autoFixOptions: FixTtsAutoFixOptions = {
       suppressRefreshes: true,
-      suppressLiveSceneUpdates: !flaggedOnly,
+      suppressLiveSceneUpdates: true,
       comparisonAliases,
       ...(flaggedOnly ? { maxAttempts: 1 } : {}),
     };
@@ -4915,8 +4972,10 @@ export default function OriginalVideosList({
         flaggedOnly: true,
       });
 
-      if (didProcess && refreshScenesData) {
-        refreshScenesData();
+      if (didProcess) {
+        console.log(
+          'Fix Flagged completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+        );
       }
 
       if (playSound) {
@@ -5070,6 +5129,8 @@ export default function OriginalVideosList({
             throwOnError?: boolean;
             skipAutoSyncAfterTtsGeneration?: boolean;
             suppressRefreshes?: boolean;
+            suppressLocalDataUpdates?: boolean;
+            suppressBusyStateUpdates?: boolean;
           },
         ) => Promise<void>;
 
@@ -5081,7 +5142,12 @@ export default function OriginalVideosList({
           sceneData?: BaserowRow,
           zoomLevel?: number,
           panMode?: 'none' | 'zoom' | 'zoomOut' | 'topToBottom',
-          opts?: { throwOnError?: boolean; suppressRefreshes?: boolean },
+          opts?: {
+            throwOnError?: boolean;
+            suppressRefreshes?: boolean;
+            suppressLocalDataUpdates?: boolean;
+            suppressBusyStateUpdates?: boolean;
+          },
         ) => Promise<void>;
 
       const transcribeSceneWithOptions =
@@ -5092,7 +5158,11 @@ export default function OriginalVideosList({
           skipRefresh?: boolean,
           skipSound?: boolean,
           updateSentence?: boolean,
-          opts?: { throwOnError?: boolean },
+          opts?: {
+            throwOnError?: boolean;
+            suppressLocalDataUpdates?: boolean;
+            suppressBusyStateUpdates?: boolean;
+          },
         ) => Promise<void>;
 
       const extractAudioUrl = (raw: unknown): string => {
@@ -5866,6 +5936,8 @@ export default function OriginalVideosList({
                   throwOnError: true,
                   skipAutoSyncAfterTtsGeneration: true,
                   suppressRefreshes: true,
+                  suppressLocalDataUpdates: true,
+                  suppressBusyStateUpdates: true,
                 },
               );
 
@@ -5941,7 +6013,12 @@ export default function OriginalVideosList({
               freshBeforeSync,
               0,
               'none',
-              { throwOnError: true, suppressRefreshes: true },
+              {
+                throwOnError: true,
+                suppressRefreshes: true,
+                suppressLocalDataUpdates: true,
+                suppressBusyStateUpdates: true,
+              },
             );
 
             const sceneForTranscribe =
@@ -5957,7 +6034,11 @@ export default function OriginalVideosList({
               true,
               true,
               false,
-              { throwOnError: true },
+              {
+                throwOnError: true,
+                suppressLocalDataUpdates: true,
+                suppressBusyStateUpdates: true,
+              },
             );
 
             const captionsUrl = await waitForCaptionsUrl(scene.id, {
@@ -6024,7 +6105,11 @@ export default function OriginalVideosList({
                 true,
                 true,
                 false,
-                { throwOnError: true },
+                {
+                  throwOnError: true,
+                  suppressLocalDataUpdates: true,
+                  suppressBusyStateUpdates: true,
+                },
               );
 
               const refreshedCaptionsUrl = await waitForCaptionsUrl(scene.id, {
@@ -6107,8 +6192,10 @@ export default function OriginalVideosList({
 
       const didProcess = await runFixIntroQaForProcessingScenesAllVideos();
 
-      if (didProcess && refreshScenesData) {
-        refreshScenesData();
+      if (didProcess) {
+        console.log(
+          'Fix Intro QA completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+        );
       }
 
       if (playSound) {
@@ -6306,9 +6393,9 @@ export default function OriginalVideosList({
         await new Promise((resolve) => setTimeout(resolve, 150));
       }
 
-      if (refreshScenesData) {
-        refreshScenesData();
-      }
+      console.log(
+        'Prompt Scenes completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+      );
 
       if (playSound) {
         await playSuccessAndNotifyBatchCompletion('Prompt Scenes');
@@ -6999,9 +7086,6 @@ export default function OriginalVideosList({
       const refreshStartedAt = Date.now();
       await handleRefresh();
       refreshDurationMs = Date.now() - refreshStartedAt;
-      if (refreshScenesData) {
-        refreshScenesData();
-      }
 
       console.info(`${logPrefix} Refresh completed.`, {
         refreshDurationMs,
@@ -7543,7 +7627,9 @@ export default function OriginalVideosList({
       }
 
       await handleRefresh();
-      if (refreshScenesData) refreshScenesData();
+      console.log(
+        'Combine Pairs completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+      );
       if (playSound) {
         await playSuccessAndNotifyBatchCompletion('Combine Pairs');
       }
@@ -8744,9 +8830,9 @@ export default function OriginalVideosList({
       }
 
       await handleRefresh();
-      if (refreshScenesData) {
-        refreshScenesData();
-      }
+      console.log(
+        'Merge Scenes completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+      );
 
       if (playSound) {
         await playSuccessAndNotifyBatchCompletion('Merge Scenes');
@@ -9159,9 +9245,9 @@ export default function OriginalVideosList({
 
       // Single refresh at batch end (instead of per-scene refreshes)
       await handleRefresh();
-      if (refreshScenesData) {
-        refreshScenesData();
-      }
+      console.log(
+        'Gen Clips All completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+      );
 
       // Play success sound (if enabled)
       if (playSound) {
@@ -9219,6 +9305,8 @@ export default function OriginalVideosList({
         opts?: {
           throwOnError?: boolean;
           captionsFieldKey?: string;
+          suppressLocalDataUpdates?: boolean;
+          suppressBusyStateUpdates?: boolean;
         },
       ) => Promise<void>;
 
@@ -9328,6 +9416,8 @@ export default function OriginalVideosList({
             {
               captionsFieldKey: 'field_7120',
               throwOnError: true,
+              suppressLocalDataUpdates: true,
+              suppressBusyStateUpdates: true,
             },
           );
 
@@ -9460,9 +9550,9 @@ export default function OriginalVideosList({
       }
 
       await handleRefresh();
-      if (refreshScenesData) {
-        refreshScenesData();
-      }
+      console.log(
+        'Transcribe + Apply + Gen Clips completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+      );
 
       if (playSound) {
         await playSuccessAndNotifyBatchCompletion(
