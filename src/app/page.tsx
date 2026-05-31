@@ -66,7 +66,7 @@ export default function Home() {
     getFilteredData,
     selectedOriginalVideo,
   } = useAppStore();
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isGlobalSettingsExpanded, setIsGlobalSettingsExpanded] =
     useState(false); // Global settings collapsed by default
@@ -75,6 +75,10 @@ export default function Home() {
       defaultGlobalSettingsSectionsExpanded,
     );
   const latestRefreshRequestRef = useRef(0);
+  const hasHandledInitialSceneLoadRef = useRef(false);
+  const refreshSelectedVideoDataSilentlyRef = useRef<() => Promise<void>>(
+    async () => undefined,
+  );
 
   // Get filtered data based on selected original video
   const filteredData = getFilteredData();
@@ -118,20 +122,6 @@ export default function Home() {
     ) => Promise<void>;
   } | null>(null);
 
-  const loadData = useCallback(async () => {
-    try {
-      setInitialLoading(true);
-      const fetchedData = await getBaserowData();
-      setData(fetchedData);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-      console.error('Error loading Baserow data:', err);
-    } finally {
-      setInitialLoading(false);
-    }
-  }, [setData, setError]);
-
   const refreshDataSilently = useCallback(async () => {
     const requestId = latestRefreshRequestRef.current + 1;
     latestRefreshRequestRef.current = requestId;
@@ -161,10 +151,6 @@ export default function Home() {
       }
     }
   }, [setData, setError]);
-
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
 
   const extractLinkedVideoId = useCallback((videoIdField: unknown) => {
     if (typeof videoIdField === 'number' && Number.isFinite(videoIdField)) {
@@ -257,6 +243,35 @@ export default function Home() {
     setData,
     setError,
   ]);
+
+  useEffect(() => {
+    refreshSelectedVideoDataSilentlyRef.current =
+      refreshSelectedVideoDataSilently;
+  }, [refreshSelectedVideoDataSilently]);
+
+  useEffect(() => {
+    const selectedVideoId = selectedOriginalVideo.id;
+
+    if (!selectedVideoId) {
+      setInitialLoading(false);
+      hasHandledInitialSceneLoadRef.current = true;
+      return;
+    }
+
+    const shouldShowInitialLoader = !hasHandledInitialSceneLoadRef.current;
+
+    if (shouldShowInitialLoader) {
+      setInitialLoading(true);
+    }
+
+    void refreshSelectedVideoDataSilentlyRef.current().finally(() => {
+      if (shouldShowInitialLoader) {
+        setInitialLoading(false);
+      }
+
+      hasHandledInitialSceneLoadRef.current = true;
+    });
+  }, [selectedOriginalVideo.id]);
 
   const handleDataUpdate = useCallback(
     (updatedData: BaserowRow[]) => {
