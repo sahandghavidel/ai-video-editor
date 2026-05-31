@@ -4814,6 +4814,7 @@ export default function OriginalVideosList({
     const comparisonAliases = await loadComparisonAliasesOnce();
     const autoFixOptions: FixTtsAutoFixOptions = {
       suppressRefreshes: true,
+      suppressLiveSceneUpdates: !flaggedOnly,
       comparisonAliases,
       ...(flaggedOnly ? { maxAttempts: 1 } : {}),
     };
@@ -4867,8 +4868,10 @@ export default function OriginalVideosList({
         flaggedOnly: false,
       });
 
-      if (didProcess && refreshScenesData) {
-        refreshScenesData();
+      if (didProcess) {
+        console.log(
+          'Fix TTS completed in isolated mode; skipping automatic scene refresh to keep current home-page view stable.',
+        );
       }
 
       if (playSound) {
@@ -10203,12 +10206,9 @@ export default function OriginalVideosList({
           await handleTranscribeProcessingScenesAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: Fix TTS finished`);
 
-          console.log('Refreshing data after Fix TTS...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          console.log(
+            'Skipping automatic refresh after Fix TTS to keep current scene view isolated while Fix TTS runs.',
+          );
         } catch (error) {
           console.error(`✗ Step ${stepNumber} Failed: Fix TTS error`, error);
           throw new Error(

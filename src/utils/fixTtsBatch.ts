@@ -8,6 +8,7 @@ export type TtsComparisonAliasEntry = {
 export type FixTtsAutoFixOptions = {
   maxAttempts?: number;
   suppressRefreshes?: boolean;
+  suppressLiveSceneUpdates?: boolean;
   comparisonAliases?: TtsComparisonAliasEntry[];
 };
 

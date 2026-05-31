@@ -371,6 +371,7 @@ export default function SceneCard({
   const [autoFixMismatchStatus, setAutoFixMismatchStatus] = useState<
     Record<number, string | null>
   >({});
+  const autoFixingMismatchLockRef = useRef(false);
 
   type CaptionsWord = { word: string; start: number; end: number };
   type AliasCanonicalRule = {
@@ -2355,6 +2356,7 @@ export default function SceneCard({
       opts?: {
         throwOnError?: boolean;
         captionsFieldKey?: string;
+        suppressLocalDataUpdates?: boolean;
       },
     ) => {
       const currentScene =
@@ -2503,8 +2505,10 @@ export default function SceneCard({
                 }
               : scene,
           );
-          onDataUpdate?.(optimisticStoreData);
-          setData(optimisticStoreData);
+          if (!opts?.suppressLocalDataUpdates) {
+            onDataUpdate?.(optimisticStoreData);
+            setData(optimisticStoreData);
+          }
         }
 
         // Refresh data from server to ensure consistency only when not skipped
@@ -3091,6 +3095,7 @@ export default function SceneCard({
         throwOnError?: boolean;
         skipAutoSyncAfterTtsGeneration?: boolean;
         suppressRefreshes?: boolean;
+        suppressLocalDataUpdates?: boolean;
       },
     ) => {
       try {
@@ -3182,13 +3187,16 @@ export default function SceneCard({
         });
 
         // Update the local data optimistically
-        const updatedData = dataRef.current.map((scene) => {
-          if (scene.id === sceneId) {
-            return { ...scene, field_6891: audioUrl };
-          }
-          return scene;
-        });
-        onDataUpdateRef.current?.(updatedData);
+        if (!opts?.suppressLocalDataUpdates) {
+          const updatedData = dataRef.current.map((scene) => {
+            if (scene.id === sceneId) {
+              return { ...scene, field_6891: audioUrl };
+            }
+            return scene;
+          });
+          dataRef.current = updatedData;
+          onDataUpdateRef.current?.(updatedData);
+        }
 
         let refreshedScene: BaserowRow | null = null;
 
@@ -3223,7 +3231,12 @@ export default function SceneCard({
                 undefined,
                 undefined,
                 opts?.suppressRefreshes
-                  ? { suppressRefreshes: true }
+                  ? {
+                      suppressRefreshes: true,
+                      ...(opts?.suppressLocalDataUpdates
+                        ? { suppressLocalDataUpdates: true }
+                        : {}),
+                    }
                   : undefined,
               );
             }, 1000);
@@ -3255,7 +3268,11 @@ export default function SceneCard({
       sceneData?: unknown,
       zoomLevel: number = 0,
       panMode: 'none' | 'zoom' | 'zoomOut' | 'topToBottom' = 'none',
-      opts?: { throwOnError?: boolean; suppressRefreshes?: boolean },
+      opts?: {
+        throwOnError?: boolean;
+        suppressRefreshes?: boolean;
+        suppressLocalDataUpdates?: boolean;
+      },
     ) => {
       try {
         setGeneratingVideo(sceneId);
@@ -3343,13 +3360,16 @@ export default function SceneCard({
         console.log(`[SYNC] Baserow update result:`, updatedRow);
 
         // Update the local data optimistically
-        const updatedData = dataRef.current.map((scene) => {
-          if (scene.id === sceneId) {
-            return { ...scene, field_6886: normalizedGeneratedVideoUrl };
-          }
-          return scene;
-        });
-        onDataUpdateRef.current?.(updatedData);
+        if (!opts?.suppressLocalDataUpdates) {
+          const updatedData = dataRef.current.map((scene) => {
+            if (scene.id === sceneId) {
+              return { ...scene, field_6886: normalizedGeneratedVideoUrl };
+            }
+            return scene;
+          });
+          dataRef.current = updatedData;
+          onDataUpdateRef.current?.(updatedData);
+        }
 
         // Only refresh from server if it's NOT a cache hit (to avoid wasteful refetch)
         if (!isCached && !opts?.suppressRefreshes) {
@@ -3997,12 +4017,19 @@ export default function SceneCard({
       sceneData?: BaserowRow,
       options?: FixTtsAutoFixOptions,
     ) => {
-      if (autoFixingMismatchSceneId !== null) return;
+      if (autoFixingMismatchLockRef.current) return;
 
-      setAutoFixingMismatchSceneId(sceneId);
-      setAutoFixMismatchStatus((prev) => ({ ...prev, [sceneId]: null }));
+      const suppressLiveSceneUpdates =
+        options?.suppressLiveSceneUpdates === true;
+      autoFixingMismatchLockRef.current = true;
+
+      if (!suppressLiveSceneUpdates) {
+        setAutoFixingMismatchSceneId(sceneId);
+        setAutoFixMismatchStatus((prev) => ({ ...prev, [sceneId]: null }));
+      }
 
       const setStatus = (msg: string | null) => {
+        if (suppressLiveSceneUpdates) return;
         setAutoFixMismatchStatus((prev) => ({ ...prev, [sceneId]: msg }));
       };
 
@@ -4015,7 +4042,7 @@ export default function SceneCard({
         const suppressRefreshes = options?.suppressRefreshes === true;
 
         const refreshSceneAfterFixFlow = async () => {
-          if (suppressRefreshes) return;
+          if (suppressRefreshes || suppressLiveSceneUpdates) return;
 
           const refreshedScene = await refreshSceneInLocalCache(sceneId);
           if (!onDataUpdateRef.current || !refreshedScene) {
@@ -4055,19 +4082,21 @@ export default function SceneCard({
               return;
             }
 
-            const updatedData = dataRef.current.map((s) =>
-              s.id === sceneId
-                ? {
-                    ...s,
-                    field_7096: status,
-                    ...(normalizedReason !== undefined
-                      ? { field_7106: normalizedReason }
-                      : {}),
-                  }
-                : s,
-            );
-            dataRef.current = updatedData;
-            onDataUpdateRef.current?.(updatedData);
+            if (!suppressLiveSceneUpdates) {
+              const updatedData = dataRef.current.map((s) =>
+                s.id === sceneId
+                  ? {
+                      ...s,
+                      field_7096: status,
+                      ...(normalizedReason !== undefined
+                        ? { field_7106: normalizedReason }
+                        : {}),
+                    }
+                  : s,
+              );
+              dataRef.current = updatedData;
+              onDataUpdateRef.current?.(updatedData);
+            }
           } catch (e) {
             console.warn(`Failed to ${statusLabel} for scene ${sceneId}:`, e);
           }
@@ -4187,6 +4216,7 @@ export default function SceneCard({
             throwOnError: true,
             skipAutoSyncAfterTtsGeneration: true,
             suppressRefreshes,
+            suppressLocalDataUpdates: suppressLiveSceneUpdates,
           });
 
           const afterTtsScene =
@@ -4221,7 +4251,11 @@ export default function SceneCard({
             (afterTtsScene as unknown) ?? undefined,
             0,
             'none',
-            { throwOnError: true, suppressRefreshes },
+            {
+              throwOnError: true,
+              suppressRefreshes,
+              suppressLocalDataUpdates: suppressLiveSceneUpdates,
+            },
           );
 
           const afterSyncScene =
@@ -4261,7 +4295,10 @@ export default function SceneCard({
             true,
             true,
             false,
-            { throwOnError: true },
+            {
+              throwOnError: true,
+              suppressLocalDataUpdates: suppressLiveSceneUpdates,
+            },
           );
 
           const sceneWithNewCaptions = await waitForSceneWhere(
@@ -4313,7 +4350,10 @@ export default function SceneCard({
               true,
               true,
               false,
-              { throwOnError: true },
+              {
+                throwOnError: true,
+                suppressLocalDataUpdates: suppressLiveSceneUpdates,
+              },
             );
 
             const sceneWithCaptions = await waitForSceneWhere(
@@ -4385,6 +4425,7 @@ export default function SceneCard({
             throwOnError: true,
             skipAutoSyncAfterTtsGeneration: true,
             suppressRefreshes,
+            suppressLocalDataUpdates: suppressLiveSceneUpdates,
           });
 
           const afterTtsScene =
@@ -4417,7 +4458,11 @@ export default function SceneCard({
             (afterTtsScene as unknown) ?? undefined,
             0,
             'none',
-            { throwOnError: true, suppressRefreshes },
+            {
+              throwOnError: true,
+              suppressRefreshes,
+              suppressLocalDataUpdates: suppressLiveSceneUpdates,
+            },
           );
 
           // Wait for Baserow to reflect the new final video URL (or at least confirm it's present).
@@ -4458,7 +4503,10 @@ export default function SceneCard({
             true,
             true,
             false,
-            { throwOnError: true },
+            {
+              throwOnError: true,
+              suppressLocalDataUpdates: suppressLiveSceneUpdates,
+            },
           );
 
           // Wait until captions URL is replaced in Baserow, then fetch from that URL.
@@ -4518,11 +4566,13 @@ export default function SceneCard({
           err instanceof Error ? err.message : 'Auto-fix mismatch failed',
         );
       } finally {
-        setAutoFixingMismatchSceneId(null);
+        autoFixingMismatchLockRef.current = false;
+        if (!suppressLiveSceneUpdates) {
+          setAutoFixingMismatchSceneId(null);
+        }
       }
     },
     [
-      autoFixingMismatchSceneId,
       dataRef,
       handleTranscribeScene,
       handleTTSProduce,
