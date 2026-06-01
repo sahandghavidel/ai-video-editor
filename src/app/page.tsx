@@ -359,6 +359,11 @@ export default function Home() {
   );
 
   const refreshData = () => {
+    if (selectedOriginalVideo.id) {
+      void refreshSelectedVideoDataSilently();
+      return;
+    }
+
     void refreshDataSilently();
   };
 
