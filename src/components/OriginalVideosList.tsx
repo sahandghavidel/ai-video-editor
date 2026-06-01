@@ -9608,6 +9608,24 @@ export default function OriginalVideosList({
       // This intentionally suppresses all step-level scene refresh callbacks
       // in this function scope (including the final callback refresh).
       const refreshScenesData = () => {};
+      const runPostStepRefreshes = false;
+
+      const maybeRunPostStepRefresh = async (
+        reason: string,
+        includeSceneRefresh = true,
+      ) => {
+        if (!runPostStepRefreshes) {
+          console.log(
+            `Skipping post-step refresh (${reason}); next step performs fresh reads.`,
+          );
+          return;
+        }
+
+        await handleRefresh();
+        if (includeSceneRefresh && refreshScenesData) {
+          refreshScenesData();
+        }
+      };
 
       let stepNumber = 0;
 
@@ -9626,12 +9644,10 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Script-from-title generation finished`,
           );
 
-          console.log('Refreshing data after script-from-title generation...');
-          await handleRefresh();
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('script-from-title', false);
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9663,12 +9679,10 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Script TTS generation finished`,
           );
 
-          console.log('Refreshing data after script TTS generation...');
-          await handleRefresh();
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('script-tts', false);
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9700,12 +9714,10 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: TTS audio → video generation finished`,
           );
 
-          console.log('Refreshing data after TTS video generation...');
-          await handleRefresh();
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('tts-video', false);
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9735,14 +9747,11 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Audio normalization finished`,
           );
 
-          // Refresh data to get updated videos
-          console.log('Refreshing data after audio normalization...');
-          await handleRefresh();
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('normalize-audio', false);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9768,14 +9777,11 @@ export default function OriginalVideosList({
           await handleConvertToCFRAll(false);
           console.log(`✓ Step ${stepNumber} Complete: CFR conversion finished`);
 
-          // Refresh data to get updated videos
-          console.log('Refreshing data after CFR conversion...');
-          await handleRefresh();
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('convert-to-cfr', false);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9805,14 +9811,11 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Silence optimization finished`,
           );
 
-          // Refresh data to get updated videos
-          console.log('Refreshing data after silence optimization...');
-          await handleRefresh();
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('optimize-silence', false);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9838,17 +9841,11 @@ export default function OriginalVideosList({
           await handleTranscribeAll(false, 'whisperx');
           console.log(`✓ Step ${stepNumber} Complete: Transcription finished`);
 
-          // Refresh data to get updated captions URLs
-          console.log('Refreshing data after transcription...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('transcribe-all', true);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9878,17 +9875,11 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Scene generation finished`,
           );
 
-          // Refresh data to get updated scenes
-          console.log('Refreshing data after scene generation...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('generate-scenes-all', true);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9948,15 +9939,13 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Combine Pairs ${pass.label} finished`,
           );
 
-          console.log('Refreshing data after combining scene pairs...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh(
+            `combine-pairs-pass-${pass.label}`,
+            true,
+          );
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -9986,15 +9975,10 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Empty scenes deletion finished`,
           );
 
-          console.log('Refreshing data after deleting empty scenes...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('delete-empty-scenes', true);
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10024,17 +10008,11 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Clip generation finished`,
           );
 
-          // Refresh data to get updated clips
-          console.log('Refreshing data after clip generation...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('generate-clips-all', true);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10100,17 +10078,13 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Transcribe + Apply + Gen Clips ${pass.label} finished`,
           );
 
-          console.log(
-            'Refreshing data after Transcribe + Apply + Gen Clips...',
+          await maybeRunPostStepRefresh(
+            `transcribe-apply-gen-clips-pass-${pass.label}`,
+            true,
           );
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10134,17 +10108,11 @@ export default function OriginalVideosList({
           await handleSpeedUpAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: Speed up finished`);
 
-          // Refresh data to get updated sped up videos
-          console.log('Refreshing data after speed up...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('speed-up-all', true);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(`✗ Step ${stepNumber} Failed: Speed up error`, error);
@@ -10197,17 +10165,11 @@ export default function OriginalVideosList({
           await handleImproveAllVideosScenes(false);
           console.log(`✓ Step ${stepNumber} Complete: AI improvement finished`);
 
-          // Refresh data to get updated improved sentences
-          console.log('Refreshing data after AI improvement...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('improve-all-scenes', true);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10233,17 +10195,11 @@ export default function OriginalVideosList({
           await handleGenerateAllTTSForAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: TTS generation finished`);
 
-          // Refresh data to get updated TTS audio
-          console.log('Refreshing data after TTS generation...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('generate-tts-all-scenes', true);
 
           // Wait 20 seconds before next step
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10269,13 +10225,7 @@ export default function OriginalVideosList({
           await handleGenerateAllVideosForAllScenes(false);
           console.log(`✓ Step ${stepNumber} Complete: Video sync finished`);
 
-          // Refresh data to get updated synced videos
-          console.log('Refreshing data after video sync...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('sync-all-videos', true);
         } catch (error) {
           console.error(`✗ Step ${stepNumber} Failed: Video sync error`, error);
           throw new Error(
@@ -10330,12 +10280,7 @@ export default function OriginalVideosList({
           await handleTranscribeFlaggedProcessingScenesAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: Fix Flagged finished`);
 
-          console.log('Refreshing data after Fix Flagged...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('fix-flagged-processing-scenes', true);
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Fix Flagged error`,
@@ -10365,12 +10310,7 @@ export default function OriginalVideosList({
           await handleFixIntroQaProcessingScenesAllVideos(false);
           console.log(`✓ Step ${stepNumber} Complete: Fix Intro QA finished`);
 
-          console.log('Refreshing data after Fix Intro QA...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('fix-intro-qa-processing-scenes', true);
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Fix Intro QA error`,
@@ -10402,12 +10342,7 @@ export default function OriginalVideosList({
             `✓ Step ${stepNumber} Complete: Scene prompting finished`,
           );
 
-          console.log('Refreshing data after scene prompting...');
-          await handleRefresh();
-          if (refreshScenesData) {
-            refreshScenesData();
-          }
-          console.log('Data refreshed successfully');
+          await maybeRunPostStepRefresh('prompt-processing-scenes', true);
         } catch (error) {
           console.error(
             `✗ Step ${stepNumber} Failed: Scene prompting error`,
@@ -10446,8 +10381,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10483,8 +10418,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10520,8 +10455,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10557,8 +10492,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10594,8 +10529,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10697,8 +10632,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
@@ -10735,8 +10670,8 @@ export default function OriginalVideosList({
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
 
-          console.log('Waiting 20 seconds before next step...');
-          await new Promise((resolve) => setTimeout(resolve, 20000));
+          console.log('Waiting 3 seconds before next step...');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           console.log('Wait complete, proceeding to next step');
         } catch (error) {
           console.error(
