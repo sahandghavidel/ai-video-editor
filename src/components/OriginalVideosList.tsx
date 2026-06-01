@@ -7250,7 +7250,6 @@ export default function OriginalVideosList({
     scenesForProcessingVideos: BaserowRow[];
   }> => {
     const freshVideosData = await getOriginalVideosData();
-    const freshScenesData = await getBaserowData();
 
     const processingVideos = getProcessingVideosForAllVideosOps(
       freshVideosData,
@@ -7259,14 +7258,28 @@ export default function OriginalVideosList({
 
     const processingVideoIds = new Set(processingVideos.map((v) => v.id));
 
-    const scenesForProcessingVideos = (freshScenesData || []).filter(
-      (scene) => {
+    const scopedSceneLists = await Promise.all(
+      processingVideos.map(async (video) => {
+        try {
+          return await getBaserowDataForOriginalVideo(video.id);
+        } catch {
+          return [] as BaserowRow[];
+        }
+      }),
+    );
+
+    let scenesForProcessingVideos = scopedSceneLists.flat();
+
+    // Safety fallback for link-shape edge cases: only if scoped fetch returned nothing.
+    if (scenesForProcessingVideos.length === 0 && processingVideos.length > 0) {
+      const freshScenesData = await getBaserowData();
+      scenesForProcessingVideos = (freshScenesData || []).filter((scene) => {
         const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
         return Boolean(
           videoId && !isNaN(videoId) && processingVideoIds.has(videoId),
         );
-      },
-    );
+      });
+    }
 
     return { processingVideos, processingVideoIds, scenesForProcessingVideos };
   };
