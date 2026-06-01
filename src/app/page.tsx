@@ -129,25 +129,15 @@ export default function Home() {
     setRefreshing(true);
 
     try {
-      const videos = await getOriginalVideosData();
-      const scopedSceneLists = await Promise.all(
-        videos.map(async (video) => {
-          try {
-            return await getBaserowDataForOriginalVideo(video.id);
-          } catch {
-            return [] as BaserowRow[];
-          }
-        }),
-      );
-
-      const fetchedData = scopedSceneLists.flat();
+      // Lightweight, non-looping refresh for no-selection/global state.
+      // We only verify connectivity/freshness here and keep scene cache intact.
+      await getOriginalVideosData();
 
       // Ignore stale responses from earlier overlapping refresh calls.
       if (requestId !== latestRefreshRequestRef.current) {
         return;
       }
 
-      setData(fetchedData);
       setError(null);
     } catch (err) {
       if (requestId !== latestRefreshRequestRef.current) {
@@ -161,7 +151,7 @@ export default function Home() {
         setRefreshing(false);
       }
     }
-  }, [setData, setError]);
+  }, [setError]);
 
   const extractLinkedVideoId = useCallback((videoIdField: unknown) => {
     if (typeof videoIdField === 'number' && Number.isFinite(videoIdField)) {
