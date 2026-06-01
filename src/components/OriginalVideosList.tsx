@@ -15,7 +15,6 @@ import {
   updateOriginalVideoRow,
   deleteOriginalVideoWithScenes,
   deleteScenesForOriginalVideo,
-  getBaserowData,
   getBaserowDataForOriginalVideo,
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
@@ -2568,8 +2567,6 @@ export default function OriginalVideosList({
         `Create En Srt: processing ${processingVideos.length} videos...`,
       );
 
-      let fallbackAllScenes: BaserowRow[] | null = null;
-
       for (const video of processingVideos) {
         setCreatingEnSrtVideoId(video.id);
 
@@ -2577,18 +2574,35 @@ export default function OriginalVideosList({
         let videoScenes = await getBaserowDataForOriginalVideo(video.id);
 
         // Fallback: some linked-row shapes may not be returned by scoped filter.
-        // In that case, fall back to a one-time full read + local link extraction.
+        // In that case, use targeted scene-id fetch from the video's linked scenes.
         if (videoScenes.length === 0) {
-          if (fallbackAllScenes === null) {
-            fallbackAllScenes = await getBaserowData();
-          }
+          const linkedSceneIds = Array.isArray(video.field_6866)
+            ? video.field_6866
+                .map((id) => Number.parseInt(String(id ?? ''), 10))
+                .filter((id) => Number.isInteger(id) && id > 0)
+            : [];
 
-          videoScenes = fallbackAllScenes.filter((scene) => {
-            const linkedVideoId = extractLinkedVideoIdFromField(
-              scene['field_6889'],
+          if (linkedSceneIds.length > 0) {
+            const fallbackScenes = await Promise.all(
+              linkedSceneIds.map(async (sceneId) => {
+                try {
+                  return await getSceneById(sceneId);
+                } catch {
+                  return null;
+                }
+              }),
             );
-            return linkedVideoId === video.id;
-          });
+
+            videoScenes = fallbackScenes.filter(
+              (scene): scene is BaserowRow => {
+                if (!scene) return false;
+                const linkedVideoId = extractLinkedVideoIdFromField(
+                  scene['field_6889'],
+                );
+                return linkedVideoId === video.id;
+              },
+            );
+          }
         }
 
         const sceneIds = videoScenes
