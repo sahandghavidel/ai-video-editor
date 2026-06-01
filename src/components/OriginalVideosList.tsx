@@ -4794,14 +4794,8 @@ export default function OriginalVideosList({
       );
     }
 
-    // Fetch fresh original videos and scenes
+    // Fetch fresh original videos
     const freshVideosData = await getOriginalVideosData();
-    const freshScenesData = await getBaserowData();
-
-    if (!freshScenesData || freshScenesData.length === 0) {
-      console.log('No scenes found to transcribe');
-      return false;
-    }
 
     // Filter videos by Processing status
     const processingVideos = freshVideosData.filter((video) => {
@@ -4817,13 +4811,26 @@ export default function OriginalVideosList({
       }
     }
 
-    const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+    const scopedScenesByVideo = await Promise.all(
+      processingVideos.map(async (video) => {
+        try {
+          return await getBaserowDataForOriginalVideo(video.id);
+        } catch (error) {
+          console.warn(
+            `Failed to fetch scoped scenes for Fix TTS video #${video.id}:`,
+            error,
+          );
+          return [] as BaserowRow[];
+        }
+      }),
+    );
 
-    // Filter scenes for Processing videos
-    const scenesForProcessingVideos = freshScenesData.filter((scene) => {
-      const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
-      return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
-    });
+    const scenesForProcessingVideos = scopedScenesByVideo.flat();
+
+    if (!scenesForProcessingVideos || scenesForProcessingVideos.length === 0) {
+      console.log('No scenes found to transcribe');
+      return false;
+    }
 
     // Base eligibility: final video + text and not already confirmed
     const eligibleScenesToFix = getFixTtsEligibleScenes(
@@ -4836,7 +4843,7 @@ export default function OriginalVideosList({
 
     console.log(`Processing videos: ${processingVideos.length}`);
     console.log(
-      `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`,
+      `Scenes in Processing videos: ${scenesForProcessingVideos.length}`,
     );
     console.log(
       flaggedOnly
