@@ -3820,52 +3820,9 @@ export default function OriginalVideosList({
       setCopyingSentencesVideoId(video.id);
       setError(null);
 
-      const scenes = await getBaserowData();
-
-      const extractLinkedVideoId = (videoIdField: unknown): number | null => {
-        if (typeof videoIdField === 'number') {
-          return videoIdField;
-        }
-
-        if (typeof videoIdField === 'string') {
-          const parsed = parseInt(videoIdField, 10);
-          return Number.isFinite(parsed) ? parsed : null;
-        }
-
-        if (Array.isArray(videoIdField) && videoIdField.length > 0) {
-          const first = videoIdField[0] as unknown;
-
-          if (typeof first === 'number') {
-            return first;
-          }
-
-          if (typeof first === 'string') {
-            const parsed = parseInt(first, 10);
-            return Number.isFinite(parsed) ? parsed : null;
-          }
-
-          if (typeof first === 'object' && first !== null) {
-            const rec = first as Record<string, unknown>;
-            const candidate = rec.id ?? rec.value;
-            const parsed = parseInt(String(candidate ?? ''), 10);
-            return Number.isFinite(parsed) ? parsed : null;
-          }
-        }
-
-        if (typeof videoIdField === 'object' && videoIdField !== null) {
-          const rec = videoIdField as Record<string, unknown>;
-          const candidate = rec.id ?? rec.value;
-          const parsed = parseInt(String(candidate ?? ''), 10);
-          return Number.isFinite(parsed) ? parsed : null;
-        }
-
-        return null;
-      };
+      const scenes = await getBaserowDataForOriginalVideo(video.id);
 
       const sentenceText = (scenes || [])
-        .filter(
-          (scene) => extractLinkedVideoId(scene['field_6889']) === video.id,
-        )
         .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
         .map((scene) => String(scene['field_6890'] ?? '').trim())
         .filter((sentence) => sentence.length > 0)
@@ -6360,7 +6317,26 @@ export default function OriginalVideosList({
 
       // Fetch fresh original videos and scenes
       const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
+
+      // Processing-only videos
+      const processingVideos =
+        getProcessingVideosForAllVideosOps(freshVideosData);
+
+      const scopedScenesByVideo = await Promise.all(
+        processingVideos.map(async (video) => {
+          try {
+            return await getBaserowDataForOriginalVideo(video.id);
+          } catch (error) {
+            console.warn(
+              `Failed to fetch scoped scenes for Prompt Scenes video #${video.id}:`,
+              error,
+            );
+            return [] as BaserowRow[];
+          }
+        }),
+      );
+
+      const freshScenesData = scopedScenesByVideo.flat();
 
       if (!freshScenesData || freshScenesData.length === 0) {
         if (playSound) {
@@ -6369,16 +6345,10 @@ export default function OriginalVideosList({
         return;
       }
 
-      // Processing-only videos
-      const processingVideos =
-        getProcessingVideosForAllVideosOps(freshVideosData);
-
-      const processingVideoIds = new Set(processingVideos.map((v) => v.id));
-
       // Scenes for Processing videos, non-empty, and missing prompt
       const scenesToPrompt = freshScenesData.filter((scene) => {
         const videoId = extractLinkedVideoId(scene['field_6889']);
-        if (!videoId || isNaN(videoId) || !processingVideoIds.has(videoId)) {
+        if (!videoId || isNaN(videoId)) {
           return false;
         }
 
