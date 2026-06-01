@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 // Toggle: when true, build EN SRT using scene Duration (field_6884)
 // instead of calculating/using Final Video Duration (field_7107).
-const USE_ORIGINAL_VIDEO_DURATION = false;
+const USE_ORIGINAL_VIDEO_DURATION = true;
 
 const ORIGINAL_DURATION_FIELD_KEY = 'field_6884';
 
