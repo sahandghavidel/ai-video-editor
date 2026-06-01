@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
-import { getBaserowData, BaserowRow } from '@/lib/baserow-actions';
+import {
+  getBaserowData,
+  getBaserowDataForOriginalVideo,
+  getSceneById,
+  BaserowRow,
+} from '@/lib/baserow-actions';
 import { resolveOpenAIClient } from '@/lib/ai-provider';
 
 interface ExtendedChatCompletionMessage
@@ -7,12 +12,52 @@ interface ExtendedChatCompletionMessage
   reasoning?: string;
 }
 
-// Helper function to fetch scenes from Baserow table 714
-async function getScenesFromTable(): Promise<BaserowRow[]> {
+// Helper function to fetch scenes from Baserow table 714.
+// Prefers scoped fetch by original-video link for performance.
+async function getScenesFromTable(sceneId: number): Promise<BaserowRow[]> {
   try {
-    // Use the existing getBaserowData function which handles authentication and pagination
+    const currentScene = await getSceneById(sceneId);
+    const linkedVideoIdRaw = currentScene?.field_6889;
+
+    let linkedVideoId: number | null = null;
+    if (typeof linkedVideoIdRaw === 'number') {
+      linkedVideoId = Number.isFinite(linkedVideoIdRaw)
+        ? linkedVideoIdRaw
+        : null;
+    } else if (typeof linkedVideoIdRaw === 'string') {
+      const parsed = parseInt(linkedVideoIdRaw, 10);
+      linkedVideoId = Number.isFinite(parsed) ? parsed : null;
+    } else if (Array.isArray(linkedVideoIdRaw) && linkedVideoIdRaw.length > 0) {
+      const first = linkedVideoIdRaw[0] as unknown;
+      if (typeof first === 'number') {
+        linkedVideoId = Number.isFinite(first) ? first : null;
+      } else if (typeof first === 'string') {
+        const parsed = parseInt(first, 10);
+        linkedVideoId = Number.isFinite(parsed) ? parsed : null;
+      } else if (typeof first === 'object' && first !== null) {
+        const rec = first as Record<string, unknown>;
+        const candidate = rec.id ?? rec.value;
+        const parsed = parseInt(String(candidate ?? ''), 10);
+        linkedVideoId = Number.isFinite(parsed) ? parsed : null;
+      }
+    } else if (typeof linkedVideoIdRaw === 'object' && linkedVideoIdRaw) {
+      const rec = linkedVideoIdRaw as Record<string, unknown>;
+      const candidate = rec.id ?? rec.value;
+      const parsed = parseInt(String(candidate ?? ''), 10);
+      linkedVideoId = Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (linkedVideoId && linkedVideoId > 0) {
+      const scopedScenes = await getBaserowDataForOriginalVideo(linkedVideoId);
+      console.log(
+        `Fetched ${scopedScenes.length} scoped scenes from Baserow for video ${linkedVideoId}`,
+      );
+      return scopedScenes;
+    }
+
+    // Fallback to full read only if link extraction fails
     const scenes = await getBaserowData();
-    console.log(`Fetched ${scenes.length} scenes from Baserow`);
+    console.log(`Fetched ${scenes.length} scenes from Baserow (fallback)`);
     return scenes;
   } catch (error) {
     console.error('Error fetching scenes from Baserow:', error);
@@ -68,7 +113,8 @@ export async function POST(request: Request) {
     console.log(`Making OpenAI API call using ${provider} provider...`);
 
     // Fetch all scenes from table 714
-    const allScenes = await getScenesFromTable();
+    const normalizedSceneId = Number(sceneId);
+    const allScenes = await getScenesFromTable(normalizedSceneId);
     console.log(`Fetched ${allScenes.length} scenes from table 714`);
 
     // Find the current scene to get its video ID

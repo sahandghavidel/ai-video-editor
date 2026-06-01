@@ -4157,47 +4157,35 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data to check status
       const freshVideosData = await getOriginalVideosData();
 
-      // Fetch fresh scenes data directly from API
-      const freshScenesData = await getBaserowData();
-
-      // Get all scenes from fresh data
-      if (!freshScenesData || freshScenesData.length === 0) {
-        console.log('No scenes found to improve');
-        return;
-      }
-
       // Filter videos by Processing status
       const videosToProcess = getProcessingVideosForAllVideosOps(
         freshVideosData,
         { operation: 'improveAll' },
       );
 
-      const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
+      const scopedScenesByVideo = await Promise.all(
+        videosToProcess.map(async (video) => {
+          try {
+            return await getBaserowDataForOriginalVideo(video.id);
+          } catch (error) {
+            console.warn(
+              `Failed to fetch scoped scenes for Improve All video #${video.id}:`,
+              error,
+            );
+            return [] as BaserowRow[];
+          }
+        }),
+      );
 
-      // Filter scenes to only process those whose parent video has status === 'Processing'
-      const scenesToProcess = freshScenesData.filter((scene) => {
-        const videoIdField = scene['field_6889'];
-        let videoId: number | null = null;
+      const scenesToProcess = scopedScenesByVideo.flat();
 
-        if (typeof videoIdField === 'number') {
-          videoId = videoIdField;
-        } else if (typeof videoIdField === 'string') {
-          videoId = parseInt(videoIdField, 10);
-        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
-          const firstId =
-            typeof videoIdField[0] === 'object'
-              ? videoIdField[0].id || videoIdField[0].value
-              : videoIdField[0];
-          videoId = parseInt(String(firstId), 10);
-        }
-
-        return videoId && !isNaN(videoId) && videoIdsToProcess.has(videoId);
-      });
+      if (!scenesToProcess || scenesToProcess.length === 0) {
+        console.log('No scenes found to improve');
+        return;
+      }
 
       console.log(`Videos with Processing status: ${videosToProcess.length}`);
-      console.log(
-        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`,
-      );
+      console.log(`Scenes to process: ${scenesToProcess.length}`);
 
       if (scenesToProcess.length === 0) {
         console.log('No scenes to process for videos with Processing status');
@@ -4224,19 +4212,29 @@ export default function OriginalVideosList({
 
       await handleImproveAllSentencesForAllVideos(
         scenesToProcess,
-        (sceneId, sentence, model, sceneData, skipRefresh) =>
-          handleSentenceImprovementWithOptions(
+        async (sceneId, sentence, model, sceneData, skipRefresh) => {
+          const latestScene = (await getSceneById(sceneId)) || sceneData;
+          const latestSentence = String(
+            latestScene?.['field_6890'] ?? sentence,
+          ).trim();
+
+          if (!latestSentence) {
+            return;
+          }
+
+          await handleSentenceImprovementWithOptions(
             sceneId,
-            sentence,
+            latestSentence,
             model,
-            sceneData,
+            latestScene,
             skipRefresh,
             undefined,
             {
               suppressLocalDataUpdates: true,
               suppressBusyStateUpdates: true,
             },
-          ),
+          );
+        },
         modelSelection.selectedModel,
         setImprovingAllVideosScenes,
         setCurrentProcessingVideoId,
