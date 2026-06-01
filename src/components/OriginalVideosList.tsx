@@ -7171,14 +7171,40 @@ export default function OriginalVideosList({
     let scenesForProcessingVideos = scopedSceneLists.flat();
 
     // Safety fallback for link-shape edge cases: only if scoped fetch returned nothing.
+    // Avoid full-table fetch by resolving scene IDs linked on processing videos.
     if (scenesForProcessingVideos.length === 0 && processingVideos.length > 0) {
-      const freshScenesData = await getBaserowData();
-      scenesForProcessingVideos = (freshScenesData || []).filter((scene) => {
-        const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
-        return Boolean(
-          videoId && !isNaN(videoId) && processingVideoIds.has(videoId),
+      const fallbackSceneIdSet = new Set<number>();
+
+      for (const video of processingVideos) {
+        const linkedIds = parsePositiveSceneIds(video.field_6866);
+        for (const sceneId of linkedIds) {
+          fallbackSceneIdSet.add(sceneId);
+        }
+      }
+
+      const fallbackSceneIds = [...fallbackSceneIdSet];
+
+      if (fallbackSceneIds.length > 0) {
+        const fetchedById = await Promise.all(
+          fallbackSceneIds.map(async (sceneId) => {
+            try {
+              return await getSceneById(sceneId);
+            } catch {
+              return null;
+            }
+          }),
         );
-      });
+
+        scenesForProcessingVideos = fetchedById.filter(
+          (scene): scene is BaserowRow => {
+            if (!scene) return false;
+            const videoId = extractLinkedVideoIdFromScene(scene['field_6889']);
+            return Boolean(
+              videoId && !isNaN(videoId) && processingVideoIds.has(videoId),
+            );
+          },
+        );
+      }
     }
 
     return { processingVideos, processingVideoIds, scenesForProcessingVideos };
