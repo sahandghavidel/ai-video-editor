@@ -16,6 +16,7 @@ import {
   deleteOriginalVideoWithScenes,
   deleteScenesForOriginalVideo,
   getBaserowData,
+  getBaserowDataForOriginalVideo,
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -2632,9 +2633,7 @@ export default function OriginalVideosList({
     }
   };
 
-  // Generate YouTube descriptions for all Processing videos using
-  // Final Video Captions URL (6872)
-  // and save into YouTube Description (6869)
+  // Generate YouTube descriptions for all Processing videos using scene sentences.
   const buildSceneSentenceTextByVideoId = (scenes: BaserowRow[]) => {
     const buckets = new Map<
       number,
@@ -2679,6 +2678,36 @@ export default function OriginalVideosList({
     return byVideoId;
   };
 
+  const buildSceneSentenceTextByScopedVideoIds = async (
+    videoIds: number[],
+  ): Promise<Map<number, string>> => {
+    const uniqueVideoIds = [...new Set(videoIds)].filter(
+      (videoId) => Number.isInteger(videoId) && videoId > 0,
+    );
+
+    if (uniqueVideoIds.length === 0) {
+      return new Map<number, string>();
+    }
+
+    const scopedScenesResults = await Promise.all(
+      uniqueVideoIds.map(async (videoId) => {
+        try {
+          const scenes = await getBaserowDataForOriginalVideo(videoId);
+          return scenes;
+        } catch (error) {
+          console.warn(
+            `Failed to fetch scoped scenes for video #${videoId}:`,
+            error,
+          );
+          return [] as BaserowRow[];
+        }
+      }),
+    );
+
+    const mergedScenes = scopedScenesResults.flat();
+    return buildSceneSentenceTextByVideoId(mergedScenes);
+  };
+
   const handleGenerateYouTubeDescriptionsAll = async (playSound = true) => {
     if (generatingYouTubeDescriptionsAll) return;
 
@@ -2688,9 +2717,13 @@ export default function OriginalVideosList({
       setError(null);
 
       const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
+
+      const processingVideoIds = freshVideosData
+        .filter((video) => extractFieldValue(video.field_6864) === 'Processing')
+        .map((video) => video.id);
+
       const sceneTextByVideoId =
-        buildSceneSentenceTextByVideoId(freshScenesData);
+        await buildSceneSentenceTextByScopedVideoIds(processingVideoIds);
 
       const videosToDescribe = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
@@ -2808,9 +2841,13 @@ export default function OriginalVideosList({
       setError(null);
 
       const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
+
+      const processingVideoIds = freshVideosData
+        .filter((video) => extractFieldValue(video.field_6864) === 'Processing')
+        .map((video) => video.id);
+
       const sceneTextByVideoId =
-        buildSceneSentenceTextByVideoId(freshScenesData);
+        await buildSceneSentenceTextByScopedVideoIds(processingVideoIds);
 
       const videosToTag = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
@@ -2944,9 +2981,13 @@ export default function OriginalVideosList({
       setError(null);
 
       const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
+
+      const processingVideoIds = freshVideosData
+        .filter((video) => extractFieldValue(video.field_6864) === 'Processing')
+        .map((video) => video.id);
+
       const sceneTextByVideoId =
-        buildSceneSentenceTextByVideoId(freshScenesData);
+        await buildSceneSentenceTextByScopedVideoIds(processingVideoIds);
 
       const videosToTitle = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
