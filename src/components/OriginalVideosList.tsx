@@ -4286,45 +4286,15 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data to check status
       const freshVideosData = await getOriginalVideosData();
 
-      // Fetch fresh scenes data directly from API
-      const freshScenesData = await getBaserowData();
-
-      // Get all scenes from fresh data
-      if (!freshScenesData || freshScenesData.length === 0) {
-        console.log('No scenes found to generate TTS');
-        return;
-      }
-
       // Filter videos by Processing status
       const videosToProcess =
         getProcessingVideosForAllVideosOps(freshVideosData);
 
-      const videoIdsToProcess = new Set(videosToProcess.map((v) => v.id));
-
-      // Filter scenes to only process those whose parent video has status === 'Processing'
-      const scenesToProcess = freshScenesData.filter((scene) => {
-        const videoIdField = scene['field_6889'];
-        let videoId: number | null = null;
-
-        if (typeof videoIdField === 'number') {
-          videoId = videoIdField;
-        } else if (typeof videoIdField === 'string') {
-          videoId = parseInt(videoIdField, 10);
-        } else if (Array.isArray(videoIdField) && videoIdField.length > 0) {
-          const firstId =
-            typeof videoIdField[0] === 'object'
-              ? videoIdField[0].id || videoIdField[0].value
-              : videoIdField[0];
-          videoId = parseInt(String(firstId), 10);
-        }
-
-        return videoId && !isNaN(videoId) && videoIdsToProcess.has(videoId);
-      });
+      const { scenesForProcessingVideos: scenesToProcess } =
+        await fetchProcessingScenes();
 
       console.log(`Videos with Processing status: ${videosToProcess.length}`);
-      console.log(
-        `Scenes to process: ${scenesToProcess.length} of ${freshScenesData.length}`,
-      );
+      console.log(`Scenes to process: ${scenesToProcess.length}`);
 
       if (scenesToProcess.length === 0) {
         console.log('No scenes to process for videos with Processing status');
