@@ -12,7 +12,6 @@ import {
 import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import {
-  extractLinkedVideoId,
   type FixTtsAutoFixOptions,
   parseFixTtsStatus,
   type TtsComparisonAliasEntry,
@@ -228,31 +227,29 @@ export default function SceneCard({
     setLoadingProcessingScenesData(true);
 
     try {
-      const { getBaserowData, getOriginalVideosData } =
+      const { getBaserowDataForOriginalVideo, getOriginalVideosData } =
         await import('@/lib/baserow-actions');
 
-      const [allScenes, originalVideos] = await Promise.all([
-        getBaserowData(),
-        getOriginalVideosData(),
-      ]);
+      const originalVideos = await getOriginalVideosData();
 
-      const processingVideoIds = new Set<number>(
-        originalVideos
-          .filter((video) => {
-            const status = extractFieldValueAsText(video.field_6864)
-              .trim()
-              .toLowerCase();
-            return status === 'processing';
-          })
-          .map((video) => video.id),
-      );
-
-      const filteredScenes = allScenes.filter((scene) => {
-        const linkedVideoId = extractLinkedVideoId(scene.field_6889);
-        return linkedVideoId !== null && processingVideoIds.has(linkedVideoId);
+      const processingVideos = originalVideos.filter((video) => {
+        const status = extractFieldValueAsText(video.field_6864)
+          .trim()
+          .toLowerCase();
+        return status === 'processing';
       });
 
-      setProcessingScenesData(filteredScenes);
+      const scopedSceneLists = await Promise.all(
+        processingVideos.map(async (video) => {
+          try {
+            return await getBaserowDataForOriginalVideo(video.id);
+          } catch {
+            return [] as BaserowRow[];
+          }
+        }),
+      );
+
+      setProcessingScenesData(scopedSceneLists.flat());
     } catch (error) {
       console.error(
         'Failed to load processing scenes across all videos:',

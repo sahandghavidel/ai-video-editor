@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
 import {
-  getBaserowData,
   getBaserowDataForOriginalVideo,
   getSceneById,
   BaserowRow,
@@ -17,6 +16,10 @@ interface ExtendedChatCompletionMessage
 async function getScenesFromTable(sceneId: number): Promise<BaserowRow[]> {
   try {
     const currentScene = await getSceneById(sceneId);
+    if (!currentScene) {
+      return [];
+    }
+
     const linkedVideoIdRaw = currentScene?.field_6889;
 
     let linkedVideoId: number | null = null;
@@ -55,10 +58,8 @@ async function getScenesFromTable(sceneId: number): Promise<BaserowRow[]> {
       return scopedScenes;
     }
 
-    // Fallback to full read only if link extraction fails
-    const scenes = await getBaserowData();
-    console.log(`Fetched ${scenes.length} scenes from Baserow (fallback)`);
-    return scenes;
+    // Fallback: keep operation independent with current scene only.
+    return [currentScene];
   } catch (error) {
     console.error('Error fetching scenes from Baserow:', error);
     return [];

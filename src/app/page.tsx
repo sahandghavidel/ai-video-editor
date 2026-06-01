@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  getBaserowData,
+  getOriginalVideosData,
   getBaserowDataForOriginalVideo,
   BaserowRow,
 } from '@/lib/baserow-actions';
@@ -129,7 +129,18 @@ export default function Home() {
     setRefreshing(true);
 
     try {
-      const fetchedData = await getBaserowData();
+      const videos = await getOriginalVideosData();
+      const scopedSceneLists = await Promise.all(
+        videos.map(async (video) => {
+          try {
+            return await getBaserowDataForOriginalVideo(video.id);
+          } catch {
+            return [] as BaserowRow[];
+          }
+        }),
+      );
+
+      const fetchedData = scopedSceneLists.flat();
 
       // Ignore stale responses from earlier overlapping refresh calls.
       if (requestId !== latestRefreshRequestRef.current) {
