@@ -2546,7 +2546,6 @@ export default function OriginalVideosList({
       setError(null);
 
       const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
 
       const processingVideos = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
@@ -2569,16 +2568,28 @@ export default function OriginalVideosList({
         `Create En Srt: processing ${processingVideos.length} videos...`,
       );
 
+      let fallbackAllScenes: BaserowRow[] | null = null;
+
       for (const video of processingVideos) {
         setCreatingEnSrtVideoId(video.id);
 
-        // Gather scene IDs for this video
-        const videoScenes = freshScenesData.filter((scene) => {
-          const linkedVideoId = extractLinkedVideoIdFromField(
-            scene['field_6889'],
-          );
-          return linkedVideoId === video.id;
-        });
+        // Gather scene IDs for this video (scoped fetch)
+        let videoScenes = await getBaserowDataForOriginalVideo(video.id);
+
+        // Fallback: some linked-row shapes may not be returned by scoped filter.
+        // In that case, fall back to a one-time full read + local link extraction.
+        if (videoScenes.length === 0) {
+          if (fallbackAllScenes === null) {
+            fallbackAllScenes = await getBaserowData();
+          }
+
+          videoScenes = fallbackAllScenes.filter((scene) => {
+            const linkedVideoId = extractLinkedVideoIdFromField(
+              scene['field_6889'],
+            );
+            return linkedVideoId === video.id;
+          });
+        }
 
         const sceneIds = videoScenes
           .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
@@ -4719,26 +4730,34 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data to check status
       const freshVideosData = await getOriginalVideosData();
 
-      // Fetch fresh scenes data directly from API
-      const freshScenesData = await getBaserowData();
-
-      if (!freshScenesData || freshScenesData.length === 0) {
-        console.log('No scenes found to delete');
-        return;
-      }
-
       // Filter videos by Processing status
       const processingVideos =
         getProcessingVideosForAllVideosOps(freshVideosData);
 
-      const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+      const scopedScenesByVideo = await Promise.all(
+        processingVideos.map(async (video) => {
+          try {
+            const scenes = await getBaserowDataForOriginalVideo(video.id);
+            return scenes;
+          } catch (error) {
+            console.warn(
+              `Failed to fetch scoped scenes for Delete Empty video #${video.id}:`,
+              error,
+            );
+            return [] as BaserowRow[];
+          }
+        }),
+      );
 
-      // Filter scenes to only those whose parent video has status === 'Processing'
-      const scenesForProcessingVideos = freshScenesData.filter((scene) => {
-        const videoId = extractLinkedVideoId(scene['field_6889']);
+      const scenesForProcessingVideos = scopedScenesByVideo.flat();
 
-        return videoId && !isNaN(videoId) && processingVideoIds.has(videoId);
-      });
+      if (
+        !scenesForProcessingVideos ||
+        scenesForProcessingVideos.length === 0
+      ) {
+        console.log('No scenes found to delete');
+        return;
+      }
 
       const emptyScenes = scenesForProcessingVideos.filter((scene) => {
         const sentence = String(scene['field_6890'] ?? '').trim();
@@ -4751,7 +4770,7 @@ export default function OriginalVideosList({
 
       console.log(`Processing videos: ${processingVideos.length}`);
       console.log(
-        `Scenes in Processing videos: ${scenesForProcessingVideos.length} of ${freshScenesData.length}`,
+        `Scenes in Processing videos: ${scenesForProcessingVideos.length}`,
       );
       console.log(`Empty scenes to delete: ${emptyScenes.length}`);
 
@@ -6651,7 +6670,6 @@ export default function OriginalVideosList({
 
     try {
       const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
 
       const processingVideos = getProcessingVideosForAllVideosOps(
         freshVideosData,
@@ -6661,6 +6679,22 @@ export default function OriginalVideosList({
       );
 
       const processingVideoIds = new Set(processingVideos.map((v) => v.id));
+
+      const scopedScenesByVideo = await Promise.all(
+        processingVideos.map(async (video) => {
+          try {
+            return await getBaserowDataForOriginalVideo(video.id);
+          } catch (error) {
+            console.warn(
+              `${logPrefix} Failed to fetch scoped scenes for video #${video.id}.`,
+              error,
+            );
+            return [] as BaserowRow[];
+          }
+        }),
+      );
+
+      const scopedScenes = scopedScenesByVideo.flat();
       const processingVideoOrderById = new Map<number, number>(
         processingVideos.map((video) => [
           video.id,
@@ -6677,7 +6711,7 @@ export default function OriginalVideosList({
 
       const candidateScenesByVideo = new Map<number, CandidateScene[]>();
 
-      for (const scene of freshScenesData || []) {
+      for (const scene of scopedScenes || []) {
         const videoId = extractLinkedVideoIdFromField(scene['field_6889']);
         if (!videoId || isNaN(videoId) || !processingVideoIds.has(videoId)) {
           continue;
