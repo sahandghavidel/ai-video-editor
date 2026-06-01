@@ -8,6 +8,7 @@ Checked against current implementation in:
 - `src/components/PipelineConfig.tsx`
 - `src/store/useAppStore.ts`
 - `src/app/api/fix-language-scenes/route.ts`
+- `src/app/api/improve-sentence/route.ts`
 
 ---
 
@@ -64,47 +65,61 @@ The order below is the actual execution order in code.
 9. `combinePairsEnabledA/B/C/D` (four optional passes) → `handleCombineLongTextPairsForProcessingVideos(skip, false)`
 10. `deleteEmpty` → `handleDeleteEmptyScenesAllVideos(false)`
 11. `generateClips` → `handleGenerateClipsAll(false)`
-12. `speedUp` → `handleSpeedUpAllVideos(false)`
-13. `fixLanguageAll` → `handleFixLanguageProcessingScenesAllVideos(false)`
-14. `improve` → `handleImproveAllVideosScenes(false)`
-15. `generateTTS` → `handleGenerateAllTTSForAllVideos(false)`
-16. `sync` → `handleGenerateAllVideosForAllScenes(false)`
-17. `transcribeScenesAfterSync` (Fix TTS) → `handleTranscribeProcessingScenesAllVideos(false)`
-18. `fixFlaggedAfterFixTTS` (Fix Flagged) → `handleTranscribeFlaggedProcessingScenesAllVideos(false)`
-19. `fixIntroQaAfterFixFlagged` (Fix Intro QA) → `handleFixIntroQaProcessingScenesAllVideos(false)`
-20. `promptScenesAfterTranscribe` → `handlePromptProcessingScenesAllVideos(false)`
+12. `transcribeApplyGenClips` passes A/B/C/D (optional) → `handleTranscribeApplyGenClipsForProcessingVideos(false, minChars)`
+13. `speedUp` → `handleSpeedUpAllVideos(false)`
+14. `fixLanguageAll` → `handleFixLanguageProcessingScenesAllVideos(false)`
+15. `improve` → `handleImproveAllVideosScenes(false)`
+16. `generateTTS` → `handleGenerateAllTTSForAllVideos(false)`
+17. `sync` → `handleGenerateAllVideosForAllScenes(false)`
+18. `transcribeScenesAfterSync` (Fix TTS) → `handleTranscribeProcessingScenesAllVideos(false)`
+19. `fixFlaggedAfterFixTTS` (Fix Flagged) → `handleTranscribeFlaggedProcessingScenesAllVideos(false)`
+20. `fixIntroQaAfterFixFlagged` (Fix Intro QA) → `handleFixIntroQaProcessingScenesAllVideos(false)`
+21. `promptScenesAfterTranscribe` → `handlePromptProcessingScenesAllVideos(false)`
 
 ### Scene post-processing block (opt-in by default)
 
-21. `generateSubtitles` → `handleGenerateSubtitlesForProcessingVideos()`
-22. `generateSceneImages` → `handleGenerateSceneImagesForProcessingVideos()`
-23. `upscaleSceneImages` → `handleUpscaleSceneImagesForProcessingVideos()`
-24. `generateSceneVideos` → `handleGenerateSceneVideosForProcessingVideos()`
-25. `enhanceSceneVideos` → `handleEnhanceSceneVideosForProcessingVideos()`
-26. `applyEnhancedVideos` → `handleApplyEnhancedVideosForProcessingVideos()`
-27. `applyUpscaledImages` → `handleApplyUpscaledImagesForProcessingVideos()`
+22. `generateSubtitles` → `handleGenerateSubtitlesForProcessingVideos()`
+23. `generateSceneImages` → `handleGenerateSceneImagesForProcessingVideos()`
+24. `upscaleSceneImages` → `handleUpscaleSceneImagesForProcessingVideos()`
+25. `generateSceneVideos` → `handleGenerateSceneVideosForProcessingVideos()`
+26. `enhanceSceneVideos` → `handleEnhanceSceneVideosForProcessingVideos()`
+27. `applyEnhancedVideos` → `handleApplyEnhancedVideosForProcessingVideos()`
+28. `applyUpscaledImages` → `handleApplyUpscaledImagesForProcessingVideos()`
 
 ### Final tail block (opt-in by default)
 
-28. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
-29. `convertFinalToCFR` → `handleConvertFinalToCFRAll(false)`
-30. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
-31. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
-32. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
-33. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
-34. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
-35. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
+29. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
+30. `convertFinalToCFR` → `handleConvertFinalToCFRAll(false)`
+31. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
+32. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
+33. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
+34. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
+35. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
+36. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
 
 ---
 
 ## 2.3 Timing and refresh behavior
 
-- Many heavy steps deliberately wait **20 seconds** before the next step.
+- Pipeline settle delay has been reduced to **3 seconds** between most heavy steps.
 - Most steps do `await handleRefresh()` and often `refreshScenesData?.()` after completion.
+- Some "isolated" scene-heavy steps intentionally skip immediate scene refresh to keep UI stable while batches run.
 - Pipeline-level finalization:
   - Telegram: `🎉 Full Pipeline Complete! ...`
   - success sound (`playSuccessSound()`)
   - `pipelineStep` is cleared shortly after success
+
+---
+
+## 2.5 Scene data loading strategy (current)
+
+- Preferred approach is **scoped scene loading per video**:
+  - `getBaserowDataForOriginalVideo(videoId)`
+  - shared helper `fetchProcessingScenes()`
+- Fallback strategy avoids full-table reads where possible:
+  - targeted scene-id recovery via `video.field_6866` + `getSceneById(sceneId)`
+- `Create En Srt` now uses the same targeted fallback pattern.
+- `improve-sentence` API route now scopes context fetch by current scene’s linked video and only uses full-table read as a last-resort fallback.
 
 ---
 
@@ -141,7 +156,8 @@ Use this checklist for a **new button operation** (all-videos or scene-level).
 3. **Implement the handler**
    - Guard duplicate execution early
    - `setError(null)` at start when appropriate
-   - Fetch fresh data (`getOriginalVideosData`, `getBaserowData`) if operation needs latest state
+   - Fetch fresh data (`getOriginalVideosData`) and prefer scoped scene loading (`fetchProcessingScenes`, `getBaserowDataForOriginalVideo`)
+   - Use targeted scene-id fallback (`getSceneById`) instead of full-table scene reads when scoped fetch returns empty
    - Filter strictly (usually `status === 'Processing'`)
    - Process sequentially with small delays to avoid API overload
    - Use `try/catch/finally` and always reset loading state in `finally`

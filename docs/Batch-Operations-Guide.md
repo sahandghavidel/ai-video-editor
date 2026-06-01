@@ -52,6 +52,11 @@ Most batch handlers follow this lifecycle:
 1. Guard against duplicate runs (`if (isRunning) return`)
 2. Set loading state and clear previous error
 3. Fetch fresh video/scene data
+
+- Prefer `getOriginalVideosData()` + scoped scene loading helpers
+- Prefer `fetchProcessingScenes()` / `getBaserowDataForOriginalVideo(videoId)` over full-table reads
+- If scoped fetch returns empty because of link-shape edge cases, use targeted scene-id fallback (`getSceneById`) from linked scene IDs
+
 4. Filter to eligible items (usually `status === 'Processing'`)
 5. Process sequentially (with small delays where needed)
 6. Refresh view state (`handleRefresh()` and/or `refreshScenesData()`)
@@ -62,6 +67,10 @@ Most batch handlers follow this lifecycle:
    - play error sound
    - set error text (or intentionally keep silent for some flows)
 9. Always reset loading state in `finally`
+
+Pipeline note:
+
+- In the full pipeline path, inter-step settle waits are now generally **3 seconds** (not 20s).
 
 ---
 
@@ -109,6 +118,7 @@ Existing completion names include:
 - `Keywords All`
 - `Titles All`
 - `Timestamps All`
+- `Create En Srt`
 - `Thumbs All`
 - `Script From Title`
 - `Improve All`
@@ -116,6 +126,7 @@ Existing completion names include:
 - `Sync All`
 - `Speed Up All`
 - `Delete Empty`
+- `Fix Language All`
 - `Fix TTS`
 - `Fix Flagged`
 - `Fix Intro QA`
@@ -161,6 +172,7 @@ When adding a new operation, pick a name consistent with this style.
 - Add a `handle...` function in `OriginalVideosList.tsx`
 - Use `try/catch/finally`
 - Filter by processing status when applicable
+- Reuse `fetchProcessingScenes()` if step is scene-level + Processing-only
 - Keep loops resilient (log and continue per-item when possible)
 
 ### Step 4: Wire completion notification correctly
@@ -220,6 +232,8 @@ Only insert new steps where their input requirements are guaranteed.
 - Missing `refreshScenesData()` for scene-driven actions
 - Adding a button without collision-safe `disabled` guards
 - Adding pipeline step without proper ordering or waits
+- Reintroducing full-table scene fetches when scoped loaders already exist
+- Using global scene fallback where targeted scene-id fallback is sufficient
 
 ---
 
