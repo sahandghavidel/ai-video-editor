@@ -3,6 +3,15 @@ import { syncVideoWithUpload } from '@/utils/ffmpeg-sync';
 
 export async function POST(request: NextRequest) {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+    const normalizedMinioBaseUrl = minioBaseUrl.replace(/\/+$/, '');
+
     const {
       videoUrl,
       audioUrl,
@@ -100,8 +109,8 @@ export async function POST(request: NextRequest) {
     if (ttsTimestamp && clipTimestamp) {
       const expectedSyncUrl =
         videoId && sceneId
-          ? `http://host.docker.internal:9000/nca-toolkit/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`
-          : `http://host.docker.internal:9000/nca-toolkit/scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`;
+          ? `${normalizedMinioBaseUrl}/${minioBucket}/video_${videoId}_scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`
+          : `${normalizedMinioBaseUrl}/${minioBucket}/scene_${sceneId}_synced_${ttsTimestamp}_${clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`;
 
       const normalizedExistingSyncedUrl =
         typeof existingSyncedUrl === 'string' ? existingSyncedUrl.trim() : '';

@@ -7,6 +7,14 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
@@ -18,7 +26,7 @@ export async function POST(request: NextRequest) {
     if (!file.type.startsWith('video/')) {
       return NextResponse.json(
         { error: 'File must be a video' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -27,7 +35,7 @@ export async function POST(request: NextRequest) {
     if (file.size > maxSize) {
       return NextResponse.json(
         { error: 'File size must be less than 10GB' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -45,7 +53,7 @@ export async function POST(request: NextRequest) {
     // Generate unique title based on filename
     const generateUniqueTitle = (
       baseName: string,
-      existingVideos: BaserowRow[]
+      existingVideos: BaserowRow[],
     ): string => {
       // Get all existing titles (field_6852)
       const existingTitles = existingVideos
@@ -92,8 +100,7 @@ export async function POST(request: NextRequest) {
     const fileExtension = file.name.split('.').pop() || 'mp4';
     const filename = `video_${videoId}_raw_${timestamp}.${fileExtension}`;
 
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     // Upload to MinIO
     const uploadResponse = await fetch(uploadUrl, {
@@ -120,7 +127,7 @@ export async function POST(request: NextRequest) {
       success: true,
       videoUrl: uploadUrl,
       filename,
-      bucket,
+      bucket: minioBucket,
       rowId: newRow.id,
       message: 'Video uploaded successfully',
     });
@@ -130,7 +137,7 @@ export async function POST(request: NextRequest) {
       {
         error: error instanceof Error ? error.message : 'Upload failed',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

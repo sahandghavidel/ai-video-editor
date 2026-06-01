@@ -451,6 +451,14 @@ export async function uploadToMinio(
   contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+
     // Check file size first
     const statStart = Date.now();
     const stats = await stat(filePath);
@@ -468,9 +476,8 @@ export async function uploadToMinio(
       filename ||
       `clip_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
 
-    // MinIO configuration (same as other endpoints)
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${finalFilename}`;
+    // MinIO configuration (env-driven)
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${finalFilename}`;
 
     // For large files (> 100MB), use streaming upload to avoid memory issues
     if (fileSize > 100 * 1024 * 1024) {

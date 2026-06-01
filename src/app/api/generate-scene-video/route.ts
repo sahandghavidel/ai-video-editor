@@ -30,11 +30,11 @@ function isSceneVideoForImage(videoUrl: string, imageSig: string): boolean {
   }
 }
 
-const MINIO_BUCKET = 'nca-toolkit';
-const MINIO_HOST = 'http://host.docker.internal:9000';
-
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
 const KIE_MODEL = 'grok-imagine/image-to-video';
+
+const MINIO_BUCKET = process.env.MINIO_BUCKET?.trim() || '';
+const MINIO_HOST = process.env.MINIO_BASE_URL?.trim() || '';
 
 const KIE_POLL_INTERVAL_MS = 3000;
 // Video tasks can take a while; allow up to 15 minutes.
@@ -467,7 +467,7 @@ async function uploadVideoUrlToMinio(options: {
   const arrayBuffer = await sourceRes.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const uploadUrl = `${MINIO_HOST}/${MINIO_BUCKET}/${options.filename}`;
+  const uploadUrl = `${MINIO_HOST.replace(/\/+$/, '')}/${MINIO_BUCKET}/${options.filename}`;
   const uploadRes = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
@@ -491,6 +491,16 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as {
       sceneId?: unknown;
     } | null;
+
+    if (!MINIO_BUCKET || !MINIO_HOST) {
+      return Response.json(
+        {
+          error:
+            'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local.',
+        },
+        { status: 500 },
+      );
+    }
 
     const sceneId =
       typeof body?.sceneId === 'number' ? body.sceneId : Number(body?.sceneId);

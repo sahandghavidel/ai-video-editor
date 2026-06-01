@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
@@ -15,8 +23,7 @@ export async function POST(request: NextRequest) {
 
     // Use the provided filename or generate one
     const filename = file.name || `captions_${Date.now()}.json`;
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     // Upload to MinIO (same as video uploads)
     const uploadResponse = await fetch(uploadUrl, {
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
         error: 'Failed to upload captions',
         details: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -652,8 +652,14 @@ export async function POST(request: NextRequest) {
         : `video_${body.videoId}_fish_tts_${timestamp}.${extension}`
       : `scene_${body.sceneId}_fish_tts_${timestamp}.${extension}`;
 
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     const contentTypeMap: Record<FishFormat, string> = {
       wav: 'audio/wav',
@@ -692,7 +698,7 @@ export async function POST(request: NextRequest) {
       provider: 'fish-s2-pro',
       audioUrl: uploadUrl,
       filename,
-      bucket,
+      bucket: minioBucket,
       sceneId: hasSceneId ? body.sceneId : null,
       videoId: hasVideoId ? body.videoId : null,
       generationParams: {

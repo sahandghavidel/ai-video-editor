@@ -24,6 +24,21 @@ export type GenerateAllVideosBatchOptions = {
 const normalizeMediaUrl = (value: unknown): string =>
   typeof value === 'string' ? value.trim() : '';
 
+const getMinioPublicConfig = () => {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_MINIO_ENDPOINT?.trim() ||
+    process.env.NEXT_PUBLIC_MINIO_BASE_URL?.trim();
+  const bucket = process.env.NEXT_PUBLIC_MINIO_BUCKET?.trim();
+
+  if (!baseUrl || !bucket) {
+    throw new Error(
+      'Missing MinIO public configuration. Set NEXT_PUBLIC_MINIO_ENDPOINT (or NEXT_PUBLIC_MINIO_BASE_URL) and NEXT_PUBLIC_MINIO_BUCKET in .env.local',
+    );
+  }
+
+  return { baseUrl: baseUrl.replace(/\/+$/, ''), bucket };
+};
+
 const extractLinkedVideoId = (videoIdField: unknown): number | null => {
   if (typeof videoIdField === 'number') {
     return Number.isFinite(videoIdField) ? videoIdField : null;
@@ -116,7 +131,8 @@ const buildExpectedSyncedUrl = (params: {
       ? `video_${params.videoId}_scene_${params.sceneId}_synced_${params.ttsTimestamp}_${params.clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`
       : `scene_${params.sceneId}_synced_${params.ttsTimestamp}_${params.clipTimestamp}_${qualityTag}${zoomSuffix}.mp4`;
 
-  return `http://host.docker.internal:9000/nca-toolkit/${baseName}`;
+  const { baseUrl, bucket } = getMinioPublicConfig();
+  return `${baseUrl}/${bucket}/${baseName}`;
 };
 
 // Batch operation: Improve all sentences with AI

@@ -6,12 +6,25 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(request: NextRequest) {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+        },
+        { status: 500 },
+      );
+    }
+
     const { prefix } = await request.json();
 
     if (!prefix) {
       return NextResponse.json(
         { success: false, error: 'Prefix is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -23,23 +36,23 @@ export async function POST(request: NextRequest) {
           success: false,
           error: 'Invalid prefix format. Must be video_NUMBER_',
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.log(
-      `[API DELETE BY PREFIX] ========================================`
+      `[API DELETE BY PREFIX] ========================================`,
     );
     console.log(
-      `[API DELETE BY PREFIX] Starting deletion for prefix: ${prefix}`
+      `[API DELETE BY PREFIX] Starting deletion for prefix: ${prefix}`,
     );
 
-    const bucket = 'nca-toolkit';
-    const minioHost = 'http://host.docker.internal:9000';
+    const bucket = minioBucket;
+    const minioHost = minioBaseUrl.replace(/\/+$/, '');
 
     // Step 1: List all objects in the bucket
     const listUrl = `${minioHost}/${bucket}/?prefix=${encodeURIComponent(
-      prefix
+      prefix,
     )}&max-keys=1000`;
 
     console.log(`[API DELETE BY PREFIX] MinIO host: ${minioHost}`);
@@ -52,17 +65,17 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(
-      `[API DELETE BY PREFIX] List response status: ${listResponse.status}`
+      `[API DELETE BY PREFIX] List response status: ${listResponse.status}`,
     );
     console.log(
       `[API DELETE BY PREFIX] List response headers:`,
-      Object.fromEntries(listResponse.headers.entries())
+      Object.fromEntries(listResponse.headers.entries()),
     );
 
     if (!listResponse.ok) {
       const errorText = await listResponse.text();
       console.error(
-        `[API DELETE BY PREFIX] ❌ Failed to list files: ${listResponse.status}`
+        `[API DELETE BY PREFIX] ❌ Failed to list files: ${listResponse.status}`,
       );
       console.error(`[API DELETE BY PREFIX] Error response: ${errorText}`);
       return NextResponse.json(
@@ -70,19 +83,19 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `Failed to list files: ${listResponse.status} - ${errorText}`,
         },
-        { status: listResponse.status }
+        { status: listResponse.status },
       );
     }
 
     const xmlText = await listResponse.text();
     console.log(
-      `[API DELETE BY PREFIX] ✓ Received XML response (${xmlText.length} bytes)`
+      `[API DELETE BY PREFIX] ✓ Received XML response (${xmlText.length} bytes)`,
     );
 
     // Log first 500 characters of XML for debugging
     if (xmlText.length > 0) {
       console.log(
-        `[API DELETE BY PREFIX] XML preview: ${xmlText.substring(0, 500)}...`
+        `[API DELETE BY PREFIX] XML preview: ${xmlText.substring(0, 500)}...`,
       );
     }
 
@@ -97,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[API DELETE BY PREFIX] ✓ Found ${fileKeys.length} files matching prefix`
+      `[API DELETE BY PREFIX] ✓ Found ${fileKeys.length} files matching prefix`,
     );
 
     if (fileKeys.length > 0) {
@@ -109,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     if (fileKeys.length === 0) {
       console.log(
-        `[API DELETE BY PREFIX] ⚠️  No files found matching prefix: ${prefix}`
+        `[API DELETE BY PREFIX] ⚠️  No files found matching prefix: ${prefix}`,
       );
       return NextResponse.json({
         success: true,
@@ -122,7 +135,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[API DELETE BY PREFIX] Starting deletion of ${fileKeys.length} files...`
+      `[API DELETE BY PREFIX] Starting deletion of ${fileKeys.length} files...`,
     );
 
     // Step 2: Delete each file
@@ -151,7 +164,7 @@ export async function POST(request: NextRequest) {
             error: `Status ${deleteResponse.status}`,
           });
           console.warn(
-            `[API DELETE BY PREFIX] ✗ Failed to delete ${key}: ${deleteResponse.status}`
+            `[API DELETE BY PREFIX] ✗ Failed to delete ${key}: ${deleteResponse.status}`,
           );
         }
 
@@ -169,7 +182,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[API DELETE BY PREFIX] Completed: ${successCount} deleted, ${failCount} failed`
+      `[API DELETE BY PREFIX] Completed: ${successCount} deleted, ${failCount} failed`,
     );
 
     return NextResponse.json({
@@ -187,7 +200,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

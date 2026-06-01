@@ -31,7 +31,7 @@ export interface OptimizeSilenceOptions {
  * Optimize silence in video by detecting silent parts and speeding them up
  */
 export async function optimizeSilence(
-  options: OptimizeSilenceOptions
+  options: OptimizeSilenceOptions,
 ): Promise<{ outputPath: string; stats: Stats }> {
   const {
     inputUrl,
@@ -108,7 +108,7 @@ export async function optimizeSilence(
       console.log(
         `  [${i}] ${silenceStarts[i].toFixed(3)}s - ${(
           silenceEnds[i] || 0
-        ).toFixed(3)}s (duration: ${duration.toFixed(3)}s)`
+        ).toFixed(3)}s (duration: ${duration.toFixed(3)}s)`,
       );
     }
 
@@ -143,8 +143,8 @@ export async function optimizeSilence(
         ignoredCount++;
         console.log(
           `Ignoring - no silence left after padding: ${rawStart.toFixed(
-            3
-          )}-${rawEnd.toFixed(3)} (padded: ${paddedDuration.toFixed(3)}s)`
+            3,
+          )}-${rawEnd.toFixed(3)} (padded: ${paddedDuration.toFixed(3)}s)`,
         );
         continue;
       }
@@ -154,10 +154,10 @@ export async function optimizeSilence(
         ignoredCount++;
         console.log(
           `Ignoring short silence: raw ${rawStart.toFixed(3)}-${rawEnd.toFixed(
-            3
+            3,
           )} | padded: ${paddedDuration.toFixed(
-            3
-          )}s < ${minSilenceDurationToSpeedUp}s`
+            3,
+          )}s < ${minSilenceDurationToSpeedUp}s`,
         );
         continue;
       }
@@ -172,7 +172,7 @@ export async function optimizeSilence(
     }
 
     console.log(
-      `Result: ${processedIntervals.length} intervals will be sped up 4x, ${ignoredCount} intervals ignored`
+      `Result: ${processedIntervals.length} intervals will be sped up 4x, ${ignoredCount} intervals ignored`,
     );
 
     // Log first 10 processed intervals
@@ -182,8 +182,8 @@ export async function optimizeSilence(
       const duration = interval.end - interval.start;
       console.log(
         `  [${i}] ${interval.start.toFixed(3)}s - ${interval.end.toFixed(
-          3
-        )}s (duration: ${duration.toFixed(3)}s)`
+          3,
+        )}s (duration: ${duration.toFixed(3)}s)`,
       );
     }
 
@@ -255,7 +255,7 @@ export async function optimizeSilence(
       if (currentTime < interval.start) {
         const segmentPath = path.resolve(
           tempDir,
-          `normal_${Date.now()}_${segmentIndex++}.mp4`
+          `normal_${Date.now()}_${segmentIndex++}.mp4`,
         );
 
         const duration = interval.start - currentTime;
@@ -318,7 +318,7 @@ export async function optimizeSilence(
       // Process silence segment with speed adjustment
       const silenceSegmentPath = path.resolve(
         tempDir,
-        `silence_${Date.now()}_${segmentIndex++}.mp4`
+        `silence_${Date.now()}_${segmentIndex++}.mp4`,
       );
 
       const silenceDuration = interval.end - interval.start;
@@ -396,7 +396,7 @@ export async function optimizeSilence(
     if (currentTime < totalDuration) {
       const segmentPath = path.resolve(
         tempDir,
-        `final_${Date.now()}_${segmentIndex++}.mp4`
+        `final_${Date.now()}_${segmentIndex++}.mp4`,
       );
 
       const duration = totalDuration - currentTime;
@@ -525,7 +525,7 @@ export async function optimizeSilence(
     ];
 
     console.log(
-      'Concatenating segments with high precision encoding for editing compatibility...'
+      'Concatenating segments with high precision encoding for editing compatibility...',
     );
     await execAsync(concatCommand.join(' '), { timeout: 3600000 }); // 1 hour timeout
 
@@ -549,14 +549,14 @@ export async function optimizeSilence(
 
     const totalSilenceDuration = processedIntervals.reduce(
       (sum, interval) => sum + (interval.end - interval.start),
-      0
+      0,
     );
 
     console.log(`Silence optimization saved to: ${fullOutputPath}`);
     console.log(
       `Stats: ${
         processedIntervals.length
-      } intervals, ${totalSilenceDuration.toFixed(2)}s total silence`
+      } intervals, ${totalSilenceDuration.toFixed(2)}s total silence`,
     );
 
     return {
@@ -579,7 +579,7 @@ export async function optimizeSilence(
     throw new Error(
       `Silence optimization failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -590,9 +590,17 @@ export async function optimizeSilence(
 export async function uploadToMinio(
   filePath: string,
   filename?: string,
-  contentType: string = 'video/mp4'
+  contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+
     const fileBuffer = await readFile(filePath);
 
     const finalFilename =
@@ -601,8 +609,7 @@ export async function uploadToMinio(
         .toString(36)
         .substr(2, 9)}.mp4`;
 
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${finalFilename}`;
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${finalFilename}`;
 
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
@@ -624,7 +631,7 @@ export async function uploadToMinio(
     throw new Error(
       `MinIO upload failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -637,7 +644,7 @@ export async function optimizeSilenceWithUpload(
     videoId?: string;
     sceneId?: string;
     cleanup?: boolean;
-  }
+  },
 ): Promise<{ localPath: string; uploadUrl: string; stats: Stats }> {
   const { videoId, sceneId, cleanup = true, ...silenceOptions } = options;
 
@@ -654,10 +661,10 @@ export async function optimizeSilenceWithUpload(
       videoId && sceneId
         ? `video_${videoId}_scene_${sceneId}_silence_opt_${timestamp}.mp4`
         : videoId
-        ? `video_${videoId}_silence_opt_${timestamp}.mp4`
-        : sceneId
-        ? `scene_${sceneId}_silence_opt_${timestamp}.mp4`
-        : `silence_opt_${timestamp}.mp4`;
+          ? `video_${videoId}_silence_opt_${timestamp}.mp4`
+          : sceneId
+            ? `scene_${sceneId}_silence_opt_${timestamp}.mp4`
+            : `silence_opt_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');

@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const sceneId = formData.get('sceneId') as string;
@@ -14,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (!sceneId || !videoId) {
       return NextResponse.json(
         { error: 'Scene ID and Video ID are required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -22,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (!file.type.startsWith('video/')) {
       return NextResponse.json(
         { error: 'File must be a video' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -31,7 +39,7 @@ export async function POST(request: NextRequest) {
     if (file.size > maxSize) {
       return NextResponse.json(
         { error: 'File size must be less than 10GB' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -46,8 +54,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     // Upload to MinIO
     const uploadResponse = await fetch(uploadUrl, {
@@ -70,7 +77,7 @@ export async function POST(request: NextRequest) {
       success: true,
       videoUrl: uploadUrl,
       filename,
-      bucket,
+      bucket: minioBucket,
       message: 'Scene video uploaded successfully',
     });
   } catch (error) {
@@ -79,7 +86,7 @@ export async function POST(request: NextRequest) {
       {
         error: error instanceof Error ? error.message : 'Upload failed',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

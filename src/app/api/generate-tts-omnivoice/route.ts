@@ -1971,8 +1971,14 @@ export async function POST(request: NextRequest) {
         : `video_${body.videoId}_omnivoice_tts_${timestamp}.wav`
       : `scene_${body.sceneId}_omnivoice_tts_${timestamp}.wav`;
 
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     const uploadStartedAt = Date.now();
     const uploadResponse = await fetch(uploadUrl, {
@@ -2002,7 +2008,7 @@ export async function POST(request: NextRequest) {
       provider: 'omnivoice',
       audioUrl: uploadUrl,
       filename,
-      bucket,
+      bucket: minioBucket,
       sceneId: hasSceneId ? body.sceneId : null,
       videoId: hasVideoId ? body.videoId : null,
       generationParams: {

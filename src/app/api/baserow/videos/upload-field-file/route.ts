@@ -10,8 +10,8 @@ import {
 export const runtime = 'nodejs';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
-const MINIO_BUCKET = 'nca-toolkit';
-const MINIO_BASE_URL = `http://host.docker.internal:9000/${MINIO_BUCKET}`;
+const MINIO_BUCKET = process.env.MINIO_BUCKET?.trim() || '';
+const MINIO_BASE_URL = process.env.MINIO_BASE_URL?.trim() || '';
 
 type BaserowRow = {
   id: number;
@@ -53,6 +53,16 @@ function parseVideoId(value: FormDataEntryValue | null): number | null {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!MINIO_BUCKET || !MINIO_BASE_URL) {
+      return NextResponse.json(
+        {
+          error:
+            'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+        },
+        { status: 500 },
+      );
+    }
+
     const formData = await request.formData();
 
     const rawFile = formData.get('file');
@@ -104,7 +114,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await rawFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const uploadUrl = `${MINIO_BASE_URL}/${filename}`;
+    const uploadUrl = `${MINIO_BASE_URL.replace(/\/+$/, '')}/${MINIO_BUCKET}/${filename}`;
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {

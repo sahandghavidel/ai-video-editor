@@ -890,8 +890,14 @@ export async function POST(request: NextRequest) {
         ? `video_${videoId}_scene_${sceneId}_tts_${timestamp}.wav`
         : `video_${videoId}_tts_${timestamp}.wav`
       : `scene_${sceneId}_tts_${timestamp}.wav`;
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${filename}`;
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     // Upload to MinIO
     const uploadResponse = await fetch(uploadUrl, {
@@ -921,7 +927,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       audioUrl: uploadUrl,
       filename,
-      bucket,
+      bucket: minioBucket,
       sceneId: hasSceneId ? sceneId : null,
       videoId: hasVideoId ? videoId : null,
     });

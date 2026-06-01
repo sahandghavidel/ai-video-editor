@@ -918,11 +918,17 @@ export async function deleteOriginalVideoWithScenes(
 
       try {
         const prefix = `video_${originalVideoId}_`;
-        const bucket = 'nca-toolkit';
-        const minioHost = 'http://host.docker.internal:9000';
+        const bucket = process.env.MINIO_BUCKET?.trim();
+        const minioHost = process.env.MINIO_BASE_URL?.trim();
+
+        if (!bucket || !minioHost) {
+          throw new Error(
+            'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+          );
+        }
 
         // List all files with the prefix (same as individual deletion - direct to MinIO)
-        const listUrl = `${minioHost}/${bucket}/?prefix=${encodeURIComponent(
+        const listUrl = `${minioHost.replace(/\/+$/, '')}/${bucket}/?prefix=${encodeURIComponent(
           prefix,
         )}&max-keys=1000`;
 

@@ -12,9 +12,17 @@ const execAsync = promisify(exec);
 async function uploadToMinio(
   filePath: string,
   filename?: string,
-  contentType: string = 'video/mp4'
+  contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+
     // Read the file as Buffer
     const fileBuffer = await readFile(filePath);
 
@@ -24,8 +32,7 @@ async function uploadToMinio(
       `enhanced_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
 
     // MinIO configuration
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${finalFilename}`;
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${finalFilename}`;
 
     // Upload to MinIO using direct HTTP PUT
     const uploadResponse = await fetch(uploadUrl, {
@@ -48,7 +55,7 @@ async function uploadToMinio(
     throw new Error(
       `MinIO upload failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -71,19 +78,19 @@ export async function POST(request: NextRequest) {
     if (!sceneId) {
       return NextResponse.json(
         { error: 'Scene ID is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!videoUrl) {
       return NextResponse.json(
         { error: 'Video URL is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.log(
-      `[ENHANCE] Scene ${sceneId}: Starting Resemble Enhance audio processing (denoise_only=${denoiseOnly}, solver=${solver}, nfe=${nfe}, tau=${tau}, lambd=${lambd})`
+      `[ENHANCE] Scene ${sceneId}: Starting Resemble Enhance audio processing (denoise_only=${denoiseOnly}, solver=${solver}, nfe=${nfe}, tau=${tau}, lambd=${lambd})`,
     );
 
     const enhanceStartTime = Date.now();
@@ -96,7 +103,7 @@ export async function POST(request: NextRequest) {
       // Get the Python script path (in project root)
       const scriptPath = path.resolve(
         process.cwd(),
-        'resemble-enhance-audio.py'
+        'resemble-enhance-audio.py',
       );
 
       // Build Python command with all parameters
@@ -136,7 +143,7 @@ export async function POST(request: NextRequest) {
       console.log(`[ENHANCE] Uploading enhanced video to MinIO...`);
       const uploadUrl = await uploadToMinio(
         result.output_path,
-        `video_${sceneId}_enhanced_${Date.now()}.mp4`
+        `video_${sceneId}_enhanced_${Date.now()}.mp4`,
       );
 
       // Cleanup local file
@@ -150,7 +157,7 @@ export async function POST(request: NextRequest) {
       console.log(
         `[ENHANCE] Scene ${sceneId}: Total processing time: ${
           enhanceEndTime - enhanceStartTime
-        }ms`
+        }ms`,
       );
 
       return NextResponse.json({
@@ -169,7 +176,7 @@ export async function POST(request: NextRequest) {
     } catch (enhanceError) {
       console.error(
         `[ENHANCE] Scene ${sceneId}: Enhancement failed:`,
-        enhanceError
+        enhanceError,
       );
 
       return NextResponse.json(
@@ -181,7 +188,7 @@ export async function POST(request: NextRequest) {
               : 'Unknown error',
           sceneId,
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
   } catch (error) {
@@ -192,7 +199,7 @@ export async function POST(request: NextRequest) {
         error: 'Internal server error',
         details: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

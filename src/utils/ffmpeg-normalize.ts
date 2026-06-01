@@ -18,7 +18,7 @@ export interface NormalizeAudioOptions {
  * Implements EBU R128 standard for broadcast loudness normalization
  */
 export async function normalizeAudioLoudness(
-  options: NormalizeAudioOptions
+  options: NormalizeAudioOptions,
 ): Promise<string> {
   const {
     inputUrl,
@@ -37,7 +37,7 @@ export async function normalizeAudioLoudness(
   try {
     console.log(`Starting audio loudness normalization for: ${inputUrl}`);
     console.log(
-      `Target loudness: ${targetLoudness} LUFS, Range: ${loudnessRange} LU, True Peak: ${truePeak} dBTP`
+      `Target loudness: ${targetLoudness} LUFS, Range: ${loudnessRange} LU, True Peak: ${truePeak} dBTP`,
     );
 
     // Pass 1: Analyze the audio and get loudness statistics
@@ -63,14 +63,14 @@ export async function normalizeAudioLoudness(
       analyzeCommandString,
       {
         timeout: 300000, // 5 minute timeout for analysis (increased for long videos)
-      }
+      },
     );
 
     // Extract JSON from stderr (FFmpeg prints loudnorm stats to stderr)
     const jsonMatch = analyzeStderr.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error(
-        'Failed to extract loudness statistics from FFmpeg output'
+        'Failed to extract loudness statistics from FFmpeg output',
       );
     }
 
@@ -114,7 +114,7 @@ export async function normalizeAudioLoudness(
 
     const execEndTime = Date.now();
     console.log(
-      `Audio normalization completed in ${execEndTime - execStartTime}ms`
+      `Audio normalization completed in ${execEndTime - execStartTime}ms`,
     );
 
     // Check if output file exists
@@ -135,7 +135,7 @@ export async function normalizeAudioLoudness(
     throw new Error(
       `Audio loudness normalization failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -146,9 +146,17 @@ export async function normalizeAudioLoudness(
 export async function uploadToMinio(
   filePath: string,
   filename?: string,
-  contentType: string = 'video/mp4'
+  contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
+    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
+    const minioBucket = process.env.MINIO_BUCKET?.trim();
+    if (!minioBaseUrl || !minioBucket) {
+      throw new Error(
+        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
+      );
+    }
+
     // Read the file as Buffer (which works with fetch)
     const fileBuffer = await readFile(filePath);
 
@@ -158,8 +166,7 @@ export async function uploadToMinio(
       `normalized_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
 
     // MinIO configuration
-    const bucket = 'nca-toolkit';
-    const uploadUrl = `http://host.docker.internal:9000/${bucket}/${finalFilename}`;
+    const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${finalFilename}`;
 
     // Upload to MinIO using direct HTTP PUT (convert Buffer to Uint8Array)
     const uploadResponse = await fetch(uploadUrl, {
@@ -182,7 +189,7 @@ export async function uploadToMinio(
     throw new Error(
       `MinIO upload failed: ${
         error instanceof Error ? error.message : 'Unknown error'
-      }`
+      }`,
     );
   }
 }
@@ -195,7 +202,7 @@ export async function normalizeAudioWithUpload(
     videoId?: string;
     sceneId?: string;
     cleanup?: boolean;
-  }
+  },
 ): Promise<{ localPath: string; uploadUrl: string }> {
   const { videoId, sceneId, cleanup = true, ...normalizeOptions } = options;
 
@@ -211,10 +218,10 @@ export async function normalizeAudioWithUpload(
       videoId && sceneId
         ? `video_${videoId}_scene_${sceneId}_normalized_${timestamp}.mp4`
         : videoId
-        ? `video_${videoId}_normalized_${timestamp}.mp4`
-        : sceneId
-        ? `scene_${sceneId}_normalized_${timestamp}.mp4`
-        : `normalized_${timestamp}.mp4`;
+          ? `video_${videoId}_normalized_${timestamp}.mp4`
+          : sceneId
+            ? `scene_${sceneId}_normalized_${timestamp}.mp4`
+            : `normalized_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadUrl = await uploadToMinio(localPath, filename, 'video/mp4');
