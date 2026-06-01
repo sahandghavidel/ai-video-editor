@@ -5046,12 +5046,6 @@ export default function OriginalVideosList({
       }
 
       const freshVideosData = await getOriginalVideosData();
-      const freshScenesData = await getBaserowData();
-
-      if (!freshScenesData || freshScenesData.length === 0) {
-        console.log('No scenes found for Fix Intro QA');
-        return false;
-      }
 
       const processingVideos = freshVideosData
         .filter((video) => {
@@ -5066,6 +5060,27 @@ export default function OriginalVideosList({
       const processingVideoIds = new Set(
         processingVideos.map((video) => video.id),
       );
+
+      const scopedScenesByVideo = await Promise.all(
+        processingVideos.map(async (video) => {
+          try {
+            return await getBaserowDataForOriginalVideo(video.id);
+          } catch (error) {
+            console.warn(
+              `Failed to fetch scoped scenes for Fix Intro QA video #${video.id}:`,
+              error,
+            );
+            return [] as BaserowRow[];
+          }
+        }),
+      );
+
+      const freshScenesData = scopedScenesByVideo.flat();
+
+      if (!freshScenesData || freshScenesData.length === 0) {
+        console.log('No scenes found for Fix Intro QA');
+        return false;
+      }
 
       const ttsVoiceByVideoId = new Map<number, string>();
       for (const video of processingVideos) {
