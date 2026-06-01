@@ -15,6 +15,7 @@ const SCENES_TABLE_ID = '714';
 
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT = 'field_6884';
+const SCENE_REFERENCE_SENTENCE_FALLBACK_FIELD_KEY = 'field_6890';
 const VIDEO_FINAL_DUBBED_FA_FIELD_KEY = 'field_7113';
 
 const DEFAULT_DUBBED_LANGUAGE = 'fa';
@@ -80,21 +81,6 @@ function parsePositiveInt(value: unknown): number | null {
         : Number.NaN;
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function parsePositiveNumber(value: unknown): number | null {
-  const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string'
-        ? Number(value)
-        : Number.NaN;
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
     return null;
   }
 
@@ -211,19 +197,6 @@ function collectTimestampMismatches(
   }
 
   return mismatches;
-}
-
-function shouldIncludeSceneForDurationSrt(
-  scene: BaserowRow,
-  baserowFields: LanguageBaserowFields,
-): boolean {
-  const duration = parsePositiveNumber(
-    scene[baserowFields.sceneDurationFieldKey],
-  );
-  const sentence = String(
-    scene[baserowFields.sceneReferenceSentenceFieldKey] ?? '',
-  ).trim();
-  return Boolean(duration) && sentence.length > 0;
 }
 
 function normalizeLanguageCode(value: unknown): string {
@@ -582,23 +555,74 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const eligibleScenes = [...scenes]
-      .sort((a, b) => getSceneOrderValue(a) - getSceneOrderValue(b))
-      .filter((scene) =>
-        shouldIncludeSceneForDurationSrt(scene, baserowFields),
+    const orderedScenes = [...scenes].sort(
+      (a, b) => getSceneOrderValue(a) - getSceneOrderValue(b),
+    );
+
+    const sceneCandidates = orderedScenes.map((scene, idx) => ({
+      scene,
+      sceneId: parsePositiveInt(scene.id),
+      normalizedReference: normalizeForLooseCompare(
+        String(scene[SCENE_REFERENCE_SENTENCE_FALLBACK_FIELD_KEY] ?? ''),
+      ),
+      used: false,
+      idx,
+    }));
+
+    const alignedPairs: Array<{
+      scene: BaserowRow;
+      enCue: (typeof enCues)[number];
+      faCue: (typeof faCues)[number];
+    }> = [];
+    const missingCueMatches: Array<{ cueIndex: number; cueText: string }> = [];
+
+    for (let i = 0; i < enCues.length; i += 1) {
+      const enCue = enCues[i];
+      const faCue = faCues[i];
+      const normalizedCueText = normalizeForLooseCompare(enCue.text ?? '');
+
+      if (!normalizedCueText) {
+        missingCueMatches.push({ cueIndex: i + 1, cueText: enCue.text ?? '' });
+        continue;
+      }
+
+      const match = sceneCandidates.find(
+        (candidate) =>
+          !candidate.used &&
+          candidate.sceneId !== null &&
+          candidate.normalizedReference.length > 0 &&
+          candidate.normalizedReference === normalizedCueText,
       );
 
-    if (eligibleScenes.length !== enCues.length) {
+      if (!match) {
+        missingCueMatches.push({ cueIndex: i + 1, cueText: enCue.text ?? '' });
+        continue;
+      }
+
+      match.used = true;
+      alignedPairs.push({ scene: match.scene, enCue, faCue });
+    }
+
+    if (alignedPairs.length !== enCues.length) {
       return NextResponse.json(
         {
           error:
             'Scene count eligible for SRT mapping does not match SRT cue count. Check scene duration/reference sentence mappings and retry.',
-          eligibleSceneCount: eligibleScenes.length,
+          details: [
+            `Text-based mapping failed: matched=${alignedPairs.length}, cueCount=${enCues.length}, totalScenes=${orderedScenes.length}`,
+            `Missing cue matches (first 20): ${missingCueMatches
+              .slice(0, 20)
+              .map((item) => `#${item.cueIndex}:${item.cueText.slice(0, 80)}`)
+              .join(' | ')}`,
+          ],
+          matchedSceneCount: alignedPairs.length,
           referenceCueCount: enCues.length,
           targetCueCount: faCues.length,
-          sceneDurationField: baserowFields.sceneDurationFieldKey,
+          totalSceneCount: orderedScenes.length,
+          missingCueMatchCount: missingCueMatches.length,
+          missingCueMatchSample: missingCueMatches.slice(0, 20),
           sceneReferenceSentenceField:
-            baserowFields.sceneReferenceSentenceFieldKey,
+            SCENE_REFERENCE_SENTENCE_FALLBACK_FIELD_KEY,
         },
         { status: 400 },
       );
@@ -608,15 +632,15 @@ export async function POST(request: NextRequest) {
     let updatedCount = 0;
     let unchangedCount = 0;
 
-    for (let i = 0; i < eligibleScenes.length; i += 1) {
-      const scene = eligibleScenes[i];
+    for (let i = 0; i < alignedPairs.length; i += 1) {
+      const scene = alignedPairs[i].scene;
       const sceneId = parsePositiveInt(scene.id);
       if (!sceneId) continue;
 
-      const enCue = enCues[i];
-      const faCue = faCues[i];
+      const enCue = alignedPairs[i].enCue;
+      const faCue = alignedPairs[i].faCue;
       const currentSceneReference = String(
-        scene[baserowFields.sceneReferenceSentenceFieldKey] ?? '',
+        scene[SCENE_REFERENCE_SENTENCE_FALLBACK_FIELD_KEY] ?? '',
       ).trim();
       const nextSceneTarget = String(faCue.text ?? '').trim();
       const currentSceneTarget = String(
