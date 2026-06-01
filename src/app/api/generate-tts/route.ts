@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { Agent } from 'undici';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 import { normalizeTtsVoiceReference } from '@/utils/ttsVoiceReference';
 
 // TTS Server management - optimized for fast API-only server
@@ -245,7 +246,7 @@ async function performShutdown(
 
               let command = '';
               psProcess.stdout.on('data', (data) => {
-                command += data.toString().trim();
+                command += data.toString();
               });
 
               psProcess.on('close', () => {
@@ -890,13 +891,8 @@ export async function POST(request: NextRequest) {
         ? `video_${videoId}_scene_${sceneId}_tts_${timestamp}.wav`
         : `video_${videoId}_tts_${timestamp}.wav`
       : `scene_${sceneId}_tts_${timestamp}.wav`;
-    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-    const minioBucket = process.env.MINIO_BUCKET?.trim();
-    if (!minioBaseUrl || !minioBucket) {
-      throw new Error(
-        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-      );
-    }
+    const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+      await ensureMinioRunning();
     const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     // Upload to MinIO

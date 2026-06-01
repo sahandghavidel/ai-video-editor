@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { readFile, access, unlink } from 'fs/promises';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 const FFMPEG_TIMEOUT_MS = 600000; // 10 minutes
 const FFMPEG_STDERR_TAIL_MAX_CHARS = 8000;
@@ -197,13 +198,8 @@ export async function uploadToMinio(
   contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
-    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-    const minioBucket = process.env.MINIO_BUCKET?.trim();
-    if (!minioBaseUrl || !minioBucket) {
-      throw new Error(
-        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-      );
-    }
+    const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+      await ensureMinioRunning();
 
     // Read the file as Buffer (which works with fetch)
     const fileBuffer = await readFile(filePath);

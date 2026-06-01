@@ -8,6 +8,7 @@ import { pipeline } from 'stream/promises';
 import http from 'http';
 import https from 'https';
 import type { IncomingMessage } from 'http';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 interface FFmpegStream {
   codec_type: string;
@@ -451,13 +452,8 @@ export async function uploadToMinio(
   contentType: string = 'video/mp4',
 ): Promise<string> {
   try {
-    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-    const minioBucket = process.env.MINIO_BUCKET?.trim();
-    if (!minioBaseUrl || !minioBucket) {
-      throw new Error(
-        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-      );
-    }
+    const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+      await ensureMinioRunning();
 
     // Check file size first
     const statStart = Date.now();

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -167,13 +168,8 @@ async function patchVideoCaptionsUrl(
 }
 
 async function uploadSrtToMinio(filename: string, srtContent: string) {
-  const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-  const minioBucket = process.env.MINIO_BUCKET?.trim();
-  if (!minioBaseUrl || !minioBucket) {
-    throw new Error(
-      'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-    );
-  }
+  const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+    await ensureMinioRunning();
 
   const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 

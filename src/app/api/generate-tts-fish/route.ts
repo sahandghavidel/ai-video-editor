@@ -6,6 +6,7 @@ import { constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 export const runtime = 'nodejs';
 export const maxDuration = 900;
@@ -652,13 +653,8 @@ export async function POST(request: NextRequest) {
         : `video_${body.videoId}_fish_tts_${timestamp}.${extension}`
       : `scene_${body.sceneId}_fish_tts_${timestamp}.${extension}`;
 
-    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-    const minioBucket = process.env.MINIO_BUCKET?.trim();
-    if (!minioBaseUrl || !minioBucket) {
-      throw new Error(
-        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-      );
-    }
+    const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+      await ensureMinioRunning();
     const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     const contentTypeMap: Record<FishFormat, string> = {

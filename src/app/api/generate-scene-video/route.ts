@@ -2,6 +2,7 @@
 // and save the resulting video URL directly into Baserow.
 
 import { createHash } from 'crypto';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 type BaserowRow = {
   id: number;
@@ -487,6 +488,7 @@ async function uploadVideoUrlToMinio(options: {
 export async function POST(req: Request) {
   try {
     getKieApiKey();
+    await ensureMinioRunning();
 
     const body = (await req.json().catch(() => null)) as {
       sceneId?: unknown;

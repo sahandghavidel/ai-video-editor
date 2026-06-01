@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncVideoWithUpload } from '@/utils/ffmpeg-sync';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 export async function POST(request: NextRequest) {
   try {
-    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-    const minioBucket = process.env.MINIO_BUCKET?.trim();
-    if (!minioBaseUrl || !minioBucket) {
-      throw new Error(
-        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-      );
-    }
+    const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+      await ensureMinioRunning();
     const normalizedMinioBaseUrl = minioBaseUrl.replace(/\/+$/, '');
 
     const {

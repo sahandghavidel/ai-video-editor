@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 /**
  * Delete all files from MinIO that start with a specific prefix
@@ -6,18 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(request: NextRequest) {
   try {
-    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-    const minioBucket = process.env.MINIO_BUCKET?.trim();
-    if (!minioBaseUrl || !minioBucket) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-        },
-        { status: 500 },
-      );
-    }
+    const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+      await ensureMinioRunning();
 
     const { prefix } = await request.json();
 

@@ -10,6 +10,7 @@ import {
   loadTtsAudioReferencesStore,
   type TtsAudioReferenceEntry,
 } from '@/lib/ttsAudioReferencesStore';
+import { ensureMinioRunning } from '@/lib/minio-runtime';
 
 export const runtime = 'nodejs';
 export const maxDuration = 900;
@@ -1971,13 +1972,8 @@ export async function POST(request: NextRequest) {
         : `video_${body.videoId}_omnivoice_tts_${timestamp}.wav`
       : `scene_${body.sceneId}_omnivoice_tts_${timestamp}.wav`;
 
-    const minioBaseUrl = process.env.MINIO_BASE_URL?.trim();
-    const minioBucket = process.env.MINIO_BUCKET?.trim();
-    if (!minioBaseUrl || !minioBucket) {
-      throw new Error(
-        'Missing MinIO configuration. Set MINIO_BASE_URL and MINIO_BUCKET in .env.local',
-      );
-    }
+    const { baseUrl: minioBaseUrl, bucket: minioBucket } =
+      await ensureMinioRunning();
     const uploadUrl = `${minioBaseUrl.replace(/\/+$/, '')}/${minioBucket}/${filename}`;
 
     const uploadStartedAt = Date.now();
