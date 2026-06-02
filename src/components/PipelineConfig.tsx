@@ -90,6 +90,10 @@ export default function PipelineConfig({
     loadingDubbedLanguagesForPipeline,
     setLoadingDubbedLanguagesForPipeline,
   ] = useState(false);
+  const [
+    hasLoadedDubbedLanguagesForPipeline,
+    setHasLoadedDubbedLanguagesForPipeline,
+  ] = useState(false);
   const templateReorderEnabled = isExpanded && isTemplateReorderMode;
 
   const selectedDubbedLanguagesForPipeline = useMemo(
@@ -136,9 +140,11 @@ export default function PipelineConfig({
       setAvailableDubbedLanguagesForPipeline(
         enabledLanguages.length > 0 ? enabledLanguages : ['fa'],
       );
+      setHasLoadedDubbedLanguagesForPipeline(true);
     } catch (error) {
       console.error('Failed to load pipeline dubbed languages:', error);
       setAvailableDubbedLanguagesForPipeline(['fa']);
+      setHasLoadedDubbedLanguagesForPipeline(false);
     } finally {
       setLoadingDubbedLanguagesForPipeline(false);
     }
@@ -190,6 +196,7 @@ export default function PipelineConfig({
   ]);
 
   useEffect(() => {
+    if (!hasLoadedDubbedLanguagesForPipeline) return;
     if (availableDubbedLanguagesForPipeline.length === 0) return;
 
     const availableSet = new Set(availableDubbedLanguagesForPipeline);
@@ -210,6 +217,7 @@ export default function PipelineConfig({
       selectedDubbedLanguagesForPipeline: filteredSelection,
     });
   }, [
+    hasLoadedDubbedLanguagesForPipeline,
     availableDubbedLanguagesForPipeline,
     selectedDubbedLanguagesForPipeline,
     updatePipelineConfig,
