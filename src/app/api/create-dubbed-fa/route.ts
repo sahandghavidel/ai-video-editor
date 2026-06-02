@@ -831,7 +831,7 @@ export async function POST(request: NextRequest) {
         sceneTargetSentenceField: baserowFields.sceneTargetSentenceFieldKey,
         referenceCueCount: enCues.length,
         targetCueCount: faCues.length,
-        eligibleSceneCount: eligibleScenes.length,
+        eligibleSceneCount: alignedPairs.length,
         updatedCount,
         unchangedCount,
         referenceSceneTextMismatchCount:
