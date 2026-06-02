@@ -262,6 +262,11 @@ export default function PipelineConfig({
       color: 'text-lime-600',
     },
     {
+      key: 'createDubbedLanguage' as const,
+      label: 'Create Dubbed Lang',
+      color: 'text-teal-600',
+    },
+    {
       key: 'generateYouTubeDescriptions' as const,
       label: 'Description',
       color: 'text-indigo-500',

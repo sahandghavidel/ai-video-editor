@@ -7,6 +7,8 @@ Checked against current implementation in:
 - `src/components/OriginalVideosList.tsx`
 - `src/components/PipelineConfig.tsx`
 - `src/store/useAppStore.ts`
+- `src/app/api/create-dubbed-fa/route.ts`
+- `src/app/api/tts-audio-references/route.ts`
 - `src/app/api/fix-language-scenes/route.ts`
 - `src/app/api/improve-sentence/route.ts`
 
@@ -91,11 +93,15 @@ The order below is the actual execution order in code.
 29. `mergeScenes` → `handleMergeScenesForProcessingVideos(false)`
 30. `convertFinalToCFR` → `handleConvertFinalToCFRAll(false)`
 31. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
-32. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
-33. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
-34. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
-35. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
-36. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
+32. `createEnSrt` → `handleCreateEnSrtAll(false)`
+33. `createDubbedLanguage` → `handleCreateDubbedLanguageForProcessingVideos(false)`
+34. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
+35. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
+36. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
+37. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
+38. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
+
+`createDubbedLanguage` uses the currently selected all-videos dubbed-language preset (loaded from `/api/tts-audio-references`).
 
 ---
 

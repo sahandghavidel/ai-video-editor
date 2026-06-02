@@ -97,6 +97,17 @@ type BaserowField =
   | undefined;
 import { Sparkles, Mic2, Wand2 } from 'lucide-react';
 
+type AudioReferenceLanguageEntry = {
+  language?: unknown;
+  enabled?: unknown;
+  isDefault?: unknown;
+};
+
+function normalizeLanguageCode(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase();
+}
+
 interface SceneHandlers {
   handleAutoFixMismatch: (
     sceneId: number,
@@ -262,6 +273,20 @@ export default function OriginalVideosList({
   const [creatingEnSrtVideoId, setCreatingEnSrtVideoId] = useState<
     number | null
   >(null);
+  const [creatingDubbedLanguageAllVideos, setCreatingDubbedLanguageAllVideos] =
+    useState(false);
+  const [creatingDubbedLanguageVideoId, setCreatingDubbedLanguageVideoId] =
+    useState<number | null>(null);
+  const [dubbingLanguageAllVideos, setDubbingLanguageAllVideos] =
+    useState('fa');
+  const [
+    availableDubbingLanguagesAllVideos,
+    setAvailableDubbingLanguagesAllVideos,
+  ] = useState<string[]>(['fa']);
+  const [
+    loadingDubbingLanguagesAllVideos,
+    setLoadingDubbingLanguagesAllVideos,
+  ] = useState(false);
   const [
     generatingYouTubeDescriptionsAll,
     setGeneratingYouTubeDescriptionsAll,
@@ -517,6 +542,74 @@ export default function OriginalVideosList({
       cancelled = true;
     };
   }, [isScriptUploadModalOpen]);
+
+  const loadDubbedLanguagesAllVideos = useCallback(async () => {
+    setLoadingDubbingLanguagesAllVideos(true);
+
+    try {
+      const response = await fetch('/api/tts-audio-references', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load dubbed languages (${response.status})`);
+      }
+
+      const payload = (await response.json().catch(() => null)) as {
+        entries?: unknown;
+      } | null;
+
+      const rawEntries = Array.isArray(payload?.entries)
+        ? (payload.entries as AudioReferenceLanguageEntry[])
+        : [];
+
+      const enabledEntries = rawEntries.filter(
+        (entry) =>
+          entry && typeof entry === 'object' && entry.enabled !== false,
+      );
+
+      const uniqueLanguages = Array.from(
+        new Set(
+          enabledEntries
+            .map((entry) => normalizeLanguageCode(entry.language))
+            .filter(Boolean),
+        ),
+      ).sort();
+
+      const languages = uniqueLanguages.length > 0 ? uniqueLanguages : ['fa'];
+      const defaultLanguage = normalizeLanguageCode(
+        enabledEntries.find((entry) => entry.isDefault === true)?.language,
+      );
+
+      setAvailableDubbingLanguagesAllVideos(languages);
+      setDubbingLanguageAllVideos((current) => {
+        const normalizedCurrent = normalizeLanguageCode(current);
+        if (languages.includes(normalizedCurrent)) return normalizedCurrent;
+        if (defaultLanguage && languages.includes(defaultLanguage)) {
+          return defaultLanguage;
+        }
+        if (languages.includes('fa')) return 'fa';
+        return languages[0];
+      });
+    } catch (error) {
+      console.error(
+        'Failed to load dubbed languages for all-videos Create Dubbed button:',
+        error,
+      );
+      setAvailableDubbingLanguagesAllVideos(['fa']);
+      setDubbingLanguageAllVideos(
+        (current) => normalizeLanguageCode(current) || 'fa',
+      );
+    } finally {
+      setLoadingDubbingLanguagesAllVideos(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isBatchOperationsExpanded) return;
+    void loadDubbedLanguagesAllVideos();
+  }, [isBatchOperationsExpanded, loadDubbedLanguagesAllVideos]);
 
   useEffect(() => {
     if (selectedOriginalVideo.id !== null) return;
@@ -2655,6 +2748,113 @@ export default function OriginalVideosList({
     } finally {
       setCreatingEnSrtVideoId(null);
       setCreatingEnSrtAll(false);
+    }
+  };
+
+  const activeDubbedLanguageForAllVideos =
+    String(dubbingLanguageAllVideos || 'fa')
+      .trim()
+      .toLowerCase() || 'fa';
+  const activeDubbedLanguageForAllVideosLabel =
+    activeDubbedLanguageForAllVideos.toUpperCase();
+
+  const handleCreateDubbedLanguageForProcessingVideos = async (
+    playSound = true,
+  ) => {
+    if (creatingDubbedLanguageAllVideos) return;
+
+    try {
+      setCreatingDubbedLanguageAllVideos(true);
+      setCreatingDubbedLanguageVideoId(null);
+      setError(null);
+
+      const freshVideosData = await getOriginalVideosData();
+      const processingVideos =
+        getProcessingVideosForAllVideosOps(freshVideosData);
+
+      if (processingVideos.length === 0) {
+        console.log(
+          `No Processing videos found for Create Dubbed ${activeDubbedLanguageForAllVideosLabel}`,
+        );
+        return;
+      }
+
+      console.log(
+        `Create Dubbed ${activeDubbedLanguageForAllVideosLabel}: processing ${processingVideos.length} videos...`,
+      );
+
+      for (const video of processingVideos) {
+        setCreatingDubbedLanguageVideoId(video.id);
+
+        try {
+          const response = await fetch('/api/create-dubbed-fa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              videoId: video.id,
+              language: activeDubbedLanguageForAllVideos,
+            }),
+          });
+
+          const payload = (await response.json().catch(() => null)) as {
+            error?: unknown;
+            details?: unknown;
+          } | null;
+
+          if (!response.ok) {
+            const details = Array.isArray(payload?.details)
+              ? payload.details
+                  .map((item) => String(item))
+                  .filter(Boolean)
+                  .slice(0, 5)
+                  .join(' | ')
+              : '';
+            const message =
+              typeof payload?.error === 'string' && payload.error.trim()
+                ? payload.error.trim()
+                : `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} failed (${response.status})`;
+
+            throw new Error(details ? `${message} — ${details}` : message);
+          }
+
+          console.log(
+            `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} complete for video #${video.id}`,
+          );
+        } catch (error) {
+          console.error(
+            `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} failed for video #${video.id}:`,
+            error,
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+
+      await handleRefresh();
+
+      if (playSound) {
+        await playSuccessAndNotifyBatchCompletion(
+          `Create Dubbed ${activeDubbedLanguageForAllVideosLabel}`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} all failed:`,
+        error,
+      );
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to create dubbed ${activeDubbedLanguageForAllVideosLabel} for all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setCreatingDubbedLanguageVideoId(null);
+      setCreatingDubbedLanguageAllVideos(false);
     }
   };
 
@@ -9604,7 +9804,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline:
   // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Transcribe+Apply+Gen Clips (A->D) -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Fix Flagged (Processing) -> Fix Intro QA (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
-  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails -> Download ZIP All
+  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Create En Srt -> Create Dubbed Lang -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails -> Download ZIP All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -10769,6 +10969,38 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Create En Srt (disabled)');
       }
 
+      if (pipelineConfig.createDubbedLanguage) {
+        stepNumber++;
+        setPipelineStep(
+          `Step ${stepNumber}: Creating dubbed ${activeDubbedLanguageForAllVideosLabel} audio for Processing videos...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Creating dubbed ${activeDubbedLanguageForAllVideosLabel} audio for Processing videos`,
+        );
+        try {
+          await handleCreateDubbedLanguageForProcessingVideos(false);
+          console.log(
+            `✓ Step ${stepNumber} Complete: Create Dubbed ${activeDubbedLanguageForAllVideosLabel} finished`,
+          );
+
+          console.log(
+            'Create Dubbed handler already completed persistence and refresh; proceeding to next step without extra wait.',
+          );
+        } catch (error) {
+          console.error(
+            `✗ Step ${stepNumber} Failed: Create Dubbed ${activeDubbedLanguageForAllVideosLabel} error`,
+            error,
+          );
+          throw new Error(
+            `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} failed: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
+      } else {
+        console.log('⊘ Skipping Step: Create Dubbed Lang (disabled)');
+      }
+
       // YouTube metadata tail steps (Processing videos only)
       // Required order: Description -> Keywords -> Titles -> Timestamps -> Thumbnails
       if (pipelineConfig.generateYouTubeDescriptions) {
@@ -11322,6 +11554,7 @@ export default function OriginalVideosList({
               onRunFullPipeline={handleRunFullPipeline}
               isRunFullPipelineDisabled={
                 runningFullPipeline ||
+                creatingDubbedLanguageAllVideos ||
                 transcribing !== null ||
                 transcribingAll ||
                 generatingScenes !== null ||
@@ -11349,7 +11582,7 @@ export default function OriginalVideosList({
                   ? 'Scene handlers not ready. Please wait...'
                   : runningFullPipeline
                     ? pipelineStep
-                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Download ZIP All'
+                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Create En Srt → Create Dubbed Lang → Download ZIP All'
               }
             />
           </div>
@@ -11368,7 +11601,7 @@ export default function OriginalVideosList({
                 <h3 className='text-sm font-semibold text-gray-900'>
                   Batch Operations For all Videos with Processing Scenes
                 </h3>
-                <span className='text-xs text-gray-500'>({43} actions)</span>
+                <span className='text-xs text-gray-500'>({44} actions)</span>
               </div>
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>
@@ -11777,6 +12010,74 @@ export default function OriginalVideosList({
                             ? `#${creatingEnSrtVideoId}...`
                             : 'Processing...'
                           : 'Create En Srt'}
+                      </span>
+                    </button>
+
+                    <div className='w-full flex flex-col justify-center gap-1 px-2 py-1 bg-teal-50 border border-teal-200 rounded-md min-h-[40px]'>
+                      <span className='text-[11px] font-medium text-teal-900'>
+                        Dubbed Language
+                        {loadingDubbingLanguagesAllVideos
+                          ? ' (loading...)'
+                          : ''}
+                      </span>
+                      <select
+                        value={activeDubbedLanguageForAllVideos}
+                        onChange={(e) =>
+                          setDubbingLanguageAllVideos(
+                            normalizeLanguageCode(e.target.value) || 'fa',
+                          )
+                        }
+                        onFocus={() => {
+                          void loadDubbedLanguagesAllVideos();
+                        }}
+                        onPointerDown={() => {
+                          void loadDubbedLanguagesAllVideos();
+                        }}
+                        disabled={
+                          creatingDubbedLanguageAllVideos || runningFullPipeline
+                        }
+                        className='w-full h-8 px-2 bg-white border border-teal-300 rounded-md text-sm text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-teal-100 disabled:text-teal-500 disabled:cursor-not-allowed'
+                        title='Select language preset for Create Dubbed all-videos batch'
+                      >
+                        {availableDubbingLanguagesAllVideos.map(
+                          (languageCode) => (
+                            <option key={languageCode} value={languageCode}>
+                              {languageCode.toUpperCase()}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        void handleCreateDubbedLanguageForProcessingVideos()
+                      }
+                      disabled={
+                        creatingDubbedLanguageAllVideos ||
+                        creatingDubbedLanguageVideoId !== null ||
+                        runningFullPipeline ||
+                        uploading ||
+                        reordering
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        creatingDubbedLanguageAllVideos
+                          ? `Creating dubbed ${activeDubbedLanguageForAllVideosLabel} audio for all Processing videos...`
+                          : `Use language preset ${activeDubbedLanguageForAllVideosLabel} from Global TTS Settings → Manage Language Presets and run Create Dubbed for all Processing videos`
+                      }
+                    >
+                      <Volume2
+                        className={`w-4 h-4 ${
+                          creatingDubbedLanguageAllVideos ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {creatingDubbedLanguageAllVideos
+                          ? creatingDubbedLanguageVideoId !== null
+                            ? `#${creatingDubbedLanguageVideoId}...`
+                            : 'Processing...'
+                          : `Create Dubbed ${activeDubbedLanguageForAllVideosLabel}`}
                       </span>
                     </button>
 
@@ -13254,6 +13555,7 @@ export default function OriginalVideosList({
                       onClick={handleRunFullPipeline}
                       disabled={
                         runningFullPipeline ||
+                        creatingDubbedLanguageAllVideos ||
                         transcribing !== null ||
                         transcribingAll ||
                         generatingScenes !== null ||
@@ -13271,6 +13573,7 @@ export default function OriginalVideosList({
                       }
                       style={
                         runningFullPipeline ||
+                        creatingDubbedLanguageAllVideos ||
                         transcribing !== null ||
                         transcribingAll ||
                         generatingScenes !== null ||
@@ -13291,6 +13594,7 @@ export default function OriginalVideosList({
                       onMouseEnter={(e) => {
                         if (
                           !runningFullPipeline &&
+                          !creatingDubbedLanguageAllVideos &&
                           transcribing === null &&
                           !transcribingAll &&
                           generatingScenes === null &&
@@ -13312,6 +13616,7 @@ export default function OriginalVideosList({
                       onMouseLeave={(e) => {
                         if (
                           !runningFullPipeline &&
+                          !creatingDubbedLanguageAllVideos &&
                           transcribing === null &&
                           !transcribingAll &&
                           generatingScenes === null &&
@@ -13336,7 +13641,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                             ? pipelineStep
-                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Prompt Scenes → Download ZIP All'
+                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Create En Srt → Create Dubbed Lang → Download ZIP All'
                       }
                     >
                       <Workflow

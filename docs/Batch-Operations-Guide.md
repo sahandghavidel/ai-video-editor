@@ -119,6 +119,7 @@ Existing completion names include:
 - `Titles All`
 - `Timestamps All`
 - `Create En Srt`
+- `Create Dubbed <LANG>` (for example `Create Dubbed FA`)
 - `Thumbs All`
 - `Script From Title`
 - `Improve All`
@@ -218,7 +219,12 @@ Important ordering already enforced:
 - Scene post-processing block:
   - `Subtitles -> Images -> Upscale -> Scene Videos -> Enhance Videos -> Apply Video -> Apply Image`
 - Final tail block:
-  - `Merge Scenes -> Transcribe Final All -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails`
+  - `Merge Scenes -> CFR Final All -> Transcribe Final All -> Create En Srt -> Create Dubbed Lang -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails`
+
+Notes:
+
+- `Create Dubbed Lang` is a Processing-videos batch step and depends on dubbed-language prerequisites from `Create En Srt`.
+- The language used by all-videos dubbing comes from the all-videos dubbed-language selector, sourced from Global TTS language presets.
 
 Only insert new steps where their input requirements are guaranteed.
 
