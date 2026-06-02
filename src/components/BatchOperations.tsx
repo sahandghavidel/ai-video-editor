@@ -440,7 +440,11 @@ export default function BatchOperations({
   const handleDeleteEmptyScenes = async () => {
     if (deletingEmptyScenes) return;
 
-    const emptyScenes = data.filter((scene) => {
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const emptyScenes = freshData.filter((scene) => {
       const sentence = String(scene['field_6890'] ?? '').trim();
       const original = String(
         scene['field_6901'] ?? scene['field_6900'] ?? '',
@@ -487,6 +491,10 @@ export default function BatchOperations({
   const handleCombineNoSubtitlePairs = async () => {
     if (combiningNoSubtitlePairs) return;
 
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     const clearedGeneratedFields: Record<string, unknown> = {
       field_6886: '', // Videos
       field_6888: '', // Video Clip URL
@@ -516,7 +524,7 @@ export default function BatchOperations({
     );
 
     // Sort scenes by start time (field_6896) to process them in order
-    const ordered = [...data].sort(
+    const ordered = [...freshData].sort(
       (a, b) => (Number(a.field_6896) || 0) - (Number(b.field_6896) || 0),
     );
     const sorted = ordered.slice(skipFirstScenes);
@@ -524,7 +532,7 @@ export default function BatchOperations({
     // Eligible scene criteria for this operation:
     // 1) Non-empty sentence (field_6890)
     // 2) Sentence char count is >= subtitle maxChars, matching subtitle skip rule
-    const isEligible = (scene: (typeof data)[0]) => {
+    const isEligible = (scene: (typeof freshData)[0]) => {
       const sentence = String(scene['field_6890'] ?? '').trim();
       if (!sentence) return false;
       const charCount = sentence.length;
@@ -532,7 +540,7 @@ export default function BatchOperations({
     };
 
     // Greedy left-to-right: find non-overlapping consecutive eligible pairs
-    const pairs: (typeof data)[0][][] = [];
+    const pairs: (typeof freshData)[0][][] = [];
     let i = 0;
     while (i < sorted.length - 1) {
       if (isEligible(sorted[i]) && isEligible(sorted[i + 1])) {
@@ -650,9 +658,13 @@ export default function BatchOperations({
     }
   };
 
-  const onImproveAllSentences = () => {
+  const onImproveAllSentences = async () => {
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     handleImproveAllSentences(
-      data,
+      freshData,
       handleSentenceImprovement,
       modelSelection.selectedModel,
       startBatchOperation,
@@ -666,6 +678,10 @@ export default function BatchOperations({
     if (!modelSelection.selectedModel) {
       return;
     }
+
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
 
     // Resolve the destination prompt field key once, so we can skip scenes
     // that already have a saved prompt.
@@ -696,7 +712,7 @@ export default function BatchOperations({
       return;
     }
 
-    const scenesToPrompt = data.filter((scene) => {
+    const scenesToPrompt = freshData.filter((scene) => {
       const sentence = String(scene['field_6890'] ?? '').trim();
       const original = String(
         scene['field_6901'] ?? scene['field_6900'] ?? '',
@@ -944,12 +960,16 @@ export default function BatchOperations({
       return;
     }
 
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     console.info(`${logPrefix} Run started.`, {
       selectedModel: modelSelection.selectedModel,
-      totalScenesInView: data.length,
+      totalScenesInView: freshData.length,
     });
 
-    const mappedScenes = [...data]
+    const mappedScenes = [...freshData]
       .map((scene) => {
         const text = String(scene['field_6890'] ?? '').trim();
         const fixedSentenceConfirmation = String(
@@ -1325,6 +1345,8 @@ export default function BatchOperations({
       return;
     }
 
+    await onRefresh?.();
+
     setApplyingCurrentVideoWordReplacements(true);
 
     try {
@@ -1375,7 +1397,11 @@ export default function BatchOperations({
     }
   };
 
-  const onGenerateAllTTS = () => {
+  const onGenerateAllTTS = async () => {
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     const voiceOverride =
       typeof selectedOriginalVideo.ttsVoiceReference === 'string' &&
       selectedOriginalVideo.ttsVoiceReference.trim().length > 0
@@ -1383,8 +1409,8 @@ export default function BatchOperations({
         : null;
 
     const dataForTts = voiceOverride
-      ? data.map((scene) => ({ ...scene, field_6860: voiceOverride }))
-      : data;
+      ? freshData.map((scene) => ({ ...scene, field_6860: voiceOverride }))
+      : freshData;
 
     handleGenerateAllTTS(
       dataForTts,
@@ -1395,9 +1421,13 @@ export default function BatchOperations({
     );
   };
 
-  const onGenerateAllVideos = () => {
+  const onGenerateAllVideos = async () => {
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     handleGenerateAllVideos(
-      data,
+      freshData,
       handleVideoGenerate,
       startBatchOperation,
       completeBatchOperation,
@@ -1406,9 +1436,13 @@ export default function BatchOperations({
     );
   };
 
-  const onConcatenateAllVideos = () => {
+  const onConcatenateAllVideos = async () => {
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     handleConcatenateAllVideos(
-      data,
+      freshData,
       startBatchOperation,
       completeBatchOperation,
       setMergedVideo,
@@ -1533,6 +1567,10 @@ export default function BatchOperations({
       return;
     }
 
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     const minSentenceCharactersForBatch = Math.max(
       0,
       Number.isFinite(transcribeApplyGenerateMinChars)
@@ -1540,10 +1578,12 @@ export default function BatchOperations({
         : 0,
     );
 
-    const scenesInRealOrder = getScenesInRealOrder(data).filter((scene) => {
-      const sceneId = Number(scene.id);
-      return Number.isInteger(sceneId) && sceneId > 0;
-    });
+    const scenesInRealOrder = getScenesInRealOrder(freshData).filter(
+      (scene) => {
+        const sceneId = Number(scene.id);
+        return Number.isInteger(sceneId) && sceneId > 0;
+      },
+    );
 
     if (scenesInRealOrder.length === 0) {
       playBatchDoneSound();
@@ -1748,6 +1788,10 @@ export default function BatchOperations({
     // This batch action must only run for the currently selected original video.
     if (!selectedOriginalVideo.id) return;
 
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     const voiceOverride =
       typeof selectedOriginalVideo.ttsVoiceReference === 'string' &&
       selectedOriginalVideo.ttsVoiceReference.trim().length > 0
@@ -1757,7 +1801,7 @@ export default function BatchOperations({
     startBatchOperation('transcribingAllFinalScenes');
     try {
       // Run sequentially, ordered, to avoid concurrency issues and ensure robust per-scene comparison.
-      const scenesToFix = getFixTtsEligibleScenes(data);
+      const scenesToFix = getFixTtsEligibleScenes(freshData);
 
       if (scenesToFix.length === 0) {
         console.log('No scenes with final video + text found to fix.');
@@ -1813,6 +1857,8 @@ export default function BatchOperations({
     if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) {
       return;
     }
+
+    await onRefresh?.();
 
     const voiceOverride =
       typeof selectedOriginalVideo.ttsVoiceReference === 'string' &&
@@ -1878,6 +1924,10 @@ export default function BatchOperations({
     // - flag with audio reason, and append sentence reason when sentence check fails
     if (!selectedOriginalVideo.id || fixingIntroQaScenes) return;
 
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     const configuredIntroQaSceneCount = Math.max(
       1,
       Number.isFinite(introQaSceneCount)
@@ -1917,7 +1967,7 @@ export default function BatchOperations({
       maxAllowedInternalPauseSecWithoutFilter: number | null;
     };
 
-    const introScenes = [...data]
+    const introScenes = [...freshData]
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
       .filter((scene) => String(scene['field_6890'] ?? '').trim().length > 0)
       .slice(0, configuredIntroQaSceneCount);
@@ -3271,7 +3321,11 @@ export default function BatchOperations({
     if (generatingAllSceneImages) return;
     if (!selectedOriginalVideo.id) return;
 
-    const scenesToImage = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToImage = [...freshData]
       .filter((scene) => {
         // Skip if already filled
         if (getExistingSceneImageUrl(scene)) return false;
@@ -3372,7 +3426,11 @@ export default function BatchOperations({
   const onGenerateAllSceneVideos = async () => {
     if (generatingAllSceneVideos) return;
 
-    const scenesToGenerate = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToGenerate = [...freshData]
       .filter((scene) => {
         // Permanent: must have a base image.
         const imgUrl = getExistingSceneImageUrl(scene);
@@ -3561,7 +3619,11 @@ export default function BatchOperations({
   const onEnhanceAllSceneVideos = async () => {
     if (enhancingAllSceneVideos) return;
 
-    const scenesToEnhance = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToEnhance = [...freshData]
       .filter((scene) => {
         // Match the modal button's intent: enhance the saved scene video (7098).
         const sceneVideoUrl = getExistingSceneVideoUrl(scene);
@@ -3630,7 +3692,11 @@ export default function BatchOperations({
   const onUpscaleAllSceneImages = async () => {
     if (upscalingAllSceneImages) return;
 
-    const scenesToUpscale = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToUpscale = [...freshData]
       .filter((scene) => {
         // Only upscale scenes that already have a base image
         if (!getExistingSceneImageUrl(scene)) return false;
@@ -3684,7 +3750,11 @@ export default function BatchOperations({
   const onApplyUpscaledImagesAll = async () => {
     if (applyingAllUpscaledImages) return;
 
-    const scenesToApply = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToApply = [...freshData]
       .filter((scene) => {
         // Only scenes with upscaled image
         if (!getExistingUpscaledSceneImageUrl(scene)) return false;
@@ -3751,7 +3821,11 @@ export default function BatchOperations({
   const onApplyEnhancedVideosAll = async () => {
     if (applyingAllEnhancedVideos) return;
 
-    const scenesToApply = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToApply = [...freshData]
       .filter((scene) => {
         // Must have a final video URL to apply onto
         const finalUrl = getExistingFinalVideoUrl(scene);
@@ -3831,7 +3905,11 @@ export default function BatchOperations({
     if (generatingAllSubtitles) return;
     if (!selectedOriginalVideo.id) return;
 
-    const scenesToSubtitle = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToSubtitle = [...freshData]
       .filter((scene) => {
         if (
           transcriptionSettings.skipFlaggedScenesInSubtitleBatch &&
@@ -3956,13 +4034,23 @@ export default function BatchOperations({
   };
 
   const calculateFinalVideoDurationsBatch = async (
-    options: { refreshOnDone?: boolean; playSoundOnDone?: boolean } = {},
+    options: {
+      refreshOnDone?: boolean;
+      playSoundOnDone?: boolean;
+      sourceData?: BaserowRow[];
+    } = {},
   ): Promise<boolean> => {
-    const { refreshOnDone = true, playSoundOnDone = true } = options;
+    const {
+      refreshOnDone = true,
+      playSoundOnDone = true,
+      sourceData,
+    } = options;
     if (calculatingFinalVideoDurations) return false;
     if (!selectedOriginalVideo.id) return false;
 
-    const sceneIds = [...data]
+    const scenes = sourceData ?? data;
+
+    const sceneIds = [...scenes]
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
       .map((scene) => Number(scene.id))
       .filter((id) => Number.isFinite(id) && id > 0);
@@ -3995,15 +4083,25 @@ export default function BatchOperations({
   };
 
   const generateDurationSrtBatch = async (
-    options: { refreshOnDone?: boolean; playSoundOnDone?: boolean } = {},
+    options: {
+      refreshOnDone?: boolean;
+      playSoundOnDone?: boolean;
+      sourceData?: BaserowRow[];
+    } = {},
   ): Promise<boolean> => {
-    const { refreshOnDone = true, playSoundOnDone = true } = options;
+    const {
+      refreshOnDone = true,
+      playSoundOnDone = true,
+      sourceData,
+    } = options;
     if (generatingDurationSrt) return false;
 
     const selectedVideoId = Number(selectedOriginalVideo.id);
     if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) return false;
 
-    const sceneIds = [...data]
+    const scenes = sourceData ?? data;
+
+    const sceneIds = [...scenes]
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
       .map((scene) => Number(scene.id))
       .filter((id) => Number.isFinite(id) && id > 0);
@@ -4053,11 +4151,16 @@ export default function BatchOperations({
     if (creatingEnSrt) return;
     if (!selectedOriginalVideo.id) return;
 
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     setCreatingEnSrt(true);
     try {
       const durationOk = await calculateFinalVideoDurationsBatch({
         refreshOnDone: false,
         playSoundOnDone: false,
+        sourceData: freshData,
       });
 
       if (!durationOk) {
@@ -4067,6 +4170,7 @@ export default function BatchOperations({
       const srtOk = await generateDurationSrtBatch({
         refreshOnDone: false,
         playSoundOnDone: false,
+        sourceData: freshData,
       });
 
       if (!srtOk) {
@@ -4087,6 +4191,8 @@ export default function BatchOperations({
     if (!Number.isFinite(selectedVideoId) || selectedVideoId <= 0) {
       return;
     }
+
+    await onRefresh?.();
 
     setCreatingDubbedEn(true);
     try {
@@ -4140,6 +4246,8 @@ export default function BatchOperations({
       return;
     }
 
+    await onRefresh?.();
+
     setCreatingDubbedFa(true);
     try {
       const res = await fetch('/api/create-dubbed-fa', {
@@ -4189,7 +4297,11 @@ export default function BatchOperations({
       return;
     }
 
-    const scenesToFit = [...data]
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
+    const scenesToFit = [...freshData]
       .filter((scene) => {
         const finalVideoUrl = getExistingFinalVideoUrl(scene);
         const targetDurationSec = parsePositiveNumber(scene['field_6884']);
