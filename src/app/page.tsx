@@ -21,7 +21,13 @@ import SubtitleGenerationSettings from '@/components/SubtitleGenerationSettings'
 import CombineScenesSettings from '@/components/CombineScenesSettings';
 import SceneVideoGenerationSettings from '@/components/SceneVideoGenerationSettings';
 import OriginalVideosList from '@/components/OriginalVideosList';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { AlertCircle, Loader2, RefreshCw, Settings } from 'lucide-react';
 
@@ -348,13 +354,12 @@ export default function Home() {
     [],
   );
 
-  const refreshData = () => {
+  const refreshData = async () => {
     if (selectedOriginalVideo.id) {
-      void refreshSelectedVideoDataSilently();
-      return;
+      return refreshSelectedVideoDataSilently();
     }
 
-    void refreshDataSilently();
+    return refreshDataSilently();
   };
 
   const refreshSelectedVideoData = () => {
@@ -364,7 +369,7 @@ export default function Home() {
   const globalSettingsSections: Array<{
     key: GlobalSettingsSectionKey;
     title: string;
-    component: JSX.Element;
+    component: ReactNode;
   }> = [
     {
       key: 'modelSelection',

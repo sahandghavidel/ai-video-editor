@@ -54,7 +54,7 @@ import {
 
 interface BatchOperationsProps {
   data: BaserowRow[];
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
   refreshing?: boolean;
   handleAutoFixMismatch: (
     sceneId: number,
@@ -4265,9 +4265,13 @@ export default function BatchOperations({
     }
   };
 
-  const onSpeedUpAllVideos = () => {
+  const onSpeedUpAllVideos = async () => {
+    await onRefresh?.();
+
+    const freshData = useAppStore.getState().getFilteredData();
+
     handleSpeedUpAllVideos(
-      data,
+      freshData,
       videoSettings.selectedSpeed,
       videoSettings.muteAudio,
       videoSettings.speedUpMode,
