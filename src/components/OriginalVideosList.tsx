@@ -3024,16 +3024,17 @@ export default function OriginalVideosList({
       // Fetch fresh original videos data directly from API
       const freshVideosData = await getOriginalVideosData();
 
-      // Filter videos that have final merged video URL but no final captions URL AND status is "Processing"
+      // Filter videos that have final merged video URL AND status is "Processing".
+      // We intentionally re-generate captions even when field_6872 already exists,
+      // so existing captions are overwritten with fresh output.
       const videosToTranscribe = freshVideosData.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858);
-        const finalCaptionsUrl = extractUrl(video.field_6872);
         const status = extractFieldValue(video.field_6864);
-        return finalVideoUrl && !finalCaptionsUrl && status === 'Processing';
+        return finalVideoUrl && status === 'Processing';
       });
 
       if (videosToTranscribe.length === 0) {
-        console.log('No final videos found that need transcription');
+        console.log('No Processing videos with Final Merged Video URL found');
         return;
       }
 
