@@ -3160,18 +3160,11 @@ export default function OriginalVideosList({
 
       const processingVideos = freshVideosData.filter((video) => {
         const status = extractFieldValue(video.field_6864);
-        const finalMergedVideoUrl = extractUrl(video.field_6858);
-        return (
-          status === 'Processing' &&
-          !!finalMergedVideoUrl &&
-          finalMergedVideoUrl.trim().length > 0
-        );
+        return status === 'Processing';
       });
 
       if (processingVideos.length === 0) {
-        console.log(
-          'No Processing videos with Final Merged Video URL found for Create En Srt',
-        );
+        console.log('No Processing videos found for Create En Srt');
         return;
       }
 
