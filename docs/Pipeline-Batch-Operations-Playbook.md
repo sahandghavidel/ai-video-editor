@@ -94,14 +94,20 @@ The order below is the actual execution order in code.
 30. `convertFinalToCFR` → `handleConvertFinalToCFRAll(false)`
 31. `transcribeFinalAll` → `handleTranscribeAllFinalVideos(false)`
 32. `createEnSrt` → `handleCreateEnSrtAll(false)`
-33. `createDubbedLanguage` → `handleCreateDubbedLanguageForProcessingVideos(false)`
+33. `createDubbedLanguage` → `handleCreateDubbedLanguageForProcessingVideos(false, { languages, ... })`
 34. `generateYouTubeDescriptions` → `handleGenerateYouTubeDescriptionsAll(false)`
 35. `generateYouTubeKeywords` → `handleGenerateYouTubeKeywordsAll(false)`
 36. `generateYouTubeTitles` → `handleGenerateYouTubeTitlesAll(false)`
 37. `generateYouTubeTimestamps` → `handleGenerateYouTubeTimestampsAll(false)`
 38. `generateThumbnails` → `handleGenerateThumbnailsAll(false)`
 
-`createDubbedLanguage` uses the currently selected all-videos dubbed-language preset (loaded from `/api/tts-audio-references`).
+`createDubbedLanguage` now uses **ordered multi-language execution**:
+
+- Pipeline override languages come from `pipelineConfig.selectedDubbedLanguagesForPipeline`
+- If pipeline override is empty, it falls back to the batch-panel selected language list
+- Languages are executed sequentially, and each language iterates Processing videos sequentially
+- For each language, videos are skipped when that language’s mapped final dubbed-audio destination field already contains a value
+- Language presets and per-language destination field mappings are loaded from `/api/tts-audio-references`
 
 ---
 

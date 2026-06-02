@@ -119,7 +119,7 @@ Existing completion names include:
 - `Titles All`
 - `Timestamps All`
 - `Create En Srt`
-- `Create Dubbed <LANG>` (for example `Create Dubbed FA`)
+- `Create Dubbed <LANG...>` (for example `Create Dubbed FA+ES`)
 - `Thumbs All`
 - `Script From Title`
 - `Improve All`
@@ -224,7 +224,11 @@ Important ordering already enforced:
 Notes:
 
 - `Create Dubbed Lang` is a Processing-videos batch step and depends on dubbed-language prerequisites from `Create En Srt`.
-- The language used by all-videos dubbing comes from the all-videos dubbed-language selector, sourced from Global TTS language presets.
+- Create Dubbed now runs **multiple languages sequentially** in selected order.
+  - Batch panel selection is stored as an ordered language list.
+  - Pipeline can override that list via Pipeline Configuration.
+  - If pipeline override is empty, pipeline falls back to the batch list.
+  - For each language, videos that already contain that language’s final dubbed-audio destination field are skipped.
 
 Only insert new steps where their input requirements are guaranteed.
 

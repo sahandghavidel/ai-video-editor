@@ -101,11 +101,405 @@ type AudioReferenceLanguageEntry = {
   language?: unknown;
   enabled?: unknown;
   isDefault?: unknown;
+  baserowFields?: {
+    videoFinalDubbedAudioFieldKey?: unknown;
+  };
+};
+
+/*
+
+  const selectedDubbedLanguagesAllVideos = useMemo(() => {
+    const normalized = toUniqueNormalizedLanguageList(dubbingLanguagesAllVideos);
+    return normalized.length > 0 ? normalized : ['fa'];
+  }, [dubbingLanguagesAllVideos]);
+
+  const selectedDubbedLanguagesAllVideosLabel = useMemo(
+    () =>
+      selectedDubbedLanguagesAllVideos
+        .map((languageCode) => languageCode.toUpperCase())
+        .join(', '),
+    [selectedDubbedLanguagesAllVideos],
+  );
+
+  const selectedDubbedLanguagesAllVideosShortLabel = useMemo(
+    () => formatLanguageSelectionShortLabel(selectedDubbedLanguagesAllVideos),
+    [selectedDubbedLanguagesAllVideos],
+  );
+
+  const pipelineDubbedLanguagesOverride = useMemo(
+    () =>
+      toUniqueNormalizedLanguageList(
+        pipelineConfig.selectedDubbedLanguagesForPipeline,
+      ),
+    [pipelineConfig.selectedDubbedLanguagesForPipeline],
+  );
+
+  const effectivePipelineDubbedLanguages = useMemo(
+    () =>
+      pipelineDubbedLanguagesOverride.length > 0
+        ? pipelineDubbedLanguagesOverride
+        : selectedDubbedLanguagesAllVideos,
+    [pipelineDubbedLanguagesOverride, selectedDubbedLanguagesAllVideos],
+  );
+
+  const effectivePipelineDubbedLanguagesLabel = useMemo(
+    () =>
+      effectivePipelineDubbedLanguages
+        .map((languageCode) => languageCode.toUpperCase())
+        .join(', '),
+    [effectivePipelineDubbedLanguages],
+  );
+
+  const pipelineDubbedOverrideActive =
+    selectedPipelineDubbedLanguagesOverride.length > 0;
+
+  const creatingDubbedLanguageCurrentLanguageLabel =
+    creatingDubbedLanguageCurrentLanguage?.toUpperCase() ?? '';
+
+  const creatingDubbedLanguageProgressLabel =
+    creatingDubbedLanguageCurrentLanguageLabel &&
+    creatingDubbedLanguageCurrentVideoIndex > 0 &&
+    creatingDubbedLanguageTotalVideos > 0
+      ? `${creatingDubbedLanguageCurrentLanguageLabel} ${creatingDubbedLanguageCurrentVideoIndex}/${creatingDubbedLanguageTotalVideos}`
+      : creatingDubbedLanguageVideoId !== null
+        ? `#${creatingDubbedLanguageVideoId}`
+        : 'Processing...';
+
+  const hasExistingDubbedFinalAudio = useCallback(
+    (video: BaserowRow, destinationFieldKey: string | undefined): boolean => {
+      if (!destinationFieldKey) return false;
+
+      const dynamicFieldValue = (video as Record<string, unknown>)[
+        destinationFieldKey
+      ];
+
+      if (!dynamicFieldValue) return false;
+
+      const extractedUrl = extractUrl(dynamicFieldValue);
+      if (extractedUrl && extractedUrl.trim().length > 0) return true;
+
+      if (typeof dynamicFieldValue === 'string') {
+        return dynamicFieldValue.trim().length > 0;
+      }
+
+      if (Array.isArray(dynamicFieldValue)) {
+        return dynamicFieldValue.length > 0;
+      }
+
+      if (typeof dynamicFieldValue === 'object' && dynamicFieldValue !== null) {
+        const obj = dynamicFieldValue as {
+          value?: unknown;
+          name?: unknown;
+          text?: unknown;
+          title?: unknown;
+          file?: { url?: unknown };
+          url?: unknown;
+        };
+
+        const directUrl =
+          typeof obj.url === 'string' ? obj.url.trim() : undefined;
+        const fileUrl =
+          typeof obj.file?.url === 'string' ? obj.file.url.trim() : undefined;
+        const valueText =
+          typeof obj.value === 'string'
+            ? obj.value.trim()
+            : typeof obj.value === 'number'
+              ? String(obj.value)
+              : '';
+        const nameText = typeof obj.name === 'string' ? obj.name.trim() : '';
+        const textValue = typeof obj.text === 'string' ? obj.text.trim() : '';
+        const titleValue =
+          typeof obj.title === 'string' ? obj.title.trim() : '';
+
+        return Boolean(
+          directUrl || fileUrl || valueText || nameText || textValue || titleValue,
+        );
+      }
+
+      return String(dynamicFieldValue).trim().length > 0;
+    },
+    [extractUrl],
+  );
+
+  const handleCreateDubbedLanguageForProcessingVideos = async (
+    playSound = true,
+    options?: {
+      languages?: string[];
+      updatePipelineProgress?: boolean;
+      pipelineStepNumber?: number;
+    },
+  ) => {
+    if (creatingDubbedLanguageAllVideos) return;
+
+    try {
+      setCreatingDubbedLanguageAllVideos(true);
+      setCreatingDubbedLanguageVideoId(null);
+      setCreatingDubbedLanguageCurrentLanguage(null);
+      setCreatingDubbedLanguageCurrentLanguageIndex(0);
+      setCreatingDubbedLanguageTotalLanguages(0);
+      setCreatingDubbedLanguageCurrentVideoIndex(0);
+      setCreatingDubbedLanguageTotalVideos(0);
+      setError(null);
+
+      const metadata = await loadDubbedLanguagesAllVideos();
+
+      const requestedLanguageList = toUniqueNormalizedLanguageList(
+        options?.languages && options.languages.length > 0
+          ? options.languages
+          : selectedDubbedLanguagesAllVideos,
+      );
+
+      const availableLanguageSet = new Set(metadata.languages);
+      const runnableLanguages = requestedLanguageList.filter((languageCode) =>
+        availableLanguageSet.has(languageCode),
+      );
+
+      if (runnableLanguages.length === 0) {
+        const fallbackLanguage =
+          metadata.defaultLanguage || metadata.languages[0] || 'fa';
+        runnableLanguages.push(fallbackLanguage);
+      }
+
+      const freshVideosData = await getOriginalVideosData();
+      const processingVideos = getProcessingVideosForAllVideosOps(
+        freshVideosData,
+      );
+
+      if (processingVideos.length === 0) {
+        console.log(
+          `No Processing videos found for Create Dubbed ${runnableLanguages
+            .map((languageCode) => languageCode.toUpperCase())
+            .join(', ')}`,
+        );
+        return;
+      }
+
+      setCreatingDubbedLanguageTotalLanguages(runnableLanguages.length);
+      setCreatingDubbedLanguageTotalVideos(processingVideos.length);
+
+      const summaries: DubbedLanguageRunSummary[] = [];
+
+      for (
+        let languageIndex = 0;
+        languageIndex < runnableLanguages.length;
+        languageIndex += 1
+      ) {
+        const languageCode = runnableLanguages[languageIndex];
+        const languageLabel = languageCode.toUpperCase();
+
+        setCreatingDubbedLanguageCurrentLanguage(languageCode);
+        setCreatingDubbedLanguageCurrentLanguageIndex(languageIndex + 1);
+
+        const summary: DubbedLanguageRunSummary = {
+          language: languageCode,
+          attempted: 0,
+          skippedExisting: 0,
+          succeeded: 0,
+          failed: 0,
+        };
+
+        const destinationFieldKey =
+          metadata.finalAudioFieldByLanguage[languageCode] ||
+          dubbedLanguageFinalAudioFieldByLanguageAllVideos[languageCode];
+
+        console.log(
+          `Create Dubbed ${languageLabel}: processing ${processingVideos.length} videos (${languageIndex + 1}/${runnableLanguages.length})...`,
+        );
+
+        for (
+          let videoIndex = 0;
+          videoIndex < processingVideos.length;
+          videoIndex += 1
+        ) {
+          const video = processingVideos[videoIndex];
+
+          setCreatingDubbedLanguageCurrentVideoIndex(videoIndex + 1);
+          setCreatingDubbedLanguageVideoId(video.id);
+
+          if (options?.updatePipelineProgress) {
+            const pipelinePrefix =
+              typeof options.pipelineStepNumber === 'number' &&
+              options.pipelineStepNumber > 0
+                ? `Step ${options.pipelineStepNumber}: `
+                : '';
+
+            setPipelineStep(
+              `${pipelinePrefix}Create Dubbed ${languageLabel} (${languageIndex + 1}/${runnableLanguages.length}) • Video ${videoIndex + 1}/${processingVideos.length} (#${video.id})...`,
+            );
+          }
+
+          if (hasExistingDubbedFinalAudio(video, destinationFieldKey)) {
+            summary.skippedExisting += 1;
+            continue;
+          }
+
+          summary.attempted += 1;
+
+          try {
+            const response = await fetch('/api/create-dubbed-fa', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                videoId: video.id,
+                language: languageCode,
+              }),
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+              error?: unknown;
+              details?: unknown;
+            } | null;
+
+            if (!response.ok) {
+              const details = Array.isArray(payload?.details)
+                ? payload.details
+                    .map((item) => String(item))
+                    .filter(Boolean)
+                    .slice(0, 5)
+                    .join(' | ')
+                : '';
+              const message =
+                typeof payload?.error === 'string' && payload.error.trim()
+                  ? payload.error.trim()
+                  : `Create Dubbed ${languageLabel} failed (${response.status})`;
+
+              throw new Error(details ? `${message} — ${details}` : message);
+            }
+
+            summary.succeeded += 1;
+
+            console.log(
+              `Create Dubbed ${languageLabel} complete for video #${video.id}`,
+            );
+          } catch (error) {
+            summary.failed += 1;
+            console.error(
+              `Create Dubbed ${languageLabel} failed for video #${video.id}:`,
+              error,
+            );
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+
+        summaries.push(summary);
+      }
+
+      await handleRefresh();
+
+      const summaryLabel = summaries
+        .map(
+          (entry) =>
+            `${entry.language.toUpperCase()}: ok ${entry.succeeded}, skip ${entry.skippedExisting}, fail ${entry.failed}`,
+        )
+        .join(' | ');
+
+      console.log(`[Create Dubbed] Batch summary → ${summaryLabel}`);
+
+      const totalFailures = summaries.reduce(
+        (sum, entry) => sum + entry.failed,
+        0,
+      );
+
+      if (playSound) {
+        await playSuccessAndNotifyBatchCompletion(
+          `Create Dubbed ${formatLanguageSelectionShortLabel(runnableLanguages)}`,
+        );
+      }
+
+      if (totalFailures > 0) {
+        setError(`Create Dubbed completed with some failures. ${summaryLabel}`);
+      }
+    } catch (error) {
+      const requestedLabel = formatLanguageSelectionShortLabel(
+        toUniqueNormalizedLanguageList(options?.languages),
+      );
+
+      console.error(
+        `Create Dubbed ${requestedLabel || selectedDubbedLanguagesAllVideosShortLabel} all failed:`,
+        error,
+      );
+
+      if (playSound) {
+        playErrorSound();
+      }
+
+      setError(
+        `Failed to create dubbed ${requestedLabel || selectedDubbedLanguagesAllVideosLabel} for all videos: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setCreatingDubbedLanguageVideoId(null);
+      setCreatingDubbedLanguageCurrentLanguage(null);
+      setCreatingDubbedLanguageCurrentLanguageIndex(0);
+      setCreatingDubbedLanguageTotalLanguages(0);
+      setCreatingDubbedLanguageCurrentVideoIndex(0);
+      setCreatingDubbedLanguageTotalVideos(0);
+      setCreatingDubbedLanguageAllVideos(false);
+    }
+  };
+*/
+
+type DubbedLanguagesMetadata = {
+  languages: string[];
+  defaultLanguage: string;
+  finalAudioFieldByLanguage: Record<string, string>;
+};
+
+type DubbedLanguageRunSummary = {
+  language: string;
+  attempted: number;
+  skippedExisting: number;
+  succeeded: number;
+  failed: number;
 };
 
 function normalizeLanguageCode(value: unknown): string {
   if (typeof value !== 'string') return '';
   return value.trim().toLowerCase();
+}
+
+function toUniqueNormalizedLanguageList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const unique = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeLanguageCode(value);
+    if (!normalized || unique.has(normalized)) continue;
+    unique.add(normalized);
+    ordered.push(normalized);
+  }
+
+  return ordered;
+}
+
+const DUBBED_LANGUAGES_ALL_VIDEOS_STORAGE_KEY = 'dubbingLanguagesAllVideos';
+
+function readStoredDubbedLanguagesAllVideos(): string[] {
+  if (typeof window === 'undefined') return ['fa'];
+
+  try {
+    const rawValue = window.localStorage.getItem(
+      DUBBED_LANGUAGES_ALL_VIDEOS_STORAGE_KEY,
+    );
+
+    if (!rawValue) return ['fa'];
+
+    const parsedValue = JSON.parse(rawValue) as unknown;
+    const normalized = toUniqueNormalizedLanguageList(parsedValue);
+    return normalized.length > 0 ? normalized : ['fa'];
+  } catch {
+    return ['fa'];
+  }
+}
+
+function formatLanguageSelectionShortLabel(languages: string[]): string {
+  const labels = languages.map((languageCode) => languageCode.toUpperCase());
+  if (labels.length <= 2) return labels.join('+');
+  return `${labels[0]}+${labels.length - 1}`;
 }
 
 interface SceneHandlers {
@@ -277,12 +671,37 @@ export default function OriginalVideosList({
     useState(false);
   const [creatingDubbedLanguageVideoId, setCreatingDubbedLanguageVideoId] =
     useState<number | null>(null);
-  const [dubbingLanguageAllVideos, setDubbingLanguageAllVideos] =
-    useState('fa');
+  const [
+    creatingDubbedLanguageCurrentLanguage,
+    setCreatingDubbedLanguageCurrentLanguage,
+  ] = useState<string | null>(null);
+  const [
+    creatingDubbedLanguageCurrentLanguageIndex,
+    setCreatingDubbedLanguageCurrentLanguageIndex,
+  ] = useState(0);
+  const [
+    creatingDubbedLanguageTotalLanguages,
+    setCreatingDubbedLanguageTotalLanguages,
+  ] = useState(0);
+  const [
+    creatingDubbedLanguageCurrentVideoIndex,
+    setCreatingDubbedLanguageCurrentVideoIndex,
+  ] = useState(0);
+  const [
+    creatingDubbedLanguageTotalVideos,
+    setCreatingDubbedLanguageTotalVideos,
+  ] = useState(0);
+  const [dubbingLanguagesAllVideos, setDubbingLanguagesAllVideos] = useState<
+    string[]
+  >(() => readStoredDubbedLanguagesAllVideos());
   const [
     availableDubbingLanguagesAllVideos,
     setAvailableDubbingLanguagesAllVideos,
   ] = useState<string[]>(['fa']);
+  const [
+    dubbedLanguageFinalAudioFieldByLanguageAllVideos,
+    setDubbedLanguageFinalAudioFieldByLanguageAllVideos,
+  ] = useState<Record<string, string>>({});
   const [
     loadingDubbingLanguagesAllVideos,
     setLoadingDubbingLanguagesAllVideos,
@@ -543,73 +962,173 @@ export default function OriginalVideosList({
     };
   }, [isScriptUploadModalOpen]);
 
-  const loadDubbedLanguagesAllVideos = useCallback(async () => {
-    setLoadingDubbingLanguagesAllVideos(true);
+  const loadDubbedLanguagesAllVideos =
+    useCallback(async (): Promise<DubbedLanguagesMetadata> => {
+      setLoadingDubbingLanguagesAllVideos(true);
 
-    try {
-      const response = await fetch('/api/tts-audio-references', {
-        method: 'GET',
-        cache: 'no-store',
-      });
+      try {
+        const response = await fetch('/api/tts-audio-references', {
+          method: 'GET',
+          cache: 'no-store',
+        });
 
-      if (!response.ok) {
-        throw new Error(`Failed to load dubbed languages (${response.status})`);
-      }
-
-      const payload = (await response.json().catch(() => null)) as {
-        entries?: unknown;
-      } | null;
-
-      const rawEntries = Array.isArray(payload?.entries)
-        ? (payload.entries as AudioReferenceLanguageEntry[])
-        : [];
-
-      const enabledEntries = rawEntries.filter(
-        (entry) =>
-          entry && typeof entry === 'object' && entry.enabled !== false,
-      );
-
-      const uniqueLanguages = Array.from(
-        new Set(
-          enabledEntries
-            .map((entry) => normalizeLanguageCode(entry.language))
-            .filter(Boolean),
-        ),
-      ).sort();
-
-      const languages = uniqueLanguages.length > 0 ? uniqueLanguages : ['fa'];
-      const defaultLanguage = normalizeLanguageCode(
-        enabledEntries.find((entry) => entry.isDefault === true)?.language,
-      );
-
-      setAvailableDubbingLanguagesAllVideos(languages);
-      setDubbingLanguageAllVideos((current) => {
-        const normalizedCurrent = normalizeLanguageCode(current);
-        if (languages.includes(normalizedCurrent)) return normalizedCurrent;
-        if (defaultLanguage && languages.includes(defaultLanguage)) {
-          return defaultLanguage;
+        if (!response.ok) {
+          throw new Error(
+            `Failed to load dubbed languages (${response.status})`,
+          );
         }
-        if (languages.includes('fa')) return 'fa';
-        return languages[0];
-      });
-    } catch (error) {
-      console.error(
-        'Failed to load dubbed languages for all-videos Create Dubbed button:',
-        error,
-      );
-      setAvailableDubbingLanguagesAllVideos(['fa']);
-      setDubbingLanguageAllVideos(
-        (current) => normalizeLanguageCode(current) || 'fa',
-      );
-    } finally {
-      setLoadingDubbingLanguagesAllVideos(false);
-    }
-  }, []);
+
+        const payload = (await response.json().catch(() => null)) as {
+          entries?: unknown;
+        } | null;
+
+        const rawEntries = Array.isArray(payload?.entries)
+          ? (payload.entries as AudioReferenceLanguageEntry[])
+          : [];
+
+        const entriesByLanguage = new Map<
+          string,
+          AudioReferenceLanguageEntry[]
+        >();
+        const enabledEntries: AudioReferenceLanguageEntry[] = [];
+
+        for (const entry of rawEntries) {
+          if (!entry || typeof entry !== 'object' || entry.enabled === false) {
+            continue;
+          }
+
+          const languageCode = normalizeLanguageCode(entry.language);
+          if (!languageCode) continue;
+
+          enabledEntries.push(entry);
+
+          const bucket = entriesByLanguage.get(languageCode) ?? [];
+          bucket.push(entry);
+          entriesByLanguage.set(languageCode, bucket);
+        }
+
+        const languages = Array.from(entriesByLanguage.keys()).sort();
+        const resolvedLanguages = languages.length > 0 ? languages : ['fa'];
+
+        const defaultLanguage =
+          normalizeLanguageCode(
+            enabledEntries.find((entry) => entry.isDefault === true)?.language,
+          ) ||
+          (resolvedLanguages.includes('fa')
+            ? 'fa'
+            : (resolvedLanguages[0] ?? 'fa'));
+
+        const finalAudioFieldByLanguage: Record<string, string> = {};
+
+        for (const languageCode of resolvedLanguages) {
+          const candidates = entriesByLanguage.get(languageCode) ?? [];
+          const preferredEntry =
+            candidates.find((entry) => entry.isDefault === true) ??
+            candidates[0];
+
+          const preferredFieldKey =
+            typeof preferredEntry?.baserowFields
+              ?.videoFinalDubbedAudioFieldKey === 'string'
+              ? preferredEntry.baserowFields.videoFinalDubbedAudioFieldKey.trim()
+              : '';
+
+          const fallbackFieldKey = candidates
+            .map((entry) => {
+              const value = entry?.baserowFields?.videoFinalDubbedAudioFieldKey;
+              return typeof value === 'string' ? value.trim() : '';
+            })
+            .find(Boolean);
+
+          const resolvedFieldKey = preferredFieldKey || fallbackFieldKey || '';
+          if (resolvedFieldKey) {
+            finalAudioFieldByLanguage[languageCode] = resolvedFieldKey;
+          }
+        }
+
+        setAvailableDubbingLanguagesAllVideos(resolvedLanguages);
+        setDubbedLanguageFinalAudioFieldByLanguageAllVideos(
+          finalAudioFieldByLanguage,
+        );
+        setDubbingLanguagesAllVideos((current) => {
+          const normalizedCurrent = toUniqueNormalizedLanguageList(current);
+          const retained = normalizedCurrent.filter((languageCode) =>
+            resolvedLanguages.includes(languageCode),
+          );
+
+          if (retained.length > 0) return retained;
+          if (defaultLanguage && resolvedLanguages.includes(defaultLanguage)) {
+            return [defaultLanguage];
+          }
+          if (resolvedLanguages.includes('fa')) return ['fa'];
+          return resolvedLanguages.length > 0 ? [resolvedLanguages[0]] : ['fa'];
+        });
+
+        return {
+          languages: resolvedLanguages,
+          defaultLanguage,
+          finalAudioFieldByLanguage,
+        };
+      } catch (error) {
+        console.error(
+          'Failed to load dubbed languages for all-videos Create Dubbed button:',
+          error,
+        );
+
+        const fallbackMetadata: DubbedLanguagesMetadata = {
+          languages: ['fa'],
+          defaultLanguage: 'fa',
+          finalAudioFieldByLanguage: {},
+        };
+
+        setAvailableDubbingLanguagesAllVideos(fallbackMetadata.languages);
+        setDubbedLanguageFinalAudioFieldByLanguageAllVideos(
+          fallbackMetadata.finalAudioFieldByLanguage,
+        );
+        setDubbingLanguagesAllVideos((current) => {
+          const normalizedCurrent = toUniqueNormalizedLanguageList(current);
+          return normalizedCurrent.length > 0 ? normalizedCurrent : ['fa'];
+        });
+
+        return fallbackMetadata;
+      } finally {
+        setLoadingDubbingLanguagesAllVideos(false);
+      }
+    }, []);
 
   useEffect(() => {
     if (!isBatchOperationsExpanded) return;
     void loadDubbedLanguagesAllVideos();
   }, [isBatchOperationsExpanded, loadDubbedLanguagesAllVideos]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    window.localStorage.setItem(
+      DUBBED_LANGUAGES_ALL_VIDEOS_STORAGE_KEY,
+      JSON.stringify(dubbingLanguagesAllVideos),
+    );
+  }, [dubbingLanguagesAllVideos]);
+
+  const toggleDubbedLanguageAllVideosSelection = useCallback(
+    (languageCode: string) => {
+      const normalized = normalizeLanguageCode(languageCode);
+      if (!normalized) return;
+
+      setDubbingLanguagesAllVideos((current) => {
+        const normalizedCurrent = toUniqueNormalizedLanguageList(current);
+
+        if (normalizedCurrent.includes(normalized)) {
+          if (normalizedCurrent.length <= 1) return normalizedCurrent;
+          return normalizedCurrent.filter(
+            (selectedLanguage) => selectedLanguage !== normalized,
+          );
+        }
+
+        return [...normalizedCurrent, normalized];
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (selectedOriginalVideo.id !== null) return;
@@ -2751,22 +3270,169 @@ export default function OriginalVideosList({
     }
   };
 
-  const activeDubbedLanguageForAllVideos =
-    String(dubbingLanguageAllVideos || 'fa')
-      .trim()
-      .toLowerCase() || 'fa';
-  const activeDubbedLanguageForAllVideosLabel =
-    activeDubbedLanguageForAllVideos.toUpperCase();
+  const selectedDubbedLanguagesAllVideos = useMemo(() => {
+    const normalized = toUniqueNormalizedLanguageList(
+      dubbingLanguagesAllVideos,
+    );
+    return normalized.length > 0 ? normalized : ['fa'];
+  }, [dubbingLanguagesAllVideos]);
+
+  const selectedDubbedLanguagesAllVideosLabel = useMemo(
+    () =>
+      selectedDubbedLanguagesAllVideos
+        .map((languageCode) => languageCode.toUpperCase())
+        .join(', '),
+    [selectedDubbedLanguagesAllVideos],
+  );
+
+  const selectedDubbedLanguagesAllVideosShortLabel = useMemo(
+    () => formatLanguageSelectionShortLabel(selectedDubbedLanguagesAllVideos),
+    [selectedDubbedLanguagesAllVideos],
+  );
+
+  const selectedPipelineDubbedLanguagesOverride = useMemo(
+    () =>
+      toUniqueNormalizedLanguageList(
+        pipelineConfig.selectedDubbedLanguagesForPipeline,
+      ),
+    [pipelineConfig.selectedDubbedLanguagesForPipeline],
+  );
+
+  const effectivePipelineDubbedLanguages = useMemo(
+    () =>
+      selectedPipelineDubbedLanguagesOverride.length > 0
+        ? selectedPipelineDubbedLanguagesOverride
+        : selectedDubbedLanguagesAllVideos,
+    [selectedPipelineDubbedLanguagesOverride, selectedDubbedLanguagesAllVideos],
+  );
+
+  const effectivePipelineDubbedLanguagesLabel = useMemo(
+    () =>
+      effectivePipelineDubbedLanguages
+        .map((languageCode) => languageCode.toUpperCase())
+        .join(', '),
+    [effectivePipelineDubbedLanguages],
+  );
+
+  const pipelineDubbedOverrideActive =
+    selectedPipelineDubbedLanguagesOverride.length > 0;
+
+  const creatingDubbedLanguageCurrentLanguageLabel =
+    creatingDubbedLanguageCurrentLanguage?.toUpperCase() ?? '';
+
+  const creatingDubbedLanguageProgressLabel =
+    creatingDubbedLanguageCurrentLanguageLabel &&
+    creatingDubbedLanguageCurrentVideoIndex > 0 &&
+    creatingDubbedLanguageTotalVideos > 0
+      ? `${creatingDubbedLanguageCurrentLanguageLabel} ${creatingDubbedLanguageCurrentVideoIndex}/${creatingDubbedLanguageTotalVideos}`
+      : creatingDubbedLanguageVideoId !== null
+        ? `#${creatingDubbedLanguageVideoId}`
+        : 'Processing...';
+
+  const hasStoredDubbedFinalAudioForLanguage = useCallback(
+    (video: BaserowRow, destinationFieldKey?: string): boolean => {
+      if (!destinationFieldKey) return false;
+
+      const rawValue = (video as Record<string, unknown>)[destinationFieldKey];
+      if (!rawValue) return false;
+
+      const detectedUrl = extractUrl(rawValue);
+      if (detectedUrl && detectedUrl.trim().length > 0) return true;
+
+      if (typeof rawValue === 'string') {
+        return rawValue.trim().length > 0;
+      }
+
+      if (Array.isArray(rawValue)) {
+        return rawValue.length > 0;
+      }
+
+      if (typeof rawValue === 'object' && rawValue !== null) {
+        const objectValue = rawValue as {
+          url?: unknown;
+          value?: unknown;
+          name?: unknown;
+          text?: unknown;
+          title?: unknown;
+          file?: { url?: unknown };
+        };
+
+        if (
+          typeof objectValue.url === 'string' &&
+          objectValue.url.trim().length > 0
+        ) {
+          return true;
+        }
+
+        if (
+          objectValue.file &&
+          typeof objectValue.file.url === 'string' &&
+          objectValue.file.url.trim().length > 0
+        ) {
+          return true;
+        }
+
+        for (const value of [
+          objectValue.value,
+          objectValue.name,
+          objectValue.text,
+          objectValue.title,
+        ]) {
+          if (typeof value === 'string' && value.trim().length > 0) {
+            return true;
+          }
+
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    },
+    [extractUrl],
+  );
 
   const handleCreateDubbedLanguageForProcessingVideos = async (
     playSound = true,
+    options?: {
+      languages?: string[];
+      updatePipelineProgress?: boolean;
+      pipelineStepNumber?: number;
+    },
   ) => {
     if (creatingDubbedLanguageAllVideos) return;
 
     try {
       setCreatingDubbedLanguageAllVideos(true);
       setCreatingDubbedLanguageVideoId(null);
+      setCreatingDubbedLanguageCurrentLanguage(null);
+      setCreatingDubbedLanguageCurrentLanguageIndex(0);
+      setCreatingDubbedLanguageTotalLanguages(0);
+      setCreatingDubbedLanguageCurrentVideoIndex(0);
+      setCreatingDubbedLanguageTotalVideos(0);
       setError(null);
+
+      const metadata = await loadDubbedLanguagesAllVideos();
+
+      const preferredLanguageSelection =
+        Array.isArray(options?.languages) && options.languages.length > 0
+          ? options.languages
+          : selectedDubbedLanguagesAllVideos;
+
+      const requestedLanguages = toUniqueNormalizedLanguageList(
+        preferredLanguageSelection,
+      );
+      const availableLanguageSet = new Set(metadata.languages);
+      const runnableLanguages = requestedLanguages.filter((languageCode) =>
+        availableLanguageSet.has(languageCode),
+      );
+
+      if (runnableLanguages.length === 0) {
+        const fallbackLanguage =
+          metadata.defaultLanguage || metadata.languages[0] || 'fa';
+        runnableLanguages.push(fallbackLanguage);
+      }
 
       const freshVideosData = await getOriginalVideosData();
       const processingVideos =
@@ -2774,86 +3440,162 @@ export default function OriginalVideosList({
 
       if (processingVideos.length === 0) {
         console.log(
-          `No Processing videos found for Create Dubbed ${activeDubbedLanguageForAllVideosLabel}`,
+          `No Processing videos found for Create Dubbed ${runnableLanguages
+            .map((languageCode) => languageCode.toUpperCase())
+            .join(', ')}`,
         );
         return;
       }
 
-      console.log(
-        `Create Dubbed ${activeDubbedLanguageForAllVideosLabel}: processing ${processingVideos.length} videos...`,
-      );
+      setCreatingDubbedLanguageTotalLanguages(runnableLanguages.length);
+      setCreatingDubbedLanguageTotalVideos(processingVideos.length);
 
-      for (const video of processingVideos) {
-        setCreatingDubbedLanguageVideoId(video.id);
+      const languageSummaries: DubbedLanguageRunSummary[] = [];
 
-        try {
-          const response = await fetch('/api/create-dubbed-fa', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              videoId: video.id,
-              language: activeDubbedLanguageForAllVideos,
-            }),
-          });
+      for (const [languageIndex, languageCode] of runnableLanguages.entries()) {
+        const languageLabel = languageCode.toUpperCase();
 
-          const payload = (await response.json().catch(() => null)) as {
-            error?: unknown;
-            details?: unknown;
-          } | null;
+        setCreatingDubbedLanguageCurrentLanguage(languageCode);
+        setCreatingDubbedLanguageCurrentLanguageIndex(languageIndex + 1);
 
-          if (!response.ok) {
-            const details = Array.isArray(payload?.details)
-              ? payload.details
-                  .map((item) => String(item))
-                  .filter(Boolean)
-                  .slice(0, 5)
-                  .join(' | ')
-              : '';
-            const message =
-              typeof payload?.error === 'string' && payload.error.trim()
-                ? payload.error.trim()
-                : `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} failed (${response.status})`;
+        console.log(
+          `Create Dubbed ${languageLabel}: processing ${processingVideos.length} videos...`,
+        );
 
-            throw new Error(details ? `${message} — ${details}` : message);
+        const languageSummary: DubbedLanguageRunSummary = {
+          language: languageCode,
+          attempted: processingVideos.length,
+          skippedExisting: 0,
+          succeeded: 0,
+          failed: 0,
+        };
+
+        const destinationFieldKey =
+          metadata.finalAudioFieldByLanguage[languageCode] ||
+          dubbedLanguageFinalAudioFieldByLanguageAllVideos[languageCode];
+
+        for (const [videoIndex, video] of processingVideos.entries()) {
+          setCreatingDubbedLanguageVideoId(video.id);
+          setCreatingDubbedLanguageCurrentVideoIndex(videoIndex + 1);
+
+          if (options?.updatePipelineProgress) {
+            const stepPrefix =
+              typeof options.pipelineStepNumber === 'number' &&
+              options.pipelineStepNumber > 0
+                ? `Step ${options.pipelineStepNumber}: `
+                : '';
+
+            setPipelineStep(
+              `${stepPrefix}Create Dubbed ${languageLabel} (${languageIndex + 1}/${runnableLanguages.length}) • Video ${videoIndex + 1}/${processingVideos.length} (#${video.id})...`,
+            );
           }
 
-          console.log(
-            `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} complete for video #${video.id}`,
-          );
-        } catch (error) {
-          console.error(
-            `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} failed for video #${video.id}:`,
-            error,
-          );
+          if (
+            hasStoredDubbedFinalAudioForLanguage(video, destinationFieldKey)
+          ) {
+            languageSummary.skippedExisting += 1;
+            console.log(
+              `Create Dubbed ${languageLabel}: skipping video #${video.id} (existing final dubbed audio in ${destinationFieldKey})`,
+            );
+            continue;
+          }
+
+          try {
+            const response = await fetch('/api/create-dubbed-fa', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                videoId: video.id,
+                language: languageCode,
+              }),
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+              error?: unknown;
+              details?: unknown;
+            } | null;
+
+            if (!response.ok) {
+              const details = Array.isArray(payload?.details)
+                ? payload.details
+                    .map((item) => String(item))
+                    .filter(Boolean)
+                    .slice(0, 5)
+                    .join(' | ')
+                : '';
+
+              const message =
+                typeof payload?.error === 'string' && payload.error.trim()
+                  ? payload.error.trim()
+                  : `Create Dubbed ${languageLabel} failed (${response.status})`;
+
+              throw new Error(details ? `${message} — ${details}` : message);
+            }
+
+            languageSummary.succeeded += 1;
+            console.log(
+              `Create Dubbed ${languageLabel} complete for video #${video.id}`,
+            );
+          } catch (error) {
+            languageSummary.failed += 1;
+            console.error(
+              `Create Dubbed ${languageLabel} failed for video #${video.id}:`,
+              error,
+            );
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 300));
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        languageSummaries.push(languageSummary);
       }
 
       await handleRefresh();
 
+      const summaryText = languageSummaries
+        .map(
+          (summary) =>
+            `${summary.language.toUpperCase()} ok:${summary.succeeded} skip:${summary.skippedExisting} fail:${summary.failed}`,
+        )
+        .join(' | ');
+
+      if (summaryText) {
+        console.log(`Create Dubbed summary: ${summaryText}`);
+      }
+
+      const totalFailures = languageSummaries.reduce(
+        (total, summary) => total + summary.failed,
+        0,
+      );
+
+      if (totalFailures > 0) {
+        setError(`Create Dubbed completed with some failures. ${summaryText}`);
+      }
+
       if (playSound) {
         await playSuccessAndNotifyBatchCompletion(
-          `Create Dubbed ${activeDubbedLanguageForAllVideosLabel}`,
+          `Create Dubbed ${formatLanguageSelectionShortLabel(runnableLanguages)}`,
         );
       }
     } catch (error) {
-      console.error(
-        `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} all failed:`,
-        error,
-      );
+      console.error('Create Dubbed all failed:', error);
 
       if (playSound) {
         playErrorSound();
       }
 
       setError(
-        `Failed to create dubbed ${activeDubbedLanguageForAllVideosLabel} for all videos: ${
+        `Failed to create dubbed languages for all videos: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
     } finally {
       setCreatingDubbedLanguageVideoId(null);
+      setCreatingDubbedLanguageCurrentLanguage(null);
+      setCreatingDubbedLanguageCurrentLanguageIndex(0);
+      setCreatingDubbedLanguageTotalLanguages(0);
+      setCreatingDubbedLanguageCurrentVideoIndex(0);
+      setCreatingDubbedLanguageTotalVideos(0);
       setCreatingDubbedLanguageAllVideos(false);
     }
   };
@@ -10971,16 +11713,26 @@ export default function OriginalVideosList({
 
       if (pipelineConfig.createDubbedLanguage) {
         stepNumber++;
+
+        const pipelineDubbedLabel =
+          effectivePipelineDubbedLanguagesLabel ||
+          selectedDubbedLanguagesAllVideosLabel ||
+          'FA';
+
         setPipelineStep(
-          `Step ${stepNumber}: Creating dubbed ${activeDubbedLanguageForAllVideosLabel} audio for Processing videos...`,
+          `Step ${stepNumber}: Creating dubbed ${pipelineDubbedLabel} audio for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Creating dubbed ${activeDubbedLanguageForAllVideosLabel} audio for Processing videos`,
+          `Step ${stepNumber}: Creating dubbed ${pipelineDubbedLabel} audio for Processing videos`,
         );
         try {
-          await handleCreateDubbedLanguageForProcessingVideos(false);
+          await handleCreateDubbedLanguageForProcessingVideos(false, {
+            languages: effectivePipelineDubbedLanguages,
+            updatePipelineProgress: true,
+            pipelineStepNumber: stepNumber,
+          });
           console.log(
-            `✓ Step ${stepNumber} Complete: Create Dubbed ${activeDubbedLanguageForAllVideosLabel} finished`,
+            `✓ Step ${stepNumber} Complete: Create Dubbed ${pipelineDubbedLabel} finished`,
           );
 
           console.log(
@@ -10988,11 +11740,11 @@ export default function OriginalVideosList({
           );
         } catch (error) {
           console.error(
-            `✗ Step ${stepNumber} Failed: Create Dubbed ${activeDubbedLanguageForAllVideosLabel} error`,
+            `✗ Step ${stepNumber} Failed: Create Dubbed ${pipelineDubbedLabel} error`,
             error,
           );
           throw new Error(
-            `Create Dubbed ${activeDubbedLanguageForAllVideosLabel} failed: ${
+            `Create Dubbed ${pipelineDubbedLabel} failed: ${
               error instanceof Error ? error.message : 'Unknown error'
             }`,
           );
@@ -12015,38 +12767,83 @@ export default function OriginalVideosList({
 
                     <div className='w-full flex flex-col justify-center gap-1 px-2 py-1 bg-teal-50 border border-teal-200 rounded-md min-h-[40px]'>
                       <span className='text-[11px] font-medium text-teal-900'>
-                        Dubbed Language
+                        Dubbed Languages (order)
                         {loadingDubbingLanguagesAllVideos
                           ? ' (loading...)'
                           : ''}
                       </span>
-                      <select
-                        value={activeDubbedLanguageForAllVideos}
-                        onChange={(e) =>
-                          setDubbingLanguageAllVideos(
-                            normalizeLanguageCode(e.target.value) || 'fa',
-                          )
-                        }
-                        onFocus={() => {
-                          void loadDubbedLanguagesAllVideos();
-                        }}
-                        onPointerDown={() => {
-                          void loadDubbedLanguagesAllVideos();
-                        }}
-                        disabled={
-                          creatingDubbedLanguageAllVideos || runningFullPipeline
-                        }
-                        className='w-full h-8 px-2 bg-white border border-teal-300 rounded-md text-sm text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-teal-100 disabled:text-teal-500 disabled:cursor-not-allowed'
-                        title='Select language preset for Create Dubbed all-videos batch'
-                      >
-                        {availableDubbingLanguagesAllVideos.map(
-                          (languageCode) => (
-                            <option key={languageCode} value={languageCode}>
-                              {languageCode.toUpperCase()}
-                            </option>
+                      <p className='text-[10px] text-teal-700'>
+                        {pipelineDubbedOverrideActive
+                          ? `Pipeline override active: ${effectivePipelineDubbedLanguagesLabel || 'None'}`
+                          : 'Pipeline uses this list unless override languages are selected in Pipeline Configuration.'}
+                      </p>
+
+                      <div className='flex flex-wrap gap-1'>
+                        {selectedDubbedLanguagesAllVideos.map(
+                          (languageCode, index) => (
+                            <button
+                              key={languageCode}
+                              type='button'
+                              onClick={() =>
+                                toggleDubbedLanguageAllVideosSelection(
+                                  languageCode,
+                                )
+                              }
+                              disabled={
+                                creatingDubbedLanguageAllVideos ||
+                                runningFullPipeline
+                              }
+                              className='inline-flex items-center gap-1 rounded-full border border-teal-300 bg-white px-2 py-0.5 text-[11px] font-medium text-teal-900 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60'
+                              title='Click to remove language from the run order (last language cannot be removed)'
+                            >
+                              <span>{index + 1}.</span>
+                              <span>{languageCode.toUpperCase()}</span>
+                              {selectedDubbedLanguagesAllVideos.length > 1 ? (
+                                <span aria-hidden='true'>×</span>
+                              ) : null}
+                            </button>
                           ),
                         )}
-                      </select>
+                      </div>
+
+                      <div className='max-h-24 overflow-y-auto rounded-md border border-teal-200 bg-white p-1'>
+                        <div className='grid grid-cols-2 gap-1'>
+                          {availableDubbingLanguagesAllVideos.map(
+                            (languageCode) => {
+                              const isSelected =
+                                selectedDubbedLanguagesAllVideos.includes(
+                                  languageCode,
+                                );
+
+                              return (
+                                <label
+                                  key={languageCode}
+                                  className='inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-teal-900 hover:bg-teal-100'
+                                >
+                                  <input
+                                    type='checkbox'
+                                    checked={isSelected}
+                                    onChange={() =>
+                                      toggleDubbedLanguageAllVideosSelection(
+                                        languageCode,
+                                      )
+                                    }
+                                    onFocus={() => {
+                                      void loadDubbedLanguagesAllVideos();
+                                    }}
+                                    disabled={
+                                      creatingDubbedLanguageAllVideos ||
+                                      runningFullPipeline
+                                    }
+                                    className='h-3.5 w-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-500 disabled:cursor-not-allowed'
+                                  />
+                                  <span>{languageCode.toUpperCase()}</span>
+                                </label>
+                              );
+                            },
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <button
@@ -12063,8 +12860,8 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         creatingDubbedLanguageAllVideos
-                          ? `Creating dubbed ${activeDubbedLanguageForAllVideosLabel} audio for all Processing videos...`
-                          : `Use language preset ${activeDubbedLanguageForAllVideosLabel} from Global TTS Settings → Manage Language Presets and run Create Dubbed for all Processing videos`
+                          ? `Creating dubbed ${creatingDubbedLanguageCurrentLanguageLabel || selectedDubbedLanguagesAllVideosLabel} audio (${creatingDubbedLanguageCurrentLanguageIndex}/${creatingDubbedLanguageTotalLanguages}) for Processing videos...`
+                          : `Run Create Dubbed for selected languages in order: ${selectedDubbedLanguagesAllVideosLabel}`
                       }
                     >
                       <Volume2
@@ -12074,10 +12871,8 @@ export default function OriginalVideosList({
                       />
                       <span>
                         {creatingDubbedLanguageAllVideos
-                          ? creatingDubbedLanguageVideoId !== null
-                            ? `#${creatingDubbedLanguageVideoId}...`
-                            : 'Processing...'
-                          : `Create Dubbed ${activeDubbedLanguageForAllVideosLabel}`}
+                          ? creatingDubbedLanguageProgressLabel
+                          : `Create Dubbed ${selectedDubbedLanguagesAllVideosShortLabel}`}
                       </span>
                     </button>
 

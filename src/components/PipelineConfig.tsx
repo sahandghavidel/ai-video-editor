@@ -2,7 +2,7 @@
 
 import { useAppStore } from '@/store/useAppStore';
 import { CheckCircle2, Circle, Settings2, Workflow } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 interface PipelineConfigProps {
   onRunFullPipeline?: () => void;
@@ -10,6 +10,48 @@ interface PipelineConfigProps {
   isRunningFullPipeline?: boolean;
   runFullPipelineLabel?: string;
   runFullPipelineTitle?: string;
+}
+
+type AudioReferenceLanguageEntry = {
+  language?: unknown;
+  enabled?: unknown;
+};
+
+function normalizeLanguageCode(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase();
+}
+
+function toUniqueNormalizedLanguageList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const unique = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeLanguageCode(value);
+    if (!normalized || unique.has(normalized)) continue;
+    unique.add(normalized);
+    ordered.push(normalized);
+  }
+
+  return ordered;
+}
+
+function arePipelineConfigValuesEqual(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false;
+
+    if (left.length !== right.length) return false;
+
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) return false;
+    }
+
+    return true;
+  }
+
+  return left === right;
 }
 
 export default function PipelineConfig({
@@ -40,7 +82,67 @@ export default function PipelineConfig({
   const [dragOverTemplateId, setDragOverTemplateId] = useState<string | null>(
     null,
   );
+  const [
+    availableDubbedLanguagesForPipeline,
+    setAvailableDubbedLanguagesForPipeline,
+  ] = useState<string[]>(['fa']);
+  const [
+    loadingDubbedLanguagesForPipeline,
+    setLoadingDubbedLanguagesForPipeline,
+  ] = useState(false);
   const templateReorderEnabled = isExpanded && isTemplateReorderMode;
+
+  const selectedDubbedLanguagesForPipeline = useMemo(
+    () =>
+      toUniqueNormalizedLanguageList(
+        pipelineConfig.selectedDubbedLanguagesForPipeline,
+      ),
+    [pipelineConfig.selectedDubbedLanguagesForPipeline],
+  );
+
+  const loadAvailableDubbedLanguagesForPipeline = useCallback(async () => {
+    setLoadingDubbedLanguagesForPipeline(true);
+
+    try {
+      const response = await fetch('/api/tts-audio-references', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load dubbed languages (${response.status})`);
+      }
+
+      const payload = (await response.json().catch(() => null)) as {
+        entries?: unknown;
+      } | null;
+
+      const rawEntries = Array.isArray(payload?.entries)
+        ? (payload.entries as AudioReferenceLanguageEntry[])
+        : [];
+
+      const enabledLanguages = Array.from(
+        new Set(
+          rawEntries
+            .filter(
+              (entry) =>
+                entry && typeof entry === 'object' && entry.enabled !== false,
+            )
+            .map((entry) => normalizeLanguageCode(entry.language))
+            .filter(Boolean),
+        ),
+      ).sort();
+
+      setAvailableDubbedLanguagesForPipeline(
+        enabledLanguages.length > 0 ? enabledLanguages : ['fa'],
+      );
+    } catch (error) {
+      console.error('Failed to load pipeline dubbed languages:', error);
+      setAvailableDubbedLanguagesForPipeline(['fa']);
+    } finally {
+      setLoadingDubbedLanguagesForPipeline(false);
+    }
+  }, []);
 
   const openSaveTemplateModal = () => {
     setTemplateName('');
@@ -77,6 +179,64 @@ export default function PipelineConfig({
       setDragOverTemplateId(null);
     }
   }, [templateReorderEnabled]);
+
+  useEffect(() => {
+    if (!isExpanded || !pipelineConfig.createDubbedLanguage) return;
+    void loadAvailableDubbedLanguagesForPipeline();
+  }, [
+    isExpanded,
+    pipelineConfig.createDubbedLanguage,
+    loadAvailableDubbedLanguagesForPipeline,
+  ]);
+
+  useEffect(() => {
+    if (availableDubbedLanguagesForPipeline.length === 0) return;
+
+    const availableSet = new Set(availableDubbedLanguagesForPipeline);
+    const filteredSelection = selectedDubbedLanguagesForPipeline.filter(
+      (languageCode) => availableSet.has(languageCode),
+    );
+
+    const isSameSelection =
+      filteredSelection.length === selectedDubbedLanguagesForPipeline.length &&
+      filteredSelection.every(
+        (languageCode, index) =>
+          languageCode === selectedDubbedLanguagesForPipeline[index],
+      );
+
+    if (isSameSelection) return;
+
+    updatePipelineConfig({
+      selectedDubbedLanguagesForPipeline: filteredSelection,
+    });
+  }, [
+    availableDubbedLanguagesForPipeline,
+    selectedDubbedLanguagesForPipeline,
+    updatePipelineConfig,
+  ]);
+
+  const togglePipelineDubbedLanguageSelection = useCallback(
+    (languageCode: string) => {
+      const normalized = normalizeLanguageCode(languageCode);
+      if (!normalized) return;
+
+      const currentSelection = selectedDubbedLanguagesForPipeline;
+
+      if (currentSelection.includes(normalized)) {
+        updatePipelineConfig({
+          selectedDubbedLanguagesForPipeline: currentSelection.filter(
+            (selectedLanguage) => selectedLanguage !== normalized,
+          ),
+        });
+        return;
+      }
+
+      updatePipelineConfig({
+        selectedDubbedLanguagesForPipeline: [...currentSelection, normalized],
+      });
+    },
+    [selectedDubbedLanguagesForPipeline, updatePipelineConfig],
+  );
 
   const handleTemplateContextDelete = (
     event: React.MouseEvent<HTMLButtonElement>,
@@ -371,7 +531,12 @@ export default function PipelineConfig({
 
     const matchedIds = pipelineTemplates
       .filter((template) =>
-        configKeys.every((key) => template.config[key] === pipelineConfig[key]),
+        configKeys.every((key) =>
+          arePipelineConfigValuesEqual(
+            template.config[key],
+            pipelineConfig[key],
+          ),
+        ),
       )
       .map((template) => template.id);
 
@@ -887,6 +1052,98 @@ export default function PipelineConfig({
                 </button>
               );
             })}
+
+            {/* Pipeline override: Dubbed language multi-select */}
+            {pipelineConfig.createDubbedLanguage && (
+              <div className='col-span-full rounded-md border border-teal-200 bg-teal-50 p-3'>
+                <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                  <div>
+                    <p className='text-xs font-semibold text-teal-900'>
+                      Create Dubbed Lang — Pipeline Language Override
+                    </p>
+                    <p className='text-[11px] text-teal-700'>
+                      Select one or more languages for pipeline execution. Order
+                      follows your selection clicks. When empty, pipeline falls
+                      back to the batch-panel language selection.
+                    </p>
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      void loadAvailableDubbedLanguagesForPipeline();
+                    }}
+                    disabled={
+                      isRunningFullPipeline || loadingDubbedLanguagesForPipeline
+                    }
+                    className='self-start rounded-md border border-teal-300 bg-white px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60'
+                    title='Reload available dubbed languages from Global TTS presets'
+                  >
+                    {loadingDubbedLanguagesForPipeline ? 'Loading…' : 'Reload'}
+                  </button>
+                </div>
+
+                <div className='mt-2 flex flex-wrap gap-1'>
+                  {selectedDubbedLanguagesForPipeline.length > 0 ? (
+                    selectedDubbedLanguagesForPipeline.map(
+                      (languageCode, index) => (
+                        <span
+                          key={languageCode}
+                          className='inline-flex items-center rounded-full border border-teal-300 bg-white px-2 py-0.5 text-[11px] font-medium text-teal-900'
+                          title={`Execution order ${index + 1}`}
+                        >
+                          {index + 1}. {languageCode.toUpperCase()}
+                        </span>
+                      ),
+                    )
+                  ) : (
+                    <span className='text-[11px] text-teal-700'>
+                      No pipeline override selected.
+                    </span>
+                  )}
+                </div>
+
+                <details
+                  className={`mt-2 rounded-md border border-teal-200 bg-white p-2 ${
+                    isRunningFullPipeline
+                      ? 'pointer-events-none opacity-60'
+                      : ''
+                  }`}
+                >
+                  <summary className='cursor-pointer text-[11px] font-medium text-teal-900'>
+                    Choose pipeline dubbed languages
+                  </summary>
+
+                  <div className='mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4'>
+                    {availableDubbedLanguagesForPipeline.map((languageCode) => {
+                      const isSelected =
+                        selectedDubbedLanguagesForPipeline.includes(
+                          languageCode,
+                        );
+
+                      return (
+                        <label
+                          key={languageCode}
+                          className='inline-flex items-center gap-1 rounded border border-teal-200 px-2 py-1 text-[11px] text-teal-900'
+                        >
+                          <input
+                            type='checkbox'
+                            checked={isSelected}
+                            onChange={() =>
+                              togglePipelineDubbedLanguageSelection(
+                                languageCode,
+                              )
+                            }
+                            disabled={isRunningFullPipeline}
+                            className='h-3.5 w-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-500'
+                          />
+                          <span>{languageCode.toUpperCase()}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </details>
+              </div>
+            )}
           </div>
 
           {/* Save Template Modal */}
