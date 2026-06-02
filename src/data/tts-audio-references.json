@@ -18,7 +18,7 @@
       },
       "deviceMap": "mps",
       "dtype": "float16",
-      "numStep": 32,
+      "numStep": 16,
       "speed": 1,
       "description": "Default Persian reference voice used for FA dubbing.",
       "tags": [
@@ -28,7 +28,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     },
     {
       "id": "en-default",
@@ -58,7 +58,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -83,7 +83,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
@@ -108,7 +108,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
@@ -133,7 +133,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
@@ -158,7 +158,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
@@ -183,7 +183,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
@@ -209,7 +209,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-02T04:36:44.103Z"
+      "updatedAt": "2026-06-02T07:47:48.092Z"
     }
   ]
 }
