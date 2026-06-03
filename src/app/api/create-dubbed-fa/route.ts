@@ -681,7 +681,7 @@ export async function POST(request: NextRequest) {
         provider: 'omnivoice',
         referenceAudioFilename: selectedLanguageReference.filename,
         skipIfDestinationExists: true,
-        failFastOnSaveError: true,
+        failFastOnSaveError: false,
         fitAudioToSceneDuration: true,
         ttsSettings: {
           provider: 'omnivoice',
@@ -709,6 +709,8 @@ export async function POST(request: NextRequest) {
       error?: unknown;
       failureCount?: unknown;
       failures?: unknown;
+      failedSceneIds?: unknown;
+      failuresByCategory?: unknown;
       generatedCount?: unknown;
       silentGeneratedCount?: unknown;
       originalSavedCount?: unknown;
@@ -721,7 +723,7 @@ export async function POST(request: NextRequest) {
       providerPath?: unknown;
     } | null;
 
-    if (!step2Response.ok || step2Payload?.ok !== true) {
+    if (!step2Response.ok) {
       const failurePreview = Array.isArray(step2Payload?.failures)
         ? step2Payload.failures
             .slice(0, 5)
@@ -743,6 +745,64 @@ export async function POST(request: NextRequest) {
 
       throw new Error(
         failurePreview ? `${message} — ${failurePreview}` : message,
+      );
+    }
+
+    const step2FailureCount = Number(step2Payload?.failureCount ?? 0);
+    const step2FailedSceneIds = Array.isArray(step2Payload?.failedSceneIds)
+      ? step2Payload.failedSceneIds
+          .map((value) => parsePositiveInt(value))
+          .filter((value): value is number => Boolean(value))
+      : Array.isArray(step2Payload?.failures)
+        ? step2Payload.failures
+            .map((item) => {
+              if (!item || typeof item !== 'object') return null;
+              const maybeSceneId = (item as { sceneId?: unknown }).sceneId;
+              return parsePositiveInt(maybeSceneId);
+            })
+            .filter((value): value is number => Boolean(value))
+        : [];
+
+    if (step2FailureCount > 0 || step2Payload?.ok !== true) {
+      return NextResponse.json(
+        {
+          error: `Step 2 ${selectedLanguageReference.language} TTS generation finished with ${step2FailureCount} failed scene(s). Merge skipped until all scenes succeed.`,
+          step: 'step-2-generate-dubbed-audio',
+          remediation: 'retry-failed-scenes',
+          details: [
+            `Retry failed scene IDs: ${step2FailedSceneIds.slice(0, 20).join(', ') || 'n/a'}`,
+            'Transient database/provider errors are now auto-retried with backoff, but exhausted scenes still need retry.',
+          ],
+          step2: {
+            ok: false,
+            failureCount: step2FailureCount,
+            failedSceneIds: step2FailedSceneIds,
+            failuresByCategory:
+              step2Payload?.failuresByCategory &&
+              typeof step2Payload.failuresByCategory === 'object'
+                ? step2Payload.failuresByCategory
+                : {},
+            generatedCount: Number(step2Payload?.generatedCount ?? 0),
+            silentGeneratedCount: Number(
+              step2Payload?.silentGeneratedCount ?? 0,
+            ),
+            originalSavedCount: Number(step2Payload?.originalSavedCount ?? 0),
+            skippedOriginalSaveCount: Number(
+              step2Payload?.skippedOriginalSaveCount ?? 0,
+            ),
+            skippedNoTextCount: Number(step2Payload?.skippedNoTextCount ?? 0),
+            skippedExistingCount: Number(
+              step2Payload?.skippedExistingCount ?? 0,
+            ),
+            skippedSceneFilterCount: Number(
+              step2Payload?.skippedSceneFilterCount ?? 0,
+            ),
+            skippedInvalidSceneIdCount: Number(
+              step2Payload?.skippedInvalidSceneIdCount ?? 0,
+            ),
+          },
+        },
+        { status: 502 },
       );
     }
 

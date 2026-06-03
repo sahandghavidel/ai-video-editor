@@ -71,7 +71,53 @@ type AudioProbeMetrics = {
 type SceneTtsFailure = {
   sceneId: number;
   error: string;
+  category?:
+    | 'tts_generation'
+    | 'baserow_save'
+    | 'silent_audio_generation'
+    | 'invalid_scene_duration'
+    | 'unknown';
 };
+
+const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_TRANSIENT_RETRY_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 300;
+const RETRY_MAX_DELAY_MS = 3000;
+const TTS_REQUEST_TIMEOUT_MS = 120_000;
+
+function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_HTTP_STATUSES.has(status);
+}
+
+function isRetryableNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('network') ||
+    message.includes('fetch failed') ||
+    message.includes('ecconnreset') ||
+    message.includes('econnreset') ||
+    message.includes('econnrefused')
+  );
+}
+
+function getRetryDelayMs(attempt: number, status?: number): number {
+  const safeAttempt = Math.max(1, attempt);
+  const baseDelay =
+    status === 429 ? RETRY_BASE_DELAY_MS * 2 : RETRY_BASE_DELAY_MS;
+  const exponential = Math.min(
+    RETRY_MAX_DELAY_MS,
+    baseDelay * Math.pow(2, safeAttempt - 1),
+  );
+  const jitter = Math.floor(Math.random() * 125);
+  return exponential + jitter;
+}
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function logFitInfo(event: string, details?: Record<string, unknown>): void {
   if (!FIT_DEBUG_LOGS) return;
@@ -1774,26 +1820,50 @@ async function baserowPatchRow(
   rowId: number,
   patch: Record<string, unknown>,
 ): Promise<void> {
-  const response = await fetch(
-    `${baserowUrl}/database/rows/table/${tableId}/${rowId}/`,
-    {
-      method: 'PATCH',
-      headers: {
-        Authorization: `JWT ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(patch),
-      cache: 'no-store',
-    },
-  );
+  let lastError: unknown = null;
 
-  if (!response.ok) {
+  for (let attempt = 1; attempt <= MAX_TRANSIENT_RETRY_ATTEMPTS; attempt += 1) {
+    const response = await fetch(
+      `${baserowUrl}/database/rows/table/${tableId}/${rowId}/`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `JWT ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(patch),
+        cache: 'no-store',
+      },
+    );
+
+    if (response.ok) {
+      return;
+    }
+
     const errorText = await response.text().catch(() => '');
-    throw new BaserowRequestError(
+    const requestError = new BaserowRequestError(
       `Baserow PATCH failed for table ${tableId} row ${rowId} (${response.status}) ${errorText}`,
       response.status,
     );
+
+    lastError = requestError;
+
+    if (
+      attempt < MAX_TRANSIENT_RETRY_ATTEMPTS &&
+      isRetryableStatus(response.status)
+    ) {
+      const delayMs = getRetryDelayMs(attempt, response.status);
+      console.warn(
+        `[generate-scene-tts-by-field] transient PATCH error for table ${tableId} row ${rowId} (status=${response.status}, attempt=${attempt}/${MAX_TRANSIENT_RETRY_ATTEMPTS}). Retrying in ${delayMs}ms...`,
+      );
+      await sleepMs(delayMs);
+      continue;
+    }
+
+    throw requestError;
   }
+
+  throw (lastError as Error) ?? new Error('Baserow PATCH failed');
 }
 
 async function patchSceneAudioWithAuthRetry(options: {
@@ -1929,49 +1999,98 @@ async function generateSceneTts(options: {
     dispatcher: TTS_PROVIDER_FETCH_DISPATCHER,
   };
 
-  const response = await fetch(`${origin}${providerPath}`, providerRequestInit);
+  let lastError: unknown = null;
 
-  const json = (await response.json().catch(() => null)) as {
-    error?: unknown;
-    audioUrl?: unknown;
-  } | null;
+  for (let attempt = 1; attempt <= MAX_TRANSIENT_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        TTS_REQUEST_TIMEOUT_MS,
+      );
 
-  if (!response.ok) {
-    const message =
-      typeof json?.error === 'string' && json.error.trim()
-        ? json.error.trim()
-        : `TTS provider failed (${response.status})`;
+      const response = await fetch(`${origin}${providerPath}`, {
+        ...providerRequestInit,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
-    logFitError('generateSceneTts:error-response', {
-      sceneId,
-      videoId,
-      providerPath,
-      status: response.status,
-      message,
-    });
+      const json = (await response.json().catch(() => null)) as {
+        error?: unknown;
+        audioUrl?: unknown;
+      } | null;
 
-    throw new Error(message);
+      if (!response.ok) {
+        const message =
+          typeof json?.error === 'string' && json.error.trim()
+            ? json.error.trim()
+            : `TTS provider failed (${response.status})`;
+
+        const retryable = isRetryableStatus(response.status);
+        const statusError = new Error(message);
+        lastError = statusError;
+
+        if (retryable && attempt < MAX_TRANSIENT_RETRY_ATTEMPTS) {
+          const delayMs = getRetryDelayMs(attempt, response.status);
+          console.warn(
+            `[generate-scene-tts-by-field] transient TTS error for scene ${sceneId} (status=${response.status}, attempt=${attempt}/${MAX_TRANSIENT_RETRY_ATTEMPTS}). Retrying in ${delayMs}ms...`,
+          );
+          await sleepMs(delayMs);
+          continue;
+        }
+
+        logFitError('generateSceneTts:error-response', {
+          sceneId,
+          videoId,
+          providerPath,
+          status: response.status,
+          message,
+          attempt,
+        });
+
+        throw statusError;
+      }
+
+      const audioUrl =
+        typeof json?.audioUrl === 'string' ? json.audioUrl.trim() : '';
+      if (!audioUrl) {
+        const emptyAudioError = new Error(
+          'TTS provider returned empty audioUrl',
+        );
+        lastError = emptyAudioError;
+        if (attempt < MAX_TRANSIENT_RETRY_ATTEMPTS) {
+          const delayMs = getRetryDelayMs(attempt);
+          await sleepMs(delayMs);
+          continue;
+        }
+        throw emptyAudioError;
+      }
+
+      logFitInfo('generateSceneTts:done', {
+        sceneId,
+        videoId,
+        providerPath,
+        audioUrl,
+      });
+
+      return audioUrl;
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableNetworkError(error);
+      if (retryable && attempt < MAX_TRANSIENT_RETRY_ATTEMPTS) {
+        const delayMs = getRetryDelayMs(attempt);
+        console.warn(
+          `[generate-scene-tts-by-field] transient network TTS error for scene ${sceneId} (attempt=${attempt}/${MAX_TRANSIENT_RETRY_ATTEMPTS}). Retrying in ${delayMs}ms...`,
+        );
+        await sleepMs(delayMs);
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  const audioUrl =
-    typeof json?.audioUrl === 'string' ? json.audioUrl.trim() : '';
-  if (!audioUrl) {
-    logFitError('generateSceneTts:error-empty-audio-url', {
-      sceneId,
-      videoId,
-      providerPath,
-    });
-    throw new Error('TTS provider returned empty audioUrl');
-  }
-
-  logFitInfo('generateSceneTts:done', {
-    sceneId,
-    videoId,
-    providerPath,
-    audioUrl,
-  });
-
-  return audioUrl;
+  throw (lastError as Error) ?? new Error('TTS generation failed');
 }
 
 export async function POST(request: NextRequest) {
@@ -2138,7 +2257,7 @@ export async function POST(request: NextRequest) {
       body?.skipIfDestinationExists,
       true,
     );
-    const failFastOnSaveError = parseBoolean(body?.failFastOnSaveError, true);
+    const failFastOnSaveError = parseBoolean(body?.failFastOnSaveError, false);
 
     const onlySceneIdSet = Array.isArray(body?.onlySceneIds)
       ? new Set(
@@ -2283,6 +2402,7 @@ export async function POST(request: NextRequest) {
         failures.push({
           sceneId,
           error: `Missing/invalid duration in ${sceneDurationFieldKey}`,
+          category: 'invalid_scene_duration',
         });
 
         logFitInfo('post:scene-skip-missing-duration', {
@@ -2393,6 +2513,7 @@ export async function POST(request: NextRequest) {
             failures.push({
               sceneId,
               error: saveMessage,
+              category: 'baserow_save',
             });
 
             logFitError('post:scene-silence-save-error', {
@@ -2419,6 +2540,7 @@ export async function POST(request: NextRequest) {
           failures.push({
             sceneId,
             error: `Silent audio generation failed: ${message}`,
+            category: 'silent_audio_generation',
           });
 
           logFitError('post:scene-silence-error', {
@@ -2476,6 +2598,7 @@ export async function POST(request: NextRequest) {
             failures.push({
               sceneId,
               error: `Failed to save original audio to ${originalAudioFieldKey}: ${saveMessage}`,
+              category: 'baserow_save',
             });
 
             logFitError('post:scene-save-original-error', {
@@ -2561,6 +2684,7 @@ export async function POST(request: NextRequest) {
           failures.push({
             sceneId,
             error: saveMessage,
+            category: 'baserow_save',
           });
 
           logFitError('post:scene-save-error', {
@@ -2587,6 +2711,7 @@ export async function POST(request: NextRequest) {
         failures.push({
           sceneId,
           error: message,
+          category: 'tts_generation',
         });
 
         logFitError('post:scene-error', {
@@ -2649,6 +2774,15 @@ export async function POST(request: NextRequest) {
       skippedInvalidSceneIdCount,
       failureCount: failures.length,
       failures: failures.slice(0, 30),
+      failedSceneIds: failures.slice(0, 30).map((failure) => failure.sceneId),
+      failuresByCategory: failures.reduce<Record<string, number>>(
+        (acc, failure) => {
+          const key = failure.category || 'unknown';
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        },
+        {},
+      ),
     });
   } catch (error) {
     console.error('[generate-scene-tts-by-field] error:', error);

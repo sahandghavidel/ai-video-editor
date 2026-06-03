@@ -4262,16 +4262,50 @@ export default function BatchOperations({
       const payload = (await res.json().catch(() => null)) as {
         error?: unknown;
         details?: unknown;
+        failureCount?: unknown;
+        failedSceneIds?: unknown;
+        step?: unknown;
       } | null;
 
       if (!res.ok) {
-        const details = Array.isArray(payload?.details)
+        const detailEntries = Array.isArray(payload?.details)
           ? payload.details
               .map((item) => String(item))
               .filter(Boolean)
               .slice(0, 5)
-              .join(' | ')
-          : '';
+          : [];
+
+        const failureCountRaw =
+          typeof payload?.failureCount === 'number'
+            ? payload.failureCount
+            : typeof payload?.failureCount === 'string'
+              ? Number(payload.failureCount)
+              : Number.NaN;
+
+        const failureCount = Number.isFinite(failureCountRaw)
+          ? Math.max(0, Math.trunc(failureCountRaw))
+          : 0;
+
+        const failedSceneIds = Array.isArray(payload?.failedSceneIds)
+          ? payload.failedSceneIds
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value) && value > 0)
+              .slice(0, 20)
+          : [];
+
+        if (failureCount > 0) {
+          detailEntries.unshift(`failed scenes: ${failureCount}`);
+        }
+
+        if (failedSceneIds.length > 0) {
+          detailEntries.push(`scene IDs: ${failedSceneIds.join(', ')}`);
+        }
+
+        if (typeof payload?.step === 'string' && payload.step.trim()) {
+          detailEntries.push(`step: ${payload.step.trim()}`);
+        }
+
+        const details = detailEntries.join(' | ');
         const message =
           typeof payload?.error === 'string' && payload.error.trim()
             ? payload.error.trim()
