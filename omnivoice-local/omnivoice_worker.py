@@ -255,6 +255,13 @@ def main() -> int:
         )
         prompt_cache: "OrderedDict[str, Any]" = OrderedDict()
 
+        # Generation counter for automatic reload
+        max_generations = max(
+            1,
+            int(os.environ.get("OMNIVOICE_MAX_GENERATIONS_BEFORE_RELOAD", "10")),
+        )
+        generation_count = 0
+
         if cache_log_enabled:
             _log(
                 "ready "
@@ -342,27 +349,43 @@ def main() -> int:
                 sample_rate = 24000
                 torchaudio.save(str(output_path), audio[0].detach().cpu(), sample_rate)
 
+                # Increment generation counter
+                generation_count += 1
+
                 if cache_log_enabled:
                     _log(
                         f"job={job_id} cache={'HIT' if cache_hit else 'MISS'} "
                         f"cache_entries={len(prompt_cache)} "
                         f"prompt_ms={prompt_ms:.1f} gen_ms={generate_ms:.1f} "
                         f"postprocess_output={postprocess_output} "
-                        f"ref={reference_audio.name}"
+                        f"ref={reference_audio.name} "
+                        f"generation_count={generation_count}/{max_generations}"
                     )
 
-                _write_response(
-                    {
-                        "id": job_id,
-                        "ok": True,
-                        "sample_rate": sample_rate,
-                        "output_path": str(output_path),
-                        "cache_hit": cache_hit,
-                        "prompt_cache_size": len(prompt_cache),
-                        "prompt_ms": round(prompt_ms, 3),
-                        "generate_ms": round(generate_ms, 3),
-                    }
-                )
+                # Log progress every few generations
+                if generation_count % 5 == 0 or generation_count == 1:
+                    _log(f"Generation progress: {generation_count}/{max_generations}")
+
+                # Check if we've reached the generation limit
+                reload_needed = generation_count >= max_generations
+
+                response = {
+                    "id": job_id,
+                    "ok": True,
+                    "sample_rate": sample_rate,
+                    "output_path": str(output_path),
+                    "cache_hit": cache_hit,
+                    "prompt_cache_size": len(prompt_cache),
+                    "prompt_ms": round(prompt_ms, 3),
+                    "generate_ms": round(generate_ms, 3),
+                }
+
+                if reload_needed:
+                    response["reload_needed"] = True
+                    if cache_log_enabled:
+                        _log(f"job={job_id} reload_needed=true (generation_count={generation_count}/{max_generations})")
+
+                _write_response(response)
             except Exception as exc:  # pylint: disable=broad-except
                 _write_response({"id": job_id, "ok": False, "error": str(exc)})
 

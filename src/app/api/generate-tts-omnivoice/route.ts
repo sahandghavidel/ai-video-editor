@@ -1432,6 +1432,7 @@ function startOmniVoiceWorker(input: {
         prompt_cache_size?: number;
         prompt_ms?: number;
         generate_ms?: number;
+        reload_needed?: boolean;
       };
 
       try {
@@ -1444,6 +1445,7 @@ function startOmniVoiceWorker(input: {
           prompt_cache_size?: number;
           prompt_ms?: number;
           generate_ms?: number;
+          reload_needed?: boolean;
         };
       } catch {
         continue;
@@ -1466,6 +1468,14 @@ function startOmniVoiceWorker(input: {
           promptMs: Math.max(0, Number(parsed.prompt_ms || 0)),
           generateMs: Math.max(0, Number(parsed.generate_ms || 0)),
         });
+
+        // Check if worker needs to be killed and restarted
+        if (parsed.reload_needed) {
+          console.info(
+            '[OmniVoice] Generation count reached, killing worker to unload model...',
+          );
+          stopOmniVoiceWorker('generation-count-reached');
+        }
       } else {
         pending.reject(
           new Error(parsed.error || 'OmniVoice worker returned failure'),
