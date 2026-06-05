@@ -1125,6 +1125,7 @@ export async function POST(request: NextRequest) {
           destinationVideoAudioFieldKey: finalDubbedAudioFieldKey,
           sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
           requireAudioForDurationScenes: true,
+          language: selectedLanguageReference.language,
         }),
         dispatcher: STEP2_FETCH_DISPATCHER,
       } as RequestInit & { dispatcher: Agent },
@@ -1278,7 +1279,7 @@ export async function POST(request: NextRequest) {
           step4SilencePaddedSec = silenceDurationSec;
 
           // Re-upload padded audio and update Baserow.
-          const paddedFilename = `video_${videoId}_dubbed_audio_padded_to_video_${Date.now()}.wav`;
+          const paddedFilename = `video_${videoId}_merged_${selectedLanguageReference.language}_padded_to_video_${Date.now()}.wav`;
           const paddedUrl = await uploadToMinio(
             paddedPath,
             paddedFilename,

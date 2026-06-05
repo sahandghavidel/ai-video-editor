@@ -878,6 +878,7 @@ export async function POST(request: NextRequest) {
       sceneDurationFieldKey?: unknown;
       requireAudioForDurationScenes?: unknown;
       skipIfDestinationExists?: unknown;
+      language?: unknown;
     } | null;
 
     const videoId = parsePositiveInt(body?.videoId);
@@ -1125,7 +1126,11 @@ export async function POST(request: NextRequest) {
       tempFiles.push(alignedMerged.localPath);
     }
 
-    const finalFilename = `video_${videoId}_merged_${sourceSceneAudioFieldKey}_${Date.now()}.wav`;
+    const languageSuffix =
+      typeof body?.language === 'string' && body.language.trim()
+        ? `${body.language.trim()}_`
+        : '';
+    const finalFilename = `video_${videoId}_merged_${languageSuffix}${sourceSceneAudioFieldKey}_${Date.now()}.wav`;
     const finalDubbedAudioUrl = await uploadToMinio(
       alignedMerged.localPath,
       finalFilename,
