@@ -805,13 +805,14 @@ async function createAndUploadSilentSceneAudio(options: {
   sceneId: number;
   videoId: number;
   targetDurationSec: number;
+  language?: string;
 }): Promise<{
   uploadUrl: string;
   inputDurationSec: number;
   outputDurationSec: number;
   speedApplied: number;
 }> {
-  const { sceneId, videoId, targetDurationSec } = options;
+  const { sceneId, videoId, targetDurationSec, language } = options;
 
   const silentSourcePath = await createSilenceAudioToDurationLocal({
     sceneId,
@@ -825,6 +826,7 @@ async function createAndUploadSilentSceneAudio(options: {
       sceneId,
       videoId,
       targetDurationSec,
+      language,
     });
   } finally {
     await safeUnlink(silentSourcePath);
@@ -1597,13 +1599,14 @@ async function fitAndUploadSceneAudio(options: {
   sceneId: number;
   videoId: number;
   targetDurationSec: number;
+  language?: string;
 }): Promise<{
   uploadUrl: string;
   inputDurationSec: number;
   outputDurationSec: number;
   speedApplied: number;
 }> {
-  const { audioUrl, sceneId, videoId, targetDurationSec } = options;
+  const { audioUrl, sceneId, videoId, targetDurationSec, language } = options;
   const startedAt = Date.now();
 
   logFitInfo('fitAndUploadSceneAudio:start', {
@@ -1636,7 +1639,8 @@ async function fitAndUploadSceneAudio(options: {
     });
 
     if (SAVE_FITTED_AUDIO_AS_WAV) {
-      const filename = `video_${videoId}_scene_${sceneId}_dubbed_fitted_${Date.now()}.wav`;
+      const langSegment = language ? `_${language}` : '';
+      const filename = `video_${videoId}_dubbed${langSegment}_scene_${sceneId}_${Date.now()}.wav`;
 
       logFitInfo('fitAndUploadSceneAudio:wav-upload-start', {
         sceneId,
@@ -1699,7 +1703,8 @@ async function fitAndUploadSceneAudio(options: {
       correctedSpeedApplied: uploadCorrected.speedApplied,
     });
 
-    const filename = `video_${videoId}_scene_${sceneId}_dubbed_fitted_${Date.now()}.m4a`;
+    const langSegmentM4a = language ? `_${language}` : '';
+    const filename = `video_${videoId}_dubbed${langSegmentM4a}_scene_${sceneId}_${Date.now()}.m4a`;
     const uploadUrl = await uploadToMinio(
       uploadLocalPath,
       filename,
@@ -2103,6 +2108,7 @@ export async function POST(request: NextRequest) {
       sourceTextFieldKey?: unknown;
       destinationAudioFieldKey?: unknown;
       originalAudioFieldKey?: unknown;
+      language?: unknown;
       createSilenceForEmptySentence?: unknown;
       emptySentenceFieldKey?: unknown;
       sceneDurationFieldKey?: unknown;
@@ -2252,6 +2258,19 @@ export async function POST(request: NextRequest) {
       body?.ttsSettings && typeof body.ttsSettings === 'object'
         ? (body.ttsSettings as Record<string, unknown>)
         : undefined;
+
+    const language =
+      (typeof body?.language === 'string' && body.language.trim()) ||
+      (ttsSettings?.omniVoice &&
+      typeof ttsSettings.omniVoice === 'object' &&
+      typeof (ttsSettings.omniVoice as Record<string, unknown>).language ===
+        'string'
+        ? (
+            (ttsSettings.omniVoice as Record<string, unknown>)
+              .language as string
+          ).trim()
+        : '') ||
+      '';
 
     const skipIfDestinationExists = parseBoolean(
       body?.skipIfDestinationExists,
@@ -2469,6 +2488,7 @@ export async function POST(request: NextRequest) {
             sceneId,
             videoId,
             targetDurationSec,
+            language,
           });
 
           fittedCount += 1;
@@ -2640,6 +2660,7 @@ export async function POST(request: NextRequest) {
             sceneId,
             videoId,
             targetDurationSec,
+            language,
           });
 
           audioUrl = fitted.uploadUrl;

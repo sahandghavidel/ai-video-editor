@@ -1976,11 +1976,12 @@ export async function POST(request: NextRequest) {
     }
 
     const timestamp = Date.now();
+    const langSegment = language ? `_${language}` : '';
     const filename = hasVideoId
       ? hasSceneId
-        ? `video_${body.videoId}_scene_${body.sceneId}_omnivoice_tts_${timestamp}.wav`
-        : `video_${body.videoId}_omnivoice_tts_${timestamp}.wav`
-      : `scene_${body.sceneId}_omnivoice_tts_${timestamp}.wav`;
+        ? `video_${body.videoId}_tts_original${langSegment}_scene_${body.sceneId}_${timestamp}.wav`
+        : `video_${body.videoId}_tts_original${langSegment}_${timestamp}.wav`
+      : `scene_${body.sceneId}_tts_original${langSegment}_${timestamp}.wav`;
 
     const { baseUrl: minioBaseUrl, bucket: minioBucket } =
       await ensureMinioRunning();
