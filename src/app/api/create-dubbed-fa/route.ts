@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Agent } from 'undici';
+import { spawn } from 'child_process';
+import path from 'path';
+import { access, unlink, writeFile } from 'fs/promises';
+import { uploadToMinio } from '@/utils/ffmpeg-direct';
 import { parseSrtSegments } from '@/utils/captions-parser';
 import {
   loadTtsAudioReferencesStore,
@@ -44,6 +48,14 @@ const STEP2_FETCH_DISPATCHER = new Agent({
 
 const MAX_TIMESTAMP_DELTA_SEC = 0.05;
 
+const VIDEO_UPLOADED_DURATION_FIELD_KEY = 'field_6909';
+const VIDEO_UPLOADED_URL_FIELD_KEY = 'field_6881';
+const AUDIO_SAMPLE_RATE = 48000;
+const AUDIO_CHANNELS = 2;
+const TIME_DECIMALS = 6;
+const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_FFPROBE_TIMEOUT_MS = 2 * 60 * 1000;
+
 type BaserowRow = Record<string, unknown>;
 
 type BaserowListResponse = {
@@ -72,6 +84,26 @@ type ResolvedAudioReference = {
   source: 'store-default-language' | 'store-first-language' | 'fallback';
 };
 
+type FFprobeStream = {
+  codec_type?: unknown;
+  duration?: string | number;
+  sample_rate?: string | number;
+  nb_samples?: string | number;
+  duration_ts?: string | number;
+  time_base?: unknown;
+};
+
+type FFprobeOutput = {
+  format?: { duration?: string | number };
+  streams?: FFprobeStream[];
+};
+
+type AudioProbeMetrics = {
+  durationSec: number;
+  sampleRate: number;
+  sampleCount: number;
+};
+
 function parsePositiveInt(value: unknown): number | null {
   const parsed =
     typeof value === 'number'
@@ -96,6 +128,261 @@ function parseNumberish(value: unknown): number {
   }
 
   return Number.NaN;
+}
+
+function parsePositiveNumber(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : Number.NaN;
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatSeconds(value: number): string {
+  return value.toFixed(TIME_DECIMALS);
+}
+
+function roundDurationSeconds(value: number): number {
+  if (!Number.isFinite(value)) return value;
+  return Number(value.toFixed(TIME_DECIMALS));
+}
+
+function secondsToSamples(seconds: number, sampleRate: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(
+      `Invalid duration seconds for sample conversion: ${seconds}`,
+    );
+  }
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0) {
+    throw new Error(`Invalid sample rate for sample conversion: ${sampleRate}`);
+  }
+  return Math.max(1, Math.round(seconds * sampleRate));
+}
+
+function samplesToSeconds(sampleCount: number, sampleRate: number): number {
+  if (!Number.isInteger(sampleCount) || sampleCount <= 0) {
+    throw new Error(
+      `Invalid sample count for duration conversion: ${sampleCount}`,
+    );
+  }
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0) {
+    throw new Error(
+      `Invalid sample rate for duration conversion: ${sampleRate}`,
+    );
+  }
+  return sampleCount / sampleRate;
+}
+
+function parseTimeBase(value: unknown): number | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const [numeratorRaw, denominatorRaw] = value.trim().split('/');
+  if (!numeratorRaw || !denominatorRaw) {
+    return null;
+  }
+  const numerator = Number(numeratorRaw);
+  const denominator = Number(denominatorRaw);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator)) {
+    return null;
+  }
+  if (denominator <= 0) {
+    return null;
+  }
+  const timeBase = numerator / denominator;
+  return Number.isFinite(timeBase) && timeBase > 0 ? timeBase : null;
+}
+
+function parsePositiveRoundedInt(value: unknown): number | null {
+  const parsed = parseNumberish(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  const rounded = Math.round(parsed);
+  return rounded > 0 ? rounded : null;
+}
+
+function makeTempPath(prefix: string, extension: string): string {
+  const safeExt = extension.replace(/^\./, '');
+  return path.resolve(
+    '/tmp',
+    `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${safeExt}`,
+  );
+}
+
+async function safeUnlink(filePath?: string | null): Promise<void> {
+  if (!filePath) return;
+  try {
+    await unlink(filePath);
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
+async function runCommand(
+  command: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(
+          new Error(
+            `${command} exited with code ${code}: ${stderr.slice(0, 500)}`,
+          ),
+        );
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+async function probeAudioMetrics(input: string): Promise<AudioProbeMetrics> {
+  const { stdout } = await runCommand(
+    'ffprobe',
+    [
+      '-v',
+      'quiet',
+      '-print_format',
+      'json',
+      '-show_format',
+      '-show_streams',
+      input,
+    ],
+    DEFAULT_FFPROBE_TIMEOUT_MS,
+  );
+
+  const parsed = (JSON.parse(stdout) ?? {}) as FFprobeOutput;
+  const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+  const audioStream =
+    streams.find((stream) => stream?.codec_type === 'audio') ??
+    streams[0] ??
+    null;
+
+  const sampleRate =
+    parsePositiveInt(audioStream?.sample_rate) ?? AUDIO_SAMPLE_RATE;
+
+  let sampleCount = parsePositiveRoundedInt(audioStream?.nb_samples);
+
+  if (!sampleCount) {
+    const durationTs = parseNumberish(audioStream?.duration_ts);
+    const timeBase = parseTimeBase(audioStream?.time_base);
+    if (Number.isFinite(durationTs) && durationTs > 0 && timeBase) {
+      const durationFromTsSec = durationTs * timeBase;
+      if (Number.isFinite(durationFromTsSec) && durationFromTsSec > 0) {
+        sampleCount = secondsToSamples(durationFromTsSec, sampleRate);
+      }
+    }
+  }
+
+  if (!sampleCount) {
+    const streamDurationSec = parseNumberish(audioStream?.duration);
+    if (Number.isFinite(streamDurationSec) && streamDurationSec > 0) {
+      sampleCount = secondsToSamples(streamDurationSec, sampleRate);
+    }
+  }
+
+  if (!sampleCount) {
+    const formatDurationSec = parseNumberish(parsed.format?.duration);
+    if (Number.isFinite(formatDurationSec) && formatDurationSec > 0) {
+      sampleCount = secondsToSamples(formatDurationSec, sampleRate);
+    }
+  }
+
+  if (!sampleCount) {
+    throw new Error('Unable to determine media duration via ffprobe');
+  }
+
+  const durationSec = samplesToSeconds(sampleCount, sampleRate);
+  return {
+    durationSec: roundDurationSeconds(durationSec),
+    sampleRate,
+    sampleCount,
+  };
+}
+
+async function appendSilenceToAudioLocal(options: {
+  videoId: number;
+  inputPath: string;
+  silenceDurationSec: number;
+}): Promise<string> {
+  const { videoId, inputPath, silenceDurationSec } = options;
+
+  const outputPath = makeTempPath(
+    `video_${videoId}_dubbed_audio_pad_to_video`,
+    'wav',
+  );
+
+  await runCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-f',
+      'lavfi',
+      '-t',
+      formatSeconds(silenceDurationSec),
+      '-i',
+      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-filter_complex',
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      outputPath,
+    ],
+    DEFAULT_FFMPEG_TIMEOUT_MS,
+  );
+
+  await access(outputPath);
+  return outputPath;
 }
 
 function getSceneOrderValue(scene: BaserowRow): number {
@@ -878,9 +1165,151 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Step 4: Pad dubbed audio with silence if shorter than the full video ──
+
+    const step4TempFiles: string[] = [];
+    let step4VideoDurationSec = 0;
+    let step4DubbedAudioDurationSec = 0;
+    let step4SilencePaddedSec = 0;
+    let step4FinalDubbedAudioUrl: string | null =
+      typeof step3Payload?.finalDubbedAudioUrl === 'string'
+        ? step3Payload.finalDubbedAudioUrl
+        : null;
+
+    try {
+      // Resolve full video duration from Baserow (field_6909), probe if missing.
+      let videoDurationSec = parsePositiveNumber(
+        videoRow[VIDEO_UPLOADED_DURATION_FIELD_KEY],
+      );
+
+      if (!videoDurationSec) {
+        const uploadedVideoUrl = extractUrl(
+          videoRow[VIDEO_UPLOADED_URL_FIELD_KEY],
+        );
+        if (uploadedVideoUrl) {
+          try {
+            const probed = await probeAudioMetrics(uploadedVideoUrl);
+            videoDurationSec = roundDurationSeconds(probed.durationSec);
+
+            if (videoDurationSec && videoDurationSec > 0) {
+              await baserowPatchRow(
+                baserowUrl,
+                token,
+                VIDEOS_TABLE_ID,
+                videoId,
+                {
+                  [VIDEO_UPLOADED_DURATION_FIELD_KEY]: videoDurationSec,
+                },
+              );
+            }
+          } catch (probeError) {
+            console.warn(
+              `[create-dubbed-fa] Step 4: Could not probe video duration for video ${videoId}:`,
+              probeError,
+            );
+          }
+        }
+      }
+
+      step4VideoDurationSec = videoDurationSec ?? 0;
+
+      if (
+        !videoDurationSec ||
+        videoDurationSec <= 0 ||
+        !step4FinalDubbedAudioUrl
+      ) {
+        console.warn(
+          `[create-dubbed-fa] Step 4: Skipping — videoDurationSec=${videoDurationSec ?? 'null'}, finalDubbedAudioUrl=${step4FinalDubbedAudioUrl ?? 'null'}`,
+        );
+      } else {
+        // Download merged dubbed audio to a temp file so we can probe & modify it locally.
+        const downloadResponse = await fetch(step4FinalDubbedAudioUrl);
+        if (!downloadResponse.ok) {
+          throw new Error(
+            `Step 4: Failed to download merged dubbed audio (${downloadResponse.status})`,
+          );
+        }
+
+        const downloadedPath = makeTempPath(
+          `video_${videoId}_dubbed_audio_step4_download`,
+          'wav',
+        );
+        step4TempFiles.push(downloadedPath);
+
+        const buffer = Buffer.from(await downloadResponse.arrayBuffer());
+        await writeFile(downloadedPath, buffer);
+
+        // Probe the downloaded audio.
+        const dubbedMetrics = await probeAudioMetrics(downloadedPath);
+        step4DubbedAudioDurationSec = dubbedMetrics.durationSec;
+
+        const targetDurationSec = roundDurationSeconds(videoDurationSec);
+        const targetSamples = secondsToSamples(
+          targetDurationSec,
+          dubbedMetrics.sampleRate,
+        );
+        const deltaSamples = dubbedMetrics.sampleCount - targetSamples;
+
+        if (deltaSamples >= 0) {
+          // Dubbed audio is already ≥ video duration — nothing to do.
+          console.log(
+            `[create-dubbed-fa] Step 4: Dubbed audio (${dubbedMetrics.durationSec}s) ≥ video (${targetDurationSec}s) — no padding needed.`,
+          );
+        } else {
+          // Dubbed audio is shorter — append silence to reach video duration.
+          const silenceDurationSec = samplesToSeconds(
+            Math.abs(deltaSamples),
+            dubbedMetrics.sampleRate,
+          );
+
+          console.log(
+            `[create-dubbed-fa] Step 4: Dubbed audio (${dubbedMetrics.durationSec}s) < video (${targetDurationSec}s) — appending ${silenceDurationSec.toFixed(TIME_DECIMALS)}s of silence.`,
+          );
+
+          const paddedPath = await appendSilenceToAudioLocal({
+            videoId,
+            inputPath: downloadedPath,
+            silenceDurationSec,
+          });
+          step4TempFiles.push(paddedPath);
+
+          // Verify padded audio matches target.
+          const paddedMetrics = await probeAudioMetrics(paddedPath);
+          step4SilencePaddedSec = silenceDurationSec;
+
+          // Re-upload padded audio and update Baserow.
+          const paddedFilename = `video_${videoId}_dubbed_audio_padded_to_video_${Date.now()}.wav`;
+          const paddedUrl = await uploadToMinio(
+            paddedPath,
+            paddedFilename,
+            'audio/wav',
+          );
+
+          await baserowPatchRow(baserowUrl, token, VIDEOS_TABLE_ID, videoId, {
+            [finalDubbedAudioFieldKey]: paddedUrl,
+          });
+
+          step4FinalDubbedAudioUrl = paddedUrl;
+
+          console.log(
+            `[create-dubbed-fa] Step 4: Padded audio saved. Final duration: ${paddedMetrics.durationSec}s (target: ${targetDurationSec}s, delta: ${paddedMetrics.sampleCount - targetSamples} samples).`,
+          );
+        }
+      }
+    } catch (step4Error) {
+      // Step 4 failure should not abort the overall pipeline — Steps 1–3 already succeeded.
+      console.error(`[create-dubbed-fa] Step 4 error (non-fatal):`, step4Error);
+    } finally {
+      for (const filePath of step4TempFiles) {
+        await safeUnlink(filePath);
+      }
+    }
+
+    // ── Final response ──
+
     return NextResponse.json({
       ok: true,
-      step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio-and-step-3-merge-save-final-dubbed-audio',
+      step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio-and-step-3-merge-save-final-dubbed-audio-and-step-4-pad-to-video-duration',
       videoId,
       language: selectedLanguageReference.language,
       step1: {
@@ -954,10 +1383,13 @@ export async function POST(request: NextRequest) {
           step3Payload?.mergedOutputDeltaSamples ?? 0,
         ),
         mergeCorrectionPasses: Number(step3Payload?.mergeCorrectionPasses ?? 0),
-        finalDubbedAudioUrl:
-          typeof step3Payload?.finalDubbedAudioUrl === 'string'
-            ? step3Payload.finalDubbedAudioUrl
-            : null,
+        finalDubbedAudioUrl: step4FinalDubbedAudioUrl,
+      },
+      step4: {
+        videoDurationSec: step4VideoDurationSec,
+        dubbedAudioDurationSec: step4DubbedAudioDurationSec,
+        silencePaddedSec: step4SilencePaddedSec,
+        finalDubbedAudioUrl: step4FinalDubbedAudioUrl,
       },
     });
   } catch (error) {
