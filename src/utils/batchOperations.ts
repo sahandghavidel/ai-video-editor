@@ -442,6 +442,162 @@ export const handleConcatenateAllVideos = async (
   }
 };
 
+// Batch operation: Merge final dubbed audio across videos for each language
+export const handleMergeAllDubbedAudio = async (
+  videos: BaserowRow[],
+  languages: string[],
+  finalAudioFieldByLanguage: Record<string, string>,
+  startBatchOperation: () => void,
+  completeBatchOperation: () => void,
+  setMergedDubbedAudio: (
+    languageCode: string,
+    url: string,
+    fileName?: string,
+  ) => void,
+  onLanguageComplete?: (language: string, success: boolean) => void,
+) => {
+  startBatchOperation();
+
+  try {
+    for (const languageCode of languages) {
+      const destinationFieldKey = finalAudioFieldByLanguage[languageCode];
+      if (!destinationFieldKey) {
+        console.warn(
+          `[MERGE AUDIO] No destination field key for language ${languageCode}, skipping`,
+        );
+        continue;
+      }
+
+      // Filter videos that have a final dubbed audio URL for this language
+      const videosWithAudio = videos
+        .filter((video) => {
+          const fieldValue = (video as Record<string, unknown>)[
+            destinationFieldKey
+          ];
+          if (!fieldValue) return false;
+
+          // Extract URL from various field formats
+          const url =
+            typeof fieldValue === 'string'
+              ? fieldValue.trim()
+              : typeof fieldValue === 'object' && fieldValue !== null
+                ? String(
+                    (fieldValue as Record<string, unknown>).url ||
+                      (fieldValue as Record<string, unknown>).value ||
+                      '',
+                  ).trim()
+                : '';
+          return url.length > 0;
+        })
+        .sort((a, b) => {
+          const orderA = Number(a.field_6902) || 0;
+          const orderB = Number(b.field_6902) || 0;
+          return orderA - orderB;
+        });
+
+      if (videosWithAudio.length === 0) {
+        console.log(
+          `[MERGE AUDIO] No videos with dubbed audio for language ${languageCode}`,
+        );
+        onLanguageComplete?.(languageCode, false);
+        continue;
+      }
+
+      if (videosWithAudio.length === 1) {
+        // Only one video — just use its URL directly
+        const singleUrl =
+          typeof videosWithAudio[0][destinationFieldKey] === 'string'
+            ? (videosWithAudio[0][destinationFieldKey] as string).trim()
+            : '';
+        if (singleUrl) {
+          const dateStr = new Date().toISOString().split('T')[0];
+          setMergedDubbedAudio(
+            languageCode,
+            singleUrl,
+            `merged-audio-${languageCode}-${dateStr}.wav`,
+          );
+          console.log(
+            `[MERGE AUDIO] Single video for ${languageCode}, using URL directly`,
+          );
+        }
+        onLanguageComplete?.(languageCode, true);
+        continue;
+      }
+
+      // Extract audio URLs in order
+      const audioUrls = videosWithAudio
+        .map((video) => {
+          const fieldValue = video[destinationFieldKey];
+          if (typeof fieldValue === 'string') return fieldValue.trim();
+          if (typeof fieldValue === 'object' && fieldValue !== null) {
+            const obj = fieldValue as Record<string, unknown>;
+            return String(obj.url || obj.value || '').trim();
+          }
+          return '';
+        })
+        .filter(Boolean);
+
+      if (audioUrls.length === 0) {
+        console.warn(
+          `[MERGE AUDIO] No audio URLs extracted for language ${languageCode}`,
+        );
+        onLanguageComplete?.(languageCode, false);
+        continue;
+      }
+
+      console.log(
+        `[MERGE AUDIO] Merging ${audioUrls.length} audio files for language ${languageCode}`,
+      );
+
+      try {
+        const response = await fetch('/api/concat-audio-fast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audio_urls: audioUrls,
+            id: `merged_audio_${languageCode}_${Date.now()}`,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Audio concat error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            // ignore parse error
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        const mergedUrl = result.audioUrl;
+        const dateStr = new Date().toISOString().split('T')[0];
+
+        setMergedDubbedAudio(
+          languageCode,
+          mergedUrl,
+          `merged-audio-${languageCode}-${dateStr}.wav`,
+        );
+
+        console.log(
+          `[MERGE AUDIO] Successfully merged audio for language ${languageCode}: ${mergedUrl}`,
+        );
+        onLanguageComplete?.(languageCode, true);
+      } catch (error) {
+        console.error(
+          `[MERGE AUDIO] Failed to merge audio for language ${languageCode}:`,
+          error,
+        );
+        onLanguageComplete?.(languageCode, false);
+      }
+    }
+  } finally {
+    completeBatchOperation();
+    playSuccessSound();
+  }
+};
+
 // Batch operation: Speed up all videos for scenes with empty sentences
 export const handleSpeedUpAllVideos = async (
   data: BaserowRow[],

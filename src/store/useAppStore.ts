@@ -110,6 +110,7 @@ export interface BatchOperationsState {
   generatingAllVideos: boolean;
   speedingUpAllVideos: boolean;
   concatenatingVideos: boolean;
+  mergingDubbedAudio: boolean;
   improvingAllVideos: boolean;
   generatingAllTTSForAllVideos: boolean;
   optimizingAllSilence: boolean;
@@ -224,6 +225,15 @@ export interface MergedVideoState {
   url: string | null;
   createdAt: Date | null;
   fileName: string | null;
+}
+
+// Merged dubbed audio state interface (per language)
+export interface MergedDubbedAudioState {
+  [languageCode: string]: {
+    url: string;
+    createdAt: string;
+    fileName: string;
+  };
 }
 
 // Selected original video state interface
@@ -378,6 +388,9 @@ interface AppState {
   // Merged Video State
   mergedVideo: MergedVideoState;
 
+  // Merged Dubbed Audio State (per language)
+  mergedDubbedAudio: MergedDubbedAudioState;
+
   // Selected Original Video State
   selectedOriginalVideo: SelectedOriginalVideoState;
 
@@ -491,6 +504,14 @@ interface AppState {
   setMergedVideo: (url: string, fileName?: string) => void;
   clearMergedVideo: () => void;
   saveMergedVideoToOriginalTable: () => Promise<void>;
+
+  // Merged Dubbed Audio Actions
+  setMergedDubbedAudio: (
+    languageCode: string,
+    url: string,
+    fileName?: string,
+  ) => void;
+  clearMergedDubbedAudio: (languageCode?: string) => void;
 
   // Selected Original Video Actions
   setSelectedOriginalVideo: (
@@ -635,6 +656,7 @@ const defaultBatchOperations: BatchOperationsState = {
   generatingAllVideos: false,
   speedingUpAllVideos: false,
   concatenatingVideos: false,
+  mergingDubbedAudio: false,
   improvingAllVideos: false,
   generatingAllTTSForAllVideos: false,
   optimizingAllSilence: false,
@@ -814,6 +836,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Merged Video State
   mergedVideo: defaultMergedVideo,
+
+  // Merged Dubbed Audio State
+  mergedDubbedAudio: {},
 
   // Selected Original Video State
   selectedOriginalVideo: defaultSelectedOriginalVideo,
@@ -1501,6 +1526,59 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       mergedVideo: defaultMergedVideo,
     }),
+
+  // Merged Dubbed Audio Actions
+  setMergedDubbedAudio: (languageCode, url, fileName) => {
+    const entry = {
+      url,
+      createdAt: new Date().toISOString(),
+      fileName: fileName || `merged-audio-${languageCode}.wav`,
+    };
+
+    set((state) => ({
+      mergedDubbedAudio: {
+        ...state.mergedDubbedAudio,
+        [languageCode]: entry,
+      },
+    }));
+
+    // Persist to localStorage
+    try {
+      const existing = get().mergedDubbedAudio;
+      localStorage.setItem('final-dubbed-audio-data', JSON.stringify(existing));
+      window.dispatchEvent(new CustomEvent('localStorageUpdate'));
+    } catch (error) {
+      console.warn(
+        'Failed to save merged dubbed audio to localStorage:',
+        error,
+      );
+    }
+  },
+
+  clearMergedDubbedAudio: (languageCode) => {
+    if (languageCode) {
+      set((state) => {
+        const entries = Object.entries(state.mergedDubbedAudio).filter(
+          ([key]) => key !== languageCode,
+        );
+        return { mergedDubbedAudio: Object.fromEntries(entries) };
+      });
+    } else {
+      set({ mergedDubbedAudio: {} });
+    }
+
+    // Persist to localStorage
+    try {
+      const existing = get().mergedDubbedAudio;
+      localStorage.setItem('final-dubbed-audio-data', JSON.stringify(existing));
+      window.dispatchEvent(new CustomEvent('localStorageUpdate'));
+    } catch (error) {
+      console.warn(
+        'Failed to save merged dubbed audio to localStorage:',
+        error,
+      );
+    }
+  },
 
   saveMergedVideoToOriginalTable: async () => {
     const state = get();

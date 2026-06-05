@@ -59,6 +59,7 @@ import {
   handleGenerateAllTTSForAllVideos as generateAllTTSForAllVideosUtil,
   handleSpeedUpAllVideosForAllScenes,
   handleGenerateAllVideos,
+  handleMergeAllDubbedAudio,
 } from '@/utils/batchOperations';
 import {
   extractLinkedVideoId as extractLinkedVideoIdFromField,
@@ -767,6 +768,8 @@ export default function OriginalVideosList({
     setMergingScenesForProcessingVideos,
   ] = useState(false);
   const [mergingFinalVideos, setMergingFinalVideos] = useState(false);
+  const [mergingDubbedAudioAllVideos, setMergingDubbedAudioAllVideos] =
+    useState(false);
   const [generatingTimestamps, setGeneratingTimestamps] = useState(false);
   const [, setTimestampData] = useState<string>('');
   const [improvingAllVideosScenes, setImprovingAllVideosScenes] =
@@ -844,6 +847,7 @@ export default function OriginalVideosList({
     useState({
       youtube: false,
       assets: false,
+      dubbedAudio: false,
     });
   const [isVideoDetailsModalOpen, setIsVideoDetailsModalOpen] = useState(false);
 
@@ -865,6 +869,8 @@ export default function OriginalVideosList({
     loadSettingsFromLocalStorage,
     mergedVideo,
     clearMergedVideo,
+    mergedDubbedAudio,
+    setMergedDubbedAudio,
     transcriptionSettings,
     deletionSettings,
     subtitleGenerationSettings,
@@ -1165,6 +1171,45 @@ export default function OriginalVideosList({
         setTimestampData(savedTimestampData);
       }
     }
+  }, []);
+
+  // Load merged dubbed audio from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('final-dubbed-audio-data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          // Merge into store (don't overwrite if already set)
+          const current = useAppStore.getState().mergedDubbedAudio;
+          const merged = { ...parsed, ...current };
+          useAppStore.setState({ mergedDubbedAudio: merged });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Listen for localStorage updates from other components
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      try {
+        const saved = localStorage.getItem('final-dubbed-audio-data');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            useAppStore.setState({ mergedDubbedAudio: parsed });
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('localStorageUpdate', handleStorageUpdate);
+    return () =>
+      window.removeEventListener('localStorageUpdate', handleStorageUpdate);
   }, []);
 
   // Helper function to extract value from Baserow field
@@ -9991,6 +10036,55 @@ export default function OriginalVideosList({
     }
   };
 
+  // Merge All Dubbed Audio across Processing videos
+  const handleMergeAllDubbedAudioAllVideos = async () => {
+    if (mergingDubbedAudioAllVideos) return;
+
+    try {
+      setMergingDubbedAudioAllVideos(true);
+      setError(null);
+
+      // Load language metadata to get field mapping
+      const metadata = await loadDubbedLanguagesAllVideos();
+
+      const languages = Object.keys(metadata.finalAudioFieldByLanguage).sort();
+      if (languages.length === 0) {
+        console.warn('[MERGE AUDIO] No languages with field mappings found');
+        return;
+      }
+
+      const freshVideosData = await getOriginalVideosData();
+      const processingVideos =
+        getProcessingVideosForAllVideosOps(freshVideosData);
+
+      if (processingVideos.length === 0) {
+        console.log(
+          '[MERGE AUDIO] No Processing videos found for merging dubbed audio',
+        );
+        return;
+      }
+
+      await handleMergeAllDubbedAudio(
+        processingVideos,
+        languages,
+        metadata.finalAudioFieldByLanguage,
+        () => {},
+        () => {},
+        setMergedDubbedAudio,
+      );
+    } catch (error) {
+      console.error('[MERGE AUDIO] Failed:', error);
+      playErrorSound();
+      setError(
+        `Failed to merge dubbed audio: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setMergingDubbedAudioAllVideos(false);
+    }
+  };
+
   // Generate Timestamps for Final Videos
   const handleGenerateTimestamps = async () => {
     try {
@@ -13485,6 +13579,37 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
+                    {/* Merge All Dubbed Audio Button */}
+                    <button
+                      onClick={handleMergeAllDubbedAudioAllVideos}
+                      disabled={
+                        mergingDubbedAudioAllVideos ||
+                        uploading ||
+                        reordering ||
+                        transcribing !== null ||
+                        transcribingAll ||
+                        generatingScenes !== null ||
+                        generatingScenesAll
+                      }
+                      className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
+                      title={
+                        mergingDubbedAudioAllVideos
+                          ? 'Merging dubbed audio...'
+                          : 'Fast-concat all final dubbed audio per language for Processing videos'
+                      }
+                    >
+                      <Volume2
+                        className={`w-4 h-4 ${
+                          mergingDubbedAudioAllVideos ? 'animate-pulse' : ''
+                        }`}
+                      />
+                      <span>
+                        {mergingDubbedAudioAllVideos
+                          ? 'Merging Audio...'
+                          : 'Merge Audio'}
+                      </span>
+                    </button>
+
                     {/* Merge Scenes for Processing Videos Button */}
                     <button
                       onClick={() => handleMergeScenesForProcessingVideos()}
@@ -15738,6 +15863,119 @@ export default function OriginalVideosList({
                 </div>
 
                 <LazyFinalVideoTable />
+              </div>
+            )}
+          </div>
+
+          {/* Final Dubbed Audio Section - Collapsible */}
+          <div className='bg-white rounded-lg border border-gray-200 overflow-hidden'>
+            <button
+              onClick={() =>
+                setSelectedVideoDetailsExpanded((prev) => ({
+                  ...prev,
+                  dubbedAudio: !prev.dubbedAudio,
+                }))
+              }
+              className='w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors'
+            >
+              <div className='flex items-center gap-2'>
+                <Volume2 className='w-5 h-5 text-violet-600' />
+                <h3 className='text-lg font-semibold text-gray-900'>
+                  Final Dubbed Audio (All Languages)
+                </h3>
+              </div>
+              <div className='flex items-center gap-2'>
+                <span className='text-xs text-gray-400'>
+                  {selectedVideoDetailsExpanded.dubbedAudio
+                    ? 'Collapse'
+                    : 'Expand'}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                    selectedVideoDetailsExpanded.dubbedAudio ? 'rotate-180' : ''
+                  }`}
+                  fill='none'
+                  stroke='currentColor'
+                  viewBox='0 0 24 24'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M19 9l-7 7-7-7'
+                  />
+                </svg>
+              </div>
+            </button>
+
+            {selectedVideoDetailsExpanded.dubbedAudio && (
+              <div className='px-4 py-4 border-t border-gray-200 bg-gray-50'>
+                {Object.keys(mergedDubbedAudio).length === 0 ? (
+                  <div className='rounded-md border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-500 text-center'>
+                    No dubbed audio merged yet. Use{' '}
+                    <strong>&quot;Merge Audio&quot;</strong> in the Batch
+                    Operations panel to merge final dubbed audio per language.
+                  </div>
+                ) : (
+                  <div className='space-y-2'>
+                    <p className='text-xs text-gray-500 mb-3'>
+                      Click a language to auto-download its merged dubbed audio.
+                    </p>
+                    {Object.keys(mergedDubbedAudio)
+                      .sort()
+                      .map((lang) => {
+                        const entry = mergedDubbedAudio[lang];
+                        return (
+                          <div
+                            key={lang}
+                            className='flex items-center justify-between p-3 rounded-md border border-violet-200 bg-white hover:bg-violet-50 transition-colors'
+                          >
+                            <div className='flex items-center gap-3'>
+                              <div className='p-1.5 bg-violet-100 rounded'>
+                                <Volume2 className='w-4 h-4 text-violet-600' />
+                              </div>
+                              <div>
+                                <div className='text-sm font-medium text-gray-900'>
+                                  {lang.toUpperCase()}
+                                </div>
+                                <div className='text-[11px] text-gray-400'>
+                                  {entry.createdAt
+                                    ? new Date(entry.createdAt).toLocaleString()
+                                    : ''}
+                                </div>
+                              </div>
+                            </div>
+                            <div className='flex items-center gap-2'>
+                              <audio
+                                controls
+                                preload='none'
+                                className='h-8 max-w-[200px]'
+                                src={entry.url}
+                              />
+                              <a
+                                href={entry.url}
+                                download={entry.fileName}
+                                className='inline-flex items-center gap-1 px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-md transition-colors'
+                                title={`Download ${lang.toUpperCase()} merged audio`}
+                              >
+                                <Download className='w-3.5 h-3.5' />
+                                Download
+                              </a>
+                              <a
+                                href={entry.url}
+                                target='_blank'
+                                rel='noopener noreferrer'
+                                className='inline-flex items-center gap-1 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium rounded-md transition-colors'
+                                title={`Open ${lang.toUpperCase()} audio in new tab`}
+                              >
+                                <ExternalLink className='w-3.5 h-3.5' />
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             )}
           </div>

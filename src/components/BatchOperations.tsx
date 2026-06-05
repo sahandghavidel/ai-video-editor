@@ -8,6 +8,7 @@ import {
   handleGenerateAllTTS,
   handleGenerateAllVideos,
   handleConcatenateAllVideos,
+  handleMergeAllDubbedAudio,
   handleSpeedUpAllVideos,
   cycleSpeed as cycleThroughSpeeds,
 } from '@/utils/batchOperations';
@@ -134,6 +135,8 @@ export default function BatchOperations({
     setMergedVideo,
     clearMergedVideo,
     saveMergedVideoToOriginalTable,
+    mergedDubbedAudio,
+    setMergedDubbedAudio,
     selectedOriginalVideo,
     saveSettingsToLocalStorage,
     loadSettingsFromLocalStorage,
@@ -1448,6 +1451,107 @@ export default function BatchOperations({
       setMergedVideo,
       selectedOriginalVideo.id,
     );
+  };
+
+  const onMergeAllDubbedAudio = async () => {
+    await onRefresh?.();
+
+    try {
+      // Load language metadata to get field mapping
+      const response = await fetch('/api/tts-audio-references', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load language metadata (${response.status})`,
+        );
+      }
+
+      const payload = (await response.json().catch(() => null)) as {
+        entries?: unknown;
+      } | null;
+
+      const rawEntries = Array.isArray(payload?.entries)
+        ? (payload.entries as AudioReferenceLanguageEntry[])
+        : [];
+
+      // Build finalAudioFieldByLanguage from entries
+      const entriesByLanguage = new Map<
+        string,
+        AudioReferenceLanguageEntry[]
+      >();
+      for (const entry of rawEntries) {
+        if (!entry || typeof entry !== 'object' || entry.enabled === false)
+          continue;
+        const lang = normalizeLanguageCode(entry.language);
+        if (!lang) continue;
+        const bucket = entriesByLanguage.get(lang) ?? [];
+        bucket.push(entry);
+        entriesByLanguage.set(lang, bucket);
+      }
+
+      const finalAudioFieldByLanguage: Record<string, string> = {};
+      for (const [lang, entries] of entriesByLanguage) {
+        const preferred =
+          entries.find((e) => e.isDefault === true) ?? entries[0];
+        const preferredKey =
+          typeof (preferred as Record<string, unknown>)?.baserowFields ===
+            'object' &&
+          (preferred as Record<string, unknown>).baserowFields !== null
+            ? String(
+                (
+                  (preferred as Record<string, unknown>)
+                    .baserowFields as Record<string, unknown>
+                )?.videoFinalDubbedAudioFieldKey || '',
+              ).trim()
+            : '';
+        const fallbackKey = entries
+          .map((e) => {
+            const bf =
+              typeof (e as Record<string, unknown>)?.baserowFields ===
+                'object' &&
+              (e as Record<string, unknown>).baserowFields !== null
+                ? (
+                    (e as Record<string, unknown>).baserowFields as Record<
+                      string,
+                      unknown
+                    >
+                  )?.videoFinalDubbedAudioFieldKey
+                : undefined;
+            return typeof bf === 'string' ? bf.trim() : '';
+          })
+          .find(Boolean);
+        const resolved = preferredKey || fallbackKey || '';
+        if (resolved) {
+          finalAudioFieldByLanguage[lang] = resolved;
+        }
+      }
+
+      const languages = Object.keys(finalAudioFieldByLanguage).sort();
+      if (languages.length === 0) {
+        console.warn('[MERGE AUDIO] No languages with field mappings found');
+        return;
+      }
+
+      const freshData = useAppStore.getState().getFilteredData();
+
+      handleMergeAllDubbedAudio(
+        freshData,
+        languages,
+        finalAudioFieldByLanguage,
+        () => {
+          startBatchOperation('mergingDubbedAudio');
+        },
+        () => {
+          completeBatchOperation('mergingDubbedAudio');
+        },
+        setMergedDubbedAudio,
+      );
+    } catch (error) {
+      console.error('[MERGE AUDIO] Failed:', error);
+    }
   };
 
   const parsePositiveSceneIds = (value: unknown): number[] => {
@@ -5765,6 +5869,50 @@ export default function BatchOperations({
                         : 'Merge All Scenes'}
                     </span>
                   </button>
+
+                  {/* Merge All Dubbed Audio Button */}
+                  <button
+                    onClick={onMergeAllDubbedAudio}
+                    disabled={batchOperations.mergingDubbedAudio}
+                    className='w-full mt-2 h-10 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title='Fast-concat all final dubbed audio files per language across Processing videos'
+                  >
+                    {batchOperations.mergingDubbedAudio && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <Volume2 className='w-4 h-4' />
+                    <span className='font-medium'>
+                      {batchOperations.mergingDubbedAudio
+                        ? 'Merging Audio...'
+                        : 'Merge All Dubbed Audio'}
+                    </span>
+                  </button>
+
+                  {/* Merged Dubbed Audio Status */}
+                  {Object.keys(mergedDubbedAudio).length > 0 && (
+                    <div className='mt-2 p-2 bg-violet-50 rounded border border-violet-200'>
+                      <p className='text-[11px] font-medium text-violet-800 mb-1'>
+                        Merged Audio ({Object.keys(mergedDubbedAudio).length}{' '}
+                        languages)
+                      </p>
+                      <div className='flex flex-wrap gap-1'>
+                        {Object.keys(mergedDubbedAudio)
+                          .sort()
+                          .map((lang) => (
+                            <a
+                              key={lang}
+                              href={mergedDubbedAudio[lang].url}
+                              download={mergedDubbedAudio[lang].fileName}
+                              className='inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 hover:bg-violet-200 text-violet-700 text-[10px] font-medium rounded transition-colors'
+                              title={`Download ${lang.toUpperCase()} merged audio`}
+                            >
+                              <Download className='w-3 h-3' />
+                              {lang.toUpperCase()}
+                            </a>
+                          ))}
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     onClick={onTranscribeApplyGenerateClipsAllScenes}
