@@ -15970,15 +15970,39 @@ export default function OriginalVideosList({
                                 className='h-8 max-w-[200px]'
                                 src={entry.url}
                               />
-                              <a
-                                href={entry.url}
-                                download={entry.fileName}
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const resp = await fetch(entry.url);
+                                    const arrayBuf = await resp.arrayBuffer();
+                                    // Force audio/mp4 MIME so browser doesn't treat it as video
+                                    const blob = new Blob([arrayBuf], {
+                                      type: 'audio/mp4',
+                                    });
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    // Ensure filename always ends with .m4a
+                                    const baseName = (
+                                      entry.fileName || `merged-audio-${lang}`
+                                    ).replace(/\.[^.]+$/, '');
+                                    const a = document.createElement('a');
+                                    a.href = blobUrl;
+                                    a.download = `${baseName}.m4a`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(blobUrl);
+                                  } catch (err) {
+                                    console.error('Download failed:', err);
+                                    // Fallback: open in new tab
+                                    window.open(entry.url, '_blank');
+                                  }
+                                }}
                                 className='inline-flex items-center gap-1 px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-md transition-colors'
                                 title={`Download ${lang.toUpperCase()} merged audio (${entry.startId}–${entry.endId})`}
                               >
                                 <Download className='w-3.5 h-3.5' />
                                 Download
-                              </a>
+                              </button>
                               <a
                                 href={entry.url}
                                 target='_blank'
