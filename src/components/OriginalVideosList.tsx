@@ -871,6 +871,7 @@ export default function OriginalVideosList({
     clearMergedVideo,
     mergedDubbedAudio,
     setMergedDubbedAudio,
+    clearMergedDubbedAudio,
     transcriptionSettings,
     deletionSettings,
     subtitleGenerationSettings,
@@ -15987,6 +15988,21 @@ export default function OriginalVideosList({
                               >
                                 <ExternalLink className='w-3.5 h-3.5' />
                               </a>
+                              <button
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `Delete ${lang.toUpperCase()} audio for videos ${entry.startId ?? '?'}–${entry.endId ?? '?'}?`,
+                                    )
+                                  ) {
+                                    clearMergedDubbedAudio(scopeKey);
+                                  }
+                                }}
+                                className='inline-flex items-center gap-1 px-2 py-1.5 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-medium rounded-md transition-colors'
+                                title={`Delete ${lang.toUpperCase()} audio`}
+                              >
+                                <Trash2 className='w-3.5 h-3.5' />
+                              </button>
                             </div>
                           </div>
                         );
