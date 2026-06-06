@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureMinioRunning } from '@/lib/minio-runtime';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,36 +65,6 @@ function getSceneOrderValue(scene: BaserowRow): number {
   return Number.isFinite(id) ? id : 0;
 }
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json().catch(() => null)) as {
-    token?: unknown;
-  } | null;
-  if (typeof data?.token !== 'string' || !data.token.trim()) {
-    throw new Error('Authentication failed: missing token');
-  }
-
-  return data.token;
-}
-
 async function fetchAllScenesForVideo(
   baserowUrl: string,
   token: string,
@@ -116,7 +87,7 @@ async function fetchAllScenesForVideo(
 
     const res = await fetch(url.toString(), {
       method: 'GET',
-      headers: { Authorization: `JWT ${token}` },
+      headers: { ...buildAuthHeader(token), },
       cache: 'no-store',
     });
 
@@ -152,7 +123,7 @@ async function patchVideoCaptionsUrl(
     {
       method: 'PATCH',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -271,7 +242,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
     const scenes = await fetchAllScenesForVideo(baserowUrl, token, videoId);
 
     if (scenes.length === 0) {

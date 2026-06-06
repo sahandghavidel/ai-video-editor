@@ -1,3 +1,4 @@
+import { buildAuthHeader, getBaserowToken } from '@/lib/baserow-auth';
 const ORIGINAL_VIDEOS_TABLE_ID = '713';
 
 export type BaserowSelectOption = {
@@ -16,94 +17,36 @@ export type BaserowFieldSchema = {
   select_options?: BaserowSelectOption[];
 };
 
-let cachedToken: string | null = null;
-let tokenExpiry = 0;
-
 let cachedFields: BaserowFieldSchema[] | null = null;
 let cachedFieldsAt = 0;
-
-function getBaserowConfig() {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  return { baserowUrl, email, password };
-}
-
-async function authenticate(forceRefresh = false): Promise<string> {
-  const { baserowUrl, email, password } = getBaserowConfig();
-
-  if (!forceRefresh && cachedToken && Date.now() < tokenExpiry - 300_000) {
-    return cachedToken;
-  }
-
-  const authResponse = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-    cache: 'no-store',
-  });
-
-  if (!authResponse.ok) {
-    const errorText = await authResponse.text().catch(() => '');
-    throw new Error(
-      `Authentication failed: ${authResponse.status} ${authResponse.statusText} ${errorText}`,
-    );
-  }
-
-  const data = (await authResponse.json().catch(() => null)) as {
-    token?: string;
-  } | null;
-
-  if (!data?.token) {
-    throw new Error('Authentication failed: missing token');
-  }
-
-  cachedToken = data.token;
-  tokenExpiry = Date.now() + 50 * 60 * 1000;
-
-  return data.token;
-}
 
 async function requestWithAuth(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const { baserowUrl } = getBaserowConfig();
+  const baserowUrl = process.env.BASEROW_API_URL;
+  if (!baserowUrl) {
+    throw new Error('Missing Baserow configuration');
+  }
 
   async function execute(token: string) {
     const response = await fetch(`${baserowUrl}${path}`, {
       ...init,
       headers: {
         ...(init.headers ?? {}),
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
       cache: 'no-store',
     });
-
-    if (response.status === 401) {
-      throw new Error('TOKEN_EXPIRED');
-    }
-
     return response;
   }
 
   try {
-    const token = await authenticate();
+    const token = await getBaserowToken();
     return await execute(token);
   } catch (error) {
-    if (error instanceof Error && error.message === 'TOKEN_EXPIRED') {
-      const token = await authenticate(true);
-      return execute(token);
-    }
-
-    throw error;
+    const freshToken = await getBaserowToken(true);
+    return execute(freshToken);
   }
 }
 

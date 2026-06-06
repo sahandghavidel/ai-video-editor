@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseFixTtsStatus } from '@/utils/fixTtsBatch';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 
@@ -51,37 +52,6 @@ function isFixTtsEligibleScene(scene: BaserowSceneRow): boolean {
   return hasFinalVideo && hasText;
 }
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json().catch(() => null)) as {
-    token?: unknown;
-  } | null;
-
-  if (!data || typeof data.token !== 'string' || !data.token.trim()) {
-    throw new Error('Authentication response does not contain a valid token');
-  }
-
-  return data.token;
-}
-
 async function fetchScenesForVideo(
   baserowUrl: string,
   token: string,
@@ -96,7 +66,7 @@ async function fetchScenesForVideo(
       {
         method: 'GET',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
         },
         cache: 'no-store',
       },
@@ -152,7 +122,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
     const scenes = await fetchScenesForVideo(baserowUrl, token, videoId);
 
     const flaggedScenes = scenes

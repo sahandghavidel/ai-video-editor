@@ -3,6 +3,7 @@ import { createVideoClipWithUpload } from '@/utils/ffmpeg-direct';
 import { BaserowRow } from '@/lib/baserow-actions';
 import path from 'path';
 import fs from 'fs/promises';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 type BaserowFileField =
   | string
@@ -388,46 +389,18 @@ async function uploadStockVideoForFallback(
 }
 
 // Import the working authentication from baserow-actions
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.token;
-}
 
 // Function to get original video data
 async function getOriginalVideoData(videoId: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   const response = await fetch(
     `${baserowUrl}/database/rows/table/713/${videoId}/`,
     {
       method: 'GET',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
         'Content-Type': 'application/json',
       },
     },
@@ -446,7 +419,7 @@ async function getOriginalVideoData(videoId: string) {
 // Function to get scenes for a video (with pagination support)
 async function getScenesForVideo(videoId: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   const allScenes = [];
   let page = 1;
@@ -460,7 +433,7 @@ async function getScenesForVideo(videoId: string) {
       {
         method: 'GET',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
           'Content-Type': 'application/json',
         },
       },
@@ -688,13 +661,13 @@ async function createVideoClip(videoUrl: string, scene: BaserowRow) {
 // Function to get a single scene by ID for verification
 async function getSceneById(sceneId: number) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   const response = await fetch(
     `${baserowUrl}/database/rows/table/714/${sceneId}/`,
     {
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
     },
   );
@@ -714,7 +687,7 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
 
   try {
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
 
     const updateData = {
       field_6886: clipUrl, // Videos field
@@ -726,7 +699,7 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
       {
         method: 'PATCH',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),

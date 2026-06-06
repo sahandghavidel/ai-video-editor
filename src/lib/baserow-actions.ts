@@ -1,72 +1,11 @@
 'use server';
 
 import { ensureMinioRunning } from '@/lib/minio-runtime';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export interface BaserowRow {
   id: number;
   [key: string]: unknown;
-}
-
-// Cache the JWT token for the duration of the server action
-let cachedToken: string | null = null;
-let tokenExpiry: number = 0;
-
-async function getJWTToken(forceRefresh = false): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.',
-    );
-  }
-
-  // Return cached token if it's still valid (with 5 minute buffer) and not forcing refresh
-  if (!forceRefresh && cachedToken && Date.now() < tokenExpiry - 300000) {
-    return cachedToken;
-  }
-
-  // Clear cached token when refreshing
-  cachedToken = null;
-  tokenExpiry = 0;
-
-  try {
-    console.log('Fetching new JWT token from Baserow...');
-    const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email,
-        password,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Auth failed with response:', errorText);
-      throw new Error(
-        `Authentication failed: ${response.status} ${response.statusText} - ${errorText}`,
-      );
-    }
-
-    const data = await response.json();
-    cachedToken = data.token;
-    // JWT tokens typically expire in 1 hour, cache for 50 minutes to be safe
-    tokenExpiry = Date.now() + 50 * 60 * 1000;
-
-    if (!cachedToken) {
-      throw new Error('No token received from Baserow');
-    }
-
-    console.log('Successfully obtained new JWT token');
-    return cachedToken;
-  } catch (error) {
-    console.error('Error authenticating with Baserow:', error);
-    throw error;
-  }
 }
 
 // Helper function to make API requests with automatic token refresh
@@ -79,7 +18,7 @@ async function makeAuthenticatedRequest(
       ...options,
       headers: {
         ...options.headers,
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
         'Content-Type': 'application/json',
       },
     });
@@ -93,13 +32,13 @@ async function makeAuthenticatedRequest(
 
   try {
     // First attempt with cached token
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
     return await requestWithToken(token);
   } catch (error) {
     // If token expired, try once more with fresh token
     if (error instanceof Error && error.message === 'TOKEN_EXPIRED') {
       console.log('Token expired, refreshing and retrying request...');
-      const freshToken = await getJWTToken(true); // Force refresh
+      const freshToken = await getBaserowToken(true); // Force refresh
       return await requestWithToken(freshToken);
     }
 

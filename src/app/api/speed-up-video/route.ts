@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { speedUpVideoWithUpload } from '@/utils/ffmpeg-direct';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -96,34 +97,6 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to get JWT token for Baserow API
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.token;
-}
 
 // Function to update scene with speed-up video URL
 async function updateSceneWithSpeedUpUrl(
@@ -133,7 +106,7 @@ async function updateSceneWithSpeedUpUrl(
   const baserowUrl = process.env.BASEROW_API_URL;
 
   try {
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
 
     const updateData = {
       field_6886: speedUpVideoUrl, // Videos field (same field updated in clip generation)
@@ -144,7 +117,7 @@ async function updateSceneWithSpeedUpUrl(
       {
         method: 'PATCH',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),

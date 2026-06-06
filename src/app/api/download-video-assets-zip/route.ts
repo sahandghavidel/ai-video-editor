@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 type BaserowRow = {
   id: number;
@@ -33,41 +34,12 @@ function extractUrlFromField(raw: unknown): string {
   return String(raw).trim();
 }
 
-function getJWTTokenParams() {
+function getBaserowUrl() {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
+  if (!baserowUrl) {
     throw new Error('Missing Baserow configuration');
   }
-
-  return { baserowUrl, email, password };
-}
-
-async function getJWTToken(): Promise<string> {
-  const { baserowUrl, email, password } = getJWTTokenParams();
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json().catch(() => null)) as {
-    token?: string;
-  } | null;
-
-  if (!data?.token) {
-    throw new Error('Authentication failed: missing token');
-  }
-
-  return data.token;
+  return baserowUrl;
 }
 
 async function baserowGetOriginalVideoRow(
@@ -80,7 +52,7 @@ async function baserowGetOriginalVideoRow(
     {
       method: 'GET',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
       cache: 'no-store',
     },
@@ -123,7 +95,7 @@ async function baserowGetSceneRowsForVideo(
       {
         method: 'GET',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
         },
         cache: 'no-store',
       },
@@ -310,8 +282,8 @@ export async function POST(req: Request) {
       return Response.json({ error: 'videoId is required' }, { status: 400 });
     }
 
-    const { baserowUrl } = getJWTTokenParams();
-    const token = await getJWTToken();
+    const baserowUrl = getBaserowUrl();
+    const token = await getBaserowToken();
 
     const [row, sceneRows] = await Promise.all([
       baserowGetOriginalVideoRow(videoId, baserowUrl, token),

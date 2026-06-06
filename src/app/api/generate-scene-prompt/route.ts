@@ -1,4 +1,5 @@
 import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 type BaserowField = {
   id: number;
@@ -14,44 +15,13 @@ type BaserowRow = {
 const SCENES_TABLE_ID = 714;
 const DEFAULT_PROMPT_FIELD_ID = 7091;
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json().catch(() => null)) as {
-    token?: string;
-  } | null;
-
-  if (!data?.token) {
-    throw new Error('Authentication failed: missing token');
-  }
-
-  return data.token;
-}
-
 async function baserowGetJson<T>(path: string, query?: Record<string, string>) {
   const baserowUrl = process.env.BASEROW_API_URL;
   if (!baserowUrl) {
     throw new Error('Missing Baserow URL');
   }
 
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
   const url = new URL(`${baserowUrl}${path}`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -62,7 +32,7 @@ async function baserowGetJson<T>(path: string, query?: Record<string, string>) {
   const res = await fetch(url.toString(), {
     method: 'GET',
     headers: {
-      Authorization: `JWT ${token}`,
+      ...buildAuthHeader(token),
     },
   });
 

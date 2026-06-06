@@ -6,6 +6,7 @@ import {
   uploadToMinio,
 } from '@/utils/ffmpeg-direct';
 import { BaserowRow } from '@/lib/baserow-actions';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 type BaserowFileField =
   | string
@@ -25,45 +26,17 @@ type BaserowFileField =
   | undefined;
 
 // Import the working authentication from baserow-actions
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.token;
-}
 
 // Function to get original video data
 async function getOriginalVideoData(videoId: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   const response = await fetch(
     `${baserowUrl}/database/rows/table/713/${videoId}/`,
     {
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
     },
   );
@@ -81,13 +54,13 @@ async function getOriginalVideoData(videoId: string) {
 // Function to get scene data
 async function getSceneData(sceneId: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   const response = await fetch(
     `${baserowUrl}/database/rows/table/714/${sceneId}/`,
     {
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
     },
   );
@@ -273,7 +246,7 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
   const baserowUrl = process.env.BASEROW_API_URL;
 
   try {
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
 
     const updateData = {
       field_6886: clipUrl, // Videos field
@@ -285,7 +258,7 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
       {
         method: 'PATCH',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),

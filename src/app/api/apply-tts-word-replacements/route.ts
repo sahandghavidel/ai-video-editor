@@ -3,6 +3,7 @@ import {
   loadTtsWordReplacementsStore,
   TtsWordReplacementEntry,
 } from '@/lib/ttsWordReplacementsStore';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 
@@ -101,37 +102,6 @@ function sceneBelongsToVideo(scene: BaserowSceneRow, videoId: number): boolean {
   return linkedVideoIds.includes(videoId);
 }
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json().catch(() => null)) as {
-    token?: unknown;
-  } | null;
-
-  if (!data || typeof data.token !== 'string' || !data.token.trim()) {
-    throw new Error('Authentication response does not contain a valid token');
-  }
-
-  return data.token;
-}
-
 async function fetchAllScenes(
   baserowUrl: string,
   token: string,
@@ -145,7 +115,7 @@ async function fetchAllScenes(
       {
         method: 'GET',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
         },
         cache: 'no-store',
       },
@@ -191,7 +161,7 @@ async function patchSceneSentence(
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
       body: JSON.stringify({
         field_6890: sentence,
@@ -237,7 +207,7 @@ export async function POST(request: Request) {
     }
 
     const replacements = prepareReplacements(entries);
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
     const scenes = await fetchAllScenes(baserowUrl, token);
     const targetScenes =
       selectedVideoId !== null

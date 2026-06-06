@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 
@@ -11,30 +12,6 @@ const NON_DUPLICABLE_FIELD_KEYS = new Set([
   'field_6905', // last modified / derived metadata
 ]);
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.token;
-}
-
 async function getSceneRow(
   baserowUrl: string,
   token: string,
@@ -45,7 +22,7 @@ async function getSceneRow(
     {
       method: 'GET',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
       cache: 'no-store',
     },
@@ -136,7 +113,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
 
     const parsedSourceSceneId =
       typeof sourceSceneId === 'number'
@@ -181,7 +158,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
       body: JSON.stringify(requestBody),
     });

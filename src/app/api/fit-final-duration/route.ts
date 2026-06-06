@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fitFinalDurationWithUpload } from '@/utils/ffmpeg-fit-duration';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 
@@ -43,43 +44,6 @@ function getScenesTableId(): number {
   return DEFAULT_SCENES_TABLE_ID;
 }
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json().catch(() => null)) as {
-    token?: unknown;
-  } | null;
-  const token = typeof data?.token === 'string' ? data.token.trim() : '';
-
-  if (!token) {
-    throw new Error('Authentication succeeded but token is missing');
-  }
-
-  return token;
-}
-
 async function updateSceneWithFittedVideoUrl(
   sceneId: number,
   fittedVideoUrl: string,
@@ -89,7 +53,7 @@ async function updateSceneWithFittedVideoUrl(
     throw new Error('Missing BASEROW_API_URL');
   }
 
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
   const tableId = getScenesTableId();
 
   const response = await fetch(
@@ -97,7 +61,7 @@ async function updateSceneWithFittedVideoUrl(
     {
       method: 'PATCH',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

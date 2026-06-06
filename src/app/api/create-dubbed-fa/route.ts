@@ -9,6 +9,7 @@ import {
   loadTtsAudioReferencesStore,
   type LanguageBaserowFields,
 } from '@/lib/ttsAudioReferencesStore';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -559,52 +560,6 @@ async function resolveLanguageAudioReference(
   };
 }
 
-let cachedToken: string | null = null;
-let cachedTokenExpiry = 0;
-
-async function getJWTToken(forceRefresh = false): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  if (
-    !forceRefresh &&
-    cachedToken &&
-    Date.now() < cachedTokenExpiry - 300_000
-  ) {
-    return cachedToken;
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const payload = (await response.json().catch(() => null)) as {
-    token?: unknown;
-  } | null;
-  const token = typeof payload?.token === 'string' ? payload.token.trim() : '';
-
-  if (!token) {
-    throw new Error('Authentication succeeded but token is missing');
-  }
-
-  cachedToken = token;
-  cachedTokenExpiry = Date.now() + 50 * 60 * 1000;
-  return token;
-}
-
 async function baserowGetJson<T>(
   baserowUrl: string,
   token: string,
@@ -613,7 +568,7 @@ async function baserowGetJson<T>(
   const response = await fetch(`${baserowUrl}${pathName}`, {
     method: 'GET',
     headers: {
-      Authorization: `JWT ${token}`,
+      ...buildAuthHeader(token),
     },
     cache: 'no-store',
   });
@@ -638,7 +593,7 @@ async function baserowPatchRow(
     {
       method: 'PATCH',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(patch),
@@ -747,7 +702,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
 
     const videoRow = await baserowGetJson<BaserowRow>(
       baserowUrl,

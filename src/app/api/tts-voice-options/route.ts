@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 const ORIGINAL_VIDEOS_TABLE_ID = '713';
 const TTS_VOICE_FIELD_ID = 6860;
@@ -48,35 +49,6 @@ function extractVoiceValue(value: unknown): string | null {
   return null;
 }
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json()) as { token?: unknown };
-  if (typeof data.token !== 'string' || !data.token) {
-    throw new Error('No JWT token returned from Baserow');
-  }
-
-  return data.token;
-}
-
 async function fetchFieldOptions(
   baserowUrl: string,
   token: string,
@@ -85,7 +57,7 @@ async function fetchFieldOptions(
     `${baserowUrl}/database/fields/table/${ORIGINAL_VIDEOS_TABLE_ID}/`,
     {
       method: 'GET',
-      headers: { Authorization: `JWT ${token}` },
+      headers: { ...buildAuthHeader(token), },
       cache: 'no-store',
     },
   );
@@ -130,7 +102,7 @@ async function fetchRowDerivedOptions(
       `${baserowUrl}/database/rows/table/${ORIGINAL_VIDEOS_TABLE_ID}/?size=200&page=${page}`,
       {
         method: 'GET',
-        headers: { Authorization: `JWT ${token}` },
+        headers: { ...buildAuthHeader(token), },
         cache: 'no-store',
       },
     );
@@ -165,7 +137,7 @@ export async function GET() {
       return NextResponse.json({ voices: [] }, { status: 500 });
     }
 
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
 
     // Preferred source: canonical field options from metadata.
     const fieldOptions = await fetchFieldOptions(baserowUrl, token);

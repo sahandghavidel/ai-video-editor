@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 
@@ -33,9 +34,6 @@ let cachedFlaggedTrueOptionIdAt = 0;
 let cachedHasTextTrueOptionId: number | null = null;
 let cachedHasTextTrueOptionIdAt = 0;
 
-let cachedJwtToken: string | null = null;
-let cachedJwtTokenExpiry = 0;
-
 async function resolveFlaggedTrueOptionId(
   baserowUrl: string,
   token: string,
@@ -54,7 +52,7 @@ async function resolveFlaggedTrueOptionId(
     {
       method: 'GET',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
       // This is server-side; ensure we don't cache across deployments unexpectedly.
       cache: 'no-store',
@@ -109,7 +107,7 @@ async function resolveHasTextTrueOptionId(
     {
       method: 'GET',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
       cache: 'no-store',
     },
@@ -186,53 +184,6 @@ function coerceTextFieldValue(value: unknown): string {
 }
 
 // Helper function to get JWT token for Baserow API
-async function getJWTToken(forceRefresh = false): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  // Keep a 5-minute safety buffer before token expiry.
-  if (
-    !forceRefresh &&
-    cachedJwtToken &&
-    Date.now() < cachedJwtTokenExpiry - 300_000
-  ) {
-    return cachedJwtToken;
-  }
-
-  if (forceRefresh) {
-    cachedJwtToken = null;
-    cachedJwtTokenExpiry = 0;
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  const token = typeof data?.token === 'string' ? data.token : '';
-
-  if (!token) {
-    throw new Error('Authentication failed: missing token');
-  }
-
-  cachedJwtToken = token;
-  // JWTs are typically valid for ~1h; cache for 50 minutes.
-  cachedJwtTokenExpiry = Date.now() + 50 * 60 * 1000;
-
-  return token;
-}
 
 async function makeBaserowRequest(
   baserowUrl: string,
@@ -244,7 +195,7 @@ async function makeBaserowRequest(
       ...init,
       headers: {
         ...(init.headers ?? {}),
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
     });
 
@@ -256,11 +207,11 @@ async function makeBaserowRequest(
   }
 
   try {
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
     return await execute(token);
   } catch (error) {
     if (error instanceof Error && error.message === 'TOKEN_EXPIRED') {
-      const freshToken = await getJWTToken(true);
+      const freshToken = await getBaserowToken(true);
       return execute(freshToken);
     }
 
@@ -346,7 +297,7 @@ export async function PATCH(
     }
 
     // Get JWT token
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
 
     // Normalize the Flagged single-select field (field_7096) if the client sends the label/boolean.
     if (Object.prototype.hasOwnProperty.call(body, FLAGGED_FIELD_KEY)) {

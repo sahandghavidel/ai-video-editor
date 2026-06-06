@@ -1,25 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 // Function to get JWT token from Baserow
-async function getJWTToken() {
-  const authUrl = `${process.env.BASEROW_API_URL}/user/token-auth/`;
-  const response = await fetch(authUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: process.env.BASEROW_EMAIL,
-      password: process.env.BASEROW_PASSWORD,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.token;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +9,7 @@ export async function GET(request: NextRequest) {
     console.log('Baserow API URL:', process.env.BASEROW_API_URL);
 
     // Test 1: Get JWT token
-    const token = await getJWTToken();
+    const token = await getBaserowToken();
     console.log('✅ JWT token obtained successfully');
 
     // Test 2: Fetch a scene from the database
@@ -35,7 +17,7 @@ export async function GET(request: NextRequest) {
       `${process.env.BASEROW_API_URL}/database/rows/table/714/?size=1`,
       {
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
         },
       },
     );
@@ -66,7 +48,7 @@ export async function GET(request: NextRequest) {
           {
             method: 'PATCH',
             headers: {
-              Authorization: `JWT ${token}`,
+              ...buildAuthHeader(token),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import { readdir } from 'fs/promises';
 import { uploadToMinio } from '@/utils/ffmpeg-direct';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 interface SceneSegment {
   id: number;
@@ -1237,38 +1238,6 @@ function generateScenesFromTranscription(
 }
 
 // Helper function to get JWT token
-async function getJWTToken() {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error(
-      'Missing Baserow configuration. Please check your environment variables.',
-    );
-  }
-
-  const authResponse = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  });
-
-  if (!authResponse.ok) {
-    const errorText = await authResponse.text();
-    throw new Error(
-      `Authentication failed: ${authResponse.status} ${errorText}`,
-    );
-  }
-
-  const authData = await authResponse.json();
-  return authData.token;
-}
 
 async function getVideoRow(videoId: string): Promise<Record<string, unknown>> {
   const baserowUrl = process.env.BASEROW_API_URL;
@@ -1278,13 +1247,13 @@ async function getVideoRow(videoId: string): Promise<Record<string, unknown>> {
     );
   }
 
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
   const response = await fetch(
     `${baserowUrl}/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
     {
       method: 'GET',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
       },
     },
   );
@@ -1309,7 +1278,7 @@ async function getVideoRow(videoId: string): Promise<Record<string, unknown>> {
 // Function to create multiple scene records in Baserow using batch operation
 async function createSceneRecordsBatch(scenes: SceneSegment[]) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   const BATCH_SIZE = 200; // Baserow's maximum batch size
   const allCreatedScenes = [];
@@ -1343,7 +1312,7 @@ async function createSceneRecordsBatch(scenes: SceneSegment[]) {
       {
         method: 'POST',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(batchData),
@@ -1376,7 +1345,7 @@ async function updateOriginalVideoWithScenes(
   sceneIds: number[],
 ) {
   const baserowUrl = process.env.BASEROW_API_URL;
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   // Update original video record with scene IDs
   const response = await fetch(
@@ -1384,7 +1353,7 @@ async function updateOriginalVideoWithScenes(
     {
       method: 'PATCH',
       headers: {
-        Authorization: `JWT ${token}`,
+        ...buildAuthHeader(token),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -1410,7 +1379,7 @@ async function updateSceneVideoUrlsBatch(sceneIds: number[], videoUrl: string) {
       'Missing Baserow configuration. Please check BASEROW_API_URL.',
     );
   }
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
   const BATCH_SIZE = 200;
 
   for (let i = 0; i < sceneIds.length; i += BATCH_SIZE) {
@@ -1428,7 +1397,7 @@ async function updateSceneVideoUrlsBatch(sceneIds: number[], videoUrl: string) {
       {
         method: 'PATCH',
         headers: {
-          Authorization: `JWT ${token}`,
+          ...buildAuthHeader(token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(batchData),

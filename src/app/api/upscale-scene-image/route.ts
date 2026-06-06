@@ -3,6 +3,7 @@ import path from 'path';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
 
@@ -23,37 +24,6 @@ const REAL_ESRGAN_WEIGHTS_URLS: Record<2 | 4, string> = {
   2: 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth',
 };
 
-async function getJWTToken(): Promise<string> {
-  const baserowUrl = process.env.BASEROW_API_URL;
-  const email = process.env.BASEROW_EMAIL;
-  const password = process.env.BASEROW_PASSWORD;
-
-  if (!baserowUrl || !email || !password) {
-    throw new Error('Missing Baserow configuration');
-  }
-
-  const response = await fetch(`${baserowUrl}/user/token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-  }
-
-  const data = (await response.json().catch(() => null)) as {
-    token?: string;
-  } | null;
-
-  if (!data?.token) {
-    throw new Error('Authentication failed: missing token');
-  }
-
-  return data.token;
-}
-
 async function baserowGetJson<T>(
   pathName: string,
   query?: Record<string, string>,
@@ -63,7 +33,7 @@ async function baserowGetJson<T>(
     throw new Error('Missing Baserow URL');
   }
 
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
   const url = new URL(`${baserowUrl}${pathName}`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -74,7 +44,7 @@ async function baserowGetJson<T>(
   const res = await fetch(url.toString(), {
     method: 'GET',
     headers: {
-      Authorization: `JWT ${token}`,
+      ...buildAuthHeader(token),
     },
   });
 
@@ -95,12 +65,12 @@ async function baserowPatchJson<T>(
     throw new Error('Missing Baserow URL');
   }
 
-  const token = await getJWTToken();
+  const token = await getBaserowToken();
 
   const res = await fetch(`${baserowUrl}${pathName}`, {
     method: 'PATCH',
     headers: {
-      Authorization: `JWT ${token}`,
+      ...buildAuthHeader(token),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
