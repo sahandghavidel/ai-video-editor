@@ -10071,6 +10071,7 @@ export default function OriginalVideosList({
         () => {},
         () => {},
         setMergedDubbedAudio,
+        new Set(Object.keys(useAppStore.getState().mergedDubbedAudio)),
       );
     } catch (error) {
       console.error('[MERGE AUDIO] Failed:', error);
@@ -15921,13 +15922,23 @@ export default function OriginalVideosList({
                     <p className='text-xs text-gray-500 mb-3'>
                       Click a language to auto-download its merged dubbed audio.
                     </p>
-                    {Object.keys(mergedDubbedAudio)
-                      .sort()
-                      .map((lang) => {
-                        const entry = mergedDubbedAudio[lang];
+                    {Object.entries(mergedDubbedAudio)
+                      .sort(([, a], [, b]) => {
+                        const aStart = a.startId ?? 0;
+                        const bStart = b.startId ?? 0;
+                        if (aStart !== bStart) return aStart - bStart;
+                        const aLang = a.languageCode ?? '';
+                        const bLang = b.languageCode ?? '';
+                        return aLang.localeCompare(bLang);
+                      })
+                      .map(([scopeKey, entry]) => {
+                        const lang =
+                          entry.languageCode ||
+                          scopeKey.split('-').pop() ||
+                          scopeKey;
                         return (
                           <div
-                            key={lang}
+                            key={scopeKey}
                             className='flex items-center justify-between p-3 rounded-md border border-violet-200 bg-white hover:bg-violet-50 transition-colors'
                           >
                             <div className='flex items-center gap-3'>
@@ -15937,6 +15948,12 @@ export default function OriginalVideosList({
                               <div>
                                 <div className='text-sm font-medium text-gray-900'>
                                   {lang.toUpperCase()}
+                                  {entry.startId != null &&
+                                    entry.endId != null && (
+                                      <span className='ml-2 text-xs text-gray-500 font-normal'>
+                                        Videos {entry.startId}–{entry.endId}
+                                      </span>
+                                    )}
                                 </div>
                                 <div className='text-[11px] text-gray-400'>
                                   {entry.createdAt
@@ -15956,7 +15973,7 @@ export default function OriginalVideosList({
                                 href={entry.url}
                                 download={entry.fileName}
                                 className='inline-flex items-center gap-1 px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-md transition-colors'
-                                title={`Download ${lang.toUpperCase()} merged audio`}
+                                title={`Download ${lang.toUpperCase()} merged audio (${entry.startId}–${entry.endId})`}
                               >
                                 <Download className='w-3.5 h-3.5' />
                                 Download

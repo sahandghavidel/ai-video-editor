@@ -227,13 +227,26 @@ export interface MergedVideoState {
   fileName: string | null;
 }
 
-// Merged dubbed audio state interface (per language)
+// Merged dubbed audio state interface (per scope: startId-endId-languageCode)
+export interface MergedDubbedAudioEntry {
+  url: string;
+  createdAt: string;
+  fileName: string;
+  startId: number;
+  endId: number;
+  languageCode: string;
+}
 export interface MergedDubbedAudioState {
-  [languageCode: string]: {
-    url: string;
-    createdAt: string;
-    fileName: string;
-  };
+  [scopeKey: string]: MergedDubbedAudioEntry;
+}
+
+/** Build a deterministic scope key for a dubbed audio range + language. */
+export function buildDubbedAudioScopeKey(
+  startId: number,
+  endId: number,
+  languageCode: string,
+): string {
+  return `${startId}-${endId}-${languageCode}`;
 }
 
 // Selected original video state interface
@@ -509,9 +522,11 @@ interface AppState {
   setMergedDubbedAudio: (
     languageCode: string,
     url: string,
+    startId: number,
+    endId: number,
     fileName?: string,
   ) => void;
-  clearMergedDubbedAudio: (languageCode?: string) => void;
+  clearMergedDubbedAudio: (scopeKey?: string) => void;
 
   // Selected Original Video Actions
   setSelectedOriginalVideo: (
@@ -1528,17 +1543,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   // Merged Dubbed Audio Actions
-  setMergedDubbedAudio: (languageCode, url, fileName) => {
-    const entry = {
+  setMergedDubbedAudio: (languageCode, url, startId, endId, fileName) => {
+    const scopeKey = buildDubbedAudioScopeKey(startId, endId, languageCode);
+    const entry: MergedDubbedAudioEntry = {
       url,
       createdAt: new Date().toISOString(),
-      fileName: fileName || `merged-audio-${languageCode}.wav`,
+      fileName:
+        fileName || `merged-audio-${languageCode}-${startId}-${endId}.wav`,
+      startId,
+      endId,
+      languageCode,
     };
 
     set((state) => ({
       mergedDubbedAudio: {
         ...state.mergedDubbedAudio,
-        [languageCode]: entry,
+        [scopeKey]: entry,
       },
     }));
 
@@ -1555,11 +1575,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  clearMergedDubbedAudio: (languageCode) => {
-    if (languageCode) {
+  clearMergedDubbedAudio: (scopeKey) => {
+    if (scopeKey) {
       set((state) => {
         const entries = Object.entries(state.mergedDubbedAudio).filter(
-          ([key]) => key !== languageCode,
+          ([key]) => key !== scopeKey,
         );
         return { mergedDubbedAudio: Object.fromEntries(entries) };
       });

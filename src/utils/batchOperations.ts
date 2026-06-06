@@ -452,11 +452,23 @@ export const handleMergeAllDubbedAudio = async (
   setMergedDubbedAudio: (
     languageCode: string,
     url: string,
+    startId: number,
+    endId: number,
     fileName?: string,
   ) => void,
+  existingScopeKeys?: Set<string>,
   onLanguageComplete?: (language: string, success: boolean) => void,
 ) => {
   startBatchOperation();
+
+  // Compute the video ID range from the processing videos array
+  const videoIds = videos
+    .map((v) => v.id)
+    .filter(
+      (id): id is number => typeof id === 'number' && Number.isFinite(id),
+    );
+  const minId = videoIds.length > 0 ? Math.min(...videoIds) : 0;
+  const maxId = videoIds.length > 0 ? Math.max(...videoIds) : 0;
 
   try {
     for (const languageCode of languages) {
@@ -465,6 +477,16 @@ export const handleMergeAllDubbedAudio = async (
         console.warn(
           `[MERGE AUDIO] No destination field key for language ${languageCode}, skipping`,
         );
+        continue;
+      }
+
+      // Build scope key and skip if already merged for this range + language
+      const scopeKey = `${minId}-${maxId}-${languageCode}`;
+      if (existingScopeKeys?.has(scopeKey)) {
+        console.log(
+          `[MERGE AUDIO] Skipping language ${languageCode} — already merged for range ${minId}–${maxId} (${scopeKey})`,
+        );
+        onLanguageComplete?.(languageCode, true);
         continue;
       }
 
@@ -514,10 +536,12 @@ export const handleMergeAllDubbedAudio = async (
           setMergedDubbedAudio(
             languageCode,
             singleUrl,
-            `merged-audio-${languageCode}-${dateStr}.wav`,
+            minId,
+            maxId,
+            `merged-audio-${languageCode}-${minId}-${maxId}-${dateStr}.wav`,
           );
           console.log(
-            `[MERGE AUDIO] Single video for ${languageCode}, using URL directly`,
+            `[MERGE AUDIO] Single video for ${languageCode}, using URL directly (${scopeKey})`,
           );
         }
         onLanguageComplete?.(languageCode, true);
@@ -546,7 +570,7 @@ export const handleMergeAllDubbedAudio = async (
       }
 
       console.log(
-        `[MERGE AUDIO] Merging ${audioUrls.length} audio files for language ${languageCode}`,
+        `[MERGE AUDIO] Merging ${audioUrls.length} audio files for language ${languageCode} (range ${minId}–${maxId})`,
       );
 
       try {
@@ -555,7 +579,7 @@ export const handleMergeAllDubbedAudio = async (
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             audio_urls: audioUrls,
-            id: `merged_audio_${languageCode}_${Date.now()}`,
+            id: `merged_audio_${languageCode}_${minId}_${maxId}_${Date.now()}`,
           }),
         });
 
@@ -577,11 +601,13 @@ export const handleMergeAllDubbedAudio = async (
         setMergedDubbedAudio(
           languageCode,
           mergedUrl,
-          `merged-audio-${languageCode}-${dateStr}.wav`,
+          minId,
+          maxId,
+          `merged-audio-${languageCode}-${minId}-${maxId}-${dateStr}.wav`,
         );
 
         console.log(
-          `[MERGE AUDIO] Successfully merged audio for language ${languageCode}: ${mergedUrl}`,
+          `[MERGE AUDIO] Successfully merged audio for language ${languageCode} (${scopeKey}): ${mergedUrl}`,
         );
         onLanguageComplete?.(languageCode, true);
       } catch (error) {
