@@ -1395,6 +1395,11 @@ function startOmniVoiceWorker(input: {
       env: {
         ...process.env,
         PYTORCH_ENABLE_MPS_FALLBACK: '0',
+        // Prevent HF hub from contacting the network during from_pretrained.
+        // The model weights are already cached locally; online fetch of
+        // configs/tokenizer files causes a 500 when Wi-Fi is off.
+        HF_HUB_OFFLINE: '1',
+        TRANSFORMERS_OFFLINE: '1',
       },
     },
   );

@@ -223,6 +223,9 @@ def main() -> int:
         args = parse_args()
         # Strict MPS mode: disable silent CPU fallback for unsupported MPS ops.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+        # Prevent HF hub network calls when model is already cached locally.
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
         import torchaudio
         from omnivoice import OmniVoice

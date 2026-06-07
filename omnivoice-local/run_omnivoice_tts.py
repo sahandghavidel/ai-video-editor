@@ -86,6 +86,9 @@ def main() -> int:
 
         # Strict MPS mode: disable silent CPU fallback for unsupported MPS ops.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+        # Prevent HF hub network calls when model is already cached locally.
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
         output_path = Path(args.output).expanduser().resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
