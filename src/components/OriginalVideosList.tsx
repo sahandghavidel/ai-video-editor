@@ -640,7 +640,7 @@ export default function OriginalVideosList({
     value: string;
     saving: boolean;
   } | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
+  const statusDebounceRef = useRef<number | null>(null);
   const [bulkStatusChange, setBulkStatusChange] = useState<string>('');
   const [showProcessingOnly, setShowProcessingOnly] = useState(true);
   const [updatingBulkStatus, setUpdatingBulkStatus] = useState(false);
@@ -2310,30 +2310,45 @@ export default function OriginalVideosList({
     }
   };
 
-  // Update status function
+  // Update status function — optimistically updates local state immediately
   const handleStatusChange = async (
     videoId: number,
     newStatus: string,
     e: React.SyntheticEvent,
   ) => {
     e.stopPropagation();
-    setUpdatingStatus(videoId);
 
+    // Debounce: ignore rapid-fire changes within 500ms
+    if (statusDebounceRef.current !== null) return;
+    statusDebounceRef.current = window.setTimeout(() => {
+      statusDebounceRef.current = null;
+    }, 500);
+
+    // Capture the old status for rollback
+    const previousVideos = originalVideos;
+    const video = previousVideos.find((v) => v.id === videoId);
+    const oldStatus = video ? extractFieldValue(video.field_6864) : newStatus;
+
+    // Optimistic: update local state immediately
+    setOriginalVideos((prevVideos) =>
+      prevVideos.map((v) =>
+        v.id === videoId ? { ...v, field_6864: newStatus } : v,
+      ),
+    );
+
+    // Fire API call in background — revert on error
     try {
       await updateOriginalVideoRow(videoId, {
         field_6864: newStatus,
       });
-
-      // Update local state
-      setOriginalVideos((prevVideos) =>
-        prevVideos.map((video) =>
-          video.id === videoId ? { ...video, field_6864: newStatus } : video,
-        ),
-      );
     } catch (error) {
       console.error('Failed to update status:', error);
-    } finally {
-      setUpdatingStatus(null);
+      // Revert optimistic update on failure
+      setOriginalVideos((prevVideos) =>
+        prevVideos.map((v) =>
+          v.id === videoId ? { ...v, field_6864: oldStatus } : v,
+        ),
+      );
     }
   };
 
@@ -15035,40 +15050,30 @@ export default function OriginalVideosList({
                               <div
                                 className='relative'
                                 onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
                               >
-                                {updatingStatus === video.id ? (
-                                  <div className='flex items-center gap-2 px-3 py-1.5'>
-                                    <Loader2 className='w-4 h-4 animate-spin text-blue-500' />
-                                    <span className='text-xs text-gray-600'>
-                                      Updating...
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <select
-                                    value={statusValue}
-                                    onChange={(e) =>
-                                      handleStatusChange(
-                                        video.id,
-                                        e.target.value,
-                                        e,
-                                      )
-                                    }
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
-                                      statusValue === 'Done'
-                                        ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200 focus:ring-green-500'
-                                        : statusValue === 'Processing'
-                                          ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 focus:ring-blue-500'
-                                          : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200 focus:ring-gray-500'
-                                    }`}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <option value='Pending'>Pending</option>
-                                    <option value='Processing'>
-                                      Processing
-                                    </option>
-                                    <option value='Done'>Done</option>
-                                  </select>
-                                )}
+                                <select
+                                  value={statusValue}
+                                  onChange={(e) =>
+                                    handleStatusChange(
+                                      video.id,
+                                      e.target.value,
+                                      e,
+                                    )
+                                  }
+                                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                                    statusValue === 'Done'
+                                      ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200 focus:ring-green-500'
+                                      : statusValue === 'Processing'
+                                        ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 focus:ring-blue-500'
+                                        : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200 focus:ring-gray-500'
+                                  }`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value='Pending'>Pending</option>
+                                  <option value='Processing'>Processing</option>
+                                  <option value='Done'>Done</option>
+                                </select>
                               </div>
                             </td>
 
