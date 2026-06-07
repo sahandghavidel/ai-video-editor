@@ -1024,7 +1024,7 @@ export async function POST(request: NextRequest) {
         originalAudioFieldKey:
           baserowFields.sceneOriginalAudioFieldKey || undefined,
         createSilenceForEmptySentence: true,
-        emptySentenceFieldKey: baserowFields.sceneReferenceSentenceFieldKey,
+        emptySentenceFieldKey: baserowFields.sceneTargetSentenceFieldKey,
         sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
         provider: 'omnivoice',
         referenceAudioFilename: selectedLanguageReference.filename,

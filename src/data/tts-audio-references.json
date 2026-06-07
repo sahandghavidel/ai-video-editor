@@ -22,10 +22,14 @@
       "numStep": 16,
       "speed": 1,
       "description": "Default Persian reference voice used for FA dubbing.",
-      "tags": ["fa", "persian", "default"],
+      "tags": [
+        "fa",
+        "persian",
+        "default"
+      ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "en-default",
@@ -49,10 +53,14 @@
       "numStep": 8,
       "speed": 1,
       "description": "Example English reference entry for future multilingual pipelines.",
-      "tags": ["en", "english", "example"],
+      "tags": [
+        "en",
+        "english",
+        "example"
+      ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -78,7 +86,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
@@ -104,7 +112,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
@@ -130,7 +138,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
@@ -156,7 +164,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
@@ -182,7 +190,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
@@ -209,7 +217,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780723908215-kn74nfnb",
@@ -236,7 +244,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     },
     {
       "id": "audio-ref-local-1780803012962-je49hy9s",
@@ -263,7 +271,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T04:13:09.079Z"
+      "updatedAt": "2026-06-07T08:35:38.124Z"
     }
   ]
 }
