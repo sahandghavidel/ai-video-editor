@@ -118,16 +118,12 @@ export function parseSrtSegments(srtContent: string): ParsedCaptionSegment[] {
   const blocks = srtContent
     .replace(/\r\n/g, '\n')
     .split(/\n{2,}/)
-    .map((b) => b.trim())
-    .filter(Boolean);
+    .filter((b) => b.trim().length > 0);
 
   const segments: ParsedCaptionSegment[] = [];
 
   for (const block of blocks) {
-    const lines = block
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    const lines = block.split('\n').map((line) => line.trim());
 
     if (lines.length < 2) continue;
 
@@ -149,7 +145,6 @@ export function parseSrtSegments(srtContent: string): ParsedCaptionSegment[] {
 
     const textLines = lines.slice(timeLineIndex + 1);
     const text = textLines.join(' ').replace(/\s+/g, ' ').trim();
-    if (!text) continue;
 
     segments.push({ text, start, end });
   }
