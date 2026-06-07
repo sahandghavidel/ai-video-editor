@@ -22,6 +22,7 @@ type AudioReferenceEntry = {
   name: string;
   filename: string;
   language: string;
+  youtubeLangCode?: string;
   referenceText: string;
   baserowFields: BaserowLanguageFields;
   deviceMap: DeviceMap;
@@ -152,11 +153,18 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
     ),
   };
 
+  const youtubeLangCode =
+    typeof (entry as Record<string, unknown>).youtubeLangCode === 'string'
+      ? ((entry as Record<string, unknown>).youtubeLangCode as string).trim() ||
+        undefined
+      : undefined;
+
   return {
     id,
     name: nameRaw || filename,
     filename,
     language: (languageRaw || 'und').toLowerCase(),
+    youtubeLangCode,
     referenceText:
       typeof entry.referenceText === 'string' ? entry.referenceText : '',
     baserowFields,
@@ -541,6 +549,29 @@ export function TTSAudioReferencesModal({
                       placeholder='fa'
                       className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
                     />
+                  </div>
+                </div>
+
+                <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
+                  <div className='space-y-1'>
+                    <label className='text-xs font-medium text-gray-700'>
+                      YouTube Sub Lang Code
+                    </label>
+                    <input
+                      type='text'
+                      value={entry.youtubeLangCode ?? ''}
+                      onChange={(event) =>
+                        updateEntry(entry.id, {
+                          youtubeLangCode: event.target.value || undefined,
+                        })
+                      }
+                      placeholder='e.g. fr, pt-BR, zh-Hans'
+                      className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
+                    />
+                    <p className='text-[10px] text-gray-400 mt-0.5'>
+                      Language code for YouTube subtitle download. Leave empty
+                      to skip auto-download.
+                    </p>
                   </div>
                 </div>
 

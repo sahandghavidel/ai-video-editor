@@ -21,6 +21,7 @@ export interface TtsAudioReferenceEntry {
   name: string;
   filename: string;
   language: string;
+  youtubeLangCode?: string;
   referenceText: string;
   baserowFields: LanguageBaserowFields;
   deviceMap: OmniVoiceDeviceMap;
@@ -245,11 +246,18 @@ export function sanitizeTtsAudioReferenceEntries(
         ? entry.updatedAt
         : new Date().toISOString();
 
+    const youtubeLangCode =
+      typeof entry.youtubeLangCode === 'string' &&
+      entry.youtubeLangCode.trim().length > 0
+        ? entry.youtubeLangCode.trim()
+        : undefined;
+
     byId.set(id, {
       id,
       name,
       filename,
       language,
+      youtubeLangCode,
       referenceText,
       baserowFields,
       deviceMap,

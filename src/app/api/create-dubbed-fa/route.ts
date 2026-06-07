@@ -76,6 +76,7 @@ type ResolvedAudioReference = {
   id: string | null;
   filename: string;
   language: string;
+  youtubeLangCode?: string;
   referenceText: string;
   baserowFields: LanguageBaserowFields;
   deviceMap: 'mps' | 'cpu' | 'auto';
@@ -515,6 +516,7 @@ async function resolveLanguageAudioReference(
           id: defaultEntry.id,
           filename: defaultEntry.filename,
           language: defaultEntry.language,
+          youtubeLangCode: defaultEntry.youtubeLangCode,
           referenceText: defaultEntry.referenceText,
           baserowFields: defaultEntry.baserowFields,
           deviceMap: defaultEntry.deviceMap,
@@ -530,6 +532,7 @@ async function resolveLanguageAudioReference(
         id: firstEntry.id,
         filename: firstEntry.filename,
         language: firstEntry.language,
+        youtubeLangCode: firstEntry.youtubeLangCode,
         referenceText: firstEntry.referenceText,
         baserowFields: firstEntry.baserowFields,
         deviceMap: firstEntry.deviceMap,
@@ -710,10 +713,112 @@ export async function POST(request: NextRequest) {
       `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
     );
 
+    /* ── Step 0: Auto-fetch missing target SRT from YouTube ── */
+
+    let srtTargetUrl = extractUrl(videoRow[baserowFields.videoSrtFieldKey]);
+
+    if (!srtTargetUrl && selectedLanguageReference.youtubeLangCode) {
+      const youtubeUrl = extractUrl(videoRow['field_6879']);
+
+      if (youtubeUrl) {
+        console.log(
+          `[create-dubbed-fa] Step 0: Target SRT missing for lang '${selectedLanguageReference.language}'. Attempting YouTube subtitle download...`,
+        );
+
+        try {
+          const ytSubResponse = await fetch(
+            `${request.nextUrl.origin}/api/download-youtube-subtitles`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: youtubeUrl,
+                lang: selectedLanguageReference.youtubeLangCode,
+                format: 'srt',
+              }),
+            },
+          );
+
+          if (ytSubResponse.ok) {
+            const srtContent = await ytSubResponse.text();
+
+            if (srtContent && srtContent.trim().length > 0) {
+              // Write SRT to a temp file and upload to MinIO.
+              const srtTmpPath = makeTempPath(
+                `video_${videoId}_yt_sub_${selectedLanguageReference.language}`,
+                'srt',
+              );
+
+              try {
+                await writeFile(srtTmpPath, srtContent, 'utf8');
+
+                const srtFilename = `video_${videoId}_${selectedLanguageReference.language}_youtube_sub_${Date.now()}.srt`;
+                const uploadedSrtUrl = await uploadToMinio(
+                  srtTmpPath,
+                  srtFilename,
+                  'text/plain',
+                );
+
+                // Update the Baserow video row with the new SRT URL.
+                await baserowPatchRow(
+                  baserowUrl,
+                  token,
+                  VIDEOS_TABLE_ID,
+                  videoId,
+                  { [baserowFields.videoSrtFieldKey]: uploadedSrtUrl },
+                );
+
+                // Re-read the row to get the updated value.
+                const updatedVideoRow = await baserowGetJson<BaserowRow>(
+                  baserowUrl,
+                  token,
+                  `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
+                );
+
+                srtTargetUrl = extractUrl(
+                  updatedVideoRow[baserowFields.videoSrtFieldKey],
+                );
+
+                console.log(
+                  `[create-dubbed-fa] Step 0: ✅ YouTube subtitle downloaded and saved for lang '${selectedLanguageReference.language}'. URL: ${uploadedSrtUrl}`,
+                );
+              } finally {
+                await safeUnlink(srtTmpPath);
+              }
+            } else {
+              console.warn(
+                `[create-dubbed-fa] Step 0: YouTube subtitle response was empty for lang '${selectedLanguageReference.youtubeLangCode}'.`,
+              );
+            }
+          } else {
+            const ytError = (await ytSubResponse.json().catch(() => null)) as {
+              error?: string;
+            } | null;
+            console.warn(
+              `[create-dubbed-fa] Step 0: YouTube subtitle download failed (${ytSubResponse.status}): ${ytError?.error ?? 'unknown error'}`,
+            );
+          }
+        } catch (ytError) {
+          console.warn(
+            `[create-dubbed-fa] Step 0: YouTube subtitle auto-fetch failed for lang '${selectedLanguageReference.language}':`,
+            ytError,
+          );
+        }
+      } else {
+        console.warn(
+          `[create-dubbed-fa] Step 0: No YouTube URL (field_6879) found for video ${videoId}.`,
+        );
+      }
+    }
+
     const srtReferenceUrl = extractUrl(
       videoRow[baserowFields.videoReferenceSrtFieldKey],
     );
-    const srtTargetUrl = extractUrl(videoRow[baserowFields.videoSrtFieldKey]);
+
+    // Re-read target SRT URL in case Step 0 updated it.
+    if (!srtTargetUrl) {
+      srtTargetUrl = extractUrl(videoRow[baserowFields.videoSrtFieldKey]);
+    }
 
     if (!srtReferenceUrl) {
       return NextResponse.json(
