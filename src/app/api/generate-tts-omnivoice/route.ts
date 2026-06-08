@@ -1321,59 +1321,81 @@ function normalizeArabicNumbersToWordsInPlainSegment(segment: string): {
 } {
   let numbersConverted = 0;
 
-  // Matches standalone numeric sequences: 123, 1234.56, ١٢٣, ١٢٣٤٫٥٦
-  // Lookbehind/lookahead block any digit or letter adjacent to the match,
-  // preventing partial matches inside identifiers like "ES2025" or "في2025".
-  const numberPattern =
-    /(?<![0-9٠-٩\p{L}])([0-9٠-٩]+(?:[.٫][0-9٠-٩]+)?)(?![0-9٠-٩\p{L}])/gu;
+  // Matches numeric sequences not preceded by another digit.
+  // The callback then decides whether to convert based on context:
+  //   - Standalone number (whitespace/punctuation before) → always convert
+  //   - After a letter + ≤3 digits (e.g. HTML5, CSS3, Node16) → convert
+  //   - After a letter + >3 digits (e.g. ES2025, في2025) → skip
+  const numberPattern = /(?<!\d)([0-9٠-٩]+(?:[.٫][0-9٠-٩]+)?)(?!\d)/g;
 
-  const text = segment.replace(numberPattern, (match) => {
-    // Normalize Eastern Arabic digits to western digits
-    let normalized = match;
-    for (const [eastern, western] of Object.entries(ARABIC_DIGITS_TO_WESTERN)) {
-      normalized = normalized.replaceAll(eastern, western);
-    }
+  const text = segment.replace(
+    numberPattern,
+    (match, _group, offset: number) => {
+      // Context check: if preceded by a letter, only convert short numbers
+      // (≤3 digits, e.g. HTML5, CSS3, Node16).  Long numbers after letters
+      // like ES2025 or في2025 are left untouched.
+      const charBefore = offset > 0 ? segment.charCodeAt(offset - 1) : 0;
+      const isLetterBefore =
+        (charBefore >= 0x41 && charBefore <= 0x5a) || // A-Z
+        (charBefore >= 0x61 && charBefore <= 0x7a) || // a-z
+        charBefore >= 0x0600; // Arabic/RTL range
+      const onlyDigits = match.replace(/[^0-9٠-٩]/g, '');
+      if (isLetterBefore && onlyDigits.length > 3) {
+        return match;
+      }
+      // Prefix a space when converting digits glued to a letter
+      // (e.g. HTML5 → HTML خمسة, not HTMLخمسة)
+      const spacePrefix = isLetterBefore ? ' ' : '';
 
-    // Split integer and decimal parts
-    const decimalSepIdx = normalized.search(ARABIC_DECIMAL_SEPARATOR);
-    if (decimalSepIdx !== -1) {
-      // Decimal numbers: read digit-by-digit after the separator
-      const intPart = normalized.slice(0, decimalSepIdx);
-      const decPart = normalized.slice(decimalSepIdx + 1);
-      const intNum = parseInt(intPart, 10);
+      // Normalize Eastern Arabic digits to western digits
+      let normalized = match;
+      for (const [eastern, western] of Object.entries(
+        ARABIC_DIGITS_TO_WESTERN,
+      )) {
+        normalized = normalized.replaceAll(eastern, western);
+      }
 
-      // Skip extremely large numbers
-      if (!Number.isFinite(intNum) || intNum > 1_000_000_000_000) {
+      // Split integer and decimal parts
+      const decimalSepIdx = normalized.search(ARABIC_DECIMAL_SEPARATOR);
+      if (decimalSepIdx !== -1) {
+        // Decimal numbers: read digit-by-digit after the separator
+        const intPart = normalized.slice(0, decimalSepIdx);
+        const decPart = normalized.slice(decimalSepIdx + 1);
+        const intNum = parseInt(intPart, 10);
+
+        // Skip extremely large numbers
+        if (!Number.isFinite(intNum) || intNum > 1_000_000_000_000) {
+          return match;
+        }
+
+        try {
+          const intWords = arabicToWords.convert(intNum);
+          const decWords = decPart
+            .split('')
+            .map((d) => arabicToWords.convert(parseInt(d, 10)))
+            .join(' ');
+          numbersConverted += 1;
+          return `${spacePrefix}${intWords} فاصل ${decWords}`;
+        } catch {
+          return match;
+        }
+      }
+
+      // Integer-only path
+      const num = parseInt(normalized, 10);
+      if (!Number.isFinite(num) || num > 1_000_000_000_000) {
         return match;
       }
 
       try {
-        const intWords = arabicToWords.convert(intNum);
-        const decWords = decPart
-          .split('')
-          .map((d) => arabicToWords.convert(parseInt(d, 10)))
-          .join(' ');
+        const words = arabicToWords.convert(num);
         numbersConverted += 1;
-        return `${intWords} فاصل ${decWords}`;
+        return `${spacePrefix}${words}`;
       } catch {
         return match;
       }
-    }
-
-    // Integer-only path
-    const num = parseInt(normalized, 10);
-    if (!Number.isFinite(num) || num > 1_000_000_000_000) {
-      return match;
-    }
-
-    try {
-      const words = arabicToWords.convert(num);
-      numbersConverted += 1;
-      return words;
-    } catch {
-      return match;
-    }
-  });
+    },
+  );
 
   return { text, numbersConverted };
 }
