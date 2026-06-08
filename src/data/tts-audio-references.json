@@ -5,7 +5,7 @@
       "name": "Farsi Default Voice",
       "filename": "ElevenLabs_2026-04-26T07_08_39__s0_v3.wav",
       "language": "fa",
-      "youtubeLangCode": "fa",
+      "youtubeLangCode": "fa-en-GB",
       "referenceText": "انتخاب کنید کدام مراحل در اجرای کامل خط لوله لحاظ شوند",
       "baserowFields": {
         "videoSrtFieldKey": "field_7112",
@@ -18,8 +18,8 @@
         "sceneOriginalAudioFieldKey": "field_7117"
       },
       "deviceMap": "mps",
-      "dtype": "float16",
-      "numStep": 16,
+      "dtype": "float32",
+      "numStep": 20,
       "speed": 1,
       "description": "Default Persian reference voice used for FA dubbing.",
       "tags": [
@@ -29,7 +29,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "en-default",
@@ -49,7 +49,7 @@
         "sceneOriginalAudioFieldKey": "field_7118"
       },
       "deviceMap": "mps",
-      "dtype": "float16",
+      "dtype": "float32",
       "numStep": 8,
       "speed": 1,
       "description": "Example English reference entry for future multilingual pipelines.",
@@ -60,7 +60,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -86,7 +86,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
@@ -112,7 +112,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
@@ -138,7 +138,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
@@ -164,7 +164,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
@@ -183,14 +183,14 @@
         "sceneDubbedAudioFieldKey": "field_7111"
       },
       "deviceMap": "mps",
-      "dtype": "float16",
+      "dtype": "float32",
       "numStep": 16,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
@@ -210,14 +210,14 @@
         "sceneOriginalAudioFieldKey": "field_7123"
       },
       "deviceMap": "mps",
-      "dtype": "float16",
+      "dtype": "float32",
       "numStep": 20,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780723908215-kn74nfnb",
@@ -237,14 +237,14 @@
         "sceneOriginalAudioFieldKey": "field_7130"
       },
       "deviceMap": "mps",
-      "dtype": "float16",
+      "dtype": "float32",
       "numStep": 20,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     },
     {
       "id": "audio-ref-local-1780803012962-je49hy9s",
@@ -264,14 +264,41 @@
         "sceneOriginalAudioFieldKey": "field_7133"
       },
       "deviceMap": "mps",
-      "dtype": "float16",
+      "dtype": "float32",
       "numStep": 20,
       "speed": 1,
       "description": "",
       "tags": [],
-      "isDefault": false,
+      "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-07T08:35:38.124Z"
+      "updatedAt": "2026-06-08T07:25:01.470Z"
+    },
+    {
+      "id": "audio-ref-local-1780884860880-hzmu5wcr",
+      "name": "Best arabic voice",
+      "filename": "ar-mine.wav",
+      "language": "arb",
+      "youtubeLangCode": "ar-en-GB",
+      "referenceText": "في هذا القسم، ستتعرف على خيارات جديدة",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7137",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7136",
+        "sceneDurationFieldKey": "field_6884",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7138",
+        "sceneDubbedAudioFieldKey": "field_7140",
+        "sceneOriginalAudioFieldKey": "field_7139"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 20,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-06-08T07:25:01.470Z"
     }
   ]
 }

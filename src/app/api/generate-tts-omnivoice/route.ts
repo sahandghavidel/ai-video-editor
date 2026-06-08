@@ -6,6 +6,7 @@ import path from 'path';
 import { promises as fsp } from 'fs';
 import os from 'os';
 import { promisify } from 'util';
+import { ToWords } from 'to-words';
 import {
   loadTtsAudioReferencesStore,
   type TtsAudioReferenceEntry,
@@ -1285,6 +1286,132 @@ function normalizeDotSeparatedWordsForOmniVoice(text: string): {
   return { normalizedText, movedDotCount };
 }
 
+/**
+ * Convert numeric sequences in Arabic text to spoken Arabic words.
+ * Only activates for language code 'arb' (the app's Arabic key).
+ *
+ * Examples:
+ *   "في عام 2025" -> "في عام ألفان و خمسة و عشرون"
+ *   "السعر 1500"  -> "السعر ألف و خمسمائة"
+ *
+ * The regex matches integers (including Eastern Arabic numerals ٠-٩)
+ * and decimal numbers.  Very large numbers (> 10^12) are left as-is
+ * to avoid pathological output.
+ */
+const ARABIC_NUMBER_TO_WORDS_LOCALE = 'arb';
+const TOWORDS_LOCALE_CODE = 'ar-SA';
+const arabicToWords = new ToWords({ localeCode: TOWORDS_LOCALE_CODE });
+const ARABIC_DECIMAL_SEPARATOR = /[.٫]/;
+const ARABIC_DIGITS_TO_WESTERN: Record<string, string> = {
+  '٠': '0',
+  '١': '1',
+  '٢': '2',
+  '٣': '3',
+  '٤': '4',
+  '٥': '5',
+  '٦': '6',
+  '٧': '7',
+  '٨': '8',
+  '٩': '9',
+};
+
+function normalizeArabicNumbersToWordsInPlainSegment(segment: string): {
+  text: string;
+  numbersConverted: number;
+} {
+  let numbersConverted = 0;
+
+  // Matches standalone numeric sequences: 123, 1234.56, ١٢٣, ١٢٣٤٫٥٦
+  // Lookbehind/lookahead block any digit or letter adjacent to the match,
+  // preventing partial matches inside identifiers like "ES2025" or "في2025".
+  const numberPattern =
+    /(?<![0-9٠-٩\p{L}])([0-9٠-٩]+(?:[.٫][0-9٠-٩]+)?)(?![0-9٠-٩\p{L}])/gu;
+
+  const text = segment.replace(numberPattern, (match) => {
+    // Normalize Eastern Arabic digits to western digits
+    let normalized = match;
+    for (const [eastern, western] of Object.entries(ARABIC_DIGITS_TO_WESTERN)) {
+      normalized = normalized.replaceAll(eastern, western);
+    }
+
+    // Split integer and decimal parts
+    const decimalSepIdx = normalized.search(ARABIC_DECIMAL_SEPARATOR);
+    if (decimalSepIdx !== -1) {
+      // Decimal numbers: read digit-by-digit after the separator
+      const intPart = normalized.slice(0, decimalSepIdx);
+      const decPart = normalized.slice(decimalSepIdx + 1);
+      const intNum = parseInt(intPart, 10);
+
+      // Skip extremely large numbers
+      if (!Number.isFinite(intNum) || intNum > 1_000_000_000_000) {
+        return match;
+      }
+
+      try {
+        const intWords = arabicToWords.convert(intNum);
+        const decWords = decPart
+          .split('')
+          .map((d) => arabicToWords.convert(parseInt(d, 10)))
+          .join(' ');
+        numbersConverted += 1;
+        return `${intWords} فاصل ${decWords}`;
+      } catch {
+        return match;
+      }
+    }
+
+    // Integer-only path
+    const num = parseInt(normalized, 10);
+    if (!Number.isFinite(num) || num > 1_000_000_000_000) {
+      return match;
+    }
+
+    try {
+      const words = arabicToWords.convert(num);
+      numbersConverted += 1;
+      return words;
+    } catch {
+      return match;
+    }
+  });
+
+  return { text, numbersConverted };
+}
+
+/**
+ * Top-level wrapper that converts Arabic numbers to words while
+ * preserving [bracket-tag] tokens (e.g. [laughter]).
+ */
+function convertArabicNumbersToWords(text: string): {
+  normalizedText: string;
+  arabicNumbersConverted: number;
+} {
+  // Match BOTH ASCII [brackets] AND Unicode ⟦ ⟧ placeholders
+  // ⟦ = U+27E6, ⟧ = U+27E7 (used by protectIdentityReplacementsFromOmniSplitting)
+  const bracketTagRegex = /[\u005B\u27E6][^\u005D\u27E7\r\n]*[\u005D\u27E7]/gu;
+  let normalizedText = '';
+  let arabicNumbersConverted = 0;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(bracketTagRegex)) {
+    const index = match.index ?? 0;
+    const before = text.slice(lastIndex, index);
+    const converted = normalizeArabicNumbersToWordsInPlainSegment(before);
+    normalizedText += converted.text;
+    arabicNumbersConverted += converted.numbersConverted;
+    normalizedText += match[0];
+    lastIndex = index + match[0].length;
+  }
+
+  const tail = normalizeArabicNumbersToWordsInPlainSegment(
+    text.slice(lastIndex),
+  );
+  normalizedText += tail.text;
+  arabicNumbersConverted += tail.numbersConverted;
+
+  return { normalizedText, arabicNumbersConverted };
+}
+
 function getWorkerScriptVersion(scriptPath: string): string {
   try {
     const stat = fs.statSync(scriptPath);
@@ -1652,10 +1779,21 @@ export async function POST(request: NextRequest) {
       replacements,
     );
 
+    // Arabic number-to-words: only activates for language 'arb'
+    const configuredLanguageForNorm =
+      typeof body.ttsSettings?.omniVoice?.language === 'string'
+        ? body.ttsSettings.omniVoice.language.trim()
+        : '';
+    const { normalizedText: textWithArabicNumbers, arabicNumbersConverted } =
+      configuredLanguageForNorm === 'arb'
+        ? convertArabicNumbersToWords(noSplitProtection.protectedText)
+        : {
+            normalizedText: noSplitProtection.protectedText,
+            arabicNumbersConverted: 0,
+          };
+
     const { normalizedText: textWithHyphenWordsSplit, hyphenSplitCount } =
-      normalizeHyphenSeparatedWordsForOmniVoice(
-        noSplitProtection.protectedText,
-      );
+      normalizeHyphenSeparatedWordsForOmniVoice(textWithArabicNumbers);
 
     const {
       normalizedText: textWithParenthesisWordsSplit,
@@ -1721,7 +1859,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} arabicNumbersConverted=${arabicNumbersConverted} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
@@ -2042,6 +2180,7 @@ export async function POST(request: NextRequest) {
         squareBracketWordsSplit: squareBracketSplitCount,
         percentSignsSpaced,
         camelCaseWordsSplit: splitWordCount,
+        arabicNumbersConverted,
         dotPrefixesMoved: movedDotCount,
         wordReplacementsApplied: replacementSubstitutions,
         wordReplacementsConfigured: replacements.length,
