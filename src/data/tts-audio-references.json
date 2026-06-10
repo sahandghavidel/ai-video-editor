@@ -27,22 +27,22 @@
         "persian",
         "default"
       ],
-      "isDefault": true,
+      "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "en-default",
-      "name": "Chinese Default Voice",
-      "filename": "ElevenLabs_2026-05-10T06_36_55__s0_v3.wav",
+      "name": "Chinese",
+      "filename": "zh-mine-3.mp3",
       "language": "zh",
-      "youtubeLangCode": "zh-Hans",
-      "referenceText": "选择要在完整流水线执行中包含的步骤",
+      "youtubeLangCode": "zh-Hans-en-GB",
+      "referenceText": "这个周末我打算在家里安静地看电影，哪里都不去，只想好好休息",
       "baserowFields": {
         "videoSrtFieldKey": "field_7114",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7119",
-        "sceneDurationFieldKey": "field_7107",
+        "sceneDurationFieldKey": "field_6884",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7115",
         "sceneDubbedAudioFieldKey": "field_7116",
@@ -50,7 +50,7 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 8,
+      "numStep": 16,
       "speed": 1,
       "description": "Example English reference entry for future multilingual pipelines.",
       "tags": [
@@ -60,7 +60,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -86,7 +86,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
@@ -112,7 +112,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
@@ -138,7 +138,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
@@ -164,7 +164,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
@@ -190,7 +190,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
@@ -217,7 +217,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780723908215-kn74nfnb",
@@ -244,7 +244,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780803012962-je49hy9s",
@@ -271,12 +271,12 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     },
     {
       "id": "audio-ref-local-1780884860880-hzmu5wcr",
       "name": "Best arabic voice",
-      "filename": "ar-mine.wav",
+      "filename": "ElevenLabs-ar.mp3",
       "language": "arb",
       "youtubeLangCode": "ar-en-GB",
       "referenceText": "في هذا القسم، ستتعرف على خيارات جديدة",
@@ -298,7 +298,115 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-08T07:25:01.470Z"
+      "updatedAt": "2026-06-10T05:58:36.673Z"
+    },
+    {
+      "id": "audio-ref-local-1780978346902-mwx5yjxh",
+      "name": "Russian",
+      "filename": "ElevenLabs_2026-06-09T05_24_39_s6_ivc_sp120_s0_sb0_se0_b_m2.mp3",
+      "language": "ru",
+      "youtubeLangCode": "ru-en-GB",
+      "referenceText": "Сегодня, к сожалению, идет очень сильный дождь",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7144",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7145",
+        "sceneDurationFieldKey": "field_6884",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7141",
+        "sceneDubbedAudioFieldKey": "field_7142",
+        "sceneOriginalAudioFieldKey": "field_7143"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 20,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-06-10T05:58:36.673Z"
+    },
+    {
+      "id": "audio-ref-local-1780988034098-yy9342ub",
+      "name": "Hindi",
+      "filename": "hi-mine-4.mp3",
+      "language": "hi",
+      "youtubeLangCode": "hi-en-GB",
+      "referenceText": "आज, मुझे महसूस हो रहा है कि हमें इस काम को मिलकर पूरा करना चाहिए",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7149",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7150",
+        "sceneDurationFieldKey": "field_6884",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7146",
+        "sceneDubbedAudioFieldKey": "field_7147",
+        "sceneOriginalAudioFieldKey": "field_7148"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 20,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-06-10T05:58:36.673Z"
+    },
+    {
+      "id": "audio-ref-local-1781064644767-pqedhfks",
+      "name": "Japanese",
+      "filename": "ja-mine.mp3",
+      "language": "ja",
+      "youtubeLangCode": "ja-en-GB",
+      "referenceText": "今日は天気がとても良いので、外で元気に遊びたいと思ってます。",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7154",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7155",
+        "sceneDurationFieldKey": "field_6884",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7151",
+        "sceneDubbedAudioFieldKey": "field_7152",
+        "sceneOriginalAudioFieldKey": "field_7153"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 20,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-06-10T05:58:36.673Z"
+    },
+    {
+      "id": "audio-ref-local-1781065130922-ldsb45we",
+      "name": "Korean",
+      "filename": "ko-mine.mp3",
+      "language": "ko",
+      "youtubeLangCode": "ko-en-GB",
+      "referenceText": "저는 매일 아침 일찍 일어나서, 따뜻한 차를 마셔요.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7157",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7156",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7160",
+        "sceneDubbedAudioFieldKey": "field_7159",
+        "sceneOriginalAudioFieldKey": "field_7158"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 20,
+      "speed": 1,
+      "description": "",
+      "tags": [],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-06-10T05:58:36.673Z"
     }
   ]
 }

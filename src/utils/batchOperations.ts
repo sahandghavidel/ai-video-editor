@@ -525,6 +525,16 @@ export const handleMergeAllDubbedAudio = async (
         continue;
       }
 
+      // Abort merge for this language if any Processing video is missing dubbed audio
+      if (videosWithAudio.length < videos.length) {
+        const missingCount = videos.length - videosWithAudio.length;
+        console.warn(
+          `[MERGE AUDIO] Skipping language ${languageCode} — ${missingCount} of ${videos.length} Processing videos missing dubbed audio`,
+        );
+        onLanguageComplete?.(languageCode, false);
+        continue;
+      }
+
       if (videosWithAudio.length === 1) {
         // Only one video — just use its URL directly
         const singleUrl =
