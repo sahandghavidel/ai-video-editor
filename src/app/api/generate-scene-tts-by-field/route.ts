@@ -2373,12 +2373,6 @@ export async function POST(request: NextRequest) {
 
       if (fitAudioToSceneDuration && !targetDurationSec) {
         skippedMissingDurationCount += 1;
-        failures.push({
-          sceneId,
-          error: `Missing/invalid duration in ${sceneDurationFieldKey}`,
-          category: 'invalid_scene_duration',
-        });
-
         logFitInfo('post:scene-skip-missing-duration', {
           fitDebugRunId,
           sceneId,

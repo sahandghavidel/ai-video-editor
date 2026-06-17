@@ -11,7 +11,7 @@
         "videoSrtFieldKey": "field_7112",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7113",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7110",
         "sceneDubbedAudioFieldKey": "field_7111",
@@ -29,7 +29,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "en-default",
@@ -42,7 +42,7 @@
         "videoSrtFieldKey": "field_7114",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7119",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7115",
         "sceneDubbedAudioFieldKey": "field_7116",
@@ -60,7 +60,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -86,7 +86,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
@@ -112,7 +112,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
@@ -138,7 +138,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
@@ -164,7 +164,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
@@ -190,7 +190,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
@@ -203,7 +203,7 @@
         "videoSrtFieldKey": "field_7122",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7121",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7125",
         "sceneDubbedAudioFieldKey": "field_7124",
@@ -217,7 +217,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780723908215-kn74nfnb",
@@ -230,7 +230,7 @@
         "videoSrtFieldKey": "field_7126",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7127",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7128",
         "sceneDubbedAudioFieldKey": "field_7129",
@@ -244,7 +244,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780803012962-je49hy9s",
@@ -257,7 +257,7 @@
         "videoSrtFieldKey": "field_7135",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7131",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7134",
         "sceneDubbedAudioFieldKey": "field_7132",
@@ -271,7 +271,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780884860880-hzmu5wcr",
@@ -284,7 +284,7 @@
         "videoSrtFieldKey": "field_7137",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7136",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7138",
         "sceneDubbedAudioFieldKey": "field_7140",
@@ -298,7 +298,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780978346902-mwx5yjxh",
@@ -311,7 +311,7 @@
         "videoSrtFieldKey": "field_7144",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7145",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7141",
         "sceneDubbedAudioFieldKey": "field_7142",
@@ -325,7 +325,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1780988034098-yy9342ub",
@@ -338,7 +338,7 @@
         "videoSrtFieldKey": "field_7149",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7150",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7146",
         "sceneDubbedAudioFieldKey": "field_7147",
@@ -352,7 +352,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781064644767-pqedhfks",
@@ -365,7 +365,7 @@
         "videoSrtFieldKey": "field_7154",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7155",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7151",
         "sceneDubbedAudioFieldKey": "field_7152",
@@ -379,7 +379,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781065130922-ldsb45we",
@@ -392,7 +392,7 @@
         "videoSrtFieldKey": "field_7157",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7156",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7160",
         "sceneDubbedAudioFieldKey": "field_7159",
@@ -406,7 +406,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781144218035-eyc5tvdz",
@@ -419,7 +419,7 @@
         "videoSrtFieldKey": "field_7161",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7166",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7182",
         "sceneDubbedAudioFieldKey": "field_7177",
@@ -433,7 +433,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781152128771-crn2xbf8",
@@ -446,7 +446,7 @@
         "videoSrtFieldKey": "field_7162",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7167",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7183",
         "sceneDubbedAudioFieldKey": "field_7178",
@@ -460,7 +460,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781153930719-huah0y0g",
@@ -473,7 +473,7 @@
         "videoSrtFieldKey": "field_7163",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7168",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7184",
         "sceneDubbedAudioFieldKey": "field_7179",
@@ -487,7 +487,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781156102363-b6shelmd",
@@ -500,7 +500,7 @@
         "videoSrtFieldKey": "field_7164",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7169",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7185",
         "sceneDubbedAudioFieldKey": "field_7180",
@@ -514,7 +514,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781160451053-me6vuufm",
@@ -527,7 +527,7 @@
         "videoSrtFieldKey": "field_7165",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7170",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7186",
         "sceneDubbedAudioFieldKey": "field_7181",
@@ -541,7 +541,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781234780021-o6tpyrsw",
@@ -554,7 +554,7 @@
         "videoSrtFieldKey": "field_7207",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7202",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7197",
         "sceneDubbedAudioFieldKey": "field_7192",
@@ -568,7 +568,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781236780182-nmelbsdb",
@@ -581,7 +581,7 @@
         "videoSrtFieldKey": "field_7208",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7203",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7198",
         "sceneDubbedAudioFieldKey": "field_7193",
@@ -595,7 +595,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781240849711-d847gllu",
@@ -608,7 +608,7 @@
         "videoSrtFieldKey": "field_7209",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7204",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7199",
         "sceneDubbedAudioFieldKey": "field_7194",
@@ -622,7 +622,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781246187580-cytr9876",
@@ -635,7 +635,7 @@
         "videoSrtFieldKey": "field_7210",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7205",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7200",
         "sceneDubbedAudioFieldKey": "field_7195",
@@ -649,7 +649,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781246997812-sjiyrume",
@@ -662,7 +662,7 @@
         "videoSrtFieldKey": "field_7211",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7206",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7201",
         "sceneDubbedAudioFieldKey": "field_7196",
@@ -676,7 +676,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781327093132-f4c3imaz",
@@ -689,7 +689,7 @@
         "videoSrtFieldKey": "field_7217",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7212",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7232",
         "sceneDubbedAudioFieldKey": "field_7227",
@@ -703,7 +703,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781328133907-s5dvmonf",
@@ -716,7 +716,7 @@
         "videoSrtFieldKey": "field_7218",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7213",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7233",
         "sceneDubbedAudioFieldKey": "field_7228",
@@ -730,7 +730,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781330127647-2tuhlsqq",
@@ -743,7 +743,7 @@
         "videoSrtFieldKey": "field_7219",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7214",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7234",
         "sceneDubbedAudioFieldKey": "field_7229",
@@ -757,7 +757,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781331491876-qg91ugqj",
@@ -770,7 +770,7 @@
         "videoSrtFieldKey": "field_7220",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7215",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7235",
         "sceneDubbedAudioFieldKey": "field_7230",
@@ -784,7 +784,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781332858843-irq4epkw",
@@ -797,7 +797,7 @@
         "videoSrtFieldKey": "field_7221",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7216",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7236",
         "sceneDubbedAudioFieldKey": "field_7231",
@@ -811,7 +811,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781409089366-3oxr7ipd",
@@ -824,7 +824,7 @@
         "videoSrtFieldKey": "field_7258",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7253",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7248",
         "sceneDubbedAudioFieldKey": "field_7243",
@@ -838,7 +838,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781411785664-3fa5ao3j",
@@ -851,7 +851,7 @@
         "videoSrtFieldKey": "field_7259",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7254",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7249",
         "sceneDubbedAudioFieldKey": "field_7244",
@@ -865,7 +865,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781413462044-60noxeqq",
@@ -878,7 +878,7 @@
         "videoSrtFieldKey": "field_7260",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7255",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7250",
         "sceneDubbedAudioFieldKey": "field_7245",
@@ -892,7 +892,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781414282222-2nup9b7d",
@@ -905,7 +905,7 @@
         "videoSrtFieldKey": "field_7261",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7256",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7251",
         "sceneDubbedAudioFieldKey": "field_7246",
@@ -919,7 +919,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781415903239-3df9svpm",
@@ -932,7 +932,7 @@
         "videoSrtFieldKey": "field_7262",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7257",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7252",
         "sceneDubbedAudioFieldKey": "field_7247",
@@ -946,7 +946,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781500405774-qx7zt78v",
@@ -959,7 +959,7 @@
         "videoSrtFieldKey": "field_7273",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7263",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7283",
         "sceneDubbedAudioFieldKey": "field_7293",
@@ -973,7 +973,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781501487260-7obleoet",
@@ -986,7 +986,7 @@
         "videoSrtFieldKey": "field_7274",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7264",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7284",
         "sceneDubbedAudioFieldKey": "field_7294",
@@ -1000,7 +1000,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781502387868-34ft0kva",
@@ -1013,7 +1013,7 @@
         "videoSrtFieldKey": "field_7275",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7265",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7285",
         "sceneDubbedAudioFieldKey": "field_7295",
@@ -1027,7 +1027,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781503075838-w68o2ze5",
@@ -1040,7 +1040,7 @@
         "videoSrtFieldKey": "field_7276",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7266",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7286",
         "sceneDubbedAudioFieldKey": "field_7296",
@@ -1054,7 +1054,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781503851763-pcko9i0s",
@@ -1067,7 +1067,7 @@
         "videoSrtFieldKey": "field_7277",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7267",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7287",
         "sceneDubbedAudioFieldKey": "field_7297",
@@ -1081,7 +1081,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781504434727-y8kuwkna",
@@ -1094,7 +1094,7 @@
         "videoSrtFieldKey": "field_7278",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7268",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7288",
         "sceneDubbedAudioFieldKey": "field_7298",
@@ -1108,7 +1108,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781504895973-zjdfj07e",
@@ -1121,7 +1121,7 @@
         "videoSrtFieldKey": "field_7279",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7269",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7289",
         "sceneDubbedAudioFieldKey": "field_7299",
@@ -1135,7 +1135,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781505361146-lc9ua33q",
@@ -1148,7 +1148,7 @@
         "videoSrtFieldKey": "field_7280",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7270",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7290",
         "sceneDubbedAudioFieldKey": "field_7300",
@@ -1162,7 +1162,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781506264954-wlaycc3i",
@@ -1175,7 +1175,7 @@
         "videoSrtFieldKey": "field_7281",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7271",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7291",
         "sceneDubbedAudioFieldKey": "field_7301",
@@ -1189,7 +1189,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781506880605-jhxnqsur",
@@ -1202,7 +1202,7 @@
         "videoSrtFieldKey": "field_7282",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7272",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7292",
         "sceneDubbedAudioFieldKey": "field_7302",
@@ -1216,7 +1216,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781592164051-ejvqahl8",
@@ -1229,7 +1229,7 @@
         "videoSrtFieldKey": "field_7353",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7343",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7333",
         "sceneDubbedAudioFieldKey": "field_7323",
@@ -1243,7 +1243,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781593715997-suguqm2p",
@@ -1256,7 +1256,7 @@
         "videoSrtFieldKey": "field_7354",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7344",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7334",
         "sceneDubbedAudioFieldKey": "field_7324",
@@ -1270,7 +1270,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781594590128-kfchedou",
@@ -1283,7 +1283,7 @@
         "videoSrtFieldKey": "field_7355",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7345",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7335",
         "sceneDubbedAudioFieldKey": "field_7325",
@@ -1297,7 +1297,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781596205784-52m7jyuw",
@@ -1310,7 +1310,7 @@
         "videoSrtFieldKey": "field_7356",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7346",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7336",
         "sceneDubbedAudioFieldKey": "field_7326",
@@ -1324,7 +1324,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781597057481-o3nalzo9",
@@ -1337,7 +1337,7 @@
         "videoSrtFieldKey": "field_7357",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7347",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7337",
         "sceneDubbedAudioFieldKey": "field_7327",
@@ -1351,7 +1351,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781598573850-bk9r2900",
@@ -1364,7 +1364,7 @@
         "videoSrtFieldKey": "field_7358",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7348",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7338",
         "sceneDubbedAudioFieldKey": "field_7328",
@@ -1378,7 +1378,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781599097389-rsvu1fwg",
@@ -1391,7 +1391,7 @@
         "videoSrtFieldKey": "field_7359",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7349",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7339",
         "sceneDubbedAudioFieldKey": "field_7329",
@@ -1405,7 +1405,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781664542968-htfzi9jo",
@@ -1418,7 +1418,7 @@
         "videoSrtFieldKey": "field_7360",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7350",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7340",
         "sceneDubbedAudioFieldKey": "field_7330",
@@ -1432,7 +1432,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781665436336-ibry9sms",
@@ -1445,7 +1445,7 @@
         "videoSrtFieldKey": "field_7361",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7351",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7341",
         "sceneDubbedAudioFieldKey": "field_7331",
@@ -1459,7 +1459,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     },
     {
       "id": "audio-ref-local-1781666281406-hv3lrnr0",
@@ -1472,7 +1472,7 @@
         "videoSrtFieldKey": "field_7362",
         "videoReferenceSrtFieldKey": "field_6872",
         "videoFinalDubbedAudioFieldKey": "field_7352",
-        "sceneDurationFieldKey": "field_6884",
+        "sceneDurationFieldKey": "field_7107",
         "sceneReferenceSentenceFieldKey": "field_6890",
         "sceneTargetSentenceFieldKey": "field_7342",
         "sceneDubbedAudioFieldKey": "field_7332",
@@ -1486,7 +1486,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-06-17T04:45:35.860Z"
+      "updatedAt": "2026-06-17T06:59:57.840Z"
     }
   ]
 }

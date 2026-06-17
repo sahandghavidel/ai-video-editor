@@ -19,7 +19,7 @@ const VIDEOS_TABLE_ID = '713';
 const SCENES_TABLE_ID = '714';
 
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
-const SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT = 'field_6884';
+const SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT = 'field_7107';
 const SCENE_REFERENCE_SENTENCE_FALLBACK_FIELD_KEY = 'field_6890';
 const VIDEO_FINAL_DUBBED_FA_FIELD_KEY = 'field_7113';
 
@@ -49,8 +49,8 @@ const STEP2_FETCH_DISPATCHER = new Agent({
 
 const MAX_TIMESTAMP_DELTA_SEC = 0.05;
 
-const VIDEO_UPLOADED_DURATION_FIELD_KEY = 'field_6909';
-const VIDEO_UPLOADED_URL_FIELD_KEY = 'field_6881';
+const VIDEO_FINAL_MERGED_DURATION_FIELD_KEY = 'field_7363';
+const VIDEO_FINAL_MERGED_URL_FIELD_KEY = 'field_6858';
 const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_CHANNELS = 2;
 const TIME_DECIMALS = 6;
@@ -1065,6 +1065,7 @@ export async function POST(request: NextRequest) {
       skippedOriginalSaveCount?: unknown;
       skippedNoTextCount?: unknown;
       skippedExistingCount?: unknown;
+      skippedMissingDurationCount?: unknown;
       skippedSceneFilterCount?: unknown;
       skippedInvalidSceneIdCount?: unknown;
       provider?: unknown;
@@ -1238,38 +1239,49 @@ export async function POST(request: NextRequest) {
         : null;
 
     try {
-      // Resolve full video duration from Baserow (field_6909), probe if missing.
-      let videoDurationSec = parsePositiveNumber(
-        videoRow[VIDEO_UPLOADED_DURATION_FIELD_KEY],
+      // Re-fetch the video row to get the latest field_6858 / field_7363 values,
+      // since the initial fetch may be stale after Steps 1–3.
+      let freshVideoRow: BaserowRow = videoRow;
+      try {
+        freshVideoRow = await baserowGetJson<BaserowRow>(
+          baserowUrl,
+          token,
+          `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
+        );
+      } catch {
+        // Fall back to stale row on re-fetch failure.
+      }
+
+      // Always probe merged video URL (field_6858) for fresh duration,
+      // then write back to field_7363. Fall back to cached value if probe fails.
+      const mergedVideoUrl = extractUrl(
+        freshVideoRow[VIDEO_FINAL_MERGED_URL_FIELD_KEY],
       );
 
-      if (!videoDurationSec) {
-        const uploadedVideoUrl = extractUrl(
-          videoRow[VIDEO_UPLOADED_URL_FIELD_KEY],
-        );
-        if (uploadedVideoUrl) {
-          try {
-            const probed = await probeAudioMetrics(uploadedVideoUrl);
-            videoDurationSec = roundDurationSeconds(probed.durationSec);
+      let videoDurationSec: number | null = null;
 
-            if (videoDurationSec && videoDurationSec > 0) {
-              await baserowPatchRow(
-                baserowUrl,
-                token,
-                VIDEOS_TABLE_ID,
-                videoId,
-                {
-                  [VIDEO_UPLOADED_DURATION_FIELD_KEY]: videoDurationSec,
-                },
-              );
-            }
-          } catch (probeError) {
-            console.warn(
-              `[create-dubbed-fa] Step 4: Could not probe video duration for video ${videoId}:`,
-              probeError,
-            );
+      if (mergedVideoUrl) {
+        try {
+          const probed = await probeAudioMetrics(mergedVideoUrl);
+          videoDurationSec = roundDurationSeconds(probed.durationSec);
+
+          if (videoDurationSec && videoDurationSec > 0) {
+            await baserowPatchRow(baserowUrl, token, VIDEOS_TABLE_ID, videoId, {
+              [VIDEO_FINAL_MERGED_DURATION_FIELD_KEY]: videoDurationSec,
+            });
+          } else {
+            videoDurationSec = null;
           }
+        } catch {
+          // Probe failed — fall back to cached value.
         }
+      }
+
+      // Fall back to cached Baserow value if probe failed or URL was missing.
+      if (!videoDurationSec) {
+        videoDurationSec = parsePositiveNumber(
+          freshVideoRow[VIDEO_FINAL_MERGED_DURATION_FIELD_KEY],
+        );
       }
 
       step4VideoDurationSec = videoDurationSec ?? 0;
@@ -1279,9 +1291,6 @@ export async function POST(request: NextRequest) {
         videoDurationSec <= 0 ||
         !step4FinalDubbedAudioUrl
       ) {
-        console.warn(
-          `[create-dubbed-fa] Step 4: Skipping — videoDurationSec=${videoDurationSec ?? 'null'}, finalDubbedAudioUrl=${step4FinalDubbedAudioUrl ?? 'null'}`,
-        );
       } else {
         // Download merged dubbed audio to a temp file so we can probe & modify it locally.
         const downloadResponse = await fetch(step4FinalDubbedAudioUrl);
