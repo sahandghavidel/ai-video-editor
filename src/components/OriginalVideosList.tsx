@@ -16054,9 +16054,10 @@ export default function OriginalVideosList({
                                     });
                                     const blobUrl = URL.createObjectURL(blob);
                                     // Ensure filename always ends with .m4a
-                                    const baseName = (
+                                    const rawBaseName = (
                                       entry.fileName || `merged-audio-${lang}`
                                     ).replace(/\.[^.]+$/, '');
+                                    const baseName = `${displayName} - ${rawBaseName}`;
                                     const a = document.createElement('a');
                                     a.href = blobUrl;
                                     a.download = `${baseName}.m4a`;
