@@ -48,6 +48,7 @@ import {
 import MergedVideoDisplay from './MergedVideoDisplay';
 import VideoDetailsModal from './video-details-modal/VideoDetailsModal';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
+import { getLanguageDisplayName } from '@/utils/languageNames';
 import { sendTelegramNotification } from '@/utils/notifications/telegram';
 import {
   formatSceneHasTextField,
@@ -849,6 +850,14 @@ export default function OriginalVideosList({
       assets: false,
       dubbedAudio: false,
     });
+  const [dubbedAudioSortMode, setDubbedAudioSortMode] = useState<
+    | 'date-newest'
+    | 'date-oldest'
+    | 'lang-az'
+    | 'lang-za'
+    | 'range-asc'
+    | 'range-desc'
+  >('date-newest');
   const [isVideoDetailsModalOpen, setIsVideoDetailsModalOpen] = useState(false);
 
   // Get clip generation state from global store
@@ -15925,23 +15934,79 @@ export default function OriginalVideosList({
                   </div>
                 ) : (
                   <div className='space-y-2'>
-                    <p className='text-xs text-gray-500 mb-3'>
-                      Click a language to auto-download its merged dubbed audio.
-                    </p>
+                    <div className='flex items-center justify-between mb-3'>
+                      <p className='text-xs text-gray-500'>
+                        Click a language to auto-download its merged dubbed
+                        audio.
+                      </p>
+                      <select
+                        value={dubbedAudioSortMode}
+                        onChange={(e) =>
+                          setDubbedAudioSortMode(
+                            e.target.value as typeof dubbedAudioSortMode,
+                          )
+                        }
+                        className='text-xs border border-gray-300 rounded-md px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-400'
+                      >
+                        <option value='date-newest'>Date (Newest first)</option>
+                        <option value='date-oldest'>Date (Oldest first)</option>
+                        <option value='lang-az'>Language (A–Z)</option>
+                        <option value='lang-za'>Language (Z–A)</option>
+                        <option value='range-asc'>
+                          Video Range (Low→High)
+                        </option>
+                        <option value='range-desc'>
+                          Video Range (High→Low)
+                        </option>
+                      </select>
+                    </div>
                     {Object.entries(mergedDubbedAudio)
                       .sort(([, a], [, b]) => {
-                        const aStart = a.startId ?? 0;
-                        const bStart = b.startId ?? 0;
-                        if (aStart !== bStart) return aStart - bStart;
-                        const aLang = a.languageCode ?? '';
-                        const bLang = b.languageCode ?? '';
-                        return aLang.localeCompare(bLang);
+                        switch (dubbedAudioSortMode) {
+                          case 'date-newest': {
+                            const aTime = a.createdAt
+                              ? new Date(a.createdAt).getTime()
+                              : 0;
+                            const bTime = b.createdAt
+                              ? new Date(b.createdAt).getTime()
+                              : 0;
+                            return bTime - aTime;
+                          }
+                          case 'date-oldest': {
+                            const aTime = a.createdAt
+                              ? new Date(a.createdAt).getTime()
+                              : 0;
+                            const bTime = b.createdAt
+                              ? new Date(b.createdAt).getTime()
+                              : 0;
+                            return aTime - bTime;
+                          }
+                          case 'lang-az':
+                            return getLanguageDisplayName(
+                              a.languageCode,
+                            ).localeCompare(
+                              getLanguageDisplayName(b.languageCode),
+                            );
+                          case 'lang-za':
+                            return getLanguageDisplayName(
+                              b.languageCode,
+                            ).localeCompare(
+                              getLanguageDisplayName(a.languageCode),
+                            );
+                          case 'range-asc':
+                            return (a.startId ?? 0) - (b.startId ?? 0);
+                          case 'range-desc':
+                            return (b.startId ?? 0) - (a.startId ?? 0);
+                          default:
+                            return 0;
+                        }
                       })
                       .map(([scopeKey, entry]) => {
                         const lang =
                           entry.languageCode ||
                           scopeKey.split('-').pop() ||
                           scopeKey;
+                        const displayName = getLanguageDisplayName(lang);
                         return (
                           <div
                             key={scopeKey}
@@ -15953,7 +16018,10 @@ export default function OriginalVideosList({
                               </div>
                               <div>
                                 <div className='text-sm font-medium text-gray-900'>
-                                  {lang.toUpperCase()}
+                                  {displayName}
+                                  <span className='ml-1 text-xs text-gray-400 font-normal uppercase'>
+                                    ({lang.toUpperCase()})
+                                  </span>
                                   {entry.startId != null &&
                                     entry.endId != null && (
                                       <span className='ml-2 text-xs text-gray-500 font-normal'>
