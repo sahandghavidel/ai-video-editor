@@ -1220,10 +1220,15 @@ export async function POST(request: NextRequest) {
           ? step3Payload.error.trim()
           : `Step 3 merge/save final dubbed audio failed (${step3Response.status})`;
 
+      const missingCount = Array.isArray(step3Payload?.missingAudioSceneIds)
+        ? step3Payload.missingAudioSceneIds.length
+        : 0;
+
       throw new Error(
-        missingAudioPreview
-          ? `${message} — missing scene audio IDs: ${missingAudioPreview}`
-          : message,
+        `[videoId=${videoId}, lang=${selectedLanguageReference.language}] ` +
+          (missingAudioPreview
+            ? `${message} — missing ${missingCount} scene(s) dubbed audio (first 10: ${missingAudioPreview})`
+            : message),
       );
     }
 

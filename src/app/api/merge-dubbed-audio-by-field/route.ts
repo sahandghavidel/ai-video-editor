@@ -980,14 +980,6 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      if (sceneDurationFieldKey) {
-        const durationSec = parsePositiveNumber(scene[sceneDurationFieldKey]);
-        if (!durationSec) {
-          skippedNoDurationCount += 1;
-          continue;
-        }
-      }
-
       const audioUrl = extractUrl(scene[sourceSceneAudioFieldKey]);
       if (!audioUrl) {
         if (requireAudioForDurationScenes) {
@@ -996,6 +988,14 @@ export async function POST(request: NextRequest) {
           skippedNoAudioCount += 1;
         }
         continue;
+      }
+
+      if (sceneDurationFieldKey) {
+        const durationSec = parsePositiveNumber(scene[sceneDurationFieldKey]);
+        if (!durationSec) {
+          skippedNoDurationCount += 1;
+          continue;
+        }
       }
 
       mergeJobs.push({
