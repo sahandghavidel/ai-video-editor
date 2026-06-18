@@ -1532,7 +1532,7 @@ export default function SceneCard({
     }
   };
 
-  const handleOpenSceneSeparationModal = (
+  const handleOpenSceneSeparationModal = async (
     sceneId: number,
     sceneData?: BaserowRow,
   ) => {
@@ -1540,10 +1540,71 @@ export default function SceneCard({
       sceneData || data.find((scene) => scene.id === sceneId);
     if (!currentScene) return;
 
-    const originalVideoUrl = String(currentScene.field_6888 || '').trim();
+    let originalVideoUrl = String(currentScene.field_6888 || '').trim();
     const originalCaptionsUrl = String(currentScene.field_7120 || '').trim();
+
+    // Auto-generate the video clip if field_6888 is empty.
     if (!originalVideoUrl) {
-      alert('No original video found for this scene.');
+      try {
+        // Call the clip generation API directly to avoid the UI busy-lock
+        // that handleGenerateSingleClip enforces (generatingSingleClip guard).
+        let clipVideoId: number | null = null;
+        const clipVideoIdField = currentScene['field_6889'];
+        if (typeof clipVideoIdField === 'number') {
+          clipVideoId = clipVideoIdField;
+        } else if (typeof clipVideoIdField === 'string') {
+          clipVideoId = parseInt(clipVideoIdField, 10);
+        } else if (
+          Array.isArray(clipVideoIdField) &&
+          clipVideoIdField.length > 0
+        ) {
+          const firstId =
+            typeof clipVideoIdField[0] === 'object'
+              ? clipVideoIdField[0].id || clipVideoIdField[0].value
+              : clipVideoIdField[0];
+          clipVideoId = parseInt(String(firstId), 10);
+        }
+
+        const clipResponse = await fetch('/api/generate-single-clip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sceneId,
+            videoId: clipVideoId || undefined,
+          }),
+        });
+
+        if (clipResponse.ok) {
+          const clipResult = (await clipResponse.json().catch(() => null)) as {
+            clipUrl?: string;
+          } | null;
+          if (clipResult?.clipUrl) {
+            originalVideoUrl = clipResult.clipUrl;
+          }
+        } else {
+          const errorText = await clipResponse.text().catch(() => '');
+          throw new Error(
+            `Clip generation failed (${clipResponse.status}): ${errorText}`,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Failed to auto-generate clip for scene ${sceneId}:`,
+          error,
+        );
+        alert(
+          `Failed to generate video clip for this scene: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+        );
+        return;
+      }
+    }
+
+    if (!originalVideoUrl) {
+      alert(
+        'Video clip is still missing after generation attempt. Please try again.',
+      );
       return;
     }
 
@@ -2392,10 +2453,75 @@ export default function SceneCard({
       const shouldSetBusyState = opts?.suppressBusyStateUpdates !== true;
 
       // Determine which video URL to use
-      const videoUrl =
+      let videoUrl =
         videoType === 'final'
           ? (currentScene.field_6886 as string)
           : (currentScene.field_6888 as string);
+
+      // Auto-generate the video clip if the original video is missing.
+      if (
+        videoType === 'original' &&
+        (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim())
+      ) {
+        console.log(
+          `No original video found in field 6888 for scene ${sceneId} — auto-generating clip...`,
+        );
+        try {
+          // Call the clip generation API directly to avoid the UI busy-lock
+          // that handleGenerateSingleClip enforces (generatingSingleClip guard).
+          let clipVideoId: number | null = null;
+          const clipVideoIdField = currentScene['field_6889'];
+          if (typeof clipVideoIdField === 'number') {
+            clipVideoId = clipVideoIdField;
+          } else if (typeof clipVideoIdField === 'string') {
+            clipVideoId = parseInt(clipVideoIdField, 10);
+          } else if (
+            Array.isArray(clipVideoIdField) &&
+            clipVideoIdField.length > 0
+          ) {
+            const firstId =
+              typeof clipVideoIdField[0] === 'object'
+                ? clipVideoIdField[0].id || clipVideoIdField[0].value
+                : clipVideoIdField[0];
+            clipVideoId = parseInt(String(firstId), 10);
+          }
+
+          const clipResponse = await fetch('/api/generate-single-clip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sceneId,
+              videoId: clipVideoId || undefined,
+            }),
+          });
+
+          if (clipResponse.ok) {
+            const clipResult = (await clipResponse
+              .json()
+              .catch(() => null)) as {
+              clipUrl?: string;
+            } | null;
+            if (clipResult?.clipUrl) {
+              videoUrl = clipResult.clipUrl;
+            }
+          } else {
+            const errorText = await clipResponse.text().catch(() => '');
+            throw new Error(
+              `Clip generation returned ${clipResponse.status} for scene ${sceneId}: ${errorText}`,
+            );
+          }
+        } catch (clipError) {
+          const clipErrorMessage = `Failed to auto-generate clip for scene ${sceneId}: ${
+            clipError instanceof Error ? clipError.message : String(clipError)
+          }`;
+          console.error(clipErrorMessage);
+          if (opts?.throwOnError) {
+            throw clipError instanceof Error
+              ? clipError
+              : new Error(String(clipError));
+          }
+        }
+      }
 
       if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
         console.log(
