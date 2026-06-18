@@ -1208,6 +1208,23 @@ export default function SceneCard({
       cursor = end;
     }
 
+    // Duration reconciliation: pin the first segment's start and the last
+    // segment's end to the original boundaries, then recompute durations.
+    // This guarantees sum(durations) === totalDuration exactly.
+    if (segments.length > 0) {
+      const firstSeg = segments[0];
+      firstSeg.start = roundSceneTiming(safeStart);
+      firstSeg.duration = roundSceneTiming(
+        Math.max(0, firstSeg.end - firstSeg.start),
+      );
+
+      const lastSeg = segments[segments.length - 1];
+      lastSeg.end = roundSceneTiming(safeEnd);
+      lastSeg.duration = roundSceneTiming(
+        Math.max(0, lastSeg.end - lastSeg.start),
+      );
+    }
+
     return segments;
   };
 

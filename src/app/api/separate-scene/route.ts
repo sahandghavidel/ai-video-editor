@@ -1209,6 +1209,35 @@ export async function POST(request: NextRequest) {
       sourceEnd,
     );
 
+    // Duration reconciliation: pin the first segment's start and the last
+    // segment's end to the original scene boundaries, then recompute all
+    // durations sequentially. This guarantees:
+    //   sum(durations) === sourceDuration  (exactly)
+    // regardless of rounding drift from gap adjustments, extensions,
+    // or overlap resolution in the pipeline above.
+    if (absoluteSegments.length > 1) {
+      const targetStartTime = roundTiming(sourceStart);
+      const targetEndTime = roundTiming(sourceStart + sourceDuration);
+
+      absoluteSegments[0].startTime = targetStartTime;
+      absoluteSegments[0].duration = roundTiming(
+        Math.max(0, absoluteSegments[0].endTime - targetStartTime),
+      );
+
+      const lastSegment = absoluteSegments[absoluteSegments.length - 1];
+      lastSegment.endTime = targetEndTime;
+      lastSegment.duration = roundTiming(
+        Math.max(0, targetEndTime - lastSegment.startTime),
+      );
+
+      // Recompute preEndTime values sequentially after the adjustment.
+      for (let i = 1; i < absoluteSegments.length; i++) {
+        absoluteSegments[i].preEndTime = roundTiming(
+          absoluteSegments[i - 1].endTime,
+        );
+      }
+    }
+
     if (!absoluteSegments.length) {
       return NextResponse.json(
         { error: 'Separation produced zero output segments' },
