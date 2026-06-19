@@ -1681,17 +1681,76 @@ export default function OriginalVideosList({
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload-video', {
+      // Step 1: Ask the server for a presigned MinIO upload URL.
+      //          This creates the Baserow row and returns a signed PUT URL
+      //          so the browser can upload directly to MinIO (no body going
+      //          through Next.js, so no size limit).
+      const presignResponse = await fetch('/api/upload-video/presign', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
+      if (!presignResponse.ok) {
+        const errBody = await presignResponse.json().catch(() => ({}));
+        throw new Error(
+          errBody.error ||
+            `Failed to prepare upload (${presignResponse.status})`,
+        );
+      }
+
+      const { uploadUrl, rowId, filename } = await presignResponse.json();
+
+      // Step 2: PUT the file directly to MinIO using XMLHttpRequest
+      //          (for real upload-progress tracking via progress events).
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                `MinIO upload failed with status ${xhr.status}: ${xhr.statusText}`,
+              ),
+            );
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('Network error during MinIO upload'));
+        });
+
+        xhr.open('PUT', uploadUrl);
+        xhr.setRequestHeader('Content-Type', file.type);
+        xhr.send(file);
+      });
+
+      // Step 3: Tell the server the upload landed so it can persist the URL
+      //          in Baserow.
+      const confirmResponse = await fetch('/api/upload-video/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowId, filename }),
+      });
+
+      if (!confirmResponse.ok) {
+        const errBody = await confirmResponse.json().catch(() => ({}));
+        throw new Error(
+          errBody.error ||
+            `Upload confirmed but saving failed (${confirmResponse.status})`,
+        );
       }
 
       // Refresh the videos list to show the new upload
