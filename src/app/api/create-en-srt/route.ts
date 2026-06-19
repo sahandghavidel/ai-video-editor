@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 // Toggle: when true, build EN SRT using scene Duration (field_6884)
 // instead of calculating/using Final Video Duration (field_7107).
-const USE_ORIGINAL_VIDEO_DURATION = true;
+const USE_ORIGINAL_VIDEO_DURATION = false;
 
 const ORIGINAL_DURATION_FIELD_KEY = 'field_6884';
 
@@ -100,6 +100,22 @@ export async function POST(request: NextRequest) {
       durationResult = (await durationResponse
         .json()
         .catch(() => null)) as Record<string, unknown> | null;
+
+      // Abort if any scene has no video URL AND no pre-existing duration.
+      const missingDurationIds =
+        (durationResult?.scenesWithoutAnyDuration as number[]) ?? [];
+      const failed = (durationResult?.failedCount as number) ?? 0;
+
+      if (missingDurationIds.length > 0 || failed > 0) {
+        return NextResponse.json(
+          {
+            error: `Cannot create EN SRT for videoId ${videoId}: ${missingDurationIds.length} scene(s) have no video and no existing duration (sceneIds: ${missingDurationIds.slice(0, 20).join(', ')}${missingDurationIds.length > 20 ? '...' : ''}), ${failed} scene(s) failed to probe`,
+            step: 'calculate-final-video-durations',
+            durationResult,
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const srtResponse = await fetch(`${baseUrl}/api/generate-duration-srt`, {

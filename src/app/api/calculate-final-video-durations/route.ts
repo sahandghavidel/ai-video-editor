@@ -109,7 +109,7 @@ async function baserowGetSceneRow(
     `${baserowUrl}/database/rows/table/${SCENES_TABLE_ID}/${sceneId}/`,
     {
       method: 'GET',
-      headers: { ...buildAuthHeader(token), },
+      headers: { ...buildAuthHeader(token) },
       cache: 'no-store',
     },
   );
@@ -185,6 +185,7 @@ export async function POST(request: NextRequest) {
     let updatedCount = 0;
     let skippedMissingFinalVideoUrlCount = 0;
     const failures: Array<{ sceneId: number; error: string }> = [];
+    const scenesWithoutAnyDuration: number[] = [];
 
     for (const sceneId of sceneIds) {
       try {
@@ -193,6 +194,15 @@ export async function POST(request: NextRequest) {
 
         if (!finalVideoUrl) {
           skippedMissingFinalVideoUrlCount += 1;
+
+          // Check if the scene already has a pre-existing duration.
+          const existingDuration = parseNumberish(
+            row[FINAL_VIDEO_DURATION_FIELD_KEY],
+          );
+          if (!Number.isFinite(existingDuration) || existingDuration <= 0) {
+            scenesWithoutAnyDuration.push(sceneId);
+          }
+
           continue;
         }
 
@@ -218,6 +228,7 @@ export async function POST(request: NextRequest) {
       updatedCount,
       skippedMissingFinalVideoUrlCount,
       failedCount: failures.length,
+      scenesWithoutAnyDuration,
       failures,
     });
   } catch (error) {
