@@ -1242,15 +1242,19 @@ export default function SceneCard({
       return;
     }
 
-    const scenesInRealOrder = getScenesInRealVideoOrder(videoId);
-    const index = scenesInRealOrder.findIndex((s) => s.id === sceneId);
+    // Use the filtered-only (unsorted) scene order so the combine button
+    // always targets the next scene in default order, ignoring any active sort.
+    const scenesInDisplayOrder = filteredOnlyData.filter(
+      (s) => getVideoIdFromScene(s) === videoId,
+    );
+    const index = scenesInDisplayOrder.findIndex((s) => s.id === sceneId);
     if (index === -1) return;
-    if (index === scenesInRealOrder.length - 1) {
+    if (index === scenesInDisplayOrder.length - 1) {
       alert('No next scene to combine with.');
       return;
     }
 
-    const nextScene = scenesInRealOrder[index + 1];
+    const nextScene = scenesInDisplayOrder[index + 1];
     if (!currentScene || !nextScene) return;
 
     const shouldCombine = window.confirm(
@@ -5958,8 +5962,9 @@ export default function SceneCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onHandlersReady]);
 
-  // Apply filters and sorting
-  const filteredAndSortedData = React.useMemo(() => {
+  // Apply filters only (no sorting). Used by combine/split to determine
+  // scene order independent of any active sort.
+  const filteredOnlyData = React.useMemo(() => {
     let filtered = data;
 
     const isSceneFlagged = (scene: Record<string, unknown>): boolean =>
@@ -6050,6 +6055,23 @@ export default function SceneCard({
       filtered = filtered.filter((_, index) => includeIndexes.has(index));
     }
 
+    return filtered;
+  }, [
+    data,
+    showOnlyFlagged,
+    showOnlyEmptyText,
+    showOnlyNotEmptyText,
+    showLongTextOnly,
+    longTextCharMinInput,
+    showShortWithNeighbors,
+    shortTextCharLimitInput,
+    showRecentlyModifiedTTS,
+  ]);
+
+  // Apply sorting on top of filteredOnlyData for display.
+  const filteredAndSortedData = React.useMemo(() => {
+    let filtered = filteredOnlyData;
+
     // Sort by duration
     if (!showShortWithNeighbors && sortByDuration) {
       filtered = [...filtered].sort((a, b) => {
@@ -6112,19 +6134,12 @@ export default function SceneCard({
 
     return filtered;
   }, [
-    data,
-    showOnlyFlagged,
-    showOnlyEmptyText,
-    showOnlyNotEmptyText,
-    showLongTextOnly,
-    longTextCharMinInput,
+    filteredOnlyData,
     showFirstNScenes,
     firstNScenesInput,
     showShortWithNeighbors,
-    shortTextCharLimitInput,
     sortByDuration,
     sortByLastModified,
-    showRecentlyModifiedTTS,
   ]);
 
   if (showProcessingScenesAllVideos && loadingProcessingScenesData) {
