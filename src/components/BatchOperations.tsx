@@ -522,10 +522,7 @@ export default function BatchOperations({
     };
     const isEmpty = (scene: BaserowRow) => {
       const sentence = String(scene['field_6890'] ?? '').trim();
-      const original = String(
-        scene['field_6901'] ?? scene['field_6900'] ?? '',
-      ).trim();
-      return sentence === '' && original === '';
+      return sentence === '';
     };
 
     setCombiningEmptyNext(true);
