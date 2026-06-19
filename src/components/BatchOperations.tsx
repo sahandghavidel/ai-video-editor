@@ -578,7 +578,7 @@ export default function BatchOperations({
         const newEndTime = Number(emptyScene.field_6897) || 0;
         const currentStart = Number(textScene.field_6896) || 0;
         const newDuration = Number(
-          Math.max(0, newEndTime - currentStart).toFixed(2),
+          Math.max(0, newEndTime - currentStart).toFixed(6),
         );
 
         // Final Video Duration (7107): sum if both exist, else empty
@@ -589,7 +589,7 @@ export default function BatchOperations({
           currFinalDur > 0 &&
           Number.isFinite(nextFinalDur) &&
           nextFinalDur > 0
-            ? Number((currFinalDur + nextFinalDur).toFixed(2))
+            ? Number((currFinalDur + nextFinalDur).toFixed(6))
             : '';
 
         // PATCH text scene with merged data
