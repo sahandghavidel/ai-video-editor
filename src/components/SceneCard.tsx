@@ -1284,6 +1284,18 @@ export default function SceneCard({
       Math.max(0, newEndTime - currentStart),
     );
 
+    // Final Video Duration (7107): sum of both scenes' measured durations.
+    // If either scene has no final duration, leave the field empty.
+    const currFinalDur = Number(currentScene.field_7107);
+    const nextFinalDur = Number(nextScene.field_7107);
+    const newFinalDuration =
+      Number.isFinite(currFinalDur) &&
+      currFinalDur > 0 &&
+      Number.isFinite(nextFinalDur) &&
+      nextFinalDur > 0
+        ? roundSceneTiming(currFinalDur + nextFinalDur)
+        : '';
+
     setCombiningId(sceneId);
 
     // Optimistic update: update current scene and remove next one from local copy
@@ -1296,6 +1308,7 @@ export default function SceneCard({
               field_6901: newOriginal,
               field_6897: newEndTime,
               field_6884: newDuration,
+              field_7107: newFinalDuration,
               ...clearedGeneratedFields,
             }
           : s,
@@ -1311,6 +1324,7 @@ export default function SceneCard({
         field_6901: newOriginal,
         field_6897: newEndTime,
         field_6884: newDuration,
+        field_7107: newFinalDuration,
         ...clearedGeneratedFields,
       });
 
