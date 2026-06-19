@@ -254,6 +254,11 @@ export default function BatchOperations({
     number | null
   >(null);
 
+  const [combiningEmptyNext, setCombiningEmptyNext] = useState(false);
+  const [combiningEmptyNextSceneId, setCombiningEmptyNextSceneId] = useState<
+    number | null
+  >(null);
+
   const playBatchDoneSound = () => {
     playSuccessSound();
   };
@@ -485,6 +490,166 @@ export default function BatchOperations({
     } finally {
       setDeletingEmptyScenes(false);
       setDeletingEmptySceneId(null);
+    }
+  };
+
+  // Combine consecutive pairs where first scene has text but the next scene is empty.
+  // Absorbs the empty scene's timing into the text scene.
+  const handleCombineWithEmptyFollowing = async () => {
+    if (combiningEmptyNext) return;
+
+    await onRefresh?.();
+
+    const clearedGeneratedFields: Record<string, unknown> = {
+      field_6886: '', // Videos
+      field_6888: '', // Video Clip URL
+      field_6891: '', // TTS
+      field_6910: '', // Captions URL for Scene
+      field_7094: '', // Image for Scene
+      field_7098: '', // Video for Scene
+      field_7095: '', // Upscaled Image for Scene
+      field_7096: null, // Flagged
+      field_7099: '', // hasText
+    };
+
+    const skipFirstScenes = Math.max(
+      0,
+      Math.floor(combineScenesSettings.skipFirstScenes),
+    );
+
+    const hasText = (scene: BaserowRow) => {
+      return String(scene['field_6890'] ?? '').trim().length > 0;
+    };
+    const isEmpty = (scene: BaserowRow) => {
+      const sentence = String(scene['field_6890'] ?? '').trim();
+      const original = String(
+        scene['field_6901'] ?? scene['field_6900'] ?? '',
+      ).trim();
+      return sentence === '' && original === '';
+    };
+
+    setCombiningEmptyNext(true);
+    setCombiningEmptyNextSceneId(null);
+
+    try {
+      // Work on a local mutable copy of the scene list so each iteration
+      // operates on the latest state without depending on stale store data.
+      const scenes = useAppStore
+        .getState()
+        .getFilteredData()
+        .slice(skipFirstScenes)
+        .map((s) => ({ ...s }));
+
+      let changed = true;
+      while (changed) {
+        changed = false;
+
+        // Find the first text scene followed by an empty scene
+        let pairIndex = -1;
+        for (let i = 0; i < scenes.length - 1; i++) {
+          if (hasText(scenes[i]) && isEmpty(scenes[i + 1])) {
+            pairIndex = i;
+            break;
+          }
+        }
+
+        if (pairIndex === -1) break;
+
+        const textScene = scenes[pairIndex];
+        const emptyScene = scenes[pairIndex + 1];
+
+        setCombiningEmptyNextSceneId(textScene.id);
+
+        const currSentence = String(textScene.field_6890 || '').trim();
+        const nextSentence = String(
+          emptyScene.field_6890 || emptyScene.field_6901 || '',
+        ).trim();
+        const sep = currSentence && nextSentence ? ' ' : '';
+        const newSentence = (currSentence + sep + nextSentence).trim();
+
+        const currOriginal = String(
+          textScene.field_6901 || textScene.field_6890 || '',
+        ).trim();
+        const nextOriginal = String(
+          emptyScene.field_6901 || emptyScene.field_6890 || '',
+        ).trim();
+        const newOriginal = (currOriginal + sep + nextOriginal).trim();
+
+        const newEndTime = Number(emptyScene.field_6897) || 0;
+        const currentStart = Number(textScene.field_6896) || 0;
+        const newDuration = Number(
+          Math.max(0, newEndTime - currentStart).toFixed(2),
+        );
+
+        // Final Video Duration (7107): sum if both exist, else empty
+        const currFinalDur = Number(textScene.field_7107);
+        const nextFinalDur = Number(emptyScene.field_7107);
+        const newFinalDuration =
+          Number.isFinite(currFinalDur) &&
+          currFinalDur > 0 &&
+          Number.isFinite(nextFinalDur) &&
+          nextFinalDur > 0
+            ? Number((currFinalDur + nextFinalDur).toFixed(2))
+            : '';
+
+        // PATCH text scene with merged data
+        const patchRes = await fetch(`/api/baserow/scenes/${textScene.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            field_6890: newSentence,
+            field_6901: newOriginal,
+            field_6897: newEndTime,
+            field_6884: newDuration,
+            field_7107: newFinalDuration,
+            ...clearedGeneratedFields,
+          }),
+        });
+
+        if (!patchRes.ok) {
+          const t = await patchRes.text().catch(() => '');
+          throw new Error(
+            `Failed to update scene ${textScene.id}: ${patchRes.status} ${t}`,
+          );
+        }
+
+        // DELETE empty scene
+        const deleteRes = await fetch(`/api/baserow/scenes/${emptyScene.id}`, {
+          method: 'DELETE',
+        });
+
+        if (!deleteRes.ok) {
+          const t = await deleteRes.text().catch(() => '');
+          throw new Error(
+            `Failed to delete scene ${emptyScene.id}: ${deleteRes.status} ${t}`,
+          );
+        }
+
+        // Update the local copy: apply merged values to text scene,
+        // then remove the empty scene so the next loop iteration
+        // never sees or tries to delete it again.
+        scenes[pairIndex] = {
+          ...textScene,
+          field_6890: newSentence,
+          field_6901: newOriginal,
+          field_6897: newEndTime,
+          field_6884: newDuration,
+          field_7107: newFinalDuration,
+          ...clearedGeneratedFields,
+        };
+        scenes.splice(pairIndex + 1, 1);
+
+        changed = true;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      playBatchDoneSound();
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to combine scenes with empty following:', error);
+    } finally {
+      setCombiningEmptyNext(false);
+      setCombiningEmptyNextSceneId(null);
     }
   };
 
@@ -5490,6 +5655,24 @@ export default function BatchOperations({
                           ? `Scene #${combiningNoSubtitleSceneId}`
                           : 'Processing...'
                         : 'Combine Pairs'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={handleCombineWithEmptyFollowing}
+                    disabled={!selectedOriginalVideo.id || combiningEmptyNext}
+                    className='w-full h-10 mt-2 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                    title='Combine text scene with its empty following scene'
+                  >
+                    {combiningEmptyNext && (
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                    )}
+                    <span className='font-medium'>
+                      {combiningEmptyNext
+                        ? combiningEmptyNextSceneId !== null
+                          ? `Scene #${combiningEmptyNextSceneId}`
+                          : 'Processing...'
+                        : 'Combine Empty Next'}
                     </span>
                   </button>
 
