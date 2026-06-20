@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
+import { getLanguageDisplayName } from '@/utils/languageNames';
 import { CheckCircle2, Circle, Settings2, Workflow } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -1099,7 +1100,8 @@ export default function PipelineConfig({
                           className='inline-flex items-center rounded-full border border-teal-300 bg-white px-2 py-0.5 text-[11px] font-medium text-teal-900'
                           title={`Execution order ${index + 1}`}
                         >
-                          {index + 1}. {languageCode.toUpperCase()}
+                          {index + 1}. {getLanguageDisplayName(languageCode)} (
+                          {languageCode.toUpperCase()})
                         </span>
                       ),
                     )
@@ -1144,7 +1146,10 @@ export default function PipelineConfig({
                             disabled={isRunningFullPipeline}
                             className='h-3.5 w-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-500'
                           />
-                          <span>{languageCode.toUpperCase()}</span>
+                          <span>
+                            {getLanguageDisplayName(languageCode)} (
+                            {languageCode.toUpperCase()})
+                          </span>
                         </label>
                       );
                     })}
