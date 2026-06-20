@@ -1256,6 +1256,7 @@ export default function BatchOperations({
           );
 
           let apiRequestId: string | null = null;
+          let modelUnloaded = false;
 
           if (!res.ok) {
             let message = `Language fix failed: ${res.status}`;
@@ -1263,9 +1264,13 @@ export default function BatchOperations({
               const json = (await res.json().catch(() => null)) as {
                 error?: unknown;
                 requestId?: unknown;
+                modelUnloaded?: unknown;
               } | null;
               apiRequestId =
                 typeof json?.requestId === 'string' ? json.requestId : null;
+              if (typeof json?.modelUnloaded === 'boolean') {
+                modelUnloaded = json.modelUnloaded;
+              }
               if (typeof json?.error === 'string' && json.error.trim()) {
                 message = json.error;
               }
@@ -1275,9 +1280,13 @@ export default function BatchOperations({
                 message = `${message} ${t}`;
               }
             }
-            throw new Error(
+            const errorWithFlag = new Error(
               `Batch ${batchNumber}/${totalBatches} failed (apiRequestId=${apiRequestId ?? 'n/a'}): ${message}`,
             );
+            (
+              errorWithFlag as Error & { modelUnloaded?: boolean }
+            ).modelUnloaded = modelUnloaded;
+            throw errorWithFlag;
           }
 
           const payload = (await res.json().catch(() => null)) as {
@@ -1452,6 +1461,11 @@ export default function BatchOperations({
               ? batchError.message
               : String(batchError);
 
+          const errorModelUnloaded =
+            batchError instanceof Error &&
+            (batchError as Error & { modelUnloaded?: boolean })
+              .modelUnloaded === true;
+
           failedBatches.push({
             batchNumber,
             sceneIds: expectedSceneIds,
@@ -1463,8 +1477,22 @@ export default function BatchOperations({
             {
               error: errorMessage,
               sceneIds: expectedSceneIds,
+              modelUnloaded: errorModelUnloaded,
             },
           );
+
+          // If the local model was unloaded due to a timeout,
+          // wait 30 seconds before sending the next batch to allow
+          // the model to be cleanly reloaded by the server.
+          if (errorModelUnloaded) {
+            console.info(
+              `${logPrefix} Local model was unloaded; cooling down 30s before next batch...`,
+              {
+                batchNumber: `${batchNumber}/${totalBatches}`,
+              },
+            );
+            await sleep(30_000);
+          }
         }
       }
 

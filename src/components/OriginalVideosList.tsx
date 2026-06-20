@@ -7864,6 +7864,7 @@ export default function OriginalVideosList({
               });
 
               let apiRequestId: string | null = null;
+              let modelUnloaded = false;
 
               if (!res.ok) {
                 let message = `Language fix failed: ${res.status}`;
@@ -7871,10 +7872,15 @@ export default function OriginalVideosList({
                   const json = (await res.json().catch(() => null)) as {
                     error?: unknown;
                     requestId?: unknown;
+                    modelUnloaded?: unknown;
                   } | null;
 
                   apiRequestId =
                     typeof json?.requestId === 'string' ? json.requestId : null;
+
+                  if (typeof json?.modelUnloaded === 'boolean') {
+                    modelUnloaded = json.modelUnloaded;
+                  }
 
                   if (typeof json?.error === 'string' && json.error.trim()) {
                     message = json.error;
@@ -7886,9 +7892,13 @@ export default function OriginalVideosList({
                   }
                 }
 
-                throw new Error(
+                const errorWithFlag = new Error(
                   `Video ${videoPlan.videoId}, batch ${batchNumber}/${videoPlan.maxTotalBatches} (global ${globalBatchNumber}/${totalMaxBatches}, attempt size ${currentBatchSize}) failed (apiRequestId=${apiRequestId ?? 'n/a'}): ${message}`,
                 );
+                (
+                  errorWithFlag as Error & { modelUnloaded?: boolean }
+                ).modelUnloaded = modelUnloaded;
+                throw errorWithFlag;
               }
 
               const payload = (await res.json().catch(() => null)) as {
@@ -8078,6 +8088,11 @@ export default function OriginalVideosList({
                   ? batchError.message
                   : String(batchError);
 
+              const errorModelUnloaded =
+                batchError instanceof Error &&
+                (batchError as Error & { modelUnloaded?: boolean })
+                  .modelUnloaded === true;
+
               if (fallbackIndex < fallbackBatchSizes.length - 1) {
                 const nextBatchSize = fallbackBatchSizes[fallbackIndex + 1];
                 console.warn(
@@ -8090,8 +8105,24 @@ export default function OriginalVideosList({
                     nextBatchSize,
                     error: lastErrorMessage,
                     sceneIds: expectedSceneIds,
+                    modelUnloaded: errorModelUnloaded,
                   },
                 );
+
+                // If the local model was unloaded due to a timeout,
+                // wait 30 seconds before sending the next (smaller) batch
+                // to allow the model to be cleanly reloaded by the server.
+                if (errorModelUnloaded) {
+                  console.info(
+                    `${logPrefix} Local model was unloaded; cooling down 30s before next attempt...`,
+                    {
+                      videoId: videoPlan.videoId,
+                      batchInVideo: `${batchNumber}/${videoPlan.maxTotalBatches}`,
+                      nextBatchSize,
+                    },
+                  );
+                  await sleep(30_000);
+                }
               }
             }
           }

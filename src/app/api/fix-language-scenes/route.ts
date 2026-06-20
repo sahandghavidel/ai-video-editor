@@ -5,6 +5,10 @@ import {
   unloadLocalModel,
 } from '@/lib/ai-provider';
 
+// Next.js route-level hard timeout (seconds). Prevents Vercel/server from
+// hanging indefinitely if the LLM never responds.
+export const maxDuration = 120;
+
 type InputScene = {
   sceneId: number;
   text: string;
@@ -16,8 +20,19 @@ type ParsedSentence = {
   fixedSentence: string;
 };
 
+/** Timeout for the LLM call in milliseconds. */
+const MODEL_CALL_TIMEOUT_MS = 120_000;
+
 const MAX_BATCH_SIZE = 100;
 const DEFAULT_MODEL = 'deepseek/deepseek-v3.2-exp';
+
+/** Check whether an error is an abort / timeout error. */
+function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  if (error instanceof Error && error.name === 'AbortError') return true;
+  const msg = error instanceof Error ? error.message : String(error);
+  return /aborted|timeout|abort/i.test(msg);
+}
 
 function createRequestId(): string {
   return `fls-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -462,20 +477,83 @@ ${scenesPayload}`;
       model,
       strictJsonMode: true,
       attemptedBatchSize: scenes.length,
+      timeoutMs: MODEL_CALL_TIMEOUT_MS,
     });
 
     // Single attempt: try with response_format=json_object first.
     // If the model/provider doesn't support it, retry once without it
     // (this is a compatibility fallback, not a retry-on-failure).
+    // The AbortController enforces a hard timeout to prevent indefinite hangs.
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(
+      () => abortController.abort(),
+      MODEL_CALL_TIMEOUT_MS,
+    );
+
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     let usedJsonFormat = true;
     try {
-      completion = await openaiClient.chat.completions.create({
-        ...baseCompletionPayload,
-        response_format: { type: 'json_object' },
-      });
+      completion = await openaiClient.chat.completions.create(
+        {
+          ...baseCompletionPayload,
+          response_format: { type: 'json_object' },
+        },
+        { signal: abortController.signal },
+      );
     } catch (jsonFormatError) {
       usedJsonFormat = false;
+
+      // If the primary call was aborted (timeout), don't try fallback.
+      if (isAbortError(jsonFormatError)) {
+        clearTimeout(timeoutId);
+        const durationMs = Date.now() - startedAt;
+        console.error(
+          `${logPrefix} LLM call timed out after ${durationMs}ms.`,
+          {
+            attemptedBatchSize: scenes.length,
+            provider,
+          },
+        );
+
+        // Unload the local model so it doesn't hold GPU/RAM while stuck.
+        let modelUnloaded = false;
+        if (provider === 'local') {
+          try {
+            const unloadRes = await unloadLocalModel({
+              modelId: model,
+              localBaseUrl: providerConfig.localEndpoint,
+              localApiKey: providerConfig.localApiKey,
+              localAdminApiKey: providerConfig.localAdminApiKey,
+            });
+            modelUnloaded = unloadRes.ok;
+            console.info(`${logPrefix} Model unloaded after timeout.`, {
+              model,
+              modelUnloaded,
+              endpoint: unloadRes.endpoint,
+            });
+          } catch (unloadErr) {
+            console.warn(`${logPrefix} Failed to unload model after timeout.`, {
+              model,
+              error: getErrorMessage(unloadErr),
+            });
+          }
+        }
+
+        const failurePayload = {
+          error: `Model call timed out after ${Math.round(durationMs / 1000)}s`,
+          requestId,
+          attemptedBatchSize: scenes.length,
+          modelUnloaded,
+          durationMs,
+        };
+        console.info(
+          `${logPrefix} API return value (timeout):`,
+          failurePayload,
+        );
+        return Response.json(failurePayload, { status: 504 });
+      }
+
+      // Non-timeout error on the primary call; try without response_format.
       console.warn(
         `${logPrefix} response_format=json_object failed; retrying without response_format.`,
         {
@@ -486,17 +564,23 @@ ${scenesPayload}`;
       try {
         completion = await openaiClient.chat.completions.create(
           baseCompletionPayload,
+          { signal: abortController.signal },
         );
       } catch (fallbackError) {
+        clearTimeout(timeoutId);
+        const durationMs = Date.now() - startedAt;
         const errorMessage = `Model request failed: ${getErrorMessage(fallbackError)}`;
         console.error(`${logPrefix} Model call failed.`, {
           error: errorMessage,
+          durationMs,
         });
 
         const failurePayload = {
           error: errorMessage,
           requestId,
           attemptedBatchSize: scenes.length,
+          modelUnloaded: false,
+          durationMs,
         };
         console.info(
           `${logPrefix} API return value (model call failure):`,
@@ -505,6 +589,7 @@ ${scenesPayload}`;
         return Response.json(failurePayload, { status: 502 });
       }
     }
+    clearTimeout(timeoutId);
 
     const rawContent = completion.choices?.[0]?.message?.content?.trim();
     console.info(`${logPrefix} Model response received.`, {
@@ -524,6 +609,8 @@ ${scenesPayload}`;
         error: errorMessage,
         requestId,
         attemptedBatchSize: scenes.length,
+        modelUnloaded: false,
+        durationMs: Date.now() - startedAt,
       };
       console.info(
         `${logPrefix} API return value (empty model content):`,
@@ -549,6 +636,8 @@ ${scenesPayload}`;
         error: errorMessage,
         requestId,
         attemptedBatchSize: scenes.length,
+        modelUnloaded: false,
+        durationMs: Date.now() - startedAt,
       };
       console.info(
         `${logPrefix} API return value (parse failure):`,
@@ -583,6 +672,8 @@ ${scenesPayload}`;
         error: errorMessage,
         requestId,
         attemptedBatchSize: scenes.length,
+        modelUnloaded: false,
+        durationMs: Date.now() - startedAt,
       };
       console.info(
         `${logPrefix} API return value (validation failure):`,
@@ -629,6 +720,8 @@ ${scenesPayload}`;
       requestId,
       unloadModelAfter,
       unloadResult,
+      modelUnloaded: false,
+      durationMs: Date.now() - startedAt,
     };
     console.info(`${logPrefix} API return value (success):`, successPayload);
     return Response.json(successPayload);
@@ -637,6 +730,8 @@ ${scenesPayload}`;
     const unhandledPayload = {
       error: getErrorMessage(error) || 'Failed to fix language for scenes',
       requestId,
+      modelUnloaded: false,
+      durationMs: Date.now() - startedAt,
     };
     console.info(
       `${logPrefix} API return value (unhandled error):`,
