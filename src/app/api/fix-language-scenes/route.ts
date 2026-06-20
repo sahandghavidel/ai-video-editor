@@ -51,6 +51,83 @@ function normalizeTextForComparison(text: string): string {
   return String(text).replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Strip invisible/problematic Unicode characters and normalize cosmetic
+ * differences (smart quotes, en/em-dashes, etc.) so that two strings that
+ * look the same to a human compare as equal.
+ *
+ * This is intentionally conservative – it only removes characters that are
+ * purely cosmetic and should never change the *meaning* of text.
+ */
+function stripProblematicUnicode(text: string): string {
+  return (
+    text
+      // NFC composition – combine characters into their canonical form.
+      .normalize('NFC')
+      // Remove zero-width / invisible formatting characters.
+      // U+200B zero-width space, U+200C zero-width non-joiner, U+200D zero-width joiner,
+      // U+200E/U+200F left-to-right / right-to-left marks, U+FEFF BOM/ZWNBSP,
+      // U+00AD soft hyphen, U+2060 word joiner, U+180E mongolian vowel separator,
+      // U+FE00-U+FE0F variation selectors (handled separately below),
+      // U+061C arabic letter mark, U+2028 line separator, U+2029 paragraph separator.
+      .replace(/[\u200B-\u200F\uFEFF\u00AD\u2060\u180E]/g, '')
+      // Remove variation selectors.
+      .replace(/[\uFE00-\uFE0F]/g, '')
+      // Remove stray combining marks (diacritics that appear/disappear
+      // between model echo attempts). Only strip the combining marks
+      // themselves, not precomposed characters like é (U+00E9).
+      .replace(/[\u0300-\u036F]/g, '')
+      // Normalize curly / smart quotes → straight quotes.
+      .replace(/[\u2018\u2019\u201A\u201B\u2039\u203A\u02BC]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"')
+      // Normalize dashes → hyphen-minus.
+      .replace(/[\u2012\u2013\u2014\u2015\u2212]/g, '-')
+      // Normalize non-breaking / special spaces → regular space.
+      .replace(/[\u00A0\u2007\u202F\u205F\u2060\u2009\u200A\u2008\uFEA0]/g, ' ')
+      // Collapse whitespace and trim.
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+/**
+ * Compare two strings using fuzzy Unicode-aware normalization.
+ * Returns whether they match and, if not, a short diff preview.
+ */
+function textsMatchFuzzy(
+  a: string,
+  b: string,
+): { match: boolean; diffPreview?: string } {
+  const canonicalA = stripProblematicUnicode(normalizeTextForComparison(a));
+  const canonicalB = stripProblematicUnicode(normalizeTextForComparison(b));
+
+  if (canonicalA === canonicalB) {
+    return { match: true };
+  }
+
+  // Build a short diff preview showing the first divergence.
+  const maxLen = Math.max(canonicalA.length, canonicalB.length);
+  let firstDiff = -1;
+  for (let i = 0; i < maxLen; i++) {
+    if (canonicalA[i] !== canonicalB[i]) {
+      firstDiff = i;
+      break;
+    }
+  }
+
+  const charA = firstDiff >= 0 ? canonicalA[firstDiff] : '';
+  const charB = firstDiff >= 0 ? canonicalB[firstDiff] : '';
+  const codePointA = firstDiff >= 0 ? (charA.codePointAt(0) ?? 0) : 0;
+  const codePointB = firstDiff >= 0 ? (charB.codePointAt(0) ?? 0) : 0;
+
+  const preview =
+    firstDiff >= 0
+      ? `char ${firstDiff}: expected U+${codePointA.toString(16).toUpperCase().padStart(4, '0')} ('${charA}'), got U+${codePointB.toString(16).toUpperCase().padStart(4, '0')} ('${charB}')`
+      : `length mismatch: ${canonicalA.length} vs ${canonicalB.length}`;
+
+  return { match: false, diffPreview: preview };
+}
+
 function isTruthyFlag(value: unknown): boolean {
   return value === true || value === 'true' || value === 1 || value === '1';
 }
@@ -132,6 +209,7 @@ function normalizeInputScenes(rawScenes: unknown): InputScene[] {
 function validateAndNormalizeModelOutput(
   parsed: unknown,
   inputScenes: InputScene[],
+  onFuzzyMatch?: (sceneId: number, diffPreview: string) => void,
 ): ParsedSentence[] {
   const inputSceneIds = inputScenes.map((scene) => scene.sceneId);
   const inputTextById = new Map<number, string>(
@@ -206,16 +284,28 @@ function validateAndNormalizeModelOutput(
       );
     }
 
-    if (returnedNormalized !== expectedNormalized) {
-      throw new Error(
-        `Model sourceText mismatch for scene ${sceneId}. Expected to match input scene value exactly.`,
-      );
+    // Use strict comparison first (fast path).
+    const strictMatch = returnedNormalized === expectedNormalized;
+
+    // If strict fails, try fuzzy Unicode-aware comparison.
+    const useOriginalText = !strictMatch;
+    if (useOriginalText) {
+      const fuzzy = textsMatchFuzzy(expectedSourceText, sourceText);
+      if (!fuzzy.match) {
+        throw new Error(
+          `Model sourceText mismatch for scene ${sceneId}. Expected to match input scene value exactly.`,
+        );
+      }
+      // Fuzzy match passed – the model echoed the right text with cosmetic
+      // Unicode differences. Log a warning but proceed, using the ORIGINAL
+      // input text as sourceText to avoid downstream inconsistency.
+      onFuzzyMatch?.(sceneId, fuzzy.diffPreview ?? 'unknown diff');
     }
 
     seenIds.add(sceneId);
     byId.set(sceneId, {
       sceneId,
-      sourceText,
+      sourceText: useOriginalText ? expectedSourceText : sourceText,
       fixedSentence,
     });
   });
@@ -349,246 +439,199 @@ Rules:
 Input scenes:
 ${scenesPayload}`;
 
-    const maxAttempts = 3;
-    let lastFailureReason = '';
+    console.info(`${logPrefix} Prompt sent to model:`);
+    console.info(userPrompt);
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const retryInstruction =
-        attempt > 1
-          ? `\n\nIMPORTANT RETRY INSTRUCTIONS (attempt ${attempt}/${maxAttempts}):\nThe previous response failed validation: ${lastFailureReason || 'unknown reason'}.\nReturn valid JSON only, and include sceneId, sourceText (exact input text for same sceneId), and fixedSentence for every scene.`
-          : '';
+    const baseCompletionPayload = {
+      model,
+      temperature: 0,
+      messages: [
+        {
+          role: 'system' as const,
+          content:
+            'You are a precise text editor for tutorial scripts. Return only strict JSON with the exact required schema.',
+        },
+        {
+          role: 'user' as const,
+          content: userPrompt,
+        },
+      ],
+    };
 
-      const promptForAttempt = `${userPrompt}${retryInstruction}`;
+    console.info(`${logPrefix} Calling ${provider} model.`, {
+      model,
+      strictJsonMode: true,
+      attemptedBatchSize: scenes.length,
+    });
 
-      console.info(
-        `${logPrefix} Prompt sent to model (attempt ${attempt}/${maxAttempts}):`,
+    // Single attempt: try with response_format=json_object first.
+    // If the model/provider doesn't support it, retry once without it
+    // (this is a compatibility fallback, not a retry-on-failure).
+    let completion: OpenAI.Chat.Completions.ChatCompletion;
+    let usedJsonFormat = true;
+    try {
+      completion = await openaiClient.chat.completions.create({
+        ...baseCompletionPayload,
+        response_format: { type: 'json_object' },
+      });
+    } catch (jsonFormatError) {
+      usedJsonFormat = false;
+      console.warn(
+        `${logPrefix} response_format=json_object failed; retrying without response_format.`,
+        {
+          error: getErrorMessage(jsonFormatError),
+        },
       );
-      console.info(promptForAttempt);
 
-      const baseCompletionPayload = {
-        model,
-        temperature: 0,
-        messages: [
-          {
-            role: 'system' as const,
-            content:
-              'You are a precise text editor for tutorial scripts. Return only strict JSON with the exact required schema.',
-          },
-          {
-            role: 'user' as const,
-            content: promptForAttempt,
-          },
-        ],
-      };
-
-      console.info(`${logPrefix} Calling ${provider} model.`, {
-        model,
-        strictJsonMode: true,
-        attempt: `${attempt}/${maxAttempts}`,
-        retryReason: attempt > 1 ? lastFailureReason : null,
-      });
-
-      let completion: OpenAI.Chat.Completions.ChatCompletion;
       try {
-        completion = await openaiClient.chat.completions.create({
-          ...baseCompletionPayload,
-          response_format: { type: 'json_object' },
-        });
-      } catch (error) {
-        console.warn(
-          `${logPrefix} response_format=json_object failed; retrying without response_format.`,
-          {
-            attempt: `${attempt}/${maxAttempts}`,
-            error: getErrorMessage(error),
-          },
+        completion = await openaiClient.chat.completions.create(
+          baseCompletionPayload,
         );
-
-        try {
-          completion = await openaiClient.chat.completions.create(
-            baseCompletionPayload,
-          );
-        } catch (fallbackError) {
-          lastFailureReason = `Model request failed: ${getErrorMessage(fallbackError)}`;
-          console.error(`${logPrefix} Model call failed.`, {
-            attempt: `${attempt}/${maxAttempts}`,
-            error: lastFailureReason,
-          });
-
-          if (attempt < maxAttempts) {
-            continue;
-          }
-
-          const modelCallFailurePayload = {
-            error: lastFailureReason,
-            requestId,
-            attemptsUsed: attempt,
-          };
-          console.info(
-            `${logPrefix} API return value (model call failure):`,
-            modelCallFailurePayload,
-          );
-          return Response.json(modelCallFailurePayload, { status: 502 });
-        }
-      }
-
-      const rawContent = completion.choices?.[0]?.message?.content?.trim();
-      console.info(`${logPrefix} Model response received.`, {
-        attempt: `${attempt}/${maxAttempts}`,
-        hasContent: Boolean(rawContent),
-        contentLength: rawContent?.length ?? 0,
-        choicesCount: completion.choices?.length ?? 0,
-      });
-      console.info(
-        `${logPrefix} Raw model return value (attempt ${attempt}/${maxAttempts}):`,
-      );
-      console.info(rawContent ?? '(empty)');
-
-      if (!rawContent) {
-        lastFailureReason = 'Model returned empty content';
-        console.warn(
-          `${logPrefix} Empty model content; will retry if attempts remain.`,
-          {
-            attempt: `${attempt}/${maxAttempts}`,
-          },
-        );
-
-        if (attempt < maxAttempts) {
-          continue;
-        }
-
-        const emptyContentPayload = {
-          error: lastFailureReason,
-          requestId,
-          attemptsUsed: attempt,
-        };
-        console.info(
-          `${logPrefix} API return value (empty model content):`,
-          emptyContentPayload,
-        );
-        return Response.json(emptyContentPayload, { status: 502 });
-      }
-
-      let parsed: unknown;
-      try {
-        parsed = tryParseJson(rawContent);
-      } catch (error) {
-        lastFailureReason = getErrorMessage(error);
-        console.warn(
-          `${logPrefix} Failed to parse model JSON response; will retry if attempts remain.`,
-          {
-            attempt: `${attempt}/${maxAttempts}`,
-            error: lastFailureReason,
-            contentPreview: rawContent.slice(0, 400),
-          },
-        );
-
-        if (attempt < maxAttempts) {
-          continue;
-        }
-
-        const parseFailurePayload = {
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Failed to parse model response JSON',
-          requestId,
-          attemptsUsed: attempt,
-        };
-        console.info(
-          `${logPrefix} API return value (parse failure):`,
-          parseFailurePayload,
-        );
-        return Response.json(parseFailurePayload, { status: 422 });
-      }
-
-      let sentences: ParsedSentence[];
-      try {
-        sentences = validateAndNormalizeModelOutput(parsed, scenes);
-      } catch (error) {
-        lastFailureReason = getErrorMessage(error);
-        console.warn(
-          `${logPrefix} Model response validation failed; will retry if attempts remain.`,
-          {
-            attempt: `${attempt}/${maxAttempts}`,
-            error: lastFailureReason,
-            expectedSceneIds: sceneIds,
-            returnedSceneIds: extractReturnedSceneIds(parsed),
-          },
-        );
-
-        if (attempt < maxAttempts) {
-          continue;
-        }
-
-        const validationFailurePayload = {
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Model response failed validation',
-          requestId,
-          attemptsUsed: attempt,
-        };
-        console.info(
-          `${logPrefix} API return value (validation failure):`,
-          validationFailurePayload,
-        );
-        return Response.json(validationFailurePayload, { status: 422 });
-      }
-
-      console.info(`${logPrefix} Validation succeeded.`, {
-        attempt: `${attempt}/${maxAttempts}`,
-        returnedSceneIds: sentences.map((s) => s.sceneId),
-        durationMs: Date.now() - startedAt,
-      });
-
-      let unloadResult: Awaited<ReturnType<typeof unloadLocalModel>> | null =
-        null;
-
-      if (provider === 'local' && unloadModelAfter) {
-        unloadResult = await unloadLocalModel({
-          modelId: model,
-          localBaseUrl: providerConfig.localEndpoint,
-          localApiKey: providerConfig.localApiKey,
-          localAdminApiKey: providerConfig.localAdminApiKey,
+      } catch (fallbackError) {
+        const errorMessage = `Model request failed: ${getErrorMessage(fallbackError)}`;
+        console.error(`${logPrefix} Model call failed.`, {
+          error: errorMessage,
         });
 
-        if (unloadResult.ok) {
-          console.info(`${logPrefix} Local model unloaded successfully.`, {
-            endpoint: unloadResult.endpoint,
-            status: unloadResult.status,
-            model,
-          });
-        } else {
-          console.warn(`${logPrefix} Local model unload failed.`, {
-            endpoint: unloadResult.endpoint,
-            status: unloadResult.status,
-            model,
-            message: unloadResult.message,
-          });
-        }
+        const failurePayload = {
+          error: errorMessage,
+          requestId,
+          attemptedBatchSize: scenes.length,
+        };
+        console.info(
+          `${logPrefix} API return value (model call failure):`,
+          failurePayload,
+        );
+        return Response.json(failurePayload, { status: 502 });
       }
-
-      const successPayload = {
-        sentences,
-        requestId,
-        attemptsUsed: attempt,
-        unloadModelAfter,
-        unloadResult,
-      };
-      console.info(`${logPrefix} API return value (success):`, successPayload);
-      return Response.json(successPayload);
     }
 
-    const exhaustedPayload = {
-      error: `Model output failed after ${maxAttempts} attempts`,
+    const rawContent = completion.choices?.[0]?.message?.content?.trim();
+    console.info(`${logPrefix} Model response received.`, {
+      hasContent: Boolean(rawContent),
+      contentLength: rawContent?.length ?? 0,
+      choicesCount: completion.choices?.length ?? 0,
+      usedJsonFormat,
+    });
+    console.info(`${logPrefix} Raw model return value:`);
+    console.info(rawContent ?? '(empty)');
+
+    if (!rawContent) {
+      const errorMessage = 'Model returned empty content';
+      console.warn(`${logPrefix} ${errorMessage}`);
+
+      const failurePayload = {
+        error: errorMessage,
+        requestId,
+        attemptedBatchSize: scenes.length,
+      };
+      console.info(
+        `${logPrefix} API return value (empty model content):`,
+        failurePayload,
+      );
+      return Response.json(failurePayload, { status: 502 });
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = tryParseJson(rawContent);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Failed to parse model response JSON';
+      console.warn(`${logPrefix} Failed to parse model JSON response.`, {
+        errorMessage,
+        contentPreview: rawContent.slice(0, 400),
+      });
+
+      const parseFailurePayload = {
+        error: errorMessage,
+        requestId,
+        attemptedBatchSize: scenes.length,
+      };
+      console.info(
+        `${logPrefix} API return value (parse failure):`,
+        parseFailurePayload,
+      );
+      return Response.json(parseFailurePayload, { status: 422 });
+    }
+
+    let sentences: ParsedSentence[];
+    try {
+      sentences = validateAndNormalizeModelOutput(
+        parsed,
+        scenes,
+        (sceneId, diffPreview) => {
+          console.warn(
+            `${logPrefix} sourceText fuzzy match for scene ${sceneId}: ${diffPreview}. Using original input text.`,
+          );
+        },
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Model response failed validation';
+      console.warn(`${logPrefix} Model response validation failed.`, {
+        error: errorMessage,
+        expectedSceneIds: sceneIds,
+        returnedSceneIds: extractReturnedSceneIds(parsed),
+      });
+
+      const validationFailurePayload = {
+        error: errorMessage,
+        requestId,
+        attemptedBatchSize: scenes.length,
+      };
+      console.info(
+        `${logPrefix} API return value (validation failure):`,
+        validationFailurePayload,
+      );
+      return Response.json(validationFailurePayload, { status: 422 });
+    }
+
+    console.info(`${logPrefix} Validation succeeded.`, {
+      returnedSceneIds: sentences.map((s) => s.sceneId),
+      attemptedBatchSize: scenes.length,
+      durationMs: Date.now() - startedAt,
+    });
+
+    let unloadResult: Awaited<ReturnType<typeof unloadLocalModel>> | null =
+      null;
+
+    if (provider === 'local' && unloadModelAfter) {
+      unloadResult = await unloadLocalModel({
+        modelId: model,
+        localBaseUrl: providerConfig.localEndpoint,
+        localApiKey: providerConfig.localApiKey,
+        localAdminApiKey: providerConfig.localAdminApiKey,
+      });
+
+      if (unloadResult.ok) {
+        console.info(`${logPrefix} Local model unloaded successfully.`, {
+          endpoint: unloadResult.endpoint,
+          status: unloadResult.status,
+          model,
+        });
+      } else {
+        console.warn(`${logPrefix} Local model unload failed.`, {
+          endpoint: unloadResult.endpoint,
+          status: unloadResult.status,
+          model,
+          message: unloadResult.message,
+        });
+      }
+    }
+
+    const successPayload = {
+      sentences,
       requestId,
-      attemptsUsed: maxAttempts,
+      unloadModelAfter,
+      unloadResult,
     };
-    console.info(
-      `${logPrefix} API return value (exhausted attempts):`,
-      exhaustedPayload,
-    );
-    return Response.json(exhaustedPayload, { status: 422 });
+    console.info(`${logPrefix} API return value (success):`, successPayload);
+    return Response.json(successPayload);
   } catch (error) {
     console.error(`${logPrefix} Unhandled failure.`, error);
     const unhandledPayload = {
