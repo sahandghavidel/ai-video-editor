@@ -1239,6 +1239,7 @@ export default function BatchOperations({
               localEndpoint: modelSelection.localEndpoint,
               localApiKey: modelSelection.localApiKey,
               localAdminApiKey: modelSelection.localAdminApiKey,
+              preferFastProvider: modelSelection.provider === 'online',
               model: modelSelection.selectedModel,
               scenes: selectedBatch.map((item) => ({
                 sceneId: item.scene.id,

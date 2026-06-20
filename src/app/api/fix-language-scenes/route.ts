@@ -355,6 +355,7 @@ export async function POST(request: Request) {
       localApiKey?: unknown;
       localAdminApiKey?: unknown;
       unloadModelAfter?: unknown;
+      preferFastProvider?: unknown;
     } | null;
 
     const providerConfig = resolveAIProviderConfig(request, body);
@@ -411,11 +412,22 @@ export async function POST(request: Request) {
         : DEFAULT_MODEL;
 
     const unloadModelAfter = isTruthyFlag(body?.unloadModelAfter);
+    const preferFastProvider = isTruthyFlag(body?.preferFastProvider);
+
+    // For OpenRouter online requests, append :nitro to the model slug to
+    // route to the highest-throughput provider. The :nitro shortcut is
+    // ignored by local providers so we only apply it for online mode.
+    const effectiveModel =
+      preferFastProvider && provider === 'online' && !model.includes(':nitro')
+        ? `${model}:nitro`
+        : model;
 
     const sceneIds = scenes.map((scene) => scene.sceneId);
 
     console.info(`${logPrefix} Input validated.`, {
       model,
+      effectiveModel,
+      preferFastProvider,
       sceneCount: scenes.length,
       sceneIds,
       unloadModelAfter,
@@ -458,7 +470,7 @@ ${scenesPayload}`;
     console.info(userPrompt);
 
     const baseCompletionPayload = {
-      model,
+      model: effectiveModel,
       temperature: 0,
       messages: [
         {
@@ -474,7 +486,8 @@ ${scenesPayload}`;
     };
 
     console.info(`${logPrefix} Calling ${provider} model.`, {
-      model,
+      model: effectiveModel,
+      preferFastProvider,
       strictJsonMode: true,
       attemptedBatchSize: scenes.length,
       timeoutMs: MODEL_CALL_TIMEOUT_MS,
