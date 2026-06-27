@@ -8,6 +8,45 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /* ------------------------------------------------------------------ */
+/*  yt-dlp binary resolution                                          */
+/* ------------------------------------------------------------------ */
+
+// Resolve a fresh yt-dlp binary at module load. Precedence:
+//   1. YTDLP_BIN env override (full path to a binary or venv script)
+//   2. <project>/.venv/bin/yt-dlp (the venv shipped with this app)
+//   3. yt-dlp on PATH (system / Homebrew fallback)
+//
+// We log which one was chosen so it is obvious in dev logs.
+function resolveYtDlpBinary(): { command: string; label: string } {
+  const override = process.env.YTDLP_BIN?.trim();
+  if (override) {
+    return { command: override, label: `env YTDLP_BIN=${override}` };
+  }
+
+  // projectRoot is <repo>/src/app/api/download-youtube-subtitles -> 4 levels up.
+  const projectRoot = path.resolve(process.cwd());
+  const candidates = [
+    path.join(projectRoot, '.venv', 'bin', 'yt-dlp'),
+    path.join(projectRoot, 'venv', 'bin', 'yt-dlp'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('fs').accessSync(candidate);
+      return { command: candidate, label: `venv ${candidate}` };
+    } catch {
+      // keep searching
+    }
+  }
+
+  return { command: 'yt-dlp', label: 'PATH (yt-dlp)' };
+}
+
+const YT_DLP_RESOLVED = resolveYtDlpBinary();
+console.log(`🛠️ [YT-SUB] Using yt-dlp binary: ${YT_DLP_RESOLVED.label}`);
+
+/* ------------------------------------------------------------------ */
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -78,6 +117,13 @@ function buildYtDlpBaseArgs(
     sleepInterval,
     '--max-sleep-interval',
     maxSleepInterval,
+    // Suppress the "your yt-dlp version is older than 90 days" warning,
+    // which produces stderr noise that gets surfaced in retry logs.
+    '--no-update',
+    // Suppress the "no impersonate target is available" warning. Impersonation
+    // is opt-in via env (e.g. YTDLP_REMOTE_COMPONENTS=ejs:github); the warning
+    // is not actionable from this app.
+    '--no-warnings',
   ];
 }
 
@@ -128,7 +174,7 @@ function runYtDlp(
   return retryWithBackoff(
     () =>
       new Promise<string>((resolve, reject) => {
-        const proc = spawn('yt-dlp', args);
+        const proc = spawn(YT_DLP_RESOLVED.command, args);
         let stdout = '';
         let stderr = '';
 
