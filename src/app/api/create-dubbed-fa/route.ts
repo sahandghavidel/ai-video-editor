@@ -739,7 +739,61 @@ export async function POST(request: NextRequest) {
             },
           );
 
+          const queuedBySubtitleApi =
+            ytSubResponse.status === 202 ||
+            ytSubResponse.headers.get('X-YT-Sub-Queued') === '1';
+
+          if (queuedBySubtitleApi) {
+            const queuedPayload = (await ytSubResponse
+              .json()
+              .catch(() => null)) as {
+              error?: string;
+              retryAfterSeconds?: number;
+              nextAttemptAt?: string;
+            } | null;
+
+            const retryAfterSeconds =
+              typeof queuedPayload?.retryAfterSeconds === 'number'
+                ? queuedPayload.retryAfterSeconds
+                : Number.parseInt(
+                    ytSubResponse.headers.get('Retry-After') ?? '',
+                    10,
+                  ) || 60;
+
+            return NextResponse.json(
+              {
+                queued: true,
+                error:
+                  queuedPayload?.error ??
+                  `YouTube subtitles are temporarily busy for language '${selectedLanguageReference.language}'.`,
+                retryAfterSeconds,
+                nextAttemptAt:
+                  queuedPayload?.nextAttemptAt ??
+                  new Date(Date.now() + retryAfterSeconds * 1000).toISOString(),
+                language: selectedLanguageReference.language,
+                youtubeLangCode: selectedLanguageReference.youtubeLangCode,
+              },
+              {
+                status: 202,
+                headers: {
+                  'Retry-After': String(retryAfterSeconds),
+                },
+              },
+            );
+          }
+
           if (ytSubResponse.ok) {
+            const responseContentType =
+              ytSubResponse.headers.get('Content-Type')?.toLowerCase() ?? '';
+            if (responseContentType.includes('application/json')) {
+              const jsonPayload = (await ytSubResponse
+                .json()
+                .catch(() => null)) as { error?: string } | null;
+              console.warn(
+                `[create-dubbed-fa] Step 0: Expected subtitle text but got JSON payload (${ytSubResponse.status}): ${jsonPayload?.error ?? 'unknown error'}`,
+              );
+            }
+
             const srtContent = await ytSubResponse.text();
 
             if (srtContent && srtContent.trim().length > 0) {

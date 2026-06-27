@@ -64,3 +64,7 @@ omnivoice-env/lib/python3.10/site-packages/omnivoice/*
 omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/*
 !omnivoice-env/lib/python3.10/site-packages/omnivoice/utils/audio.py
 src/data/tts-audio-references.json
+.cache/*
+# Track the youtube-cookies README so users know how to export cookies
+!.cache/youtube-cookies/
+!.cache/youtube-cookies/README.md
