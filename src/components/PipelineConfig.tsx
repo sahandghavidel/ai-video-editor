@@ -105,6 +105,21 @@ export default function PipelineConfig({
     [pipelineConfig.selectedDubbedLanguagesForPipeline],
   );
 
+  // Load available languages when component expands or dubbed language is enabled
+  useEffect(() => {
+    if (
+      isExpanded &&
+      pipelineConfig.createDubbedLanguage &&
+      !hasLoadedDubbedLanguagesForPipeline
+    ) {
+      void loadAvailableDubbedLanguagesForPipeline();
+    }
+  }, [
+    isExpanded,
+    pipelineConfig.createDubbedLanguage,
+    hasLoadedDubbedLanguagesForPipeline,
+  ]);
+
   const loadAvailableDubbedLanguagesForPipeline = useCallback(async () => {
     setLoadingDubbedLanguagesForPipeline(true);
 
@@ -197,22 +212,28 @@ export default function PipelineConfig({
   ]);
 
   useEffect(() => {
+    // Only filter when we have a complete loaded list (more than just default ['fa'])
+    // and the selected languages don't match available ones
     if (!hasLoadedDubbedLanguagesForPipeline) return;
-    if (availableDubbedLanguagesForPipeline.length === 0) return;
+    if (availableDubbedLanguagesForPipeline.length <= 1) return; // Wait for full load
 
     const availableSet = new Set(availableDubbedLanguagesForPipeline);
     const filteredSelection = selectedDubbedLanguagesForPipeline.filter(
       (languageCode) => availableSet.has(languageCode),
     );
 
-    const isSameSelection =
-      filteredSelection.length === selectedDubbedLanguagesForPipeline.length &&
-      filteredSelection.every(
-        (languageCode, index) =>
-          languageCode === selectedDubbedLanguagesForPipeline[index],
-      );
+    // Only update if we actually need to filter out invalid selections
+    if (filteredSelection.length === selectedDubbedLanguagesForPipeline.length)
+      return;
 
-    if (isSameSelection) return;
+    // Don't filter if the selection is empty (let user choose)
+    if (selectedDubbedLanguagesForPipeline.length === 0) return;
+
+    console.log('Filtering dubbed language selection:', {
+      original: selectedDubbedLanguagesForPipeline,
+      filtered: filteredSelection,
+      available: availableDubbedLanguagesForPipeline,
+    });
 
     updatePipelineConfig({
       selectedDubbedLanguagesForPipeline: filteredSelection,
