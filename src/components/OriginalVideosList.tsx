@@ -44,6 +44,8 @@ import {
   FastForward,
   GitMerge,
   MoreHorizontal,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import MergedVideoDisplay from './MergedVideoDisplay';
 import VideoDetailsModal from './video-details-modal/VideoDetailsModal';
@@ -604,6 +606,18 @@ const LazyFinalVideoTable = dynamic(() => import('./FinalVideoTable'), {
   loading: () => null,
 });
 
+const formatUploadFileSize = (size: number): string => {
+  if (size >= 1024 * 1024 * 1024) {
+    return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+};
+
 export default function OriginalVideosList({
   sceneHandlers,
   refreshScenesData,
@@ -614,6 +628,10 @@ export default function OriginalVideosList({
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [mergedUploadFiles, setMergedUploadFiles] = useState<File[]>([]);
+  const [isMergedUploadModalOpen, setIsMergedUploadModalOpen] = useState(false);
+  const [uploadingMergedFiles, setUploadingMergedFiles] = useState(false);
+  const [mergedUploadStatus, setMergedUploadStatus] = useState('');
 
   const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
   const [scriptUploadTitle, setScriptUploadTitle] = useState('');
@@ -868,6 +886,7 @@ export default function OriginalVideosList({
     clearClipGeneration,
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mergedFileInputRef = useRef<HTMLInputElement>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Global state
@@ -1777,6 +1796,130 @@ export default function OriginalVideosList({
 
   const openFileDialog = () => {
     fileInputRef.current?.click();
+  };
+
+  const openMergedFileDialog = () => {
+    mergedFileInputRef.current?.click();
+  };
+
+  const closeMergedUploadModal = () => {
+    if (uploadingMergedFiles) return;
+    setIsMergedUploadModalOpen(false);
+    setMergedUploadFiles([]);
+    setMergedUploadStatus('');
+    if (mergedFileInputRef.current) {
+      mergedFileInputRef.current.value = '';
+    }
+  };
+
+  const handleMergedFileSelect = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const invalidFile = files.find((file) => !file.type.startsWith('video/'));
+    if (invalidFile) {
+      setError(`Please select only video files. ${invalidFile.name} is not a video.`);
+      event.target.value = '';
+      return;
+    }
+
+    if (files.length < 2) {
+      setError('Please select at least two videos to merge.');
+      event.target.value = '';
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024 * 1024;
+    const oversizedFile = files.find((file) => file.size > maxSize);
+    if (oversizedFile) {
+      setError(`${oversizedFile.name} must be less than 10GB.`);
+      event.target.value = '';
+      return;
+    }
+
+    setError(null);
+    setMergedUploadFiles(files);
+    setMergedUploadStatus('');
+    setIsMergedUploadModalOpen(true);
+  };
+
+  const moveMergedUploadFile = (index: number, direction: -1 | 1) => {
+    setMergedUploadFiles((currentFiles) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= currentFiles.length) {
+        return currentFiles;
+      }
+
+      const nextFiles = [...currentFiles];
+      [nextFiles[index], nextFiles[targetIndex]] = [
+        nextFiles[targetIndex],
+        nextFiles[index],
+      ];
+      return nextFiles;
+    });
+  };
+
+  const removeMergedUploadFile = (index: number) => {
+    setMergedUploadFiles((currentFiles) =>
+      currentFiles.filter((_, fileIndex) => fileIndex !== index),
+    );
+  };
+
+  const handleMergedFilesUpload = async () => {
+    if (uploadingMergedFiles) return;
+
+    if (mergedUploadFiles.length < 2) {
+      setError('Please keep at least two videos in the merge list.');
+      return;
+    }
+
+    setUploadingMergedFiles(true);
+    setMergedUploadStatus('Uploading files to local merge route...');
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      mergedUploadFiles.forEach((file) => {
+        formData.append('files', file, file.name);
+      });
+
+      const firstFileName = mergedUploadFiles[0]?.name || 'merged-video.mp4';
+      formData.append('titleBase', firstFileName.replace(/\.[^/.]+$/, ''));
+
+      setMergedUploadStatus('Merging videos...');
+      const response = await fetch('/api/upload-video/merge-files', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Merged upload failed (${response.status})`,
+        );
+      }
+
+      setMergedUploadStatus('Refreshing videos...');
+      await fetchOriginalVideos(true);
+
+      setMergedUploadStatus('Done');
+      setTimeout(() => {
+        setUploadingMergedFiles(false);
+        setIsMergedUploadModalOpen(false);
+        setMergedUploadFiles([]);
+        setMergedUploadStatus('');
+        if (mergedFileInputRef.current) {
+          mergedFileInputRef.current.value = '';
+        }
+      }, 800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Merged upload failed');
+      setUploadingMergedFiles(false);
+      setMergedUploadStatus('');
+    }
   };
 
   const openScriptUploadModal = () => {
@@ -12597,9 +12740,9 @@ export default function OriginalVideosList({
                     {/* Upload Button */}
                     <button
                       onClick={openFileDialog}
-                      disabled={uploading}
+                      disabled={uploading || uploadingMergedFiles}
                       className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
-                        uploading
+                        uploading || uploadingMergedFiles
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-green-500 hover:bg-green-600'
                       } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
@@ -12624,12 +12767,44 @@ export default function OriginalVideosList({
                       )}
                     </button>
 
+                    {/* Upload Merged Button */}
+                    <button
+                      onClick={openMergedFileDialog}
+                      disabled={uploading || uploadingMergedFiles}
+                      className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
+                        uploading || uploadingMergedFiles
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-600'
+                      } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
+                      title={
+                        uploadingMergedFiles
+                          ? mergedUploadStatus || 'Merging and uploading...'
+                          : 'Select multiple videos, reorder them, merge, and upload'
+                      }
+                    >
+                      {uploadingMergedFiles ? (
+                        <>
+                          <Loader2 className='w-4 h-4 animate-spin' />
+                          <span className='truncate'>
+                            {mergedUploadStatus || 'Merging...'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <GitMerge className='w-4 h-4' />
+                          <span>Upload Merged</span>
+                        </>
+                      )}
+                    </button>
+
                     {/* Upload Script Button */}
                     <button
                       onClick={openScriptUploadModal}
-                      disabled={uploading || creatingVideoFromScript}
+                      disabled={
+                        uploading || uploadingMergedFiles || creatingVideoFromScript
+                      }
                       className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
-                        uploading || creatingVideoFromScript
+                        uploading || uploadingMergedFiles || creatingVideoFromScript
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-green-500 hover:bg-green-600'
                       } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
@@ -12653,11 +12828,13 @@ export default function OriginalVideosList({
                       onClick={() => void handleGenerateTtsFromScripts()}
                       disabled={
                         uploading ||
+                        uploadingMergedFiles ||
                         creatingVideoFromScript ||
                         generatingTtsFromScripts
                       }
                       className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
                         uploading ||
+                        uploadingMergedFiles ||
                         creatingVideoFromScript ||
                         generatingTtsFromScripts
                           ? 'bg-gray-400 cursor-not-allowed'
@@ -12683,6 +12860,7 @@ export default function OriginalVideosList({
                       onClick={() => void handleGenerateVideoFromTtsAudioAll()}
                       disabled={
                         uploading ||
+                        uploadingMergedFiles ||
                         creatingVideoFromScript ||
                         generatingTtsFromScripts ||
                         generatingVideoFromTtsAudioAll ||
@@ -12690,6 +12868,7 @@ export default function OriginalVideosList({
                       }
                       className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate ${
                         uploading ||
+                        uploadingMergedFiles ||
                         creatingVideoFromScript ||
                         generatingTtsFromScripts ||
                         generatingVideoFromTtsAudioAll ||
@@ -12719,6 +12898,128 @@ export default function OriginalVideosList({
                       onChange={handleFileSelect}
                       className='hidden'
                     />
+
+                    <input
+                      ref={mergedFileInputRef}
+                      type='file'
+                      accept='video/*'
+                      multiple
+                      onChange={handleMergedFileSelect}
+                      className='hidden'
+                    />
+
+                    {isMergedUploadModalOpen && (
+                      <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4'>
+                        <div className='w-full max-w-3xl rounded-lg bg-white shadow-lg border border-gray-200'>
+                          <div className='px-4 py-3 border-b border-gray-200 flex items-center justify-between'>
+                            <h3 className='text-sm font-semibold text-gray-900'>
+                              Upload Merged Videos
+                            </h3>
+                            <button
+                              onClick={closeMergedUploadModal}
+                              disabled={uploadingMergedFiles}
+                              className='text-gray-500 hover:text-gray-700 disabled:text-gray-300'
+                              title='Close'
+                            >
+                              <X className='w-4 h-4' />
+                            </button>
+                          </div>
+
+                          <div className='p-4 space-y-3'>
+                            <div className='max-h-[50vh] overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-200'>
+                              {mergedUploadFiles.map((file, index) => (
+                                <div
+                                  key={`${file.name}-${file.lastModified}-${index}`}
+                                  className='flex items-center gap-3 px-3 py-2'
+                                >
+                                  <div className='w-7 text-xs font-semibold text-gray-500'>
+                                    {index + 1}
+                                  </div>
+                                  <div className='min-w-0 flex-1'>
+                                    <div className='truncate text-sm font-medium text-gray-900'>
+                                      {file.name}
+                                    </div>
+                                    <div className='text-xs text-gray-500'>
+                                      {formatUploadFileSize(file.size)}
+                                    </div>
+                                  </div>
+                                  <div className='flex items-center gap-1'>
+                                    <button
+                                      type='button'
+                                      onClick={() =>
+                                        moveMergedUploadFile(index, -1)
+                                      }
+                                      disabled={
+                                        uploadingMergedFiles || index === 0
+                                      }
+                                      className='p-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:text-gray-300 disabled:hover:bg-white'
+                                      title='Move up'
+                                    >
+                                      <ArrowUp className='w-3.5 h-3.5' />
+                                    </button>
+                                    <button
+                                      type='button'
+                                      onClick={() =>
+                                        moveMergedUploadFile(index, 1)
+                                      }
+                                      disabled={
+                                        uploadingMergedFiles ||
+                                        index === mergedUploadFiles.length - 1
+                                      }
+                                      className='p-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:text-gray-300 disabled:hover:bg-white'
+                                      title='Move down'
+                                    >
+                                      <ArrowDown className='w-3.5 h-3.5' />
+                                    </button>
+                                    <button
+                                      type='button'
+                                      onClick={() =>
+                                        removeMergedUploadFile(index)
+                                      }
+                                      disabled={uploadingMergedFiles}
+                                      className='p-1.5 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:text-red-300 disabled:hover:bg-white'
+                                      title='Remove'
+                                    >
+                                      <Trash2 className='w-3.5 h-3.5' />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {mergedUploadStatus && (
+                              <div className='flex items-center gap-2 text-sm text-gray-700'>
+                                <Loader2 className='w-4 h-4 animate-spin text-green-600' />
+                                <span>{mergedUploadStatus}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className='px-4 py-3 border-t border-gray-200 flex justify-end gap-2'>
+                            <button
+                              onClick={closeMergedUploadModal}
+                              disabled={uploadingMergedFiles}
+                              className='px-3 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:text-gray-400'
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleMergedFilesUpload}
+                              disabled={
+                                uploadingMergedFiles ||
+                                mergedUploadFiles.length < 2
+                              }
+                              className='inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400'
+                            >
+                              {uploadingMergedFiles && (
+                                <Loader2 className='w-4 h-4 animate-spin' />
+                              )}
+                              <span>Merge and Upload</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {isScriptUploadModalOpen && (
                       <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4'>
