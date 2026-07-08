@@ -4637,38 +4637,57 @@ export default function OriginalVideosList({
         if (!extractUrl(video.field_7101)) variantsToGenerate.push(2);
         if (!extractUrl(video.field_7102)) variantsToGenerate.push(3);
 
-        for (const variant of variantsToGenerate) {
-          try {
-            const response = await fetch('/api/generate-thumbnail-image', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                videoId: video.id,
-                variant,
-              }),
-            });
+        if (variantsToGenerate.length === 0) {
+          continue;
+        }
 
-            if (!response.ok) {
-              const errorText = await response.text().catch(() => '');
-              throw new Error(
-                `Thumbnail ${variant} generation failed (${response.status}): ${errorText}`,
-              );
-            }
+        try {
+          const response = await fetch('/api/generate-thumbnail-images', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              videoId: video.id,
+              variants: variantsToGenerate,
+            }),
+          });
 
-            console.log(
-              `Saved thumbnail ${variant} for video #${video.id} (${variantsToGenerate.length} missing variant(s))`,
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(
+              `Thumbnail batch generation failed (${response.status}): ${errorText}`,
             );
-          } catch (error) {
-            console.error(
-              `Failed to generate thumbnail ${variant} for video #${video.id}:`,
-              error,
-            );
-            // Continue with next thumbnail/video
           }
 
-          await new Promise((resolve) => setTimeout(resolve, 250));
+          const result = (await response.json().catch(() => null)) as {
+            results?: Array<{
+              variant?: unknown;
+              imageUrl?: unknown;
+              skipped?: unknown;
+              error?: unknown;
+            }>;
+          } | null;
+
+          const results = Array.isArray(result?.results) ? result.results : [];
+          for (const thumbResult of results) {
+            const variant = Number(thumbResult.variant);
+            if (thumbResult.error) {
+              console.error(
+                `Failed to generate thumbnail ${variant} for video #${video.id}: ${String(thumbResult.error)}`,
+              );
+            } else {
+              console.log(
+                `Saved thumbnail ${variant} for video #${video.id}${thumbResult.skipped ? ' (already existed)' : ''}`,
+              );
+            }
+          }
+        } catch (error) {
+          console.error(
+            `Failed to generate thumbnail batch for video #${video.id}:`,
+            error,
+          );
+          // Continue with next video.
         }
       }
 
