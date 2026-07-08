@@ -809,6 +809,84 @@ const defaultPipelineConfig: PipelineConfig = {
 };
 
 const defaultPipelineTemplates: PipelineTemplate[] = [];
+const PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY =
+  'pipelineDubbedLanguagesOverride';
+
+function normalizeLanguageCode(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase();
+}
+
+function toUniqueNormalizedLanguageList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const unique = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeLanguageCode(value);
+    if (!normalized || unique.has(normalized)) continue;
+    unique.add(normalized);
+    ordered.push(normalized);
+  }
+
+  return ordered;
+}
+
+function normalizePipelineConfig(
+  config: Partial<PipelineConfig> | undefined,
+  selectedDubbedLanguagesOverride?: string[],
+): PipelineConfig {
+  const selectedDubbedLanguagesForPipeline =
+    selectedDubbedLanguagesOverride !== undefined
+      ? toUniqueNormalizedLanguageList(selectedDubbedLanguagesOverride)
+      : toUniqueNormalizedLanguageList(
+          config?.selectedDubbedLanguagesForPipeline,
+        );
+
+  return {
+    ...defaultPipelineConfig,
+    ...config,
+    selectedDubbedLanguagesForPipeline,
+  };
+}
+
+function getPipelineConfigForStorage(config: PipelineConfig) {
+  const storedConfig = { ...config } as Partial<PipelineConfig>;
+  delete storedConfig.selectedDubbedLanguagesForPipeline;
+  return storedConfig;
+}
+
+function savePipelineConfigToLocalStorage(config: PipelineConfig): void {
+  localStorage.setItem(
+    'pipelineConfig',
+    JSON.stringify(getPipelineConfigForStorage(config)),
+  );
+  localStorage.setItem(
+    PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY,
+    JSON.stringify(config.selectedDubbedLanguagesForPipeline),
+  );
+}
+
+function readStoredPipelineDubbedLanguagesOverride(): string[] | null {
+  const savedValue = localStorage.getItem(
+    PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY,
+  );
+
+  if (!savedValue) return null;
+
+  try {
+    return toUniqueNormalizedLanguageList(JSON.parse(savedValue));
+  } catch {
+    return null;
+  }
+}
+
+function normalizePipelineTemplateConfig(
+  config: Partial<PipelineConfig> | undefined,
+): PipelineConfig {
+  return normalizePipelineConfig(config, []);
+}
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
@@ -1720,34 +1798,35 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Pipeline Configuration Actions
   updatePipelineConfig: (updates) =>
     set((state) => {
-      const newConfig = {
+      const newConfig = normalizePipelineConfig({
         ...state.pipelineConfig,
         ...updates,
-      };
+      });
       // Save to localStorage whenever updated
-      localStorage.setItem('pipelineConfig', JSON.stringify(newConfig));
+      savePipelineConfigToLocalStorage(newConfig);
       return { pipelineConfig: newConfig };
     }),
 
   togglePipelineStep: (step) =>
     set((state) => {
-      const newConfig = {
+      const newConfig = normalizePipelineConfig({
         ...state.pipelineConfig,
         [step]: !state.pipelineConfig[step],
-      };
+      });
       // Save to localStorage whenever updated
-      localStorage.setItem('pipelineConfig', JSON.stringify(newConfig));
+      savePipelineConfigToLocalStorage(newConfig);
       return { pipelineConfig: newConfig };
     }),
 
   resetPipelineConfig: () =>
-    set(() => {
-      // Save to localStorage when reset
-      localStorage.setItem(
-        'pipelineConfig',
-        JSON.stringify(defaultPipelineConfig),
+    set((state) => {
+      const nextConfig = normalizePipelineConfig(
+        defaultPipelineConfig,
+        state.pipelineConfig.selectedDubbedLanguagesForPipeline,
       );
-      return { pipelineConfig: defaultPipelineConfig };
+      // Save to localStorage when reset
+      savePipelineConfigToLocalStorage(nextConfig);
+      return { pipelineConfig: nextConfig };
     }),
 
   savePipelineTemplate: (name) =>
@@ -1766,7 +1845,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? {
             ...existingTemplate,
             name: trimmedName,
-            config: { ...state.pipelineConfig },
+            config: normalizePipelineTemplateConfig(state.pipelineConfig),
             updatedAt: nowIso,
           }
         : {
@@ -1776,7 +1855,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 ? crypto.randomUUID()
                 : `pipeline-template-${Date.now()}`,
             name: trimmedName,
-            config: { ...state.pipelineConfig },
+            config: normalizePipelineTemplateConfig(state.pipelineConfig),
             createdAt: nowIso,
             updatedAt: nowIso,
           };
@@ -1800,12 +1879,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (!template) return {};
 
-      const nextConfig = {
-        ...defaultPipelineConfig,
-        ...template.config,
-      };
+      const nextConfig = normalizePipelineConfig(
+        template.config,
+        state.pipelineConfig.selectedDubbedLanguagesForPipeline,
+      );
 
-      localStorage.setItem('pipelineConfig', JSON.stringify(nextConfig));
+      savePipelineConfigToLocalStorage(nextConfig);
 
       return { pipelineConfig: nextConfig };
     }),
@@ -1916,6 +1995,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       subtitleGenerationSettings: state.subtitleGenerationSettings,
       combineScenesSettings: state.combineScenesSettings,
       sceneVideoGenerationSettings: state.sceneVideoGenerationSettings,
+      pipelineConfig: getPipelineConfigForStorage(
+        normalizePipelineConfig(state.pipelineConfig),
+      ),
       modelSelection: {
         provider: state.modelSelection.provider,
         selectedOnlineModel: state.modelSelection.selectedOnlineModel,
@@ -1945,6 +2027,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadSettingsFromLocalStorage: () => {
     try {
       const savedSettings = localStorage.getItem('video-editor-settings');
+      const storedPipelineDubbedLanguagesOverride =
+        readStoredPipelineDubbedLanguagesOverride();
+
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
 
@@ -2041,10 +2126,10 @@ export const useAppStore = create<AppState>((set, get) => ({
                 ...settings.selectedOriginalVideo,
               }
             : defaultSelectedOriginalVideo,
-          pipelineConfig: {
-            ...defaultPipelineConfig,
-            ...settings.pipelineConfig,
-          },
+          pipelineConfig: normalizePipelineConfig(
+            settings.pipelineConfig,
+            storedPipelineDubbedLanguagesOverride ?? undefined,
+          ),
         }));
 
         console.log('Settings loaded from localStorage');
@@ -2054,7 +2139,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       const savedPipelineConfig = localStorage.getItem('pipelineConfig');
       if (savedPipelineConfig) {
         const config = JSON.parse(savedPipelineConfig);
-        set({ pipelineConfig: { ...defaultPipelineConfig, ...config } });
+        const normalizedConfig = normalizePipelineConfig(
+          config,
+          storedPipelineDubbedLanguagesOverride ??
+            toUniqueNormalizedLanguageList(
+              config?.selectedDubbedLanguagesForPipeline,
+            ),
+        );
+        savePipelineConfigToLocalStorage(normalizedConfig);
+        set({ pipelineConfig: normalizedConfig });
       }
 
       const savedPipelineTemplates = localStorage.getItem('pipelineTemplates');
@@ -2100,11 +2193,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
                 const config =
                   template.config && typeof template.config === 'object'
-                    ? {
-                        ...defaultPipelineConfig,
-                        ...(template.config as Partial<PipelineConfig>),
-                      }
-                    : { ...defaultPipelineConfig };
+                    ? normalizePipelineTemplateConfig(
+                        template.config as Partial<PipelineConfig>,
+                      )
+                    : normalizePipelineTemplateConfig(undefined);
 
                 return {
                   id,
@@ -2405,6 +2497,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       localStorage.removeItem('video-editor-settings');
       localStorage.removeItem('pipelineConfig');
+      localStorage.removeItem(PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY);
       localStorage.removeItem('pipelineTemplates');
       localStorage.removeItem('subtitleGenerationSettings');
       localStorage.removeItem('combineScenesSettings');

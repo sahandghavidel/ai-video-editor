@@ -91,10 +91,6 @@ export default function PipelineConfig({
     loadingDubbedLanguagesForPipeline,
     setLoadingDubbedLanguagesForPipeline,
   ] = useState(false);
-  const [
-    hasLoadedDubbedLanguagesForPipeline,
-    setHasLoadedDubbedLanguagesForPipeline,
-  ] = useState(false);
   const templateReorderEnabled = isExpanded && isTemplateReorderMode;
 
   const selectedDubbedLanguagesForPipeline = useMemo(
@@ -104,21 +100,6 @@ export default function PipelineConfig({
       ),
     [pipelineConfig.selectedDubbedLanguagesForPipeline],
   );
-
-  // Load available languages when component expands or dubbed language is enabled
-  useEffect(() => {
-    if (
-      isExpanded &&
-      pipelineConfig.createDubbedLanguage &&
-      !hasLoadedDubbedLanguagesForPipeline
-    ) {
-      void loadAvailableDubbedLanguagesForPipeline();
-    }
-  }, [
-    isExpanded,
-    pipelineConfig.createDubbedLanguage,
-    hasLoadedDubbedLanguagesForPipeline,
-  ]);
 
   const loadAvailableDubbedLanguagesForPipeline = useCallback(async () => {
     setLoadingDubbedLanguagesForPipeline(true);
@@ -156,11 +137,9 @@ export default function PipelineConfig({
       setAvailableDubbedLanguagesForPipeline(
         enabledLanguages.length > 0 ? enabledLanguages : ['fa'],
       );
-      setHasLoadedDubbedLanguagesForPipeline(true);
     } catch (error) {
       console.error('Failed to load pipeline dubbed languages:', error);
       setAvailableDubbedLanguagesForPipeline(['fa']);
-      setHasLoadedDubbedLanguagesForPipeline(false);
     } finally {
       setLoadingDubbedLanguagesForPipeline(false);
     }
@@ -209,40 +188,6 @@ export default function PipelineConfig({
     isExpanded,
     pipelineConfig.createDubbedLanguage,
     loadAvailableDubbedLanguagesForPipeline,
-  ]);
-
-  useEffect(() => {
-    // Only filter when we have a complete loaded list (more than just default ['fa'])
-    // and the selected languages don't match available ones
-    if (!hasLoadedDubbedLanguagesForPipeline) return;
-    if (availableDubbedLanguagesForPipeline.length <= 1) return; // Wait for full load
-
-    const availableSet = new Set(availableDubbedLanguagesForPipeline);
-    const filteredSelection = selectedDubbedLanguagesForPipeline.filter(
-      (languageCode) => availableSet.has(languageCode),
-    );
-
-    // Only update if we actually need to filter out invalid selections
-    if (filteredSelection.length === selectedDubbedLanguagesForPipeline.length)
-      return;
-
-    // Don't filter if the selection is empty (let user choose)
-    if (selectedDubbedLanguagesForPipeline.length === 0) return;
-
-    console.log('Filtering dubbed language selection:', {
-      original: selectedDubbedLanguagesForPipeline,
-      filtered: filteredSelection,
-      available: availableDubbedLanguagesForPipeline,
-    });
-
-    updatePipelineConfig({
-      selectedDubbedLanguagesForPipeline: filteredSelection,
-    });
-  }, [
-    hasLoadedDubbedLanguagesForPipeline,
-    availableDubbedLanguagesForPipeline,
-    selectedDubbedLanguagesForPipeline,
-    updatePipelineConfig,
   ]);
 
   const togglePipelineDubbedLanguageSelection = useCallback(
@@ -555,9 +500,9 @@ export default function PipelineConfig({
     transcribeApplyStartNumber + transcribeApplyPasses.length;
 
   const matchingTemplateIds = useMemo(() => {
-    const configKeys = Object.keys(pipelineConfig) as Array<
+    const configKeys = (Object.keys(pipelineConfig) as Array<
       keyof typeof pipelineConfig
-    >;
+    >).filter((key) => key !== 'selectedDubbedLanguagesForPipeline');
 
     const matchedIds = pipelineTemplates
       .filter((template) =>
