@@ -1,10 +1,9 @@
-// Nano Banana thumbnail generation for Original Videos table.
+// GPT Image 2 thumbnail generation for Original Videos table.
 // Stores provider-returned hosted URL directly into Baserow fields:
 // - field_7100 (Thumbnail 1)
 // - field_7101 (Thumbnail 2)
 // - field_7102 (Thumbnail 3)
 
-import { randomInt } from 'crypto';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 type BaserowRow = {
@@ -14,40 +13,9 @@ type BaserowRow = {
 
 const ORIGINAL_VIDEOS_TABLE_ID = 713;
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
-const KIE_MODEL = 'google/nano-banana-edit';
+const KIE_MODEL = 'gpt-image-2-text-to-image';
 const KIE_POLL_INTERVAL_MS = 3000;
 const KIE_MAX_WAIT_MS = 600000;
-
-function parseKieCharacterImageUrls(raw: string | undefined): string[] {
-  const s = String(raw ?? '').trim();
-  if (!s) return [];
-
-  if (s.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(s) as unknown;
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((v): v is string => typeof v === 'string')
-          .map((v) => v.trim())
-          .filter((v) => v.length > 0)
-          .filter((v) => v.startsWith('http://') || v.startsWith('https://'));
-      }
-    } catch {
-      // fall through to delimiter parsing
-    }
-  }
-
-  return s
-    .split(/[\s,;\n\r]+/g)
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0)
-    .filter((v) => v.startsWith('http://') || v.startsWith('https://'));
-}
-
-function pickRandom<T>(arr: T[]): T {
-  if (arr.length === 0) throw new Error('pickRandom called with empty array');
-  return arr[randomInt(arr.length)] as T;
-}
 
 function getKieApiKey(): string {
   const key = process.env.KIE_API_KEY;
@@ -130,42 +98,95 @@ type ThumbnailVariant = 1 | 2 | 3;
 type ThumbnailVariantConfig = {
   variant: ThumbnailVariant;
   fieldKey: string;
-  maxWords: number;
 };
 
 function getThumbnailVariantConfig(variant: number): ThumbnailVariantConfig {
   if (variant === 1) {
-    return { variant: 1, fieldKey: 'field_7100', maxWords: 4 };
+    return { variant: 1, fieldKey: 'field_7100' };
   }
 
   if (variant === 2) {
-    return { variant: 2, fieldKey: 'field_7101', maxWords: 5 };
+    return { variant: 2, fieldKey: 'field_7101' };
   }
 
   if (variant === 3) {
-    return { variant: 3, fieldKey: 'field_7102', maxWords: 6 };
+    return { variant: 3, fieldKey: 'field_7102' };
   }
 
   throw new Error('Invalid thumbnail variant. Expected 1, 2, or 3.');
 }
 
+function extractTextFromField(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim();
+
+  if (typeof raw === 'number' || typeof raw === 'boolean') {
+    return String(raw).trim();
+  }
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => extractTextFromField(item))
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const candidate = obj.value ?? obj.name ?? obj.text ?? obj.title;
+    return extractTextFromField(candidate);
+  }
+
+  return '';
+}
+
+function cleanTitleLine(line: string): string {
+  return line
+    .replace(/^\s*\d+[\).:-]?\s*/, '')
+    .replace(/^\s*[-*]\s*/, '')
+    .trim();
+}
+
+function pickFirstTitle(rawTitle: unknown): string {
+  return extractTextFromField(rawTitle)
+    .split('\n')
+    .map(cleanTitleLine)
+    .find(Boolean) ?? '';
+}
+
 function buildThumbnailPrompt(
-  script: string,
-  cfg: ThumbnailVariantConfig,
+  videoTitle: string,
+  videoDescription: string,
 ): string {
-  const clippedScript = script.trim().slice(0, 4000);
+  const clippedTitle = videoTitle.trim().slice(0, 500);
+  const clippedDescription = videoDescription.trim().slice(0, 4000);
 
-  return `Create a cinematic, high-contrast YouTube thumbnail in 16:9 ratio.
+  return `Create a very clickable, shiny, branded YouTube thumbnail in 16:9
 
-Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the video.
+Video title:
+${clippedTitle}
 
-do it for this YouTube script:
+Video description:
+${clippedDescription}
 
-"${clippedScript}"
+Brand style:
+Use a consistent brand style: dark navy/black background, yellow/gold, electric blue glow, white bold text. The thumbnail should look premium, modern, shiny, and high-contrast, like a top coding education channel.
 
-Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high YouTube CTR. Add short headline text on thumbnail with MAX ${cfg.maxWords} words.
+Main text:
+Use only 3 to 6 big words maximum. Make the text extremely large, bold, readable on mobile, and very easy to understand in one second. Use white and yellow/gold text with electric blue shadows/glow. Choose the most clickable words from the video topic.
 
-Headline should be punchy and emotionally strong. Keep text very large and clearly readable on mobile.No watermark, no logos, no tiny text.`;
+Layout:
+Use a repeatable layout:
+- Big main text on the left or center-left
+- Yellow/gold banner behind the most important word
+- One huge shiny topic icon or object on the right
+- Small row of 3 to 4 clean feature icons at the bottom
+
+Design details:
+Use glossy 3D text, strong shadows, neon blue rim lights, yellow highlights, lens flares, clean spacing, and a dark tech background. Make it exciting, beginner-friendly, and professional.
+
+Important:
+Do not use random colors. Keep the brand colors consistent: dark navy/black, yellow/gold, electric blue, and white. Avoid clutter. Avoid too many small words. Make the main text and main icon the strongest parts of the image.`;
 }
 
 type KieCreateTaskResponse = {
@@ -186,10 +207,7 @@ type KieRecordInfoResponse = {
   };
 };
 
-async function createNanoBananaTask(
-  prompt: string,
-  imageUrls: string[],
-): Promise<string> {
+async function createGptImageTask(prompt: string): Promise<string> {
   const apiKey = getKieApiKey();
 
   const response = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
@@ -202,9 +220,8 @@ async function createNanoBananaTask(
       model: KIE_MODEL,
       input: {
         prompt,
-        image_urls: imageUrls,
-        output_format: 'png',
-        image_size: '16:9',
+        aspect_ratio: '16:9',
+        resolution: '1K',
       },
     }),
   });
@@ -309,7 +326,7 @@ function extractResultUrl(resultJson: unknown): string | null {
   return null;
 }
 
-async function fetchNanoBananaResult(taskId: string) {
+async function fetchGptImageResult(taskId: string) {
   const apiKey = getKieApiKey();
 
   const response = await fetch(
@@ -385,13 +402,19 @@ export async function POST(req: Request) {
       `/database/rows/table/${ORIGINAL_VIDEOS_TABLE_ID}/${videoId}/`,
     );
 
-    const script =
-      typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+    const titleFromMetadata = pickFirstTitle(video.field_6870);
+    const titleFromOriginal = pickFirstTitle(video.field_6852);
+    const videoTitle = titleFromMetadata || titleFromOriginal;
 
-    if (!script) {
+    const descriptionFromMetadata = extractTextFromField(video.field_6869);
+    const script = extractTextFromField(video.field_6854);
+    const videoDescription = descriptionFromMetadata || script;
+
+    if (!videoTitle && !videoDescription) {
       return Response.json(
         {
-          error: 'Script (field_6854) is required for thumbnail generation',
+          error:
+            'Video title, YouTube description, or Script is required for thumbnail generation',
         },
         { status: 400 },
       );
@@ -407,39 +430,20 @@ export async function POST(req: Request) {
       });
     }
 
-    const prompt = buildThumbnailPrompt(script, cfg);
-
-    const characterImageUrls = parseKieCharacterImageUrls(
-      process.env.KIE_CHARACTER_IMAGE_URL,
-    );
-
-    if (characterImageUrls.length === 0) {
-      return Response.json(
-        {
-          error:
-            'Missing KIE_CHARACTER_IMAGE_URL (Nano Banana Edit requires at least one image URL in input.image_urls).',
-        },
-        { status: 400 },
-      );
-    }
-
-    const selectedCharacterImageUrl = pickRandom(characterImageUrls);
-
-    const taskId = await createNanoBananaTask(prompt, [
-      selectedCharacterImageUrl,
-    ]);
+    const prompt = buildThumbnailPrompt(videoTitle, videoDescription);
+    const taskId = await createGptImageTask(prompt);
 
     let imageUrl = '';
     let lastState: string | null = null;
 
     const pollStart = Date.now();
     while (Date.now() - pollStart < KIE_MAX_WAIT_MS) {
-      const pollResult = await fetchNanoBananaResult(taskId);
+      const pollResult = await fetchGptImageResult(taskId);
       lastState = pollResult.state;
 
       if (pollResult.state === 'fail') {
         throw new Error(
-          `Nano Banana task failed: ${pollResult.failMsg || 'Unknown failure'}`,
+          `GPT Image 2 task failed: ${pollResult.failMsg || 'Unknown failure'}`,
         );
       }
 
@@ -453,13 +457,13 @@ export async function POST(req: Request) {
 
     if (!imageUrl) {
       throw new Error(
-        `Nano Banana task timed out without a result (taskId=${taskId}, lastState=${lastState ?? 'unknown'})`,
+        `GPT Image 2 task timed out without a result (taskId=${taskId}, lastState=${lastState ?? 'unknown'})`,
       );
     }
 
     if (!imageUrl.startsWith('http')) {
       throw new Error(
-        'Nano Banana returned a non-http imageUrl. Please configure it to return a hosted URL.',
+        'GPT Image 2 returned a non-http imageUrl. Please configure it to return a hosted URL.',
       );
     }
 
@@ -474,7 +478,6 @@ export async function POST(req: Request) {
       imageUrl,
       fieldKey: cfg.fieldKey,
       variant: cfg.variant,
-      maxWords: cfg.maxWords,
     });
   } catch (error) {
     console.error('Error generating thumbnail image:', error);

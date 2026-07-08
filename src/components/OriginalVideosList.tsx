@@ -4584,8 +4584,8 @@ export default function OriginalVideosList({
     }
   };
 
-  // Generate 3 thumbnail variants for all Processing videos using Script (6854)
-  // and save into fields 7100 / 7101 / 7102
+  // Generate 3 thumbnail variants for all Processing videos using the shared
+  // title/description thumbnail prompt and save into fields 7100 / 7101 / 7102.
   const handleGenerateThumbnailsAll = async (playSound = true) => {
     if (generatingThumbnailsAll) return;
 
@@ -4600,10 +4600,13 @@ export default function OriginalVideosList({
         freshVideosData,
         { operation: 'generateThumbnails' },
       ).filter((video) => {
-        const script =
-          typeof video.field_6854 === 'string' ? video.field_6854.trim() : '';
+        const title =
+          extractFieldValue(video.field_6870).trim() ||
+          extractFieldValue(video.field_6852).trim();
+        const description = extractFieldValue(video.field_6869).trim();
+        const script = extractFieldValue(video.field_6854).trim();
 
-        if (script.length === 0) {
+        if (!title && !description && !script) {
           return false;
         }
 
@@ -13546,8 +13549,8 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         generatingThumbnailsAll
-                          ? 'Generating 3 thumbnail variants from script with Nano Banana Edit...'
-                          : 'Generate missing thumbnails for Processing videos with Script (6854): field_7100 (2 words), field_7101 (3 words), field_7102 (5 words)'
+                          ? 'Generating 3 thumbnail variants with GPT Image 2...'
+                          : 'Generate missing thumbnails for Processing videos with the shared GPT Image 2 title/description prompt'
                       }
                     >
                       <Sparkles
@@ -15905,17 +15908,14 @@ export default function OriginalVideosList({
                               {
                                 variant: 1 as const,
                                 field: selectedVideo.field_7100,
-                                maxWords: 2,
                               },
                               {
                                 variant: 2 as const,
                                 field: selectedVideo.field_7101,
-                                maxWords: 3,
                               },
                               {
                                 variant: 3 as const,
                                 field: selectedVideo.field_7102,
-                                maxWords: 5,
                               },
                             ] as const
                           ).map((thumb) => {
@@ -15952,8 +15952,7 @@ export default function OriginalVideosList({
                                 </div>
                                 <div className='p-2 border-t border-gray-200 space-y-2'>
                                   <div className='text-xs text-gray-600'>
-                                    Thumb {thumb.variant} · Max {thumb.maxWords}{' '}
-                                    words
+                                    Thumb {thumb.variant} · GPT Image 2
                                   </div>
                                   <div className='grid grid-cols-2 gap-2'>
                                     <button
@@ -15969,7 +15968,7 @@ export default function OriginalVideosList({
                                         downloadingThumbnailVideoId !== null
                                       }
                                       className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white transition-colors disabled:cursor-not-allowed'
-                                      title={`Regenerate thumbnail ${thumb.variant} with MAX ${thumb.maxWords} words prompt`}
+                                      title={`Regenerate thumbnail ${thumb.variant} with the shared GPT Image 2 prompt`}
                                     >
                                       {isRegenerating ? (
                                         <>
