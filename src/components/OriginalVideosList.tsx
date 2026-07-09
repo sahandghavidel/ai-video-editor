@@ -796,6 +796,14 @@ export default function OriginalVideosList({
     message: string;
     tone: 'success' | 'warning' | 'error';
   } | null>(null);
+  const [translatingMetadataVideoId, setTranslatingMetadataVideoId] = useState<
+    number | null
+  >(null);
+  const [metadataTranslationStatus, setMetadataTranslationStatus] = useState<{
+    videoId: number;
+    message: string;
+    tone: 'success' | 'warning' | 'error';
+  } | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -5156,6 +5164,28 @@ export default function OriginalVideosList({
     }
   };
 
+  const buildVideoMetadataTranslationText = (video: BaserowRow) => {
+    const titles = (extractFieldValue(video.field_6870) || '')
+      .split('\n')
+      .map((line) =>
+        line
+          .replace(/^\s*\d+[\).:-]?\s*/, '')
+          .replace(/^\s*[-*•]\s*/, '')
+          .trim(),
+      )
+      .filter(Boolean)
+      .join('\n');
+
+    const description = (extractFieldValue(video.field_6869) || '').trim();
+    const timestamps = (extractFieldValue(video.field_6873) || '').trim();
+    const timestampsSection = timestamps ? `Timestamps\n${timestamps}` : '';
+
+    return [titles, description, timestampsSection]
+      .map((section) => section.trim())
+      .filter(Boolean)
+      .join('\n\n');
+  };
+
   const handleCopyVideoSentences = async (video: BaserowRow) => {
     try {
       setCopyingSentencesVideoId(video.id);
@@ -5287,6 +5317,112 @@ export default function OriginalVideosList({
       });
     } finally {
       setTranslatingThumbnailVideoId(null);
+    }
+  };
+
+  const handleTranslateVideoMetadata = async (video: BaserowRow) => {
+    const languages = effectivePipelineDubbedLanguages;
+    const metadataText = buildVideoMetadataTranslationText(video);
+
+    if (languages.length === 0) {
+      setMetadataTranslationStatus({
+        videoId: video.id,
+        message: 'No pipeline languages selected for metadata translation.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    if (!metadataText) {
+      setMetadataTranslationStatus({
+        videoId: video.id,
+        message: 'No title, description, or timestamps found to translate.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    try {
+      setTranslatingMetadataVideoId(video.id);
+      setMetadataTranslationStatus(null);
+      setError(null);
+
+      const response = await fetch('/api/translate-metadata-languages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: video.id,
+          languages,
+          metadataText,
+          model: modelSelection.selectedModel,
+          provider: modelSelection.provider,
+          localEndpoint: modelSelection.localEndpoint,
+          localApiKey: modelSelection.localApiKey,
+          localAdminApiKey: modelSelection.localAdminApiKey,
+          preferFastProvider: modelSelection.provider === 'online',
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        saved?: unknown[];
+        skipped?: unknown[];
+        failed?: unknown[];
+        exportDir?: unknown;
+        provider?: unknown;
+        effectiveModel?: unknown;
+        batchSize?: unknown;
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || `Metadata translation failed (${response.status})`,
+        );
+      }
+
+      const savedCount = Array.isArray(payload?.saved)
+        ? payload.saved.length
+        : 0;
+      const skippedCount = Array.isArray(payload?.skipped)
+        ? payload.skipped.length
+        : 0;
+      const failedCount = Array.isArray(payload?.failed)
+        ? payload.failed.length
+        : 0;
+
+      console.log(
+        `Translated metadata for video #${video.id}: saved=${savedCount}, skipped=${skippedCount}, failed=${failedCount}, provider=${String(payload?.provider || '')}, model=${String(payload?.effectiveModel || '')}, batchSize=${String(payload?.batchSize || '')}, folder=${String(payload?.exportDir || '')}`,
+      );
+
+      if (failedCount > 0) {
+        console.warn(
+          `Metadata translations completed with failed languages for video #${video.id}:`,
+          payload?.failed,
+        );
+      }
+
+      setMetadataTranslationStatus({
+        videoId: video.id,
+        message: `Metadata translations complete: ${savedCount} saved, ${skippedCount} skipped, ${failedCount} failed.`,
+        tone: failedCount > 0 ? 'warning' : 'success',
+      });
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        `Failed to translate metadata for video #${video.id}:`,
+        error,
+      );
+      setMetadataTranslationStatus({
+        videoId: video.id,
+        message: `Metadata translation could not start or finish: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+        tone: 'error',
+      });
+    } finally {
+      setTranslatingMetadataVideoId(null);
     }
   };
 
@@ -16250,7 +16386,7 @@ export default function OriginalVideosList({
                             );
                           })}
                         </div>
-                        <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2'>
+                        <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2'>
                           <button
                             onClick={() =>
                               handleDownloadAssetsZip(selectedVideo.id)
@@ -16351,6 +16487,35 @@ export default function OriginalVideosList({
                               </>
                             )}
                           </button>
+
+                          <button
+                            onClick={() =>
+                              handleTranslateVideoMetadata(selectedVideo)
+                            }
+                            disabled={
+                              translatingMetadataVideoId !== null ||
+                              !buildVideoMetadataTranslationText(selectedVideo)
+                            }
+                            className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-slate-700 hover:bg-slate-800 disabled:bg-slate-300 text-white transition-colors disabled:cursor-not-allowed'
+                            title={`Translate title, description, and timestamps into pipeline languages: ${effectivePipelineDubbedLanguages
+                              .map((languageCode) =>
+                                getLanguageDisplayName(languageCode),
+                              )
+                              .join(', ')}`}
+                          >
+                            {translatingMetadataVideoId ===
+                            selectedVideo.id ? (
+                              <>
+                                <Loader2 className='w-4 h-4 animate-spin' />
+                                Translating...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className='w-4 h-4' />
+                                Translate Metadata
+                              </>
+                            )}
+                          </button>
                         </div>
                         {thumbnailTranslationStatus?.videoId ===
                           selectedVideo.id && (
@@ -16364,6 +16529,20 @@ export default function OriginalVideosList({
                             }`}
                           >
                             {thumbnailTranslationStatus.message}
+                          </div>
+                        )}
+                        {metadataTranslationStatus?.videoId ===
+                          selectedVideo.id && (
+                          <div
+                            className={`mt-2 rounded border px-3 py-2 text-xs ${
+                              metadataTranslationStatus.tone === 'success'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : metadataTranslationStatus.tone === 'warning'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                  : 'border-red-200 bg-red-50 text-red-700'
+                            }`}
+                          >
+                            {metadataTranslationStatus.message}
                           </div>
                         )}
                       </div>
