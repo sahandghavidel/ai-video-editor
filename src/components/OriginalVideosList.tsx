@@ -659,6 +659,14 @@ export default function OriginalVideosList({
     value: string;
     saving: boolean;
   } | null>(null);
+  const [editingYouTubeMetadata, setEditingYouTubeMetadata] = useState<{
+    videoId: number;
+    title: string;
+    description: string;
+    timestamps: string;
+    keywords: string;
+    saving: boolean;
+  } | null>(null);
   const statusDebounceRef = useRef<number | null>(null);
   const [bulkStatusChange, setBulkStatusChange] = useState<string>('');
   const [showProcessingOnly, setShowProcessingOnly] = useState(true);
@@ -2518,6 +2526,81 @@ export default function OriginalVideosList({
     } else if (e.key === 'Escape') {
       e.preventDefault();
       cancelTitleEdit();
+    }
+  };
+
+  const startYouTubeMetadataEdit = (video: BaserowRow) => {
+    setEditingYouTubeMetadata({
+      videoId: video.id,
+      title: extractFieldValue(video.field_6870) || '',
+      description: extractFieldValue(video.field_6869) || '',
+      timestamps: extractFieldValue(video.field_6873) || '',
+      keywords: extractFieldValue(video.field_6871) || '',
+      saving: false,
+    });
+  };
+
+  const cancelYouTubeMetadataEdit = () => {
+    setEditingYouTubeMetadata(null);
+  };
+
+  const updateYouTubeMetadataDraft = (
+    field: 'title' | 'description' | 'timestamps' | 'keywords',
+    value: string,
+  ) => {
+    setEditingYouTubeMetadata((prev) =>
+      prev ? { ...prev, [field]: value } : prev,
+    );
+  };
+
+  const clearYouTubeMetadataDraftField = (
+    field: 'title' | 'description' | 'timestamps' | 'keywords',
+  ) => {
+    updateYouTubeMetadataDraft(field, '');
+  };
+
+  const saveYouTubeMetadataEdit = async (videoId: number) => {
+    if (
+      !editingYouTubeMetadata ||
+      editingYouTubeMetadata.videoId !== videoId
+    ) {
+      return;
+    }
+
+    setEditingYouTubeMetadata((prev) =>
+      prev ? { ...prev, saving: true } : prev,
+    );
+    setError(null);
+
+    const updateData = {
+      field_6870: editingYouTubeMetadata.title.trimEnd(),
+      field_6869: editingYouTubeMetadata.description.trimEnd(),
+      field_6873: editingYouTubeMetadata.timestamps.trimEnd(),
+      field_6871: editingYouTubeMetadata.keywords.trimEnd(),
+    };
+
+    try {
+      await updateOriginalVideoRow(videoId, updateData);
+
+      setOriginalVideos((prevVideos) =>
+        prevVideos.map((video) =>
+          video.id === videoId ? { ...video, ...updateData } : video,
+        ),
+      );
+
+      setEditingYouTubeMetadata(null);
+      playSuccessSound();
+    } catch (error) {
+      console.error('Failed to update YouTube metadata:', error);
+      playErrorSound();
+      setError(
+        `Failed to update YouTube metadata: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+      setEditingYouTubeMetadata((prev) =>
+        prev ? { ...prev, saving: false } : prev,
+      );
     }
   };
 
@@ -16059,49 +16142,226 @@ export default function OriginalVideosList({
                         </button>
                         {selectedVideoDetailsExpanded.youtube && (
                           <div className='px-3 pb-3 border-t border-gray-100 space-y-3 text-sm'>
+                            <div className='flex justify-end pt-3'>
+                              {editingYouTubeMetadata?.videoId ===
+                              selectedVideo.id ? (
+                                <div className='flex gap-2'>
+                                  <button
+                                    type='button'
+                                    onClick={() =>
+                                      saveYouTubeMetadataEdit(selectedVideo.id)
+                                    }
+                                    disabled={editingYouTubeMetadata.saving}
+                                    className='inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white transition-colors'
+                                  >
+                                    {editingYouTubeMetadata.saving ? (
+                                      <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                    ) : (
+                                      <Save className='w-3.5 h-3.5' />
+                                    )}
+                                    Save
+                                  </button>
+                                  <button
+                                    type='button'
+                                    onClick={cancelYouTubeMetadataEdit}
+                                    disabled={editingYouTubeMetadata.saving}
+                                    className='inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 text-gray-700 transition-colors'
+                                  >
+                                    <X className='w-3.5 h-3.5' />
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type='button'
+                                  onClick={() =>
+                                    startYouTubeMetadataEdit(selectedVideo)
+                                  }
+                                  className='inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 text-gray-700 transition-colors'
+                                >
+                                  <Edit3 className='w-3.5 h-3.5' />
+                                  Edit
+                                </button>
+                              )}
+                            </div>
                             <div>
-                              <div className='text-gray-500 mb-1'>Title</div>
-                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
-                                {(
-                                  extractFieldValue(selectedVideo.field_6870) ||
-                                  ''
-                                )
-                                  .split('\n')
-                                  .map((line) =>
-                                    line
-                                      .replace(/^\s*\d+\)\s*/, '')
-                                      .replace(/^\s*[-*•]\s*/, '')
-                                      .trim(),
+                              <div className='flex items-center justify-between gap-2 mb-1'>
+                                <div className='text-gray-500'>Title</div>
+                                {editingYouTubeMetadata?.videoId ===
+                                  selectedVideo.id && (
+                                  <button
+                                    type='button'
+                                    onClick={() =>
+                                      clearYouTubeMetadataDraftField('title')
+                                    }
+                                    disabled={editingYouTubeMetadata.saving}
+                                    className='inline-flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 disabled:opacity-50'
+                                  >
+                                    <Trash2 className='w-3 h-3' />
+                                    Clear
+                                  </button>
+                                )}
+                              </div>
+                              {editingYouTubeMetadata?.videoId ===
+                              selectedVideo.id ? (
+                                <textarea
+                                  value={editingYouTubeMetadata.title}
+                                  onChange={(event) =>
+                                    updateYouTubeMetadataDraft(
+                                      'title',
+                                      event.target.value,
+                                    )
+                                  }
+                                  disabled={editingYouTubeMetadata.saving}
+                                  rows={4}
+                                  className='w-full text-gray-900 bg-white border border-gray-300 rounded p-2 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100'
+                                />
+                              ) : (
+                                <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
+                                  {(
+                                    extractFieldValue(
+                                      selectedVideo.field_6870,
+                                    ) || ''
                                   )
-                                  .filter(Boolean)
-                                  .join('\n') || 'N/A'}
-                              </div>
+                                    .split('\n')
+                                    .map((line) =>
+                                      line
+                                        .replace(/^\s*\d+\)\s*/, '')
+                                        .replace(/^\s*[-*•]\s*/, '')
+                                        .trim(),
+                                    )
+                                    .filter(Boolean)
+                                    .join('\n') || 'N/A'}
+                                </div>
+                              )}
                             </div>
                             <div>
-                              <div className='text-gray-500 mb-1'>
-                                {/* add line breaks */}
-                                ----
+                              <div className='flex items-center justify-between gap-2 mb-1'>
+                                <div className='text-gray-500'>
+                                  Description
+                                </div>
+                                {editingYouTubeMetadata?.videoId ===
+                                  selectedVideo.id && (
+                                  <button
+                                    type='button'
+                                    onClick={() =>
+                                      clearYouTubeMetadataDraftField(
+                                        'description',
+                                      )
+                                    }
+                                    disabled={editingYouTubeMetadata.saving}
+                                    className='inline-flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 disabled:opacity-50'
+                                  >
+                                    <Trash2 className='w-3 h-3' />
+                                    Clear
+                                  </button>
+                                )}
                               </div>
-                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
-                                {extractFieldValue(selectedVideo.field_6869) ||
-                                  'N/A'}
-                              </div>
+                              {editingYouTubeMetadata?.videoId ===
+                              selectedVideo.id ? (
+                                <textarea
+                                  value={editingYouTubeMetadata.description}
+                                  onChange={(event) =>
+                                    updateYouTubeMetadataDraft(
+                                      'description',
+                                      event.target.value,
+                                    )
+                                  }
+                                  disabled={editingYouTubeMetadata.saving}
+                                  rows={8}
+                                  className='w-full text-gray-900 bg-white border border-gray-300 rounded p-2 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100'
+                                />
+                              ) : (
+                                <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
+                                  {extractFieldValue(
+                                    selectedVideo.field_6869,
+                                  ) || 'N/A'}
+                                </div>
+                              )}
                             </div>
                             <div>
-                              <div className='text-gray-500 mb-1'>
-                                Timestamps
+                              <div className='flex items-center justify-between gap-2 mb-1'>
+                                <div className='text-gray-500'>
+                                  Timestamps
+                                </div>
+                                {editingYouTubeMetadata?.videoId ===
+                                  selectedVideo.id && (
+                                  <button
+                                    type='button'
+                                    onClick={() =>
+                                      clearYouTubeMetadataDraftField(
+                                        'timestamps',
+                                      )
+                                    }
+                                    disabled={editingYouTubeMetadata.saving}
+                                    className='inline-flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 disabled:opacity-50'
+                                  >
+                                    <Trash2 className='w-3 h-3' />
+                                    Clear
+                                  </button>
+                                )}
                               </div>
-                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2 font-mono'>
-                                {extractFieldValue(selectedVideo.field_6873) ||
-                                  'N/A'}
-                              </div>
+                              {editingYouTubeMetadata?.videoId ===
+                              selectedVideo.id ? (
+                                <textarea
+                                  value={editingYouTubeMetadata.timestamps}
+                                  onChange={(event) =>
+                                    updateYouTubeMetadataDraft(
+                                      'timestamps',
+                                      event.target.value,
+                                    )
+                                  }
+                                  disabled={editingYouTubeMetadata.saving}
+                                  rows={6}
+                                  className='w-full text-gray-900 bg-white border border-gray-300 rounded p-2 resize-y font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100'
+                                />
+                              ) : (
+                                <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2 font-mono'>
+                                  {extractFieldValue(
+                                    selectedVideo.field_6873,
+                                  ) || 'N/A'}
+                                </div>
+                              )}
                             </div>
                             <div>
-                              <div className='text-gray-500 mb-1'>Keywords</div>
-                              <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
-                                {extractFieldValue(selectedVideo.field_6871) ||
-                                  'N/A'}
+                              <div className='flex items-center justify-between gap-2 mb-1'>
+                                <div className='text-gray-500'>Keywords</div>
+                                {editingYouTubeMetadata?.videoId ===
+                                  selectedVideo.id && (
+                                  <button
+                                    type='button'
+                                    onClick={() =>
+                                      clearYouTubeMetadataDraftField('keywords')
+                                    }
+                                    disabled={editingYouTubeMetadata.saving}
+                                    className='inline-flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 disabled:opacity-50'
+                                  >
+                                    <Trash2 className='w-3 h-3' />
+                                    Clear
+                                  </button>
+                                )}
                               </div>
+                              {editingYouTubeMetadata?.videoId ===
+                              selectedVideo.id ? (
+                                <textarea
+                                  value={editingYouTubeMetadata.keywords}
+                                  onChange={(event) =>
+                                    updateYouTubeMetadataDraft(
+                                      'keywords',
+                                      event.target.value,
+                                    )
+                                  }
+                                  disabled={editingYouTubeMetadata.saving}
+                                  rows={3}
+                                  className='w-full text-gray-900 bg-white border border-gray-300 rounded p-2 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100'
+                                />
+                              ) : (
+                                <div className='text-gray-900 whitespace-pre-wrap bg-gray-50 rounded p-2'>
+                                  {extractFieldValue(
+                                    selectedVideo.field_6871,
+                                  ) || 'N/A'}
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
