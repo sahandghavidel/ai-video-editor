@@ -24,6 +24,7 @@ export type ThumbnailTaskResult = {
 const ORIGINAL_VIDEOS_TABLE_ID = 713;
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
 const KIE_MODEL = 'gpt-image-2-text-to-image';
+const KIE_IMAGE_TO_IMAGE_MODEL = 'gpt-image-2-image-to-image';
 export const THUMBNAIL_POLL_INTERVAL_MS = 3000;
 export const THUMBNAIL_MAX_WAIT_MS = 300000;
 
@@ -266,6 +267,51 @@ async function createGptImageTask(prompt: string): Promise<string> {
   const taskId = json?.data?.taskId;
   if (typeof taskId !== 'string' || !taskId.trim()) {
     throw new Error(`Kie createTask returned no taskId (${json?.msg ?? ''})`);
+  }
+
+  return taskId;
+}
+
+export async function createGptImageToImageTask(
+  prompt: string,
+  inputUrl: string,
+): Promise<string> {
+  const apiKey = getKieApiKey();
+
+  if (!inputUrl.startsWith('http')) {
+    throw new Error('Image-to-image input URL must be a hosted http URL');
+  }
+
+  const response = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: KIE_IMAGE_TO_IMAGE_MODEL,
+      input: {
+        prompt,
+        input_urls: [inputUrl],
+        aspect_ratio: '16:9',
+        resolution: '1K',
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    throw new Error(`Kie image-to-image createTask failed: ${response.status} ${t}`);
+  }
+
+  const json = (await response
+    .json()
+    .catch(() => null)) as KieCreateTaskResponse | null;
+  const taskId = json?.data?.taskId;
+  if (typeof taskId !== 'string' || !taskId.trim()) {
+    throw new Error(
+      `Kie image-to-image createTask returned no taskId (${json?.msg ?? ''})`,
+    );
   }
 
   return taskId;

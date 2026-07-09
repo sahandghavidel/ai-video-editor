@@ -297,29 +297,26 @@ export async function POST(req: Request) {
     const sentenceText = buildSentencesText(sceneRows);
     const metadataText = buildMetadataText(row);
 
-    const thumbnailUrls = [
-      extractUrlFromField(row.field_7100),
-      extractUrlFromField(row.field_7101),
-      extractUrlFromField(row.field_7102),
-    ].filter(Boolean);
-
     const finalVideoUrl = extractUrlFromField(row.field_6858);
 
     const zip = new JSZip();
     let addedFileCount = 0;
     const skippedAssets: string[] = [];
 
-    for (let i = 0; i < thumbnailUrls.length; i++) {
-      const thumbUrl = thumbnailUrls[i];
+    const selectedThumbnailUrl = extractUrlFromField(row.field_7100);
+    if (selectedThumbnailUrl) {
       try {
-        const asset = await fetchAsset(thumbUrl);
-        const ext = getExtensionFromUrlOrType(thumbUrl, asset.contentType);
-        zip.file(`thumbnail_${i + 1}${ext}`, asset.data);
+        const asset = await fetchAsset(selectedThumbnailUrl);
+        const ext = getExtensionFromUrlOrType(
+          selectedThumbnailUrl,
+          asset.contentType,
+        );
+        zip.file(`thumbnail${ext}`, asset.data);
         addedFileCount += 1;
       } catch (error) {
         const reason =
           error instanceof Error ? error.message : 'Unknown thumbnail error';
-        skippedAssets.push(`thumbnail_${i + 1}: ${reason}`);
+        skippedAssets.push(`thumbnail: ${reason}`);
       }
     }
 

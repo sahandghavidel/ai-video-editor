@@ -770,6 +770,12 @@ export default function OriginalVideosList({
     useState<number | null>(null);
   const [regeneratingThumbnailVariant, setRegeneratingThumbnailVariant] =
     useState<1 | 2 | 3 | null>(null);
+  const [selectingThumbnailVideoId, setSelectingThumbnailVideoId] = useState<
+    number | null
+  >(null);
+  const [selectingThumbnailVariant, setSelectingThumbnailVariant] = useState<
+    1 | 2 | 3 | null
+  >(null);
   const [downloadingThumbnailVideoId, setDownloadingThumbnailVideoId] =
     useState<number | null>(null);
   const [downloadingThumbnailVariant, setDownloadingThumbnailVariant] =
@@ -783,6 +789,13 @@ export default function OriginalVideosList({
   const [copyingSentencesVideoId, setCopyingSentencesVideoId] = useState<
     number | null
   >(null);
+  const [translatingThumbnailVideoId, setTranslatingThumbnailVideoId] =
+    useState<number | null>(null);
+  const [thumbnailTranslationStatus, setThumbnailTranslationStatus] = useState<{
+    videoId: number;
+    message: string;
+    tone: 'success' | 'warning' | 'error';
+  } | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -4844,6 +4857,57 @@ export default function OriginalVideosList({
     }
   };
 
+  const handleChoosePrimaryThumbnail = async (
+    video: BaserowRow,
+    variant: 1 | 2 | 3,
+  ) => {
+    if (variant === 1) return;
+
+    const selectedField: 'field_7101' | 'field_7102' =
+      variant === 2 ? 'field_7101' : 'field_7102';
+    const selectedThumbnailUrl = extractUrl(video[selectedField]);
+
+    if (!selectedThumbnailUrl) {
+      setError(`Thumbnail ${variant} is not generated yet`);
+      return;
+    }
+
+    const updateData = {
+      field_7100: video[selectedField],
+      [selectedField]: video.field_7100,
+    };
+
+    try {
+      setSelectingThumbnailVideoId(video.id);
+      setSelectingThumbnailVariant(variant);
+      setError(null);
+
+      await updateOriginalVideoRow(video.id, updateData);
+
+      setOriginalVideos((prevVideos) =>
+        prevVideos.map((row) =>
+          row.id === video.id ? { ...row, ...updateData } : row,
+        ),
+      );
+
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        `Failed to choose thumbnail ${variant} as #1 for video #${video.id}:`,
+        error,
+      );
+      playErrorSound();
+      setError(
+        `Failed to choose thumbnail ${variant} as #1: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setSelectingThumbnailVideoId(null);
+      setSelectingThumbnailVariant(null);
+    }
+  };
+
   const handleDownloadSingleThumbnail = async (
     videoId: number,
     variant: 1 | 2 | 3,
@@ -5127,6 +5191,102 @@ export default function OriginalVideosList({
       );
     } finally {
       window.setTimeout(() => setCopyingSentencesVideoId(null), 1200);
+    }
+  };
+
+  const handleTranslateSelectedThumbnail = async (video: BaserowRow) => {
+    const languages = effectivePipelineDubbedLanguages;
+
+    if (languages.length === 0) {
+      setThumbnailTranslationStatus({
+        videoId: video.id,
+        message: 'No pipeline languages selected for thumbnail translation.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    if (!extractUrl(video.field_7100)) {
+      setThumbnailTranslationStatus({
+        videoId: video.id,
+        message:
+          'Selected thumbnail is missing. Choose or generate thumbnail 1 first.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    try {
+      setTranslatingThumbnailVideoId(video.id);
+      setThumbnailTranslationStatus(null);
+      setError(null);
+
+      const response = await fetch('/api/translate-thumbnail-languages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: video.id,
+          languages,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        saved?: unknown[];
+        skipped?: unknown[];
+        failed?: unknown[];
+        exportDir?: unknown;
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || `Thumbnail translation failed (${response.status})`,
+        );
+      }
+
+      const savedCount = Array.isArray(payload?.saved)
+        ? payload.saved.length
+        : 0;
+      const skippedCount = Array.isArray(payload?.skipped)
+        ? payload.skipped.length
+        : 0;
+      const failedCount = Array.isArray(payload?.failed)
+        ? payload.failed.length
+        : 0;
+
+      console.log(
+        `Translated thumbnails for video #${video.id}: saved=${savedCount}, skipped=${skippedCount}, failed=${failedCount}, folder=${String(payload?.exportDir || '')}`,
+      );
+
+      if (failedCount > 0) {
+        console.warn(
+          `Thumbnail translations completed with failed languages for video #${video.id}:`,
+          payload?.failed,
+        );
+      }
+
+      setThumbnailTranslationStatus({
+        videoId: video.id,
+        message: `Thumbnail translations complete: ${savedCount} saved, ${skippedCount} skipped, ${failedCount} failed.`,
+        tone: failedCount > 0 ? 'warning' : 'success',
+      });
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        `Failed to translate selected thumbnail for video #${video.id}:`,
+        error,
+      );
+      setThumbnailTranslationStatus({
+        videoId: video.id,
+        message: `Thumbnail translation could not start or finish: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+        tone: 'error',
+      });
+    } finally {
+      setTranslatingThumbnailVideoId(null);
     }
   };
 
@@ -15951,11 +16111,19 @@ export default function OriginalVideosList({
                               downloadingThumbnailVideoId ===
                                 selectedVideo.id &&
                               downloadingThumbnailVariant === thumb.variant;
+                            const isPrimaryThumbnail = thumb.variant === 1;
+                            const isSelectingThumbnail =
+                              selectingThumbnailVideoId === selectedVideo.id &&
+                              selectingThumbnailVariant === thumb.variant;
 
                             return (
                               <div
                                 key={thumb.variant}
-                                className='rounded-md border border-gray-200 overflow-hidden bg-gray-50'
+                                className={`rounded-md border overflow-hidden bg-gray-50 ${
+                                  isPrimaryThumbnail
+                                    ? 'border-emerald-500 ring-1 ring-emerald-500'
+                                    : 'border-gray-200'
+                                }`}
                               >
                                 <div className='aspect-video bg-gray-100 flex items-center justify-center'>
                                   {thumbUrl ? (
@@ -15977,6 +16145,46 @@ export default function OriginalVideosList({
                                   <div className='text-xs text-gray-600'>
                                     Thumb {thumb.variant} · GPT Image 2
                                   </div>
+                                  <button
+                                    onClick={() =>
+                                      handleChoosePrimaryThumbnail(
+                                        selectedVideo,
+                                        thumb.variant,
+                                      )
+                                    }
+                                    disabled={
+                                      !thumbUrl ||
+                                      isPrimaryThumbnail ||
+                                      isRegenerating ||
+                                      selectingThumbnailVideoId !== null ||
+                                      regeneratingThumbnailVideoId !== null ||
+                                      downloadingThumbnailVideoId !== null ||
+                                      generatingThumbnailsAll
+                                    }
+                                    className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white transition-colors disabled:cursor-not-allowed'
+                                    title={
+                                      isPrimaryThumbnail
+                                        ? 'This thumbnail is already the #1 choice'
+                                        : `Make thumbnail ${thumb.variant} the #1 choice for this video`
+                                    }
+                                  >
+                                    {isSelectingThumbnail ? (
+                                      <>
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                        Choosing...
+                                      </>
+                                    ) : isPrimaryThumbnail ? (
+                                      <>
+                                        <CheckCircle className='w-3.5 h-3.5' />
+                                        Selected
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CheckCircle className='w-3.5 h-3.5' />
+                                        Choose #1
+                                      </>
+                                    )}
+                                  </button>
                                   <div className='grid grid-cols-2 gap-2'>
                                     <button
                                       onClick={() =>
@@ -15987,6 +16195,7 @@ export default function OriginalVideosList({
                                       }
                                       disabled={
                                         regeneratingThumbnailVideoId !== null ||
+                                        selectingThumbnailVideoId !== null ||
                                         generatingThumbnailsAll ||
                                         downloadingThumbnailVideoId !== null
                                       }
@@ -16016,6 +16225,7 @@ export default function OriginalVideosList({
                                         !thumbUrl ||
                                         isRegenerating ||
                                         regeneratingThumbnailVideoId !== null ||
+                                        selectingThumbnailVideoId !== null ||
                                         downloadingThumbnailVideoId !== null ||
                                         generatingThumbnailsAll
                                       }
@@ -16040,7 +16250,7 @@ export default function OriginalVideosList({
                             );
                           })}
                         </div>
-                        <div className='mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2'>
+                        <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2'>
                           <button
                             onClick={() =>
                               handleDownloadAssetsZip(selectedVideo.id)
@@ -16048,10 +16258,11 @@ export default function OriginalVideosList({
                             disabled={
                               downloadingAssetsZipVideoId !== null ||
                               regeneratingThumbnailVideoId !== null ||
+                              selectingThumbnailVideoId !== null ||
                               generatingThumbnailsAll
                             }
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Export thumbnails, final video, English SRT, sentences.txt, and metadata.txt into this video ID folder on the local computer.'
+                            title='Export the selected thumbnail, final video, English SRT, sentences.txt, and metadata.txt into this video ID folder on the local computer.'
                           >
                             {downloadingAssetsZipVideoId ===
                             selectedVideo.id ? (
@@ -16062,7 +16273,7 @@ export default function OriginalVideosList({
                             ) : (
                               <>
                                 <Download className='w-4 h-4' />
-                                Export Thumbnails + Final Video
+                                Export Thumbnail + Final Video
                               </>
                             )}
                           </button>
@@ -16108,7 +16319,53 @@ export default function OriginalVideosList({
                               </>
                             )}
                           </button>
+
+                          <button
+                            onClick={() =>
+                              handleTranslateSelectedThumbnail(selectedVideo)
+                            }
+                            disabled={
+                              translatingThumbnailVideoId !== null ||
+                              regeneratingThumbnailVideoId !== null ||
+                              selectingThumbnailVideoId !== null ||
+                              generatingThumbnailsAll ||
+                              !extractUrl(selectedVideo.field_7100)
+                            }
+                            className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-fuchsia-600 hover:bg-fuchsia-700 disabled:bg-fuchsia-300 text-white transition-colors disabled:cursor-not-allowed'
+                            title={`Translate the selected thumbnail into pipeline languages: ${effectivePipelineDubbedLanguages
+                              .map((languageCode) =>
+                                getLanguageDisplayName(languageCode),
+                              )
+                              .join(', ')}`}
+                          >
+                            {translatingThumbnailVideoId ===
+                            selectedVideo.id ? (
+                              <>
+                                <Loader2 className='w-4 h-4 animate-spin' />
+                                Translating...
+                              </>
+                            ) : (
+                              <>
+                                <Subtitles className='w-4 h-4' />
+                                Translate Thumbnail
+                              </>
+                            )}
+                          </button>
                         </div>
+                        {thumbnailTranslationStatus?.videoId ===
+                          selectedVideo.id && (
+                          <div
+                            className={`mt-2 rounded border px-3 py-2 text-xs ${
+                              thumbnailTranslationStatus.tone === 'success'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : thumbnailTranslationStatus.tone === 'warning'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                  : 'border-red-200 bg-red-50 text-red-700'
+                            }`}
+                          >
+                            {thumbnailTranslationStatus.message}
+                          </div>
+                        )}
                       </div>
 
                       {/* YouTube Metadata */}

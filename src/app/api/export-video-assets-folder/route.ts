@@ -315,27 +315,24 @@ export async function POST(req: Request) {
     const writtenFiles: string[] = [];
     const skippedAssets: string[] = [];
 
-    const thumbnailUrls = [
-      extractUrlFromField(row.field_7100),
-      extractUrlFromField(row.field_7101),
-      extractUrlFromField(row.field_7102),
-    ].filter(Boolean);
-
-    for (let i = 0; i < thumbnailUrls.length; i++) {
-      const thumbUrl = thumbnailUrls[i];
+    const selectedThumbnailUrl = extractUrlFromField(row.field_7100);
+    if (selectedThumbnailUrl) {
       try {
-        const asset = await fetchAsset(thumbUrl);
-        const ext = getExtensionFromUrlOrType(thumbUrl, asset.contentType);
+        const asset = await fetchAsset(selectedThumbnailUrl);
+        const ext = getExtensionFromUrlOrType(
+          selectedThumbnailUrl,
+          asset.contentType,
+        );
         const filePath = await writeBufferToVideoExportDir(
           videoId,
-          withEnglishPrefix(`thumbnail_${i + 1}${ext}`),
+          withEnglishPrefix(`thumbnail${ext}`),
           asset.data,
         );
         writtenFiles.push(filePath);
       } catch (error) {
         const reason =
           error instanceof Error ? error.message : 'Unknown thumbnail error';
-        skippedAssets.push(`thumbnail_${i + 1}: ${reason}`);
+        skippedAssets.push(`thumbnail: ${reason}`);
       }
     }
 
