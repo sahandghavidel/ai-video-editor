@@ -146,6 +146,7 @@ export default function BatchOperations({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [exportingMergedVideo, setExportingMergedVideo] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Collapsible state - collapsed by default
@@ -817,6 +818,42 @@ export default function BatchOperations({
       setTimeout(() => setSaveToDbMessage(null), 5000);
     } finally {
       setSavingToDatabase(false);
+    }
+  };
+
+  const handleExportMergedVideo = async () => {
+    if (!mergedVideo.url || !selectedOriginalVideo.id) {
+      return;
+    }
+
+    try {
+      setExportingMergedVideo(true);
+      const response = await fetch('/api/export-video-url-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: selectedOriginalVideo.id,
+          url: mergedVideo.url,
+          fileName: mergedVideo.fileName || 'merged-video',
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || `Failed to export merged video (${response.status})`,
+        );
+      }
+
+      playSuccessSound();
+    } catch (error) {
+      console.error('Failed to export merged video:', error);
+    } finally {
+      setExportingMergedVideo(false);
     }
   };
 
@@ -4977,14 +5014,20 @@ export default function BatchOperations({
                         <ExternalLink className='w-4 h-4' />
                         Open in New Tab
                       </a>
-                      <a
-                        href={mergedVideo.url}
-                        download={mergedVideo.fileName}
+                      <button
+                        type='button'
+                        onClick={handleExportMergedVideo}
+                        disabled={!selectedOriginalVideo.id || exportingMergedVideo}
                         className='inline-flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
+                        title={
+                          selectedOriginalVideo.id
+                            ? 'Export merged video into the local video ID folder'
+                            : 'Select an original video before exporting'
+                        }
                       >
                         <Download className='w-4 h-4' />
-                        Download
-                      </a>
+                        {exportingMergedVideo ? 'Exporting...' : 'Export'}
+                      </button>
                       <button
                         onClick={() =>
                           mergedVideo.url &&

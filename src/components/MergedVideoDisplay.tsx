@@ -9,14 +9,17 @@ interface MergedVideoDisplayProps {
     fileName: string | null;
     createdAt: Date | null;
   };
+  exportVideoId?: number | null;
   onClear?: () => void;
 }
 
 export default function MergedVideoDisplay({
   mergedVideo,
+  exportVideoId,
   onClear,
 }: MergedVideoDisplayProps) {
   const [showPlayer, setShowPlayer] = useState(false);
+  const [exporting, setExporting] = useState(false);
   console.log('MergedVideoDisplay rendering with:', mergedVideo);
 
   // Don't render if no URL
@@ -89,15 +92,51 @@ export default function MergedVideoDisplay({
 
           {/* Action Buttons */}
           <div className='flex items-center gap-3'>
-            <a
-              href={mergedVideo.url}
-              target='_blank'
-              rel='noopener noreferrer'
+            <button
+              type='button'
+              disabled={!exportVideoId || exporting}
+              onClick={async () => {
+                if (!exportVideoId || !mergedVideo.url) return;
+
+                try {
+                  setExporting(true);
+                  const response = await fetch('/api/export-video-url-file', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      videoId: exportVideoId,
+                      url: mergedVideo.url,
+                      fileName: mergedVideo.fileName || 'merged-video',
+                    }),
+                  });
+                  const payload = (await response.json().catch(() => null)) as {
+                    error?: string;
+                  } | null;
+
+                  if (!response.ok) {
+                    throw new Error(
+                      payload?.error ||
+                        `Failed to export merged video (${response.status})`,
+                    );
+                  }
+                } catch (error) {
+                  console.error('Failed to export merged video:', error);
+                } finally {
+                  setExporting(false);
+                }
+              }}
               className='inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md'
+              title={
+                exportVideoId
+                  ? 'Export merged video into the local video ID folder'
+                  : 'Select a video before exporting'
+              }
             >
               <Download className='w-4 h-4' />
-              Download
-            </a>
+              {exporting ? 'Exporting...' : 'Export'}
+            </button>
             <a
               href={mergedVideo.url}
               target='_blank'

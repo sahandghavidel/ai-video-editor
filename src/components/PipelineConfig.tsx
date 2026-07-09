@@ -428,7 +428,7 @@ export default function PipelineConfig({
     },
     {
       key: 'downloadAssetsZipAll' as const,
-      label: 'Download ZIP All',
+      label: 'Export All',
       color: 'text-blue-500',
     },
   ];

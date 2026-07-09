@@ -4775,47 +4775,20 @@ export default function OriginalVideosList({
       setDownloadingThumbnailVariant(variant);
       setError(null);
 
-      const response = await fetch(thumbnailUrl, { cache: 'no-store' });
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(
-          `Failed to download thumbnail (${response.status}): ${errorText}`,
-        );
-      }
-
-      const blob = await response.blob();
-
-      let extension = 'png';
-      try {
-        const pathname = new URL(thumbnailUrl).pathname;
-        const lastSegment = pathname.split('/').pop() || '';
-        const dotIndex = lastSegment.lastIndexOf('.');
-        if (dotIndex > -1 && dotIndex < lastSegment.length - 1) {
-          extension = lastSegment.slice(dotIndex + 1).toLowerCase();
-        }
-      } catch {
-        // Ignore URL parsing errors and use default extension.
-      }
-
-      const fileName = `thumbnail_${videoId}_${variant}.${extension}`;
-
-      const blobUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = fileName;
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(blobUrl);
+      await exportUrlFileForVideo(
+        videoId,
+        thumbnailUrl,
+        `thumbnail_${variant}`,
+      );
+      playSuccessSound();
     } catch (error) {
       console.error(
-        `Failed to download thumbnail ${variant} for video #${videoId}:`,
+        `Failed to export thumbnail ${variant} for video #${videoId}:`,
         error,
       );
       playErrorSound();
       setError(
-        `Failed to download thumbnail ${variant}: ${
+        `Failed to export thumbnail ${variant}: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -4825,71 +4798,52 @@ export default function OriginalVideosList({
     }
   };
 
-  const downloadAssetsZipForVideo = async (videoId: number) => {
-    const sanitizeDownloadFileName = (
-      rawName: string,
-      fallbackName: string,
-    ): string => {
-      const normalized = (rawName || '')
-        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/\.+$/g, '');
-
-      return normalized || fallbackName;
-    };
-
-    const response = await fetch('/api/download-video-assets-zip', {
+  const exportUrlFileForVideo = async (
+    videoId: number,
+    url: string,
+    fileName: string,
+  ) => {
+    const response = await fetch('/api/export-video-url-file', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ videoId }),
+      body: JSON.stringify({ videoId, url, fileName }),
     });
 
+    const payload = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
       throw new Error(
-        `Failed to create assets ZIP (${response.status}): ${errorText}`,
+        payload?.error || `Failed to export file (${response.status})`,
       );
     }
+  };
 
-    const blob = await response.blob();
+  const exportTextFileForVideo = async (
+    videoId: number,
+    fileName: string,
+    text: string,
+  ) => {
+    const response = await fetch('/api/export-video-text-file', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ videoId, fileName, text }),
+    });
 
-    const disposition =
-      response.headers.get('content-disposition') ||
-      response.headers.get('Content-Disposition') ||
-      '';
+    const payload = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
 
-    const filenameMatch = disposition.match(
-      /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
-    );
-
-    const rawZipName = (filenameMatch?.[1] ||
-      filenameMatch?.[2] ||
-      `video_${videoId}.zip`) as string | undefined;
-
-    let decodedZipName = rawZipName || `video_${videoId}.zip`;
-    try {
-      decodedZipName = decodeURIComponent(decodedZipName);
-    } catch {
-      // If it's not actually URI-encoded, keep the raw value.
+    if (!response.ok) {
+      throw new Error(
+        payload?.error || `Failed to export text file (${response.status})`,
+      );
     }
-
-    const zipFileName = sanitizeDownloadFileName(
-      decodedZipName,
-      `video_${videoId}.zip`,
-    );
-
-    const blobUrl = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = blobUrl;
-    anchor.download = zipFileName;
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.URL.revokeObjectURL(blobUrl);
   };
 
   const exportAssetsFolderForVideo = async (videoId: number) => {
@@ -4957,22 +4911,22 @@ export default function OriginalVideosList({
         getProcessingVideosForAllVideosOps(freshVideosData);
 
       if (videosToProcess.length === 0) {
-        console.log('No Processing videos found for assets ZIP download');
+        console.log('No Processing videos found for asset folder export');
         return;
       }
 
       console.log(
-        `Downloading assets ZIP for ${videosToProcess.length} Processing videos...`,
+        `Exporting asset folders for ${videosToProcess.length} Processing videos...`,
       );
 
       for (const video of videosToProcess) {
         setDownloadingAssetsZipVideoId(video.id);
 
         try {
-          await downloadAssetsZipForVideo(video.id);
+          await exportAssetsFolderForVideo(video.id);
         } catch (error) {
           console.error(
-            `Failed to download assets ZIP for video #${video.id}:`,
+            `Failed to export assets folder for video #${video.id}:`,
             error,
           );
           // Continue with the next video.
@@ -4982,15 +4936,15 @@ export default function OriginalVideosList({
       }
 
       if (playSound) {
-        await playSuccessAndNotifyBatchCompletion('Download ZIP All');
+        await playSuccessAndNotifyBatchCompletion('Export All');
       }
     } catch (error) {
-      console.error('Error downloading assets ZIP for all videos:', error);
+      console.error('Error exporting asset folders for all videos:', error);
       if (playSound) {
         playErrorSound();
       }
       setError(
-        `Failed to download ZIP all: ${
+        `Failed to export all asset folders: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -5034,42 +4988,8 @@ export default function OriginalVideosList({
         throw new Error('No metadata available to copy');
       }
 
-      const sanitizeDownloadFileName = (
-        rawName: string,
-        fallbackName: string,
-      ): string => {
-        const normalized = (rawName || '')
-          .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .replace(/\.+$/g, '');
-
-        return normalized || fallbackName;
-      };
-
-      const titleForName = extractFieldValue(video.field_6852);
-      const fallbackBaseName = `video_${video.id}_metadata`;
-      const downloadBaseName = sanitizeDownloadFileName(
-        titleForName
-          ? `video_${video.id}_${titleForName}_metadata`
-          : fallbackBaseName,
-        fallbackBaseName,
-      );
-
       await navigator.clipboard.writeText(metadataText);
-
-      const blob = new Blob([metadataText], {
-        type: 'text/plain;charset=utf-8',
-      });
-      const blobUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = `${downloadBaseName}.txt`;
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(blobUrl);
+      await exportTextFileForVideo(video.id, 'metadata.txt', metadataText);
 
       playSuccessSound();
     } catch (error) {
@@ -5102,42 +5022,8 @@ export default function OriginalVideosList({
         throw new Error('No sentences found in field_6890 for this video');
       }
 
-      const sanitizeDownloadFileName = (
-        rawName: string,
-        fallbackName: string,
-      ): string => {
-        const normalized = (rawName || '')
-          .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .replace(/\.+$/g, '');
-
-        return normalized || fallbackName;
-      };
-
-      const titleForName = extractFieldValue(video.field_6852);
-      const fallbackBaseName = `video_${video.id}_sentences`;
-      const downloadBaseName = sanitizeDownloadFileName(
-        titleForName
-          ? `video_${video.id}_${titleForName}_sentences`
-          : fallbackBaseName,
-        fallbackBaseName,
-      );
-
       await navigator.clipboard.writeText(sentenceText);
-
-      const blob = new Blob([sentenceText], {
-        type: 'text/plain;charset=utf-8',
-      });
-      const blobUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = `${downloadBaseName}.txt`;
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(blobUrl);
+      await exportTextFileForVideo(video.id, 'sentences.txt', sentenceText);
 
       playSuccessSound();
     } catch (error) {
@@ -10942,7 +10828,7 @@ export default function OriginalVideosList({
   // Run Full Pipeline:
   // Script From Title -> TTS Script -> TTS Video -> Normalize Audio -> CFR -> Silence -> Transcribe All -> Generate Scenes -> Combine Pairs -> Delete Empty -> Gen Clips All -> Transcribe+Apply+Gen Clips (A->D) -> Speed Up All -> Fix Language All -> Improve All -> TTS All -> Sync All -> Fix TTS (Processing) -> Fix Flagged (Processing) -> Fix Intro QA (Processing) -> Prompt Scenes (Processing)
   // (+ optional, scene-level post-processing steps at the end)
-  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Create En Srt -> Create Dubbed Lang -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails -> Download ZIP All
+  // Final tail order: Apply Video -> Apply Image -> Merge Scenes -> CFR Final All -> Transcribe Final All -> Create En Srt -> Create Dubbed Lang -> Description -> Keywords -> Titles -> Timestamps -> Thumbnails -> Export All
   const handleRunFullPipeline = async () => {
     if (!sceneHandlers) {
       console.log(
@@ -12320,38 +12206,38 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Thumbnails (disabled)');
       }
 
-      // Download ZIP tail step (Processing videos only)
+      // Export assets tail step (Processing videos only)
       if (pipelineConfig.downloadAssetsZipAll) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Downloading assets ZIP files for Processing videos...`,
+          `Step ${stepNumber}: Exporting asset folders for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Downloading assets ZIP files for Processing videos`,
+          `Step ${stepNumber}: Exporting asset folders for Processing videos`,
         );
         try {
           await handleDownloadAssetsZipAll(false, true);
           console.log(
-            `✓ Step ${stepNumber} Complete: Assets ZIP download finished`,
+            `✓ Step ${stepNumber} Complete: Asset folder export finished`,
           );
 
-          console.log('Refreshing data after assets ZIP download...');
+          console.log('Refreshing data after asset folder export...');
           await handleRefresh();
           if (refreshScenesData) refreshScenesData();
           console.log('Data refreshed successfully');
         } catch (error) {
           console.error(
-            `✗ Step ${stepNumber} Failed: Download ZIP All error`,
+            `✗ Step ${stepNumber} Failed: Export All error`,
             error,
           );
           throw new Error(
-            `Download ZIP All failed: ${
+            `Export All failed: ${
               error instanceof Error ? error.message : 'Unknown error'
             }`,
           );
         }
       } else {
-        console.log('⊘ Skipping Step: Download ZIP All (disabled)');
+        console.log('⊘ Skipping Step: Export All (disabled)');
       }
 
       console.log('========================================');
@@ -12730,7 +12616,7 @@ export default function OriginalVideosList({
                   ? 'Scene handlers not ready. Please wait...'
                   : runningFullPipeline
                     ? pipelineStep
-                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Create En Srt → Create Dubbed Lang → Download ZIP All'
+                    : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Create En Srt → Create Dubbed Lang → Export All'
               }
             />
           </div>
@@ -14899,7 +14785,7 @@ export default function OriginalVideosList({
                       </span>
                     </button>
 
-                    {/* Download ZIP All Button */}
+                    {/* Export All Button */}
                     <button
                       onClick={() => handleDownloadAssetsZipAll()}
                       disabled={
@@ -14912,8 +14798,8 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         downloadingAssetsZipAll
-                          ? 'Downloading assets ZIP files for Processing videos...'
-                          : 'Download assets ZIP for all videos with Processing status (includes available assets and text files)'
+                          ? 'Exporting asset folders for Processing videos...'
+                          : 'Export assets into local video ID folders for all videos with Processing status'
                       }
                     >
                       <Download
@@ -14926,7 +14812,7 @@ export default function OriginalVideosList({
                           ? downloadingAssetsZipVideoId !== null
                             ? `V${downloadingAssetsZipVideoId}`
                             : 'Processing...'
-                          : 'Download ZIP All'}
+                          : 'Export All'}
                       </span>
                     </button>
 
@@ -15021,7 +14907,7 @@ export default function OriginalVideosList({
                           ? 'Scene handlers not ready. Please wait...'
                           : runningFullPipeline
                             ? pipelineStep
-                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Create En Srt → Create Dubbed Lang → Download ZIP All'
+                            : 'Run full pipeline: Script From Title → TTS Script → TTS Video → Normalize → CFR → Silence → Transcribe → Scenes → Combine → Delete Empty → Clips → Transcribe+Apply+Clips (A→D) → Speed Up → Fix Language → Improve → TTS → Sync → Fix TTS → Fix Flagged → Fix Intro QA → Prompt Scenes → Create En Srt → Create Dubbed Lang → Export All'
                       }
                     >
                       <Workflow
@@ -15045,6 +14931,7 @@ export default function OriginalVideosList({
           {mergedVideo.url && (
             <MergedVideoDisplay
               mergedVideo={mergedVideo}
+              exportVideoId={selectedOriginalVideo.id}
               onClear={clearMergedVideo}
             />
           )}
@@ -16042,17 +15929,17 @@ export default function OriginalVideosList({
                                         generatingThumbnailsAll
                                       }
                                       className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
-                                      title='Download this thumbnail only'
+                                      title='Export this thumbnail into the local video ID folder'
                                     >
                                       {isDownloadingSingle ? (
                                         <>
                                           <Loader2 className='w-3.5 h-3.5 animate-spin' />
-                                          Downloading...
+                                          Exporting...
                                         </>
                                       ) : (
                                         <>
                                           <Download className='w-3.5 h-3.5' />
-                                          Download
+                                          Export
                                         </>
                                       )}
                                     </button>
@@ -16095,12 +15982,12 @@ export default function OriginalVideosList({
                             }
                             disabled={copyingMetadataVideoId !== null}
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Copy titles, description, timestamps, and keywords to clipboard and download as a .txt file with blank lines between each section'
+                            title='Copy titles, description, timestamps, and keywords to clipboard and export metadata.txt into the local video ID folder'
                           >
                             {copyingMetadataVideoId === selectedVideo.id ? (
                               <>
                                 <Check className='w-4 h-4' />
-                                Copied + Downloaded
+                                Copied + Exported
                               </>
                             ) : (
                               <>
@@ -16116,12 +16003,12 @@ export default function OriginalVideosList({
                             }
                             disabled={copyingSentencesVideoId !== null}
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Copy all Sentence (6890) lines to clipboard and download as a .txt file, one sentence per line'
+                            title='Copy all Sentence (6890) lines to clipboard and export sentences.txt into the local video ID folder'
                           >
                             {copyingSentencesVideoId === selectedVideo.id ? (
                               <>
                                 <Check className='w-4 h-4' />
-                                Copied + Downloaded
+                                Copied + Exported
                               </>
                             ) : (
                               <>
@@ -16480,38 +16367,40 @@ export default function OriginalVideosList({
                                 src={entry.url}
                               />
                               <button
-                                onClick={async () => {
-                                  try {
-                                    const resp = await fetch(entry.url);
-                                    const arrayBuf = await resp.arrayBuffer();
-                                    // Force audio/mp4 MIME so browser doesn't treat it as video
-                                    const blob = new Blob([arrayBuf], {
-                                      type: 'audio/mp4',
-                                    });
-                                    const blobUrl = URL.createObjectURL(blob);
-                                    // Ensure filename always ends with .m4a
-                                    const rawBaseName = (
-                                      entry.fileName || `merged-audio-${lang}`
-                                    ).replace(/\.[^.]+$/, '');
-                                    const baseName = `${displayName} - ${rawBaseName}`;
-                                    const a = document.createElement('a');
-                                    a.href = blobUrl;
-                                    a.download = `${baseName}.m4a`;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    URL.revokeObjectURL(blobUrl);
+	                                onClick={async () => {
+	                                  try {
+                                      const currentVideoId = selectedVideo?.id;
+                                      if (!currentVideoId) {
+                                        throw new Error('No selected video ID');
+                                      }
+
+	                                    const rawBaseName = (
+	                                      entry.fileName || `merged-audio-${lang}`
+	                                    ).replace(/\.[^.]+$/, '');
+	                                    const baseName = `${displayName} - ${rawBaseName}`;
+	                                    await exportUrlFileForVideo(
+                                      currentVideoId,
+	                                      entry.url,
+	                                      `${baseName}.m4a`,
+	                                    );
+                                    playSuccessSound();
                                   } catch (err) {
-                                    console.error('Download failed:', err);
-                                    // Fallback: open in new tab
-                                    window.open(entry.url, '_blank');
+                                    console.error('Audio export failed:', err);
+                                    playErrorSound();
+                                    setError(
+                                      `Failed to export ${lang.toUpperCase()} merged audio: ${
+                                        err instanceof Error
+                                          ? err.message
+                                          : 'Unknown error'
+                                      }`,
+                                    );
                                   }
                                 }}
                                 className='inline-flex items-center gap-1 px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-md transition-colors'
-                                title={`Download ${lang.toUpperCase()} merged audio (${entry.startId}–${entry.endId})`}
+                                title={`Export ${lang.toUpperCase()} merged audio (${entry.startId}–${entry.endId}) into the local video ID folder`}
                               >
                                 <Download className='w-3.5 h-3.5' />
-                                Download
+                                Export
                               </button>
                               <a
                                 href={entry.url}
