@@ -1,4 +1,5 @@
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
+import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
 import {
   ensureVideoExportDir,
   parseVideoExportId,
@@ -6,6 +7,7 @@ import {
   writeBufferToVideoExportDir,
   writeTextToVideoExportDir,
 } from '@/lib/local-video-export';
+import { getLanguageDisplayName } from '@/utils/languageNames';
 
 export const runtime = 'nodejs';
 
@@ -220,8 +222,24 @@ function withEnglishPrefix(fileName: string): string {
   return fileName.startsWith('English - ') ? fileName : `English - ${fileName}`;
 }
 
+function formatLanguageNameForFile(languageCode: string): string {
+  const displayName = getLanguageDisplayName(languageCode);
+  const regionMatch = displayName.match(/^(.+?)\s+-\s+(.+)$/);
+
+  if (regionMatch) {
+    return `${regionMatch[1].trim()} (${regionMatch[2].trim()})`;
+  }
+
+  return displayName;
+}
+
 function getExtensionFromUrlOrType(url: string, contentType: string): string {
   const lowerType = contentType.toLowerCase();
+  if (lowerType.includes('audio/wav')) return '.wav';
+  if (lowerType.includes('audio/mpeg')) return '.mp3';
+  if (lowerType.includes('audio/mp3')) return '.mp3';
+  if (lowerType.includes('audio/mp4')) return '.m4a';
+  if (lowerType.includes('audio/x-m4a')) return '.m4a';
   if (lowerType.includes('video/mp4')) return '.mp4';
   if (lowerType.includes('video/webm')) return '.webm';
   if (lowerType.includes('video/quicktime')) return '.mov';
@@ -284,6 +302,8 @@ export async function POST(req: Request) {
       baserowGetOriginalVideoRow(videoId, baserowUrl, token),
       baserowGetSceneRowsForVideo(videoId, baserowUrl, token),
     ]);
+    const { entries: audioReferenceEntries } =
+      await loadTtsAudioReferencesStore();
 
     const exportDir = await ensureVideoExportDir(videoId);
     const title = sanitizeExportFileName(
@@ -354,6 +374,45 @@ export async function POST(req: Request) {
         const reason =
           error instanceof Error ? error.message : 'Unknown English SRT error';
         skippedAssets.push(`english_srt: ${reason}`);
+      }
+    }
+
+    const seenDubbedAudioFields = new Set<string>();
+    for (const entry of audioReferenceEntries) {
+      if (!entry.enabled) continue;
+
+      const languageCode = String(entry.language || '').trim().toLowerCase();
+      const fieldKey = entry.baserowFields.videoFinalDubbedAudioFieldKey;
+      if (!languageCode || !fieldKey || seenDubbedAudioFields.has(fieldKey)) {
+        continue;
+      }
+
+      seenDubbedAudioFields.add(fieldKey);
+      const dubbedAudioUrl = extractUrlFromField(row[fieldKey]);
+      if (!dubbedAudioUrl) continue;
+
+      try {
+        const dubbedAudioAsset = await fetchAsset(dubbedAudioUrl);
+        const audioExt = getExtensionFromUrlOrType(
+          dubbedAudioUrl,
+          dubbedAudioAsset.contentType,
+        );
+        const languageName = sanitizeExportFileName(
+          formatLanguageNameForFile(languageCode),
+          languageCode.toUpperCase(),
+        );
+        const filePath = await writeBufferToVideoExportDir(
+          videoId,
+          `${languageName} - audio${audioExt}`,
+          dubbedAudioAsset.data,
+        );
+        writtenFiles.push(filePath);
+      } catch (error) {
+        const reason =
+          error instanceof Error
+            ? error.message
+            : 'Unknown dubbed audio error';
+        skippedAssets.push(`dubbed_audio_${languageCode}: ${reason}`);
       }
     }
 
