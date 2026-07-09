@@ -4892,21 +4892,47 @@ export default function OriginalVideosList({
     window.URL.revokeObjectURL(blobUrl);
   };
 
+  const exportAssetsFolderForVideo = async (videoId: number) => {
+    const response = await fetch('/api/export-video-assets-folder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ videoId }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      exportDir?: string;
+      error?: string;
+    } | null;
+
+    if (!response.ok) {
+      throw new Error(
+        payload?.error ||
+          `Failed to export assets folder (${response.status})`,
+      );
+    }
+
+    console.log(
+      `Exported assets for video #${videoId} to ${payload?.exportDir || 'local folder'}`,
+    );
+  };
+
   const handleDownloadAssetsZip = async (videoId: number) => {
     try {
       setDownloadingAssetsZipVideoId(videoId);
       setError(null);
 
-      await downloadAssetsZipForVideo(videoId);
+      await exportAssetsFolderForVideo(videoId);
       playSuccessSound();
     } catch (error) {
       console.error(
-        `Failed to download assets ZIP for video #${videoId}:`,
+        `Failed to export assets folder for video #${videoId}:`,
         error,
       );
       playErrorSound();
       setError(
-        `Failed to download ZIP: ${
+        `Failed to export assets folder: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -16047,18 +16073,18 @@ export default function OriginalVideosList({
                               generatingThumbnailsAll
                             }
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Download ZIP with all thumbnails, final video, sentences.txt, and metadata.txt. The ZIP and final video filenames use one of the generated titles.'
+                            title='Export thumbnails, final video, sentences.txt, and metadata.txt into this video ID folder on the local computer.'
                           >
                             {downloadingAssetsZipVideoId ===
                             selectedVideo.id ? (
                               <>
                                 <Loader2 className='w-4 h-4 animate-spin' />
-                                Preparing ZIP...
+                                Exporting...
                               </>
                             ) : (
                               <>
                                 <Download className='w-4 h-4' />
-                                Download Thumbnails + Final Video ZIP
+                                Export Thumbnails + Final Video
                               </>
                             )}
                           </button>
