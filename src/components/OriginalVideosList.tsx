@@ -4778,7 +4778,7 @@ export default function OriginalVideosList({
       await exportUrlFileForVideo(
         videoId,
         thumbnailUrl,
-        `thumbnail_${variant}`,
+        `English - thumbnail_${variant}`,
       );
       playSuccessSound();
     } catch (error) {
@@ -4989,7 +4989,11 @@ export default function OriginalVideosList({
       }
 
       await navigator.clipboard.writeText(metadataText);
-      await exportTextFileForVideo(video.id, 'metadata.txt', metadataText);
+      await exportTextFileForVideo(
+        video.id,
+        'English - metadata.txt',
+        metadataText,
+      );
 
       playSuccessSound();
     } catch (error) {
@@ -5023,7 +5027,11 @@ export default function OriginalVideosList({
       }
 
       await navigator.clipboard.writeText(sentenceText);
-      await exportTextFileForVideo(video.id, 'sentences.txt', sentenceText);
+      await exportTextFileForVideo(
+        video.id,
+        'English - sentences.txt',
+        sentenceText,
+      );
 
       playSuccessSound();
     } catch (error) {
@@ -16381,7 +16389,7 @@ export default function OriginalVideosList({
 	                                    await exportUrlFileForVideo(
                                       currentVideoId,
 	                                      entry.url,
-	                                      `${baseName}.m4a`,
+                                      `English - ${baseName}.m4a`,
 	                                    );
                                     playSuccessSound();
                                   } catch (err) {

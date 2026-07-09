@@ -836,7 +836,7 @@ export default function BatchOperations({
         body: JSON.stringify({
           videoId: selectedOriginalVideo.id,
           url: mergedVideo.url,
-          fileName: mergedVideo.fileName || 'merged-video',
+          fileName: `English - ${mergedVideo.fileName || 'merged-video'}`,
         }),
       });
       const payload = (await response.json().catch(() => null)) as {

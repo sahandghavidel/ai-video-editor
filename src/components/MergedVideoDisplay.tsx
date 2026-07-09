@@ -108,7 +108,9 @@ export default function MergedVideoDisplay({
                     body: JSON.stringify({
                       videoId: exportVideoId,
                       url: mergedVideo.url,
-                      fileName: mergedVideo.fileName || 'merged-video',
+                      fileName: `English - ${
+                        mergedVideo.fileName || 'merged-video'
+                      }`,
                     }),
                   });
                   const payload = (await response.json().catch(() => null)) as {

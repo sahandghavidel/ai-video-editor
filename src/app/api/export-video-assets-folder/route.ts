@@ -216,6 +216,10 @@ function pickTitleFromField(rawTitleField: unknown, videoId: number): string {
   return candidates[0] || `video_${videoId}`;
 }
 
+function withEnglishPrefix(fileName: string): string {
+  return fileName.startsWith('English - ') ? fileName : `English - ${fileName}`;
+}
+
 function getExtensionFromUrlOrType(url: string, contentType: string): string {
   const lowerType = contentType.toLowerCase();
   if (lowerType.includes('video/mp4')) return '.mp4';
@@ -304,7 +308,7 @@ export async function POST(req: Request) {
         const ext = getExtensionFromUrlOrType(thumbUrl, asset.contentType);
         const filePath = await writeBufferToVideoExportDir(
           videoId,
-          `thumbnail_${i + 1}${ext}`,
+          withEnglishPrefix(`thumbnail_${i + 1}${ext}`),
           asset.data,
         );
         writtenFiles.push(filePath);
@@ -325,7 +329,7 @@ export async function POST(req: Request) {
         );
         const filePath = await writeBufferToVideoExportDir(
           videoId,
-          `${title}${finalExt}`,
+          withEnglishPrefix(`${title}${finalExt}`),
           finalAsset.data,
         );
         writtenFiles.push(filePath);
@@ -338,13 +342,21 @@ export async function POST(req: Request) {
 
     if (sentenceText.trim()) {
       writtenFiles.push(
-        await writeTextToVideoExportDir(videoId, 'sentences.txt', sentenceText),
+        await writeTextToVideoExportDir(
+          videoId,
+          withEnglishPrefix('sentences.txt'),
+          sentenceText,
+        ),
       );
     }
 
     if (metadataText.trim()) {
       writtenFiles.push(
-        await writeTextToVideoExportDir(videoId, 'metadata.txt', metadataText),
+        await writeTextToVideoExportDir(
+          videoId,
+          withEnglishPrefix('metadata.txt'),
+          metadataText,
+        ),
       );
     }
 
