@@ -15968,7 +15968,7 @@ export default function OriginalVideosList({
                               generatingThumbnailsAll
                             }
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Export thumbnails, final video, sentences.txt, and metadata.txt into this video ID folder on the local computer.'
+                            title='Export thumbnails, final video, English SRT, sentences.txt, and metadata.txt into this video ID folder on the local computer.'
                           >
                             {downloadingAssetsZipVideoId ===
                             selectedVideo.id ? (

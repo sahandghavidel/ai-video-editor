@@ -340,6 +340,23 @@ export async function POST(req: Request) {
       }
     }
 
+    const englishSrtUrl = extractUrlFromField(row.field_6872);
+    if (englishSrtUrl) {
+      try {
+        const srtAsset = await fetchAsset(englishSrtUrl);
+        const filePath = await writeBufferToVideoExportDir(
+          videoId,
+          'English - United Kingdom.srt',
+          srtAsset.data,
+        );
+        writtenFiles.push(filePath);
+      } catch (error) {
+        const reason =
+          error instanceof Error ? error.message : 'Unknown English SRT error';
+        skippedAssets.push(`english_srt: ${reason}`);
+      }
+    }
+
     if (sentenceText.trim()) {
       writtenFiles.push(
         await writeTextToVideoExportDir(
