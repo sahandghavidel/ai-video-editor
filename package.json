@@ -11,6 +11,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "busboy": "^1.6.0",
     "context-filter-polyfill": "^0.3.23",
     "jszip": "^3.10.1",
     "lucide-react": "^0.544.0",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@types/busboy": "^1.5.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

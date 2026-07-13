@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createWriteStream } from 'fs';
 import { mkdtemp, rm, unlink } from 'fs/promises';
+import Busboy from 'busboy';
 import os from 'os';
 import path from 'path';
 import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
 import {
   createOriginalVideoRow,
   getOriginalVideosData,
@@ -22,6 +22,12 @@ export const maxDuration = 3600;
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024; // 10 GB per source video
 const MAX_TOTAL_SIZE = 50 * 1024 * 1024 * 1024; // 50 GB per merge request
+
+type ParsedUpload = {
+  tempPaths: string[];
+  files: Array<{ name: string; contentType: string; size: number }>;
+  titleBase: string | null;
+};
 
 function sanitizeName(value: string): string {
   return value
@@ -67,22 +73,41 @@ function generateUniqueTitle(baseName: string, videos: BaserowRow[]): string {
   return candidate;
 }
 
-async function writeUploadedFileToTemp(file: File, filePath: string) {
-  const readable = Readable.fromWeb(
-    file.stream() as unknown as Parameters<typeof Readable.fromWeb>[0],
-  );
-  await pipeline(readable, createWriteStream(filePath));
-}
-
 export async function POST(request: NextRequest) {
   let tempDir: string | null = null;
   let mergedLocalPath: string | null = null;
 
   try {
-    const formData = await request.formData();
-    const files = formData
-      .getAll('files')
-      .filter((value): value is File => value instanceof File);
+    const contentType = request.headers.get('content-type') || '';
+    if (!contentType.toLowerCase().includes('multipart/form-data')) {
+      return NextResponse.json(
+        { error: 'Expected multipart/form-data request body' },
+        { status: 400 },
+      );
+    }
+
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (Number.isFinite(contentLength) && contentLength > MAX_TOTAL_SIZE) {
+      return NextResponse.json(
+        { error: 'Total selected video size must be less than 50 GB' },
+        { status: 400 },
+      );
+    }
+
+    if (!request.body) {
+      return NextResponse.json(
+        { error: 'Request body is required' },
+        { status: 400 },
+      );
+    }
+
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'merged-upload-'));
+    const parsedUpload = await parseMultipartUpload(
+      request,
+      tempDir,
+      contentType,
+    );
+    const { files, tempPaths, titleBase: parsedTitleBase } = parsedUpload;
 
     if (files.length < 2) {
       return NextResponse.json(
@@ -91,18 +116,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const invalidFile = files.find((file) => !file.type.startsWith('video/'));
+    const invalidFile = files.find((file) => !file.contentType.startsWith('video/'));
     if (invalidFile) {
       return NextResponse.json(
         { error: `${invalidFile.name} is not a video file` },
-        { status: 400 },
-      );
-    }
-
-    const oversizedFile = files.find((file) => file.size > MAX_FILE_SIZE);
-    if (oversizedFile) {
-      return NextResponse.json(
-        { error: `${oversizedFile.name} must be less than 10 GB` },
         { status: 400 },
       );
     }
@@ -113,20 +130,6 @@ export async function POST(request: NextRequest) {
         { error: 'Total selected video size must be less than 50 GB' },
         { status: 400 },
       );
-    }
-
-    tempDir = await mkdtemp(path.join(os.tmpdir(), 'merged-upload-'));
-    const tempPaths: string[] = [];
-
-    for (const [index, file] of files.entries()) {
-      const extension = getExtension(file.name);
-      const safeName = sanitizePathSegment(file.name);
-      const filePath = path.join(
-        tempDir,
-        `${String(index + 1).padStart(3, '0')}_${safeName}.${extension}`,
-      );
-      await writeUploadedFileToTemp(file, filePath);
-      tempPaths.push(filePath);
     }
 
     try {
@@ -149,11 +152,7 @@ export async function POST(request: NextRequest) {
       return Math.max(max, order);
     }, 0);
     const nextOrder = maxOrder + 1;
-    const rawTitleBase = formData.get('titleBase');
-    const titleBase =
-      typeof rawTitleBase === 'string'
-        ? sanitizeName(rawTitleBase)
-        : sanitizeName(files[0].name);
+    const titleBase = sanitizeName(parsedTitleBase || files[0].name);
     const uniqueTitle = generateUniqueTitle(titleBase, existingVideos);
 
     const newRow = await createOriginalVideoRow({
@@ -209,4 +208,137 @@ export async function POST(request: NextRequest) {
       }
     }
   }
+}
+
+function parseMultipartUpload(
+  request: NextRequest,
+  tempDir: string,
+  contentType: string,
+): Promise<ParsedUpload> {
+  return new Promise((resolve, reject) => {
+    const tempPaths: string[] = [];
+    const files: ParsedUpload['files'] = [];
+    let titleBase: string | null = null;
+    let fileIndex = 0;
+    let settled = false;
+    let totalSize = 0;
+    const pendingWrites: Promise<void>[] = [];
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    const busboy = Busboy({
+      headers: {
+        'content-type': contentType,
+      },
+      limits: {
+        fileSize: MAX_FILE_SIZE,
+        files: 100,
+        fields: 20,
+      },
+    });
+
+    busboy.on('field', (name, value) => {
+      if (name === 'titleBase') {
+        titleBase = value;
+      }
+    });
+
+    busboy.on('file', (name, fileStream, info) => {
+      if (name !== 'files') {
+        fileStream.resume();
+        return;
+      }
+
+      const filename = info.filename || `video-${fileIndex + 1}.mp4`;
+      const contentTypeForFile = info.mimeType || 'application/octet-stream';
+      const extension = getExtension(filename);
+      const safeName = sanitizePathSegment(filename);
+      const currentIndex = fileIndex++;
+      const filePath = path.join(
+        tempDir,
+        `${String(currentIndex + 1).padStart(3, '0')}_${safeName}.${extension}`,
+      );
+      let fileSize = 0;
+      let hitFileSizeLimit = false;
+
+      const writeStream = createWriteStream(filePath);
+      tempPaths.push(filePath);
+
+      fileStream.on('data', (chunk: Buffer) => {
+        fileSize += chunk.length;
+        totalSize += chunk.length;
+        if (totalSize > MAX_TOTAL_SIZE) {
+          fileStream.unpipe(writeStream);
+          writeStream.destroy();
+          fail(new Error('Total selected video size must be less than 50 GB'));
+        }
+      });
+
+      fileStream.on('limit', () => {
+        hitFileSizeLimit = true;
+        fileStream.unpipe(writeStream);
+        writeStream.destroy();
+        fail(new Error(`${filename} must be less than 10 GB`));
+      });
+
+      fileStream.on('error', (error) => {
+        writeStream.destroy();
+        fail(error instanceof Error ? error : new Error('File stream failed'));
+      });
+
+      writeStream.on('error', (error) => {
+        fileStream.resume();
+        fail(error instanceof Error ? error : new Error('File write failed'));
+      });
+
+      const writeDone = new Promise<void>((writeResolve, writeReject) => {
+        writeStream.on('finish', () => {
+          if (hitFileSizeLimit) {
+            writeReject(new Error(`${filename} must be less than 10 GB`));
+            return;
+          }
+
+          files[currentIndex] = {
+            name: filename,
+            contentType: contentTypeForFile,
+            size: fileSize,
+          };
+          writeResolve();
+        });
+        writeStream.on('error', writeReject);
+      });
+
+      pendingWrites.push(writeDone);
+      fileStream.pipe(writeStream);
+    });
+
+    busboy.on('error', (error) => {
+      fail(error instanceof Error ? error : new Error('Failed to parse body'));
+    });
+
+    busboy.on('finish', async () => {
+      if (settled) return;
+
+      try {
+        await Promise.all(pendingWrites);
+        if (settled) return;
+        settled = true;
+        resolve({
+          tempPaths,
+          files: files.filter(Boolean),
+          titleBase,
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error('Failed to save files'));
+      }
+    });
+
+    Readable.fromWeb(
+      request.body as unknown as Parameters<typeof Readable.fromWeb>[0],
+    ).pipe(busboy);
+  });
 }
