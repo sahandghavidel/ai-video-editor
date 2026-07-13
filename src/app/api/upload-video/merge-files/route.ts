@@ -27,7 +27,15 @@ type ParsedUpload = {
   tempPaths: string[];
   files: Array<{ name: string; contentType: string; size: number }>;
   titleBase: string | null;
+  renderNormally: boolean;
 };
+
+function jsonFailure(error: string) {
+  return NextResponse.json({
+    success: false,
+    error,
+  });
+}
 
 function sanitizeName(value: string): string {
   return value
@@ -80,25 +88,16 @@ export async function POST(request: NextRequest) {
   try {
     const contentType = request.headers.get('content-type') || '';
     if (!contentType.toLowerCase().includes('multipart/form-data')) {
-      return NextResponse.json(
-        { error: 'Expected multipart/form-data request body' },
-        { status: 400 },
-      );
+      return jsonFailure('Expected multipart/form-data request body');
     }
 
     const contentLength = Number(request.headers.get('content-length') || 0);
     if (Number.isFinite(contentLength) && contentLength > MAX_TOTAL_SIZE) {
-      return NextResponse.json(
-        { error: 'Total selected video size must be less than 50 GB' },
-        { status: 400 },
-      );
+      return jsonFailure('Total selected video size must be less than 50 GB');
     }
 
     if (!request.body) {
-      return NextResponse.json(
-        { error: 'Request body is required' },
-        { status: 400 },
-      );
+      return jsonFailure('Request body is required');
     }
 
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'merged-upload-'));
@@ -108,42 +107,42 @@ export async function POST(request: NextRequest) {
       contentType,
     );
     const { files, tempPaths, titleBase: parsedTitleBase } = parsedUpload;
+    const { renderNormally } = parsedUpload;
 
     if (files.length < 2) {
-      return NextResponse.json(
-        { error: 'Select at least two video files to merge' },
-        { status: 400 },
-      );
+      return jsonFailure('Select at least two video files to merge');
     }
 
     const invalidFile = files.find((file) => !file.contentType.startsWith('video/'));
     if (invalidFile) {
-      return NextResponse.json(
-        { error: `${invalidFile.name} is not a video file` },
-        { status: 400 },
-      );
+      return jsonFailure(`${invalidFile.name} is not a video file`);
     }
 
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
-      return NextResponse.json(
-        { error: 'Total selected video size must be less than 50 GB' },
-        { status: 400 },
-      );
+      return jsonFailure('Total selected video size must be less than 50 GB');
     }
 
-    try {
-      mergedLocalPath = await concatenateVideosFast(tempPaths);
-    } catch (fastError) {
-      console.log(
-        '[MERGED_UPLOAD] Fast local merge failed, falling back to re-encode:',
-        fastError,
-      );
+    if (renderNormally) {
       mergedLocalPath = await concatenateVideosWithFFmpeg({
         videoUrls: tempPaths,
-        useHardwareAcceleration: true,
+        useHardwareAcceleration: false,
         videoBitrate: '6000k',
       });
+    } else {
+      try {
+        mergedLocalPath = await concatenateVideosFast(tempPaths);
+      } catch (fastError) {
+        console.log(
+          '[MERGED_UPLOAD] Fast local merge failed, falling back to re-encode:',
+          fastError,
+        );
+        mergedLocalPath = await concatenateVideosWithFFmpeg({
+          videoUrls: tempPaths,
+          useHardwareAcceleration: true,
+          videoBitrate: '6000k',
+        });
+      }
     }
 
     const existingVideos = await getOriginalVideosData();
@@ -181,16 +180,10 @@ export async function POST(request: NextRequest) {
       mergedFiles: files.length,
     });
   } catch (error) {
-    console.error('[MERGED_UPLOAD] Error merging uploaded files:', error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to merge and upload files',
-      },
-      { status: 500 },
-    );
+    const message =
+      error instanceof Error ? error.message : 'Failed to merge and upload files';
+    console.warn('[MERGED_UPLOAD] Merge upload failed gracefully:', message);
+    return jsonFailure(message);
   } finally {
     if (mergedLocalPath) {
       try {
@@ -219,6 +212,7 @@ function parseMultipartUpload(
     const tempPaths: string[] = [];
     const files: ParsedUpload['files'] = [];
     let titleBase: string | null = null;
+    let renderNormally = false;
     let fileIndex = 0;
     let settled = false;
     let totalSize = 0;
@@ -244,6 +238,8 @@ function parseMultipartUpload(
     busboy.on('field', (name, value) => {
       if (name === 'titleBase') {
         titleBase = value;
+      } else if (name === 'renderNormally') {
+        renderNormally = value === 'true';
       }
     });
 
@@ -331,6 +327,7 @@ function parseMultipartUpload(
           tempPaths,
           files: files.filter(Boolean),
           titleBase,
+          renderNormally,
         });
       } catch (error) {
         fail(error instanceof Error ? error : new Error('Failed to save files'));

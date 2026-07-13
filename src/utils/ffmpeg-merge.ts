@@ -5,6 +5,35 @@ import { access, unlink, writeFile } from 'fs/promises';
 import { uploadToMinio } from './ffmpeg-direct';
 
 const execAsync = promisify(exec);
+const DEFAULT_MERGE_FFMPEG_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
+const DEFAULT_FAST_MERGE_FFMPEG_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const DEFAULT_MERGE_FFMPEG_MAX_BUFFER = 100 * 1024 * 1024; // 100MB stderr/stdout
+
+function parsePositiveNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getMergeFfmpegTimeoutMs() {
+  return parsePositiveNumber(
+    process.env.MERGE_FFMPEG_TIMEOUT_MS,
+    DEFAULT_MERGE_FFMPEG_TIMEOUT_MS,
+  );
+}
+
+function getFastMergeFfmpegTimeoutMs() {
+  return parsePositiveNumber(
+    process.env.FAST_MERGE_FFMPEG_TIMEOUT_MS,
+    DEFAULT_FAST_MERGE_FFMPEG_TIMEOUT_MS,
+  );
+}
+
+function getMergeFfmpegMaxBuffer() {
+  return parsePositiveNumber(
+    process.env.MERGE_FFMPEG_MAX_BUFFER,
+    DEFAULT_MERGE_FFMPEG_MAX_BUFFER,
+  );
+}
 
 export interface ConcatenateOptions {
   videoUrls: string[];
@@ -57,7 +86,14 @@ export async function concatenateVideosWithFFmpeg(
       );
 
       // Build FFmpeg command with multiple inputs (direct HTTP URLs)
-      const ffmpegCommand = ['ffmpeg', '-y']; // Overwrite output
+      const ffmpegCommand = [
+        'ffmpeg',
+        '-y',
+        '-threads',
+        '0',
+        '-filter_threads',
+        '0',
+      ];
 
       // Add all video URLs as inputs
       videoUrls.forEach((url) => {
@@ -88,10 +124,14 @@ export async function concatenateVideosWithFFmpeg(
         ffmpegCommand.push(
           '-c:v',
           'libx264',
+          '-threads',
+          '0',
           '-preset',
           'medium',
           '-crf',
-          '20'
+          '20',
+          '-pix_fmt',
+          'yuv420p'
         );
       }
 
@@ -101,6 +141,8 @@ export async function concatenateVideosWithFFmpeg(
         'aac',
         '-b:a',
         '128k',
+        '-ar',
+        '48000',
         '-ac',
         '2',
         '-avoid_negative_ts',
@@ -110,10 +152,11 @@ export async function concatenateVideosWithFFmpeg(
 
       const commandString = ffmpegCommand.join(' ');
       const execStartTime = Date.now();
+      const timeoutMs = getMergeFfmpegTimeoutMs();
 
       const { stdout, stderr } = await execAsync(commandString, {
-        timeout: 300000, // 5 minute timeout for merging
-        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large stderr output
+        timeout: timeoutMs,
+        maxBuffer: getMergeFfmpegMaxBuffer(),
       });
 
       const execEndTime = Date.now();
@@ -275,8 +318,8 @@ export async function concatenateVideosFast(
     );
 
     const { stdout, stderr } = await execAsync(commandString, {
-      timeout: 120000, // 2 minute timeout for fast copy
-      maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large stderr output
+      timeout: getFastMergeFfmpegTimeoutMs(),
+      maxBuffer: getMergeFfmpegMaxBuffer(),
     });
 
     const execEndTime = Date.now();

@@ -632,6 +632,8 @@ export default function OriginalVideosList({
   const [isMergedUploadModalOpen, setIsMergedUploadModalOpen] = useState(false);
   const [uploadingMergedFiles, setUploadingMergedFiles] = useState(false);
   const [mergedUploadStatus, setMergedUploadStatus] = useState('');
+  const [renderMergedUploadNormally, setRenderMergedUploadNormally] =
+    useState(false);
 
   const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
   const [scriptUploadTitle, setScriptUploadTitle] = useState('');
@@ -1836,6 +1838,7 @@ export default function OriginalVideosList({
     setIsMergedUploadModalOpen(false);
     setMergedUploadFiles([]);
     setMergedUploadStatus('');
+    setRenderMergedUploadNormally(false);
     if (mergedFileInputRef.current) {
       mergedFileInputRef.current.value = '';
     }
@@ -1871,6 +1874,7 @@ export default function OriginalVideosList({
     setError(null);
     setMergedUploadFiles(files);
     setMergedUploadStatus('');
+    setRenderMergedUploadNormally(false);
     setIsMergedUploadModalOpen(true);
   };
 
@@ -1909,6 +1913,7 @@ export default function OriginalVideosList({
     setError(null);
 
     try {
+      const shouldNotifyTelegram = renderMergedUploadNormally;
       const formData = new FormData();
       mergedUploadFiles.forEach((file) => {
         formData.append('files', file, file.name);
@@ -1916,8 +1921,16 @@ export default function OriginalVideosList({
 
       const firstFileName = mergedUploadFiles[0]?.name || 'merged-video.mp4';
       formData.append('titleBase', firstFileName.replace(/\.[^/.]+$/, ''));
+      formData.append(
+        'renderNormally',
+        renderMergedUploadNormally ? 'true' : 'false',
+      );
 
-      setMergedUploadStatus('Merging videos...');
+      setMergedUploadStatus(
+        renderMergedUploadNormally
+          ? 'Rendering merged video...'
+          : 'Merging videos...',
+      );
       const response = await fetch('/api/upload-video/merge-files', {
         method: 'POST',
         body: formData,
@@ -1925,14 +1938,24 @@ export default function OriginalVideosList({
 
       const result = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        throw new Error(
-          result.error || `Merged upload failed (${response.status})`,
-        );
+      if (!response.ok || result?.success === false) {
+        const errorMessage =
+          result?.error || `Merged upload failed (${response.status})`;
+        setError(errorMessage);
+        setMergedUploadStatus('Failed');
+        playErrorSound();
+        setUploadingMergedFiles(false);
+        return;
       }
 
       setMergedUploadStatus('Refreshing videos...');
       await fetchOriginalVideos(true);
+
+      if (shouldNotifyTelegram) {
+        await playSuccessAndNotifyBatchCompletion('Upload Merged Render');
+      } else {
+        playSuccessSound();
+      }
 
       setMergedUploadStatus('Done');
       setTimeout(() => {
@@ -1940,12 +1963,14 @@ export default function OriginalVideosList({
         setIsMergedUploadModalOpen(false);
         setMergedUploadFiles([]);
         setMergedUploadStatus('');
+        setRenderMergedUploadNormally(false);
         if (mergedFileInputRef.current) {
           mergedFileInputRef.current.value = '';
         }
       }, 800);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Merged upload failed');
+      playErrorSound();
       setUploadingMergedFiles(false);
       setMergedUploadStatus('');
     }
@@ -13314,6 +13339,29 @@ export default function OriginalVideosList({
                                 <span>{mergedUploadStatus}</span>
                               </div>
                             )}
+
+                            <label className='flex items-start gap-3 rounded-md border border-gray-200 p-3 text-sm text-gray-800'>
+                              <input
+                                type='checkbox'
+                                checked={renderMergedUploadNormally}
+                                onChange={(event) =>
+                                  setRenderMergedUploadNormally(
+                                    event.target.checked,
+                                  )
+                                }
+                                disabled={uploadingMergedFiles}
+                                className='mt-0.5 h-4 w-4 rounded border-gray-300 text-green-600'
+                              />
+                              <span className='min-w-0'>
+                                <span className='block font-medium text-gray-900'>
+                                  Render normally
+                                </span>
+                                <span className='block text-xs text-gray-500'>
+                                  Re-encode video and audio to resolve codec,
+                                  bitrate, or audio setting conflicts.
+                                </span>
+                              </span>
+                            </label>
                           </div>
 
                           <div className='px-4 py-3 border-t border-gray-200 flex justify-end gap-2'>
