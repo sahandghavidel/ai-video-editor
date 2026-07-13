@@ -1914,20 +1914,27 @@ export default function OriginalVideosList({
 
     try {
       const shouldNotifyTelegram = renderMergedUploadNormally;
+      const firstFileName = mergedUploadFiles[0]?.name || 'merged-video.mp4';
       const formData = new FormData();
       mergedUploadFiles.forEach((file) => {
         formData.append('files', file, file.name);
       });
 
-      const firstFileName = mergedUploadFiles[0]?.name || 'merged-video.mp4';
       formData.append('titleBase', firstFileName.replace(/\.[^/.]+$/, ''));
       formData.append(
         'renderNormally',
         renderMergedUploadNormally ? 'true' : 'false',
       );
 
+      setIsMergedUploadModalOpen(false);
+      setMergedUploadFiles([]);
+      setRenderMergedUploadNormally(false);
+      if (mergedFileInputRef.current) {
+        mergedFileInputRef.current.value = '';
+      }
+
       setMergedUploadStatus(
-        renderMergedUploadNormally
+        shouldNotifyTelegram
           ? 'Rendering merged video...'
           : 'Merging videos...',
       );
@@ -1960,13 +1967,7 @@ export default function OriginalVideosList({
       setMergedUploadStatus('Done');
       setTimeout(() => {
         setUploadingMergedFiles(false);
-        setIsMergedUploadModalOpen(false);
-        setMergedUploadFiles([]);
         setMergedUploadStatus('');
-        setRenderMergedUploadNormally(false);
-        if (mergedFileInputRef.current) {
-          mergedFileInputRef.current.value = '';
-        }
       }, 800);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Merged upload failed');
