@@ -127,6 +127,132 @@ function circleCanvasFromSource(source: HTMLCanvasElement): HTMLCanvasElement {
   return out;
 }
 
+async function createMacWindowOverlay(text: string): Promise<File> {
+  const width = 1600;
+  const height = 900;
+  const titleBarHeight = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is unavailable');
+
+  const roundedRect = (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    radius: number,
+  ) => {
+    const r = Math.min(radius, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  roundedRect(8, 8, width - 16, height - 16, 34);
+  ctx.clip();
+
+  const bodyGradient = ctx.createLinearGradient(
+    0,
+    titleBarHeight,
+    width,
+    height,
+  );
+  bodyGradient.addColorStop(0, '#071522');
+  bodyGradient.addColorStop(1, '#0b1d2c');
+  ctx.fillStyle = bodyGradient;
+  ctx.fillRect(8, 8, width - 16, height - 16);
+
+  const barGradient = ctx.createLinearGradient(0, 0, width, titleBarHeight);
+  barGradient.addColorStop(0, '#172b3b');
+  barGradient.addColorStop(1, '#132536');
+  ctx.fillStyle = barGradient;
+  ctx.fillRect(8, 8, width - 16, titleBarHeight);
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.lineWidth = 5;
+  roundedRect(8, 8, width - 16, height - 16, 34);
+  ctx.stroke();
+
+  const dots = [
+    { x: 70, color: '#ff5f57' },
+    { x: 126, color: '#febc2e' },
+    { x: 182, color: '#28c840' },
+  ];
+  for (const dot of dots) {
+    ctx.beginPath();
+    ctx.arc(dot.x, 72, 17, 0, Math.PI * 2);
+    ctx.fillStyle = dot.color;
+    ctx.fill();
+  }
+
+  const fontSize = 54;
+  const lineHeight = 72;
+  const left = 62;
+  const top = titleBarHeight + 72;
+  const maxWidth = width - left * 2;
+  ctx.font = `500 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
+  ctx.fillStyle = '#f4f7fb';
+  ctx.textBaseline = 'top';
+
+  const lines: string[] = [];
+  for (const paragraph of text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, '    ')
+    .split('\n')) {
+    if (!paragraph) {
+      lines.push('');
+      continue;
+    }
+    let remaining = paragraph;
+    while (ctx.measureText(remaining).width > maxWidth) {
+      let splitAt = remaining.length;
+      while (
+        splitAt > 1 &&
+        ctx.measureText(remaining.slice(0, splitAt)).width > maxWidth
+      ) {
+        splitAt -= 1;
+      }
+      const lastSpace = remaining.lastIndexOf(' ', splitAt - 1);
+      if (lastSpace > 0) splitAt = lastSpace + 1;
+      lines.push(remaining.slice(0, splitAt).replace(/\s+$/, ''));
+      remaining = remaining.slice(splitAt);
+    }
+    lines.push(remaining);
+  }
+
+  const maxLines = Math.floor((height - top - 50) / lineHeight);
+  lines.slice(0, maxLines).forEach((line, index) => {
+    const visibleLine =
+      index === maxLines - 1 && lines.length > maxLines
+        ? `${line.replace(/\s+$/, '')}…`
+        : line;
+    ctx.fillText(visibleLine, left, top + index * lineHeight, maxWidth);
+  });
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (value) =>
+        value
+          ? resolve(value)
+          : reject(new Error('Could not create Mac window image')),
+      'image/png',
+    );
+  });
+  return new File([blob], `mac-window-${Date.now()}.png`, {
+    type: 'image/png',
+  });
+}
+
 function mergeRefs<T>(refs: Array<React.Ref<T> | undefined>) {
   return (value: T | null) => {
     for (const ref of refs) {
@@ -5031,6 +5157,35 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   setOverlayImage(null);
                   setOverlayImageUrl(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
+                }
+              }}
+              onAddMacWindow={async () => {
+                const text = customText.trim();
+                if (!text) return;
+
+                try {
+                  const file = await createMacWindowOverlay(text);
+                  const localUrl = URL.createObjectURL(file);
+
+                  if (overlayImageUrl?.startsWith('blob:')) {
+                    URL.revokeObjectURL(overlayImageUrl);
+                  }
+
+                  setOverlayImage(file);
+                  setOverlayImageUrl(localUrl);
+                  setOverlayVideo(null);
+                  setOverlayVideoUrl(null);
+                  setActualImageDimensions({ width: 1600, height: 900 });
+                  setOverlayPosition({ x: 50, y: 50 });
+                  setOverlaySize({ width: 72, height: 40.5 });
+                  setSelectedWordText(null);
+                  setCustomText('');
+                  setPreviewUrl(null);
+                  setIsPreviewLoading(false);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                } catch (error) {
+                  console.error('Failed to create Mac window overlay:', error);
+                  alert('Could not create the Mac window overlay');
                 }
               }}
               onClearText={() => {

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {
+  AppWindow,
   Gift,
   Image as ImageIcon,
   List,
@@ -26,6 +27,7 @@ type Props = {
   onCustomTextChange: (v: string) => void;
   onCustomTextEnter: () => void;
   onAddText: () => void;
+  onAddMacWindow: () => void;
   onClearText: () => void;
   onInsertFull: () => void;
 
@@ -51,6 +53,7 @@ export function TranscriptionControls({
   onCustomTextChange,
   onCustomTextEnter,
   onAddText,
+  onAddMacWindow,
   onClearText,
   onInsertFull,
   canTranscribe,
@@ -159,18 +162,18 @@ export function TranscriptionControls({
 
       {/* Custom Text Input */}
       <div className='flex gap-2 mt-3 items-center w-full'>
-        <input
-          type='text'
+        <textarea
+          rows={1}
           value={customText}
           onChange={(e) => onCustomTextChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               onCustomTextEnter();
             }
           }}
-          placeholder='Enter custom text for overlay...'
-          className='w-2/3 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          placeholder='Enter text (Shift+Enter for a new line)...'
+          className='w-2/3 min-h-10 max-h-28 px-3 py-2 text-sm border border-gray-300 rounded resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
         />
         <button
           type='button'
@@ -209,6 +212,16 @@ export function TranscriptionControls({
           aria-label='Add text as overlay'
         >
           <Plus className='h-4 w-4' />
+        </button>
+        <button
+          type='button'
+          onClick={onAddMacWindow}
+          disabled={!customText.trim()}
+          className='p-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+          aria-label='Add text inside a Mac-style window'
+          title='Add as Mac window'
+        >
+          <AppWindow className='h-4 w-4' />
         </button>
         <button
           type='button'
