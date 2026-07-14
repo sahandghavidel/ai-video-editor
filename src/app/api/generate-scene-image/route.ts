@@ -1,7 +1,6 @@
-// Nano Banana image generation: store the provider-returned URL directly.
+// GPT Image 2 scene generation: store the provider-returned URL directly.
 // We intentionally avoid re-uploading the generated image to MinIO.
 
-import { randomInt } from 'crypto';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 type BaserowRow = {
@@ -12,8 +11,7 @@ type BaserowRow = {
 const SCENES_TABLE_ID = 714;
 const IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
-// Nano Banana Edit model identifier (must match KIE API exactly)
-const KIE_MODEL = 'google/nano-banana-edit';
+const KIE_MODEL = 'gpt-image-2-text-to-image';
 const CONTEXT_SCENES_BEFORE = 50;
 const CONTEXT_SCENES_AFTER = 50;
 const RETRY_CONTEXT_SCENES_BEFORE = Math.max(
@@ -25,41 +23,7 @@ const RETRY_CONTEXT_SCENES_AFTER = Math.max(
   Math.floor(CONTEXT_SCENES_AFTER / 2),
 );
 const KIE_POLL_INTERVAL_MS = 3000;
-// Allow more time for KIE Nano Banana jobs to complete (10 minutes).
-const KIE_MAX_WAIT_MS = 600000;
-
-function parseKieCharacterImageUrls(raw: string | undefined): string[] {
-  const s = String(raw ?? '').trim();
-  if (!s) return [];
-
-  // Support JSON array: ["https://...", "https://..."]
-  if (s.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(s) as unknown;
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((v): v is string => typeof v === 'string')
-          .map((v) => v.trim())
-          .filter((v) => v.length > 0)
-          .filter((v) => v.startsWith('http://') || v.startsWith('https://'));
-      }
-    } catch {
-      // fall through to delimiter parsing
-    }
-  }
-
-  // Support comma/semicolon/newline/whitespace separated lists.
-  return s
-    .split(/[\s,;\n\r]+/g)
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0)
-    .filter((v) => v.startsWith('http://') || v.startsWith('https://'));
-}
-
-function pickRandom<T>(arr: T[]): T {
-  if (arr.length === 0) throw new Error('pickRandom called with empty array');
-  return arr[randomInt(arr.length)] as T;
-}
+const KIE_MAX_WAIT_MS = 300000;
 
 async function baserowGetJson<T>(
   pathName: string,
@@ -226,24 +190,35 @@ function buildSceneImagePrompt(params: {
   const { sceneId, currentText, contextScript, contextBefore, contextAfter } =
     params;
 
-  return `You are a professional image creator for video clips. Your task is to analyze the script I provide and convert each scene into a single, clear visual that communicates the idea being spoken.
+  return `You are a professional editorial illustrator creating visuals for educational video scenes.
 
-  For each scene:
-  Create a strong visual metaphor that explains the concept. Do not just show the character talking; show the character interacting with relevant objects, symbols, UI elements, diagrams, or metaphorical props (e.g., charts, clocks, ladders, puzzles, obstacles, tools). Keep the composition simple, large and readable.
+Analyze the current scene and its surrounding script context. Create one clear 16:9 visual that communicates the specific idea being spoken in the current scene.
 
-  Style: high contrast, dramatic lighting, clean composition, minimal clutter, strong emotional storytelling, optimised for high retention. Keep the character large and clearly visible.
+Visual concept:
+Represent one clear idea using one main subject and no more than two supporting elements. Use a relevant object, environment, interface, diagram, symbol, tool, or simple visual metaphor. Do not default to showing a presenter or recurring character.
 
-  Use the provided reference image for the character. Keep the exact same character design, hairstyle, face, proportions, and cartoon style. Do not redesign the character — only change facial expression and pose while keeping him clearly the same person. Add strong emotional expression and dynamic, storytelling poses. The character should look highly engaged and expressive, using body language and facial expressions to communicate the emotions and ideas of the scene.
+Include a person only when a human action or emotion is essential to explaining the scene. If a person is included, treat them as a scene-specific supporting subject. Do not imply that their appearance must match people in other scenes.
 
-  Create an image for the current scene:
+Visual style:
+Create a simple, carefully art-directed editorial illustration. Use clean shapes, restrained detail, balanced spacing, generous negative space, matte materials, soft natural shadows, and simple believable geometry. Keep the main subject large and immediately understandable.
 
-  current scene: ${sceneId} ${currentText}
+The image should feel intentionally designed by a human illustrator. Avoid excessive detail, random background objects, glossy 3D rendering, exaggerated cinematic lighting, lens flares, floating particles, unnecessary neon effects, distorted anatomy, surreal object combinations, and decorative technology that does not help explain the scene.
 
-  Context window (${contextBefore} before / ${contextAfter} after): ${contextScript}
+Color direction:
+Use the channel colors as restrained art direction, not as a strict color filter. Choose either dark navy or warm off-white as the main background. Use warm gold only to guide attention toward the most important subject. Add muted electric blue only when it improves separation or clarity.
 
-  Create an image for the current scene:
+Allow realistic, softly muted colors for people, objects, and environments so the image feels natural and thoughtfully illustrated. Do not recolor every object navy, gold, or blue. Avoid heavy neon glow, excessive contrast, metallic gold surfaces, and overly dark scenes.
 
-  current scene: ${sceneId} ${currentText}`;
+Important exclusions:
+Do not include logos, channel names, brand marks, watermarks, promotional text, title cards, banners, thumbnail layouts, feature-icon rows, or other overt branding. Avoid unnecessary written text. This must look like a clean editorial scene illustration, not a YouTube thumbnail.
+
+Current scene:
+Scene ${sceneId}: ${currentText}
+
+Surrounding script context (${contextBefore} before / ${contextAfter} after):
+${contextScript}
+
+Generate only the visual for the current scene. Use the surrounding context only to understand its meaning and continuity. Do not combine multiple scenes into one image.`;
 }
 
 function getKieApiKey(): string {
@@ -277,12 +252,7 @@ type KieRecordInfoResponse = {
   };
 };
 
-async function createNanoBananaTask(
-  prompt: string,
-  imageUrls: string[],
-  imageSize: string = '16:9',
-  outputFormat: string = 'png',
-): Promise<string> {
+async function createGptImageTask(prompt: string): Promise<string> {
   const apiKey = getKieApiKey();
 
   const response = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
@@ -295,11 +265,8 @@ async function createNanoBananaTask(
       model: KIE_MODEL,
       input: {
         prompt,
-        // Nano Banana Edit expects image URLs of the uploaded file(s)
-        // (up to 10). We'll pass our reference image URL(s) here.
-        image_urls: imageUrls,
-        output_format: outputFormat,
-        image_size: imageSize,
+        aspect_ratio: '16:9',
+        resolution: '1K',
       },
     }),
   });
@@ -322,7 +289,7 @@ async function createNanoBananaTask(
   return taskId;
 }
 
-type NanoBananaPollResult = {
+type GptImagePollResult = {
   imageUrl: string | null;
   state: string | null;
   failMsg: string | null;
@@ -413,9 +380,7 @@ function extractResultUrl(resultJson: unknown): string | null {
   return null;
 }
 
-async function fetchNanoBananaResult(
-  taskId: string,
-): Promise<NanoBananaPollResult> {
+async function fetchGptImageResult(taskId: string): Promise<GptImagePollResult> {
   const apiKey = getKieApiKey();
 
   const response = await fetch(
@@ -460,7 +425,7 @@ async function fetchNanoBananaResult(
         ? resultJson.slice(0, 200)
         : JSON.stringify(resultJson).slice(0, 200);
     console.warn(
-      `Nano Banana success with no URL yet (taskId=${taskId}). resultJson snippet: ${snippet}`,
+      `GPT Image 2 success with no URL yet (taskId=${taskId}). resultJson snippet: ${snippet}`,
     );
   }
 
@@ -582,39 +547,13 @@ export async function POST(req: Request) {
       contextAfter: RETRY_CONTEXT_SCENES_AFTER,
     });
 
-    const characterImageUrls = parseKieCharacterImageUrls(
-      process.env.KIE_CHARACTER_IMAGE_URL,
-    );
-    const selectedCharacterImageUrl =
-      characterImageUrls.length > 0 ? pickRandom(characterImageUrls) : null;
-    const imageUrls = selectedCharacterImageUrl
-      ? [selectedCharacterImageUrl]
-      : [];
-
-    // Nano Banana Edit requires at least 1 input image URL.
-    if (imageUrls.length === 0) {
-      return Response.json(
-        {
-          error:
-            'Missing KIE_CHARACTER_IMAGE_URL (Nano Banana Edit requires at least one image URL in input.image_urls). You can set a single URL or a list (CSV/whitespace/JSON array).',
-        },
-        { status: 400 },
-      );
-    }
-
-    if (selectedCharacterImageUrl) {
-      console.log(
-        `generate-scene-image: using character reference (${characterImageUrls.length} candidates): ${selectedCharacterImageUrl}`,
-      );
-    }
-
     let taskId = '';
     try {
       console.log(
-        'generate-scene-image: sending prompt to Nano Banana Edit (attempt 1, full context)',
+        'generate-scene-image: sending prompt to GPT Image 2 (attempt 1, full context)',
       );
       console.log(fullPrompt);
-      taskId = await createNanoBananaTask(fullPrompt, imageUrls);
+      taskId = await createGptImageTask(fullPrompt);
     } catch (error) {
       if (!isPromptTooLongError(error)) {
         throw error;
@@ -624,23 +563,23 @@ export async function POST(req: Request) {
         `generate-scene-image: first createTask failed due to prompt length. Retrying once with trimmed context (${RETRY_CONTEXT_SCENES_BEFORE} before / ${RETRY_CONTEXT_SCENES_AFTER} after).`,
       );
       console.log(
-        'generate-scene-image: sending prompt to Nano Banana Edit (attempt 2, trimmed context)',
+        'generate-scene-image: sending prompt to GPT Image 2 (attempt 2, trimmed context)',
       );
       console.log(trimmedPrompt);
 
-      taskId = await createNanoBananaTask(trimmedPrompt, imageUrls);
+      taskId = await createGptImageTask(trimmedPrompt);
     }
 
     let imageUrl = '';
     let lastState: string | null = null;
     const pollStart = Date.now();
     while (Date.now() - pollStart < KIE_MAX_WAIT_MS) {
-      const pollResult = await fetchNanoBananaResult(taskId);
+      const pollResult = await fetchGptImageResult(taskId);
       lastState = pollResult.state;
 
       if (pollResult.state === 'fail') {
         throw new Error(
-          `Nano Banana task failed: ${pollResult.failMsg || 'Unknown failure'}`,
+          `GPT Image 2 task failed: ${pollResult.failMsg || 'Unknown failure'}`,
         );
       }
 
@@ -651,7 +590,7 @@ export async function POST(req: Request) {
 
       if (pollResult.state === 'success') {
         console.warn(
-          `Nano Banana reported success but no URL yet (taskId=${taskId}).`,
+          `GPT Image 2 reported success but no URL yet (taskId=${taskId}).`,
         );
       }
 
@@ -660,7 +599,7 @@ export async function POST(req: Request) {
 
     if (!imageUrl) {
       throw new Error(
-        `Nano Banana task timed out without a result (taskId=${taskId}, lastState=${
+        `GPT Image 2 task timed out without a result (taskId=${taskId}, lastState=${
           lastState ?? 'unknown'
         })`,
       );
@@ -672,7 +611,7 @@ export async function POST(req: Request) {
       // If the provider ever returns a data URL, we refuse rather than silently
       // re-uploading, since that violates the desired behavior.
       throw new Error(
-        'Nano Banana returned a non-http imageUrl. Please configure it to return a hosted URL.',
+        'GPT Image 2 returned a non-http imageUrl. Please configure it to return a hosted URL.',
       );
     }
 

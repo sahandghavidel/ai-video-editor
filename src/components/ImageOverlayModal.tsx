@@ -4283,7 +4283,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   isApplying || isGeneratingSceneImage || isUpscalingSceneImage
                 }
                 className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
-                title='Generate image with Nano Banana Pro and save to Baserow (Image for Scene)'
+                title='Generate image with OpenAI Image 2 and save to Baserow (Image for Scene)'
               >
                 {isGeneratingSceneImage ? (
                   <span className='inline-flex items-center gap-2'>
