@@ -48,6 +48,14 @@ type CropAdjustments = {
 
 type CropShape = 'rectangle' | 'circle';
 
+type SceneImageProvider = 'openai-image-2' | 'nano-banana-2-lite';
+
+const SCENE_IMAGE_PROVIDER_STORAGE_KEY = 'scene-image-provider';
+const SCENE_IMAGE_PROVIDER_LABELS: Record<SceneImageProvider, string> = {
+  'openai-image-2': 'OpenAI Image 2',
+  'nano-banana-2-lite': 'Nano Banana 2 Lite',
+};
+
 // Helper function to convert hex color to RGB
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -554,8 +562,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
   const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
   const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
+  const [sceneImageProvider, setSceneImageProvider] =
+    useState<SceneImageProvider>('nano-banana-2-lite');
   const [isUpscalingSceneImage, setIsUpscalingSceneImage] = useState(false);
-  const [sceneUpscaleScale, setSceneUpscaleScale] = useState<2 | 3 | 4>(4);
+  const [sceneUpscaleScale, setSceneUpscaleScale] = useState<2 | 3 | 4>(3);
   const [sceneUpscaleStatus, setSceneUpscaleStatus] = useState<string | null>(
     null,
   );
@@ -573,6 +583,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     useState(false);
   const [applyUpscaledSceneImageStatus, setApplyUpscaledSceneImageStatus] =
     useState<string | null>(null);
+
+  useEffect(() => {
+    const savedProvider = localStorage.getItem(
+      SCENE_IMAGE_PROVIDER_STORAGE_KEY,
+    );
+    if (
+      savedProvider === 'openai-image-2' ||
+      savedProvider === 'nano-banana-2-lite'
+    ) {
+      setSceneImageProvider(savedProvider);
+    }
+  }, []);
   const [isDetectingSceneImageText, setIsDetectingSceneImageText] =
     useState(false);
   const [sceneHasTextStatus, setSceneHasTextStatus] = useState<string | null>(
@@ -3020,7 +3042,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ sceneId }),
+        body: JSON.stringify({ sceneId, provider: sceneImageProvider }),
       });
 
       if (!genRes.ok) {
@@ -3054,7 +3076,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     } finally {
       setIsGeneratingSceneImage(false);
     }
-  }, [sceneId, loadOverlayFromRemoteUrl, mergeLocalSceneSnapshot]);
+  }, [
+    sceneId,
+    sceneImageProvider,
+    loadOverlayFromRemoteUrl,
+    mergeLocalSceneSnapshot,
+  ]);
 
   const handleUpscaleSceneImage = useCallback(async () => {
     if (!sceneId) return;
@@ -4402,6 +4429,26 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   'Prompt'
                 )}
               </button>
+              <select
+                value={sceneImageProvider}
+                onChange={(event) => {
+                  const provider = event.target.value as SceneImageProvider;
+                  setSceneImageProvider(provider);
+                  localStorage.setItem(
+                    SCENE_IMAGE_PROVIDER_STORAGE_KEY,
+                    provider,
+                  );
+                }}
+                disabled={
+                  isApplying || isGeneratingSceneImage || isUpscalingSceneImage
+                }
+                className='px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Choose the provider used to generate the scene image'
+                aria-label='Image provider'
+              >
+                <option value='openai-image-2'>OpenAI Image 2</option>
+                <option value='nano-banana-2-lite'>Nano Banana 2 Lite</option>
+              </select>
               <button
                 type='button'
                 onClick={handleGenerateSceneImage}
@@ -4409,7 +4456,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   isApplying || isGeneratingSceneImage || isUpscalingSceneImage
                 }
                 className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
-                title='Generate image with OpenAI Image 2 and save to Baserow (Image for Scene)'
+                title={`Generate image with ${SCENE_IMAGE_PROVIDER_LABELS[sceneImageProvider]} and save to Baserow (Image for Scene)`}
               >
                 {isGeneratingSceneImage ? (
                   <span className='inline-flex items-center gap-2'>

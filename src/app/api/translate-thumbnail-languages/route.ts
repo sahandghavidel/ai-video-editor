@@ -16,8 +16,8 @@ import {
 import { getLanguageDisplayName } from '@/utils/languageNames';
 
 const BATCH_SIZE = 10;
-const BATCH_TIMEOUT_MS = 180000;
-const MAX_ATTEMPTS = 2;
+const BATCH_TIMEOUT_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 3;
 
 type LanguageTask = {
   languageCode: string;

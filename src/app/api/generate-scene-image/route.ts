@@ -1,4 +1,4 @@
-// GPT Image 2 scene generation: store the provider-returned URL directly.
+// Scene image generation: store the provider-returned URL directly.
 // We intentionally avoid re-uploading the generated image to MinIO.
 
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
@@ -11,7 +11,21 @@ type BaserowRow = {
 const SCENES_TABLE_ID = 714;
 const IMAGE_FIELD_KEY = 'field_7094'; // Image for Scene (7094)
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
-const KIE_MODEL = 'gpt-image-2-text-to-image';
+type SceneImageProvider = 'openai-image-2' | 'nano-banana-2-lite';
+
+const SCENE_IMAGE_PROVIDERS: Record<
+  SceneImageProvider,
+  { label: string; model: string }
+> = {
+  'openai-image-2': {
+    label: 'OpenAI Image 2',
+    model: 'gpt-image-2-text-to-image',
+  },
+  'nano-banana-2-lite': {
+    label: 'Nano Banana 2 Lite',
+    model: 'nano-banana-2-lite',
+  },
+};
 const CONTEXT_SCENES_BEFORE = 50;
 const CONTEXT_SCENES_AFTER = 50;
 const RETRY_CONTEXT_SCENES_BEFORE = Math.max(
@@ -23,7 +37,7 @@ const RETRY_CONTEXT_SCENES_AFTER = Math.max(
   Math.floor(CONTEXT_SCENES_AFTER / 2),
 );
 const KIE_POLL_INTERVAL_MS = 3000;
-const KIE_MAX_WAIT_MS = 300000;
+const KIE_MAX_WAIT_MS = 15 * 60 * 1000;
 
 async function baserowGetJson<T>(
   pathName: string,
@@ -252,8 +266,23 @@ type KieRecordInfoResponse = {
   };
 };
 
-async function createGptImageTask(prompt: string): Promise<string> {
+function isSceneImageProvider(value: unknown): value is SceneImageProvider {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(SCENE_IMAGE_PROVIDERS, value)
+  );
+}
+
+async function createImageTask(
+  prompt: string,
+  provider: SceneImageProvider,
+): Promise<string> {
   const apiKey = getKieApiKey();
+  const providerConfig = SCENE_IMAGE_PROVIDERS[provider];
+  const input =
+    provider === 'openai-image-2'
+      ? { prompt, aspect_ratio: '16:9', resolution: '1K' }
+      : { prompt, aspect_ratio: '16:9' };
 
   const response = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
     method: 'POST',
@@ -262,12 +291,8 @@ async function createGptImageTask(prompt: string): Promise<string> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: KIE_MODEL,
-      input: {
-        prompt,
-        aspect_ratio: '16:9',
-        resolution: '1K',
-      },
+      model: providerConfig.model,
+      input,
     }),
   });
 
@@ -289,7 +314,7 @@ async function createGptImageTask(prompt: string): Promise<string> {
   return taskId;
 }
 
-type GptImagePollResult = {
+type ImagePollResult = {
   imageUrl: string | null;
   state: string | null;
   failMsg: string | null;
@@ -380,7 +405,10 @@ function extractResultUrl(resultJson: unknown): string | null {
   return null;
 }
 
-async function fetchGptImageResult(taskId: string): Promise<GptImagePollResult> {
+async function fetchImageResult(
+  taskId: string,
+  providerLabel: string,
+): Promise<ImagePollResult> {
   const apiKey = getKieApiKey();
 
   const response = await fetch(
@@ -425,7 +453,7 @@ async function fetchGptImageResult(taskId: string): Promise<GptImagePollResult> 
         ? resultJson.slice(0, 200)
         : JSON.stringify(resultJson).slice(0, 200);
     console.warn(
-      `GPT Image 2 success with no URL yet (taskId=${taskId}). resultJson snippet: ${snippet}`,
+      `${providerLabel} success with no URL yet (taskId=${taskId}). resultJson snippet: ${snippet}`,
     );
   }
 
@@ -443,6 +471,7 @@ export async function POST(req: Request) {
 
     const body = (await req.json().catch(() => null)) as {
       sceneId?: unknown;
+      provider?: unknown;
     } | null;
 
     const sceneId =
@@ -451,6 +480,18 @@ export async function POST(req: Request) {
     if (!Number.isFinite(sceneId) || sceneId <= 0) {
       return Response.json({ error: 'Scene ID is required' }, { status: 400 });
     }
+
+    const provider = body?.provider ?? 'nano-banana-2-lite';
+    if (!isSceneImageProvider(provider)) {
+      return Response.json(
+        {
+          error:
+            'Invalid image provider. Expected openai-image-2 or nano-banana-2-lite.',
+        },
+        { status: 400 },
+      );
+    }
+    const providerConfig = SCENE_IMAGE_PROVIDERS[provider];
 
     // Fetch current scene.
     const currentScene = await baserowGetJson<BaserowRow>(
@@ -550,10 +591,10 @@ export async function POST(req: Request) {
     let taskId = '';
     try {
       console.log(
-        'generate-scene-image: sending prompt to GPT Image 2 (attempt 1, full context)',
+        `generate-scene-image: sending prompt to ${providerConfig.label} (attempt 1, full context)`,
       );
       console.log(fullPrompt);
-      taskId = await createGptImageTask(fullPrompt);
+      taskId = await createImageTask(fullPrompt, provider);
     } catch (error) {
       if (!isPromptTooLongError(error)) {
         throw error;
@@ -563,23 +604,23 @@ export async function POST(req: Request) {
         `generate-scene-image: first createTask failed due to prompt length. Retrying once with trimmed context (${RETRY_CONTEXT_SCENES_BEFORE} before / ${RETRY_CONTEXT_SCENES_AFTER} after).`,
       );
       console.log(
-        'generate-scene-image: sending prompt to GPT Image 2 (attempt 2, trimmed context)',
+        `generate-scene-image: sending prompt to ${providerConfig.label} (attempt 2, trimmed context)`,
       );
       console.log(trimmedPrompt);
 
-      taskId = await createGptImageTask(trimmedPrompt);
+      taskId = await createImageTask(trimmedPrompt, provider);
     }
 
     let imageUrl = '';
     let lastState: string | null = null;
     const pollStart = Date.now();
     while (Date.now() - pollStart < KIE_MAX_WAIT_MS) {
-      const pollResult = await fetchGptImageResult(taskId);
+      const pollResult = await fetchImageResult(taskId, providerConfig.label);
       lastState = pollResult.state;
 
       if (pollResult.state === 'fail') {
         throw new Error(
-          `GPT Image 2 task failed: ${pollResult.failMsg || 'Unknown failure'}`,
+          `${providerConfig.label} task failed: ${pollResult.failMsg || 'Unknown failure'}`,
         );
       }
 
@@ -590,7 +631,7 @@ export async function POST(req: Request) {
 
       if (pollResult.state === 'success') {
         console.warn(
-          `GPT Image 2 reported success but no URL yet (taskId=${taskId}).`,
+          `${providerConfig.label} reported success but no URL yet (taskId=${taskId}).`,
         );
       }
 
@@ -599,7 +640,7 @@ export async function POST(req: Request) {
 
     if (!imageUrl) {
       throw new Error(
-        `GPT Image 2 task timed out without a result (taskId=${taskId}, lastState=${
+        `${providerConfig.label} task timed out without a result (taskId=${taskId}, lastState=${
           lastState ?? 'unknown'
         })`,
       );
@@ -611,7 +652,7 @@ export async function POST(req: Request) {
       // If the provider ever returns a data URL, we refuse rather than silently
       // re-uploading, since that violates the desired behavior.
       throw new Error(
-        'GPT Image 2 returned a non-http imageUrl. Please configure it to return a hosted URL.',
+        `${providerConfig.label} returned a non-http imageUrl. Please configure it to return a hosted URL.`,
       );
     }
 
@@ -622,7 +663,11 @@ export async function POST(req: Request) {
       },
     );
 
-    return Response.json({ imageUrl });
+    return Response.json({
+      imageUrl,
+      provider,
+      model: providerConfig.model,
+    });
   } catch (error) {
     console.error('Error generating scene image:', error);
     return Response.json(

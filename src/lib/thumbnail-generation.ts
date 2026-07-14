@@ -26,7 +26,7 @@ const KIE_API_BASE = 'https://api.kie.ai/api/v1';
 const KIE_MODEL = 'gpt-image-2-text-to-image';
 const KIE_IMAGE_TO_IMAGE_MODEL = 'gpt-image-2-image-to-image';
 export const THUMBNAIL_POLL_INTERVAL_MS = 3000;
-export const THUMBNAIL_MAX_WAIT_MS = 300000;
+export const THUMBNAIL_MAX_WAIT_MS = 15 * 60 * 1000;
 
 type KieCreateTaskResponse = {
   code?: number;
