@@ -428,7 +428,7 @@ export default function PipelineConfig({
     },
     {
       key: 'downloadAssetsZipAll' as const,
-      label: 'Export All',
+      label: 'Export All + SRTs',
       color: 'text-blue-500',
     },
   ];

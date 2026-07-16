@@ -4,6 +4,12 @@ An AI-assisted production workspace for turning source videos or scripts into ed
 
 Ultimate Video Editor combines a Next.js dashboard with Baserow, MinIO, FFmpeg, local or hosted AI models, speech services, and image/video generation providers. It is designed for scene-based production: ingest a source, generate or refine its script, build scene media, synchronize narration, run quality-control passes, assemble the final video, and export the accompanying YouTube assets.
 
+## Application preview
+
+![Ultimate Video Editor pipeline configuration](./assets/screenshots/pipeline-configuration.png)
+
+_The configurable production pipeline supports reusable templates, multi-step automation, and language-specific dubbing._
+
 > [!NOTE]
 > This is a self-hosted production application, not a hosted SaaS product. Several workflows depend on separately configured services, provider credentials, Baserow tables, and local filesystem paths. Review the configuration section before running it outside the original development environment.
 

@@ -12619,19 +12619,19 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Thumbnails (disabled)');
       }
 
-      // Export assets tail step (Processing videos only)
+      // Export assets + available translated SRTs tail step (Processing videos only)
       if (pipelineConfig.downloadAssetsZipAll) {
         stepNumber++;
         setPipelineStep(
-          `Step ${stepNumber}: Exporting asset folders for Processing videos...`,
+          `Step ${stepNumber}: Exporting asset folders and translated SRTs for Processing videos...`,
         );
         console.log(
-          `Step ${stepNumber}: Exporting asset folders for Processing videos`,
+          `Step ${stepNumber}: Exporting asset folders and translated SRTs for Processing videos`,
         );
         try {
           await handleDownloadAssetsZipAll(false, true);
           console.log(
-            `✓ Step ${stepNumber} Complete: Asset folder export finished`,
+            `✓ Step ${stepNumber} Complete: Asset folders and translated SRTs export finished`,
           );
 
           console.log('Refreshing data after asset folder export...');
@@ -15234,8 +15234,8 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         downloadingAssetsZipAll
-                          ? 'Exporting asset folders for Processing videos...'
-                          : 'Export assets into local video ID folders for all videos with Processing status'
+                          ? 'Exporting asset folders and translated SRTs for Processing videos...'
+                          : 'Export assets, including English and translated SRT files, into local video ID folders for all videos with Processing status'
                       }
                     >
                       <Download
