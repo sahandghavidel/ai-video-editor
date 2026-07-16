@@ -629,11 +629,17 @@ export default function OriginalVideosList({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [mergedUploadFiles, setMergedUploadFiles] = useState<File[]>([]);
+  const [mergedUploadTitles, setMergedUploadTitles] = useState<string[]>([]);
   const [isMergedUploadModalOpen, setIsMergedUploadModalOpen] = useState(false);
   const [uploadingMergedFiles, setUploadingMergedFiles] = useState(false);
   const [mergedUploadStatus, setMergedUploadStatus] = useState('');
   const [renderMergedUploadNormally, setRenderMergedUploadNormally] =
     useState(false);
+  const [addMergedUploadTransitions, setAddMergedUploadTransitions] =
+    useState(false);
+  const [includeMergedTransitionSound, setIncludeMergedTransitionSound] =
+    useState(true);
+  const [showMergedUploadTitles, setShowMergedUploadTitles] = useState(true);
 
   const [isScriptUploadModalOpen, setIsScriptUploadModalOpen] = useState(false);
   const [scriptUploadTitle, setScriptUploadTitle] = useState('');
@@ -1837,8 +1843,12 @@ export default function OriginalVideosList({
     if (uploadingMergedFiles) return;
     setIsMergedUploadModalOpen(false);
     setMergedUploadFiles([]);
+    setMergedUploadTitles([]);
     setMergedUploadStatus('');
     setRenderMergedUploadNormally(false);
+    setAddMergedUploadTransitions(false);
+    setIncludeMergedTransitionSound(true);
+    setShowMergedUploadTitles(true);
     if (mergedFileInputRef.current) {
       mergedFileInputRef.current.value = '';
     }
@@ -1873,8 +1883,14 @@ export default function OriginalVideosList({
 
     setError(null);
     setMergedUploadFiles(files);
+    setMergedUploadTitles(
+      files.map((file) => file.name.replace(/\.[^/.]+$/, '')),
+    );
     setMergedUploadStatus('');
     setRenderMergedUploadNormally(false);
+    setAddMergedUploadTransitions(false);
+    setIncludeMergedTransitionSound(true);
+    setShowMergedUploadTitles(true);
     setIsMergedUploadModalOpen(true);
   };
 
@@ -1892,11 +1908,26 @@ export default function OriginalVideosList({
       ];
       return nextFiles;
     });
+    setMergedUploadTitles((currentTitles) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= currentTitles.length) {
+        return currentTitles;
+      }
+      const nextTitles = [...currentTitles];
+      [nextTitles[index], nextTitles[targetIndex]] = [
+        nextTitles[targetIndex],
+        nextTitles[index],
+      ];
+      return nextTitles;
+    });
   };
 
   const removeMergedUploadFile = (index: number) => {
     setMergedUploadFiles((currentFiles) =>
       currentFiles.filter((_, fileIndex) => fileIndex !== index),
+    );
+    setMergedUploadTitles((currentTitles) =>
+      currentTitles.filter((_, titleIndex) => titleIndex !== index),
     );
   };
 
@@ -1925,10 +1956,29 @@ export default function OriginalVideosList({
         'renderNormally',
         renderMergedUploadNormally ? 'true' : 'false',
       );
+      formData.append(
+        'addTransitions',
+        renderMergedUploadNormally && addMergedUploadTransitions
+          ? 'true'
+          : 'false',
+      );
+      formData.append(
+        'includeTransitionSound',
+        includeMergedTransitionSound ? 'true' : 'false',
+      );
+      formData.append(
+        'showTransitionTitles',
+        showMergedUploadTitles ? 'true' : 'false',
+      );
+      formData.append('transitionTitles', JSON.stringify(mergedUploadTitles));
 
       setIsMergedUploadModalOpen(false);
       setMergedUploadFiles([]);
+      setMergedUploadTitles([]);
       setRenderMergedUploadNormally(false);
+      setAddMergedUploadTransitions(false);
+      setIncludeMergedTransitionSound(true);
+      setShowMergedUploadTitles(true);
       if (mergedFileInputRef.current) {
         mergedFileInputRef.current.value = '';
       }
@@ -13282,13 +13332,60 @@ export default function OriginalVideosList({
                                   <div className='w-7 text-xs font-semibold text-gray-500'>
                                     {index + 1}
                                   </div>
-                                  <div className='min-w-0 flex-1'>
+                                  <div className='min-w-0 flex-1 space-y-1.5'>
                                     <div className='truncate text-sm font-medium text-gray-900'>
                                       {file.name}
                                     </div>
                                     <div className='text-xs text-gray-500'>
                                       {formatUploadFileSize(file.size)}
                                     </div>
+                                    {renderMergedUploadNormally &&
+                                      addMergedUploadTransitions &&
+                                      showMergedUploadTitles && (
+                                        <div>
+                                          <label className='mb-1 block text-[11px] font-medium text-gray-600'>
+                                            {index === 0
+                                              ? 'Title (first video has no intro title)'
+                                              : 'Title shown after transition'}
+                                          </label>
+                                          <div className='flex gap-1.5'>
+                                            <input
+                                              type='text'
+                                              value={mergedUploadTitles[index] || ''}
+                                              onChange={(event) =>
+                                                setMergedUploadTitles((current) =>
+                                                  current.map((title, titleIndex) =>
+                                                    titleIndex === index
+                                                      ? event.target.value
+                                                      : title,
+                                                  ),
+                                                )
+                                              }
+                                              maxLength={80}
+                                              disabled={uploadingMergedFiles || index === 0}
+                                              className='min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-800 focus:border-[#FFD21C] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400'
+                                            />
+                                            {index > 0 && (
+                                              <button
+                                                type='button'
+                                                onClick={() =>
+                                                  setMergedUploadTitles((current) =>
+                                                    current.map((title, titleIndex) =>
+                                                      titleIndex === index
+                                                        ? file.name.replace(/\.[^/.]+$/, '')
+                                                        : title,
+                                                    ),
+                                                  )
+                                                }
+                                                className='rounded border border-gray-300 px-2 text-[11px] text-gray-600 hover:bg-gray-50'
+                                                title='Reset to filename'
+                                              >
+                                                Reset
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
                                   </div>
                                   <div className='flex items-center gap-1'>
                                     <button
@@ -13363,6 +13460,77 @@ export default function OriginalVideosList({
                                 </span>
                               </span>
                             </label>
+
+                            {renderMergedUploadNormally && (
+                              <div className='ml-7 space-y-2 rounded-md border border-[#FFD21C]/40 bg-[#071B3D]/[0.04] p-3 text-sm text-gray-800'>
+                                <label className='flex items-start gap-3'>
+                                  <input
+                                    type='checkbox'
+                                    checked={addMergedUploadTransitions}
+                                    onChange={(event) =>
+                                      setAddMergedUploadTransitions(
+                                        event.target.checked,
+                                      )
+                                    }
+                                    disabled={uploadingMergedFiles}
+                                    className='mt-0.5 h-4 w-4 rounded border-gray-300 text-[#FFD21C]'
+                                  />
+                                  <span className='min-w-0'>
+                                    <span className='block font-medium text-gray-900'>
+                                      Add JavaScript King transitions
+                                    </span>
+                                    <span className='block text-xs text-gray-500'>
+                                      Add a smooth 0.95-second navy-led wipe with electric-blue, gold, and cyan accents matching the channel thumbnail.
+                                    </span>
+                                  </span>
+                                </label>
+
+                                {addMergedUploadTransitions && (
+                                  <div className='ml-7 space-y-2'>
+                                  <label className='flex items-start gap-3'>
+                                    <input
+                                      type='checkbox'
+                                      checked={includeMergedTransitionSound}
+                                      onChange={(event) =>
+                                        setIncludeMergedTransitionSound(
+                                          event.target.checked,
+                                        )
+                                      }
+                                      disabled={uploadingMergedFiles}
+                                      className='mt-0.5 h-4 w-4 rounded border-gray-300 text-[#FFD21C]'
+                                    />
+                                    <span className='min-w-0'>
+                                      <span className='block font-medium text-gray-900'>
+                                        Transition sound effect
+                                      </span>
+                                      <span className='block text-xs text-gray-500'>
+                                        Mix in a smooth, subtle futuristic whoosh at each transition.
+                                      </span>
+                                    </span>
+                                  </label>
+                                  <label className='flex items-start gap-3'>
+                                    <input
+                                      type='checkbox'
+                                      checked={showMergedUploadTitles}
+                                      onChange={(event) =>
+                                        setShowMergedUploadTitles(event.target.checked)
+                                      }
+                                      disabled={uploadingMergedFiles}
+                                      className='mt-0.5 h-4 w-4 rounded border-gray-300 text-[#FFD21C]'
+                                    />
+                                    <span className='min-w-0'>
+                                      <span className='block font-medium text-gray-900'>
+                                        Show incoming video titles
+                                      </span>
+                                      <span className='block text-xs text-gray-500'>
+                                        Use each filename by default and edit it directly in the file list above.
+                                      </span>
+                                    </span>
+                                  </label>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className='px-4 py-3 border-t border-gray-200 flex justify-end gap-2'>

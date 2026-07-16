@@ -13,6 +13,7 @@ import {
 } from '@/lib/baserow-actions';
 import {
   concatenateVideosFast,
+  concatenateVideosWithBrandedTransitions,
   concatenateVideosWithFFmpeg,
 } from '@/utils/ffmpeg-merge';
 import { uploadToMinio } from '@/utils/ffmpeg-direct';
@@ -28,6 +29,10 @@ type ParsedUpload = {
   files: Array<{ name: string; contentType: string; size: number }>;
   titleBase: string | null;
   renderNormally: boolean;
+  addTransitions: boolean;
+  includeTransitionSound: boolean;
+  showTransitionTitles: boolean;
+  transitionTitles: string[];
 };
 
 function jsonFailure(error: string) {
@@ -44,6 +49,17 @@ function sanitizeName(value: string): string {
     .replace(/[^a-zA-Z0-9._ -]/g, '')
     .replace(/\s+/g, ' ')
     .slice(0, 120);
+}
+
+function sanitizeTransitionTitle(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  return (
+    value
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80) || fallback
+  );
 }
 
 function sanitizePathSegment(value: string): string {
@@ -107,7 +123,14 @@ export async function POST(request: NextRequest) {
       contentType,
     );
     const { files, tempPaths, titleBase: parsedTitleBase } = parsedUpload;
-    const { renderNormally } = parsedUpload;
+    const {
+      renderNormally,
+      addTransitions,
+      includeTransitionSound,
+      showTransitionTitles,
+      transitionTitles,
+    } =
+      parsedUpload;
 
     if (files.length < 2) {
       return jsonFailure('Select at least two video files to merge');
@@ -124,11 +147,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (renderNormally) {
-      mergedLocalPath = await concatenateVideosWithFFmpeg({
-        videoUrls: tempPaths,
-        useHardwareAcceleration: false,
-        videoBitrate: '6000k',
-      });
+      mergedLocalPath = addTransitions
+        ? await concatenateVideosWithBrandedTransitions({
+            videoUrls: tempPaths,
+            duration: 0.95,
+            includeSoundEffect: includeTransitionSound,
+            titles: showTransitionTitles
+              ? files.map((file, index) =>
+                  sanitizeTransitionTitle(
+                    transitionTitles[index],
+                    file.name.replace(/\.[^/.]+$/, ''),
+                  ),
+                )
+              : [],
+          })
+        : await concatenateVideosWithFFmpeg({
+            videoUrls: tempPaths,
+            useHardwareAcceleration: false,
+            videoBitrate: '6000k',
+          });
     } else {
       try {
         mergedLocalPath = await concatenateVideosFast(tempPaths);
@@ -213,6 +250,10 @@ function parseMultipartUpload(
     const files: ParsedUpload['files'] = [];
     let titleBase: string | null = null;
     let renderNormally = false;
+    let addTransitions = false;
+    let includeTransitionSound = true;
+    let showTransitionTitles = true;
+    let transitionTitlesRaw = '[]';
     let fileIndex = 0;
     let settled = false;
     let totalSize = 0;
@@ -240,6 +281,14 @@ function parseMultipartUpload(
         titleBase = value;
       } else if (name === 'renderNormally') {
         renderNormally = value === 'true';
+      } else if (name === 'addTransitions') {
+        addTransitions = value === 'true';
+      } else if (name === 'includeTransitionSound') {
+        includeTransitionSound = value === 'true';
+      } else if (name === 'showTransitionTitles') {
+        showTransitionTitles = value === 'true';
+      } else if (name === 'transitionTitles') {
+        transitionTitlesRaw = value;
       }
     });
 
@@ -323,11 +372,22 @@ function parseMultipartUpload(
         await Promise.all(pendingWrites);
         if (settled) return;
         settled = true;
+        let transitionTitles: string[] = [];
+        try {
+          const parsedTitles = JSON.parse(transitionTitlesRaw);
+          if (Array.isArray(parsedTitles)) transitionTitles = parsedTitles.slice(0, 100);
+        } catch {
+          transitionTitles = [];
+        }
         resolve({
           tempPaths,
           files: files.filter(Boolean),
           titleBase,
           renderNormally,
+          addTransitions: renderNormally && addTransitions,
+          includeTransitionSound,
+          showTransitionTitles,
+          transitionTitles,
         });
       } catch (error) {
         fail(error instanceof Error ? error : new Error('Failed to save files'));

@@ -1,10 +1,11 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { access, unlink, writeFile } from 'fs/promises';
 import { uploadToMinio } from './ffmpeg-direct';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const DEFAULT_MERGE_FFMPEG_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
 const DEFAULT_FAST_MERGE_FFMPEG_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const DEFAULT_MERGE_FFMPEG_MAX_BUFFER = 100 * 1024 * 1024; // 100MB stderr/stdout
@@ -40,6 +41,302 @@ export interface ConcatenateOptions {
   outputPath?: string;
   useHardwareAcceleration?: boolean;
   videoBitrate?: string;
+}
+
+type ProbedVideo = {
+  duration: number;
+  width: number;
+  height: number;
+  hasAudio: boolean;
+};
+
+export interface BrandedTransitionOptions {
+  videoUrls: string[];
+  outputPath?: string;
+  duration?: number;
+  includeSoundEffect?: boolean;
+  titles?: string[];
+}
+
+async function probeVideoForTransition(videoUrl: string): Promise<ProbedVideo> {
+  const { stdout } = await execFileAsync(
+    'ffprobe',
+    [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration:stream=codec_type,width,height',
+      '-of',
+      'json',
+      videoUrl,
+    ],
+    {
+      timeout: getMergeFfmpegTimeoutMs(),
+      maxBuffer: getMergeFfmpegMaxBuffer(),
+    },
+  );
+  const result = JSON.parse(stdout) as {
+    format?: { duration?: string };
+    streams?: Array<{
+      codec_type?: string;
+      width?: number;
+      height?: number;
+    }>;
+  };
+  const videoStream = result.streams?.find(
+    (stream) => stream.codec_type === 'video',
+  );
+  const duration = Number(result.format?.duration);
+
+  if (
+    !videoStream?.width ||
+    !videoStream.height ||
+    !Number.isFinite(duration) ||
+    duration <= 0
+  ) {
+    throw new Error(`Unable to read video metadata for ${path.basename(videoUrl)}`);
+  }
+
+  return {
+    duration,
+    width: videoStream.width,
+    height: videoStream.height,
+    hasAudio: Boolean(
+      result.streams?.some((stream) => stream.codec_type === 'audio'),
+    ),
+  };
+}
+
+/**
+ * Re-encode and merge videos with the JavaScript King diagonal brand wipe.
+ * The wipe uses JavaScript King navy, gold, and cool-white bands and optionally mixes a
+ * quiet, generated whoosh at every join, so no external media asset is needed.
+ */
+export async function concatenateVideosWithBrandedTransitions(
+  options: BrandedTransitionOptions,
+): Promise<string> {
+  const {
+    videoUrls,
+    outputPath,
+    duration = 0.95,
+    includeSoundEffect = true,
+    titles = [],
+  } = options;
+
+  if (videoUrls.length < 2) {
+    throw new Error('At least two videos are required for transitions');
+  }
+
+  const probes = await Promise.all(videoUrls.map(probeVideoForTransition));
+  const shortestDuration = Math.min(...probes.map((probe) => probe.duration));
+  const transitionDuration = Math.min(duration, shortestDuration / 2);
+  if (transitionDuration < 0.1) {
+    throw new Error('The selected videos are too short for a transition');
+  }
+
+  const targetWidth = probes[0].width - (probes[0].width % 2);
+  const targetHeight = probes[0].height - (probes[0].height % 2);
+  const outputFileName =
+    outputPath ||
+    `merged_transition_${Date.now()}_${Math.random().toString(36).slice(2, 11)}.mp4`;
+  const fullOutputPath = path.resolve('/tmp', outputFileName);
+  const filters: string[] = [];
+
+  probes.forEach((probe, index) => {
+    filters.push(
+      `[${index}:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,` +
+        `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black,` +
+        'fps=30,format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS' +
+        `[v${index}]`,
+    );
+
+    if (probe.hasAudio) {
+      filters.push(
+        `[${index}:a]aresample=48000:async=1:first_pts=0,` +
+          `aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
+          `apad,atrim=duration=${probe.duration.toFixed(6)},asetpts=PTS-STARTPTS[a${index}]`,
+      );
+    } else {
+      filters.push(
+        `anullsrc=r=48000:cl=stereo,atrim=duration=${probe.duration.toFixed(6)},` +
+          `asetpts=PTS-STARTPTS[a${index}]`,
+      );
+    }
+  });
+
+  // q is the pixel's diagonal position. f sweeps from off-screen left to
+  // off-screen right, carrying restrained JavaScript King color bands with it.
+  const q = '(X/W+0.35*Y/H)/1.35';
+  // FFmpeg's xfade P value runs from 1 to 0, so invert it to make the wipe
+  // travel from the outgoing clip (A) into the incoming clip (B).
+  const progress = '(1-P)';
+  const easedProgress = `(${progress}*${progress}*(3-2*${progress}))`;
+  const f = `(${easedProgress}*1.56-0.56)`;
+  const navy = 'if(eq(PLANE,0),37,if(eq(PLANE,1),146,117))';
+  const electricBlue = 'if(eq(PLANE,0),117,if(eq(PLANE,1),196,68))';
+  const gold = 'if(eq(PLANE,0),190,if(eq(PLANE,1),42,161))';
+  const cyan = 'if(eq(PLANE,0),155,if(eq(PLANE,1),174,77))';
+  const transitionExpression =
+    `if(lt(${q},${f}),B,` +
+    `if(lt(${q},${f}+0.34),${navy},` +
+    `if(lt(${q},${f}+0.46),${electricBlue},` +
+    `if(lt(${q},${f}+0.54),${gold},` +
+    `if(lt(${q},${f}+0.56),${cyan},A)))))`;
+
+  let videoLabel = 'v0';
+  let audioLabel = 'a0';
+  const transitionStarts: number[] = [];
+  let accumulatedDuration = probes[0].duration;
+
+  for (let index = 1; index < probes.length; index++) {
+    const transitionStart = accumulatedDuration - transitionDuration;
+    transitionStarts.push(transitionStart);
+    filters.push(
+      `[${videoLabel}][v${index}]xfade=transition=custom:` +
+        `duration=${transitionDuration.toFixed(3)}:` +
+        `offset=${transitionStart.toFixed(6)}:` +
+        `expr='${transitionExpression}'[vx${index}]`,
+    );
+    filters.push(
+      `[${audioLabel}][a${index}]acrossfade=d=${transitionDuration.toFixed(3)}:` +
+        'c1=tri:c2=tri' +
+        `[ax${index}]`,
+    );
+    videoLabel = `vx${index}`;
+    audioLabel = `ax${index}`;
+    accumulatedDuration += probes[index].duration - transitionDuration;
+  }
+
+  if (titles.length > 1) {
+    const titleFiles = await Promise.all(
+      titles.slice(1).map(async (title, index) => {
+        const titlePath = path.join(
+          path.dirname(videoUrls[0]),
+          `transition-title-${index + 1}.txt`,
+        );
+        const uppercaseTitle = title.toUpperCase();
+        const displayTitle =
+          uppercaseTitle.length < 20
+            ? uppercaseTitle + '\u00a0'.repeat(20 - uppercaseTitle.length)
+            : uppercaseTitle;
+        await writeFile(titlePath, displayTitle, 'utf8');
+        return titlePath.replace(/:/g, '\\:').replace(/'/g, "\\'");
+      }),
+    );
+    for (let index = 0; index < titleFiles.length; index++) {
+      // Let the incoming video settle before the thumbnail-inspired lower-third enters.
+      const start = transitionStarts[index] + transitionDuration + 0.1;
+      const nextTransition = transitionStarts[index + 1] ?? Number.POSITIVE_INFINITY;
+      const end = Math.min(start + 3.2, nextTransition - 0.15);
+      if (end - start < 0.7) continue;
+      const fontSize = Math.max(32, Math.round(targetHeight * 0.054));
+      const border = Math.max(14, Math.round(targetHeight * 0.018));
+      const accentFontSize = Math.max(30, Math.round(targetHeight * 0.05));
+      const accentBorder = Math.max(14, Math.round(targetHeight * 0.016));
+      const textOutline = Math.max(2, Math.round(targetHeight * 0.0028));
+      const accentFinalX = Math.round(targetWidth * 0.05);
+      const titleFinalX = Math.round(targetWidth * 0.075);
+      const y = Math.round(targetHeight * 0.73);
+      const exitStart = end - 0.3;
+      const makeXExpression = (finalX: number, entranceStart: number) =>
+        `if(lt(t,${(entranceStart + 0.3).toFixed(3)}),-tw+(t-${entranceStart.toFixed(3)})/0.3*(${finalX}+tw),` +
+        `if(lt(t,${exitStart.toFixed(3)}),${finalX},` +
+        `${finalX}+(t-${exitStart.toFixed(3)})/0.3*(-tw-${finalX})))`;
+      const accentXExpression = makeXExpression(accentFinalX, start);
+      const titleXExpression = makeXExpression(titleFinalX, start + 0.06);
+      filters.push(
+        `[${videoLabel}]drawtext=font='Impact':text='I':` +
+          `fontsize=${accentFontSize}:fontcolor=0xFFD21C:` +
+          `borderw=${Math.max(2, Math.round(accentBorder * 0.18))}:bordercolor=0xFFD21C:` +
+          `shadowcolor=0x50B9FF@0.55:shadowx=0:shadowy=4:` +
+          `x='${accentXExpression}':y=${y}:` +
+          `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'[accent${index}]`,
+      );
+      filters.push(
+        `[accent${index}]drawtext=font='Impact':textfile='${titleFiles[index]}':` +
+          `fontsize=${fontSize}:fontcolor=0xF4F8FF:` +
+          `box=1:boxcolor=0x071B3D@0.94:boxborderw=${border}:` +
+          `borderw=${textOutline}:bordercolor=0x168BFF@0.95:` +
+          `shadowcolor=0x50B9FF@0.5:shadowx=0:shadowy=5:` +
+          `x='${titleXExpression}':y=${y}:` +
+          `enable='between(t,${(start + 0.06).toFixed(3)},${end.toFixed(3)})'[titled${index}]`,
+      );
+      videoLabel = `titled${index}`;
+    }
+  }
+
+  if (includeSoundEffect) {
+    const whooshLabels = transitionStarts.map((start, index) => {
+      const delayMs = Math.max(0, Math.round(start * 1000));
+      const label = `whoosh${index}`;
+      filters.push(
+        `anoisesrc=d=${transitionDuration.toFixed(3)}:c=pink:r=48000:a=0.085,` +
+          'highpass=f=280,lowpass=f=4300,' +
+          `afade=t=in:st=0:d=${(transitionDuration * 0.42).toFixed(3)},` +
+          `afade=t=out:st=${(transitionDuration * 0.42).toFixed(3)}:` +
+          `d=${(transitionDuration * 0.58).toFixed(3)},` +
+          `adelay=${delayMs}|${delayMs}[${label}]`,
+      );
+      return `[${label}]`;
+    });
+    filters.push(
+      `[${audioLabel}]${whooshLabels.join('')}amix=inputs=${whooshLabels.length + 1}:` +
+        'duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]',
+    );
+    audioLabel = 'aout';
+  }
+
+  const ffmpegArgs = ['-y'];
+  videoUrls.forEach((url) => ffmpegArgs.push('-i', url));
+  ffmpegArgs.push(
+    '-filter_complex',
+    filters.join(';'),
+    '-map',
+    `[${videoLabel}]`,
+    '-map',
+    `[${audioLabel}]`,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'medium',
+    '-crf',
+    '20',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '128k',
+    '-ar',
+    '48000',
+    '-ac',
+    '2',
+    '-movflags',
+    '+faststart',
+    '-avoid_negative_ts',
+    'make_zero',
+    fullOutputPath,
+  );
+
+  try {
+    await execFileAsync('ffmpeg', ffmpegArgs, {
+      timeout: getMergeFfmpegTimeoutMs(),
+      maxBuffer: getMergeFfmpegMaxBuffer(),
+    });
+    await access(fullOutputPath);
+    return fullOutputPath;
+  } catch (error) {
+    try {
+      await unlink(fullOutputPath);
+    } catch {
+      // Ignore cleanup errors.
+    }
+    throw new Error(
+      `FFmpeg branded transition merge failed: ${
+        error instanceof Error ? error.message : 'Unknown error'
+      }`,
+    );
+  }
 }
 
 /**
