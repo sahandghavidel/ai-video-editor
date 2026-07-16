@@ -214,12 +214,7 @@ export async function concatenateVideosWithBrandedTransitions(
           path.dirname(videoUrls[0]),
           `transition-title-${index + 1}.txt`,
         );
-        const uppercaseTitle = title.toUpperCase();
-        const displayTitle =
-          uppercaseTitle.length < 20
-            ? uppercaseTitle + '\u00a0'.repeat(20 - uppercaseTitle.length)
-            : uppercaseTitle;
-        await writeFile(titlePath, displayTitle, 'utf8');
+        await writeFile(titlePath, title.toUpperCase(), 'utf8');
         return titlePath.replace(/:/g, '\\:').replace(/'/g, "\\'");
       }),
     );
@@ -233,10 +228,10 @@ export async function concatenateVideosWithBrandedTransitions(
       const border = Math.max(14, Math.round(targetHeight * 0.018));
       const accentFontSize = Math.max(30, Math.round(targetHeight * 0.05));
       const accentBorder = Math.max(14, Math.round(targetHeight * 0.016));
-      const textOutline = Math.max(2, Math.round(targetHeight * 0.0028));
+      const textOutline = Math.max(2, Math.round(targetHeight * 0.0018));
       const accentFinalX = Math.round(targetWidth * 0.05);
-      const titleFinalX = Math.round(targetWidth * 0.075);
-      const y = Math.round(targetHeight * 0.73);
+      const titleFinalX = Math.round(targetWidth * 0.066);
+      const y = Math.round(targetHeight * 0.7);
       const exitStart = end - 0.3;
       const makeXExpression = (finalX: number, entranceStart: number) =>
         `if(lt(t,${(entranceStart + 0.3).toFixed(3)}),-tw+(t-${entranceStart.toFixed(3)})/0.3*(${finalX}+tw),` +
@@ -248,7 +243,7 @@ export async function concatenateVideosWithBrandedTransitions(
         `[${videoLabel}]drawtext=font='Impact':text='I':` +
           `fontsize=${accentFontSize}:fontcolor=0xFFD21C:` +
           `borderw=${Math.max(2, Math.round(accentBorder * 0.18))}:bordercolor=0xFFD21C:` +
-          `shadowcolor=0x50B9FF@0.55:shadowx=0:shadowy=4:` +
+          `shadowcolor=0x50B9FF@0.35:shadowx=0:shadowy=3:` +
           `x='${accentXExpression}':y=${y}:` +
           `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'[accent${index}]`,
       );
@@ -256,8 +251,8 @@ export async function concatenateVideosWithBrandedTransitions(
         `[accent${index}]drawtext=font='Impact':textfile='${titleFiles[index]}':` +
           `fontsize=${fontSize}:fontcolor=0xF4F8FF:` +
           `box=1:boxcolor=0x071B3D@0.94:boxborderw=${border}:` +
-          `borderw=${textOutline}:bordercolor=0x168BFF@0.95:` +
-          `shadowcolor=0x50B9FF@0.5:shadowx=0:shadowy=5:` +
+          `borderw=${textOutline}:bordercolor=0x168BFF@0.78:` +
+          `shadowcolor=0x50B9FF@0.28:shadowx=0:shadowy=3:` +
           `x='${titleXExpression}':y=${y}:` +
           `enable='between(t,${(start + 0.06).toFixed(3)},${end.toFixed(3)})'[titled${index}]`,
       );
