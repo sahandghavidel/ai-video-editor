@@ -10,6 +10,10 @@ Ultimate Video Editor combines a Next.js dashboard with Baserow, MinIO, FFmpeg, 
 
 _The configurable production pipeline supports reusable templates, multi-step automation, and language-specific dubbing._
 
+![AI thumbnail generation and YouTube metadata workspace](./assets/screenshots/thumbnail-and-youtube-metadata.png)
+
+_Generate and compare thumbnail variants, select or export the final artwork, and manage YouTube metadata from the same workspace._
+
 > [!NOTE]
 > This is a self-hosted production application, not a hosted SaaS product. Several workflows depend on separately configured services, provider credentials, Baserow tables, and local filesystem paths. Review the configuration section before running it outside the original development environment.
 
