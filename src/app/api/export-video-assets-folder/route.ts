@@ -374,6 +374,58 @@ export async function POST(req: Request) {
       }
     }
 
+    const seenTranslatedSrtFields = new Set<string>();
+    const seenTranslatedSrtLanguages = new Set<string>();
+    for (const entry of audioReferenceEntries) {
+      if (!entry.enabled) continue;
+
+      const languageCode = String(entry.language || '').trim().toLowerCase();
+      const fieldKey = entry.baserowFields.videoSrtFieldKey;
+
+      // English uses the dedicated final-captions field exported above.
+      if (
+        !languageCode ||
+        languageCode === 'en' ||
+        !fieldKey ||
+        seenTranslatedSrtFields.has(fieldKey) ||
+        seenTranslatedSrtLanguages.has(languageCode)
+      ) {
+        continue;
+      }
+
+      seenTranslatedSrtFields.add(fieldKey);
+      seenTranslatedSrtLanguages.add(languageCode);
+
+      const languageName = sanitizeExportFileName(
+        formatLanguageNameForFile(languageCode),
+        languageCode.toUpperCase(),
+      );
+      const translatedSrtUrl = extractUrlFromField(row[fieldKey]);
+
+      if (!translatedSrtUrl) {
+        skippedAssets.push(
+          `translated_srt_${languageCode}: no SRT URL in ${fieldKey}`,
+        );
+        continue;
+      }
+
+      try {
+        const srtAsset = await fetchAsset(translatedSrtUrl);
+        const filePath = await writeBufferToVideoExportDir(
+          videoId,
+          `${languageName}.srt`,
+          srtAsset.data,
+        );
+        writtenFiles.push(filePath);
+      } catch (error) {
+        const reason =
+          error instanceof Error
+            ? error.message
+            : 'Unknown translated SRT error';
+        skippedAssets.push(`translated_srt_${languageCode}: ${reason}`);
+      }
+    }
+
     const seenDubbedAudioFields = new Set<string>();
     for (const entry of audioReferenceEntries) {
       if (!entry.enabled) continue;
