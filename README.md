@@ -1,371 +1,228 @@
-# Ultimate Video Editor - AI-Powered Video Production Pipeline
+# Ultimate Video Editor
 
-A comprehensive Next.js application for automated video content creation with integrated TTS (Text-to-Speech), video synchronization, and intelligent automation features.
+An AI-assisted production workspace for turning source videos or scripts into edited, narrated, subtitled, translated, and publish-ready video packages.
 
-## 🚀 Key Features
+Ultimate Video Editor combines a Next.js dashboard with Baserow, MinIO, FFmpeg, local or hosted AI models, speech services, and image/video generation providers. It is designed for scene-based production: ingest a source, generate or refine its script, build scene media, synchronize narration, run quality-control passes, assemble the final video, and export the accompanying YouTube assets.
 
-### Core Functionality
+> [!NOTE]
+> This is a self-hosted production application, not a hosted SaaS product. Several workflows depend on separately configured services, provider credentials, Baserow tables, and local filesystem paths. Review the configuration section before running it outside the original development environment.
 
-- **Baserow Integration**: Full CRUD operations with self-hosted Baserow database
-- **Inline Text Editing**: Click-to-edit interface with real-time database updates
-- **TTS Generation**: AI-powered text-to-speech with MinIO cloud storage integration
-- **Video Processing**: Local FFmpeg-based video processing with hardware acceleration
-- **Transcription**: High-quality NVIDIA Parakeet TDT model for speech-to-text
-- **Smart Automation**: Optional auto-generation workflows for streamlined production
-- **Media Playback**: Integrated audio/video players with modal interfaces
-- **File Management**: Centralized MinIO object storage for all media assets
+## Features
 
-### Advanced Automation Options
+### Source and project management
 
-- **Auto-Generate TTS**: Automatically create audio when text is saved
-- **Auto-Generate Videos**: Automatically synchronize videos after TTS creation
-- **Smart Workflow**: Chain TTS → Video → Production pipeline seamlessly
+- Browse video projects and their linked scenes from Baserow.
+- Upload a single source video or select, reorder, and merge multiple files before upload.
+- Edit scene text and production data directly from the dashboard.
+- Preview source, generated, synchronized, and merged media without leaving the application.
 
-## 📚 Internal Documentation
+### Script and AI workflows
 
-- [Batch Operations Guide](docs/Batch-Operations-Guide.md) - How batch actions are structured and how to add new ones (including Telegram completion notifications)
-- [FFmpeg Fonts (macOS)](docs/FFMPEG-Fonts.md) - Deterministic `drawtext` font usage and local font inventory
+- Generate scripts from titles, improve scene text, fix language issues, and create scene prompts.
+- Choose hosted models through OpenRouter or connect an OpenAI-compatible local OMLX endpoint.
+- Create YouTube titles, descriptions, keywords, timestamps, and thumbnail variants.
+- Generate editorial scene images, upscale them, turn them into video clips, and apply enhanced media back to scenes.
 
-## 🏗️ Architecture Overview
+### Speech, transcription, and dubbing
 
-### Production Pipeline
+- Generate narration with the configured TTS integrations, including Fish Audio and OmniVoice workflows.
+- Maintain reusable voice references and word-replacement rules.
+- Transcribe source or final media with Parakeet, Cohere Local, Whisper-family, WhisperX, or MLX WhisperX options.
+- Generate timed subtitles and English SRT files.
+- Produce and merge dubbed audio for one or more configured languages.
+- Detect and repair flagged TTS, intro-silence, and transcription issues.
 
-```
-Text Edit → TTS Generation → Video Synchronization → Final Production
-     ↓            ↓                    ↓                    ↓
-Baserow      MinIO Storage      Local FFmpeg        Playback Ready
-field_6890   field_6891         field_6886          Media Players
-```
+### Video and audio processing
 
-### Service Integration
+- Synchronize scene video duration to generated narration.
+- Normalize or enhance audio, optimize silence, adjust playback speed, and fit final duration.
+- Convert footage to constant frame rate, concatenate scenes, and merge final videos with FFmpeg.
+- Split long scenes, generate individual clips, and combine eligible scene pairs.
+- Add image and text overlays, highlighted subtitles, typing effects, and GIF assets.
+- Optionally upscale or interpolate scene video through the bundled REAL Video Enhancer backend.
 
-- **Baserow Database**: `host.docker.internal:714` - Data persistence
-- **TTS Service**: `host.docker.internal:8004` - Speech synthesis
-- **MinIO Storage**: `host.docker.internal:9000` - File storage
-- **Parakeet Transcription**: Local NVIDIA model for speech-to-text
-- **Next.js App**: `localhost:3000` - User interface
+### Automation and delivery
 
-## Tech Stack
+- Run operations on one scene, an entire video, or a configurable full pipeline.
+- Enable, disable, reorder, and save reusable pipeline presets.
+- Apply filters and multi-pass controls to expensive batch operations.
+- Receive completion and failure notifications through Telegram.
+- Export a per-video folder or ZIP containing the final media, script, metadata, thumbnails, subtitles, and dubbed audio.
 
-- **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
-- **Database**: Baserow (self-hosted at host.docker.internal:714)
-- **Storage**: MinIO object storage (host.docker.internal:9000)
-- **Audio Processing**: Custom TTS service (host.docker.internal:8004)
-- **Video Processing**: Local FFmpeg with hardware acceleration
-- **Transcription**: NVIDIA Parakeet TDT 0.6B v3 model
-- **Authentication**: JWT tokens for Baserow API
+## Pipeline
 
-## 🎛️ User Interface
+The full pipeline is configurable, but a typical production flow looks like this:
 
-### Interactive Scene Cards
-
-Each scene provides a complete production interface with:
-
-#### Media Control Buttons:
-
-1. **🎵 Generate TTS** (Purple) - Create AI speech from text
-2. **🔊 Play Audio** (Blue) - Preview generated TTS audio
-3. **🎬 Play Video** (Green) - View original video clip
-4. **⚡ Generate Video** (Teal) - Synchronize audio with video
-5. **🎯 Play Produced** (Orange) - Preview final synchronized video
-
-#### Automation Controls:
-
-- **Auto-Generate TTS**: Checkbox to enable automatic TTS creation on text save
-- **Auto-Generate Videos**: Checkbox to enable automatic video sync after TTS generation
-
-### Smart Workflow Features
-
-- **Click-to-Edit**: Inline text editing with auto-save to database
-- **Optimistic Updates**: Immediate UI feedback with server synchronization
-- **Error Handling**: Graceful error recovery with user notifications
-- **Loading States**: Visual feedback during processing operations
-- **Responsive Design**: Mobile-friendly interface with Tailwind CSS
-
-## 🔧 Technical Implementation
-
-### API Routes
-
-```typescript
-/api/generate-tts    # TTS generation + MinIO upload
-/api/generate-video  # Video synchronization via local FFmpeg
+```text
+Source video or title
+        |
+        v
+Script -> narration -> transcription -> scene separation
+        |
+        v
+Scene clips -> text fixes -> TTS -> synchronization -> QA
+        |
+        v
+Subtitles -> images -> scene videos -> enhancement -> final merge
+        |
+        v
+Dubbing -> YouTube metadata -> thumbnails -> asset export
 ```
 
-### Database Schema (Baserow Fields)
+Pipeline presets can retain different combinations of these steps for different channels, languages, or production styles.
 
-- `field_6890`: Scene text content
-- `field_6888`: Original video URL
-- `field_6891`: Generated TTS audio URL
-- `field_6886`: Synchronized video URL
-- `order`: Scene ordering
+## Technology
 
-### Video Synchronization Algorithm
+- Next.js 15 App Router, React 19, TypeScript, and Tailwind CSS
+- Zustand for client-side workflow and settings state
+- Baserow for project and scene records
+- MinIO for media object storage
+- FFmpeg for local audio and video processing
+- OpenRouter, OpenAI-compatible local models, KIE, Fish Audio, and OmniVoice integrations
+- Sharp and Tesseract.js for image processing and OCR-assisted workflows
+- yt-dlp for YouTube subtitle retrieval
+- REAL Video Enhancer for optional local upscaling and frame interpolation
 
-```javascript
-// Local FFmpeg processing with duration-based speed adjustment
-const speedRatio = videoDuration / audioDuration;
-const syncedVideo = await processVideoWithAudio({
-  originalVideo: videoUrl,
-  audioTrack: audioUrl,
-  speedAdjustment: speedRatio,
-  outputFormat: 'mp4',
-});
-```
+## Requirements
 
-### Component Architecture
+At minimum, development requires:
 
-```typescript
-SceneCard.tsx           # Main component with 5-button interface
-├── State Management    # React hooks for UI state
-├── Media Refs         # useRef for audio/video elements
-├── API Integration    # Fetch calls to generation endpoints
-├── Auto-generation    # Conditional workflow automation
-└── Error Handling     # Graceful failure recovery
-```
+- Node.js 20 or newer
+- npm
+- FFmpeg and FFprobe available on `PATH`
+- A reachable Baserow instance with the expected video and scene tables
+- A reachable MinIO instance and bucket
 
-## 📦 Project Structure
+Additional features require their corresponding services or credentials:
 
-```
+- OpenRouter or OpenAI API access, or an OpenAI-compatible local model server
+- KIE API access for configured image and video generation models
+- Fish Audio and/or OmniVoice for their TTS workflows
+- yt-dlp for YouTube subtitle downloads
+- Python and the REAL Video Enhancer dependencies for local enhancement
+- A Telegram bot and chat ID for notifications
+
+## Getting started
+
+1. Clone the repository and enter the project:
+
+   ```bash
+   git clone https://github.com/sahandghavidel/ai-video-editor.git
+   cd ai-video-editor
+   ```
+
+2. Install the Node.js dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Create the local environment file:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+4. Add the values required by the workflows you intend to use. The core configuration normally includes:
+
+   ```env
+   # Baserow
+   BASEROW_API_URL=http://localhost:714/api
+   BASEROW_TABLE_ID=your_scenes_table_id
+   BASEROW_SCENES_TABLE_ID=your_scenes_table_id
+   BASEROW_EMAIL=you@example.com
+   BASEROW_PASSWORD=your_password
+   # Alternatively, configure BASEROW_TOKEN and BASEROW_USE_DATABASE_TOKEN.
+
+   # MinIO
+   MINIO_BASE_URL=http://localhost:9000
+   MINIO_BUCKET=your_bucket
+   MINIO_ROOT_USER=your_access_key
+   MINIO_ROOT_PASSWORD=your_secret_key
+
+   # AI providers (configure only what you use)
+   OPENROUTER_API_KEY=your_openrouter_key
+   OPENAI_API_KEY=your_openai_key
+   KIE_API_KEY=your_kie_key
+   FISH_TTS_API_KEY=your_fish_audio_key
+
+   # Optional notifications
+   TELEGRAM_BOT_TOKEN=your_bot_token
+   TELEGRAM_CHAT_ID=your_chat_id
+   ```
+
+   The committed [.env.example](./.env.example) also documents the yt-dlp cache, cookie, rate-limit, and client-rotation settings. Feature-specific routes contain additional optional tuning variables for local transcription, TTS cleanup, FFmpeg timeouts, and video enhancement.
+
+5. Start the development environment:
+
+   ```bash
+   npm run dev
+   ```
+
+   The development script starts Next.js at [http://localhost:9540](http://localhost:9540) and restarts the local MinIO server. It currently contains macOS-specific paths and expects the `minio` executable plus `MINIO_ROOT_PASSWORD`; adjust `scripts/dev-with-minio.sh` for your machine if necessary.
+
+   To run Next.js without the helper script:
+
+   ```bash
+   npx next dev -p 9540
+   ```
+
+## Configuration notes
+
+- Baserow field mappings are part of the application code and must match your schema. Review `src/lib/baserow-actions.ts` and the Baserow API helpers before connecting a new database.
+- The local folder exporter currently writes to a developer-specific path defined in `src/lib/local-video-export.ts`. Change `LOCAL_VIDEO_EXPORT_BASE_DIR` before using folder export on another machine.
+- Browser-facing and server-side MinIO variables are separate in some workflows. Configure the `NEXT_PUBLIC_MINIO_*` values when the browser needs direct object URLs.
+- AI model choice, pipeline steps, transcription settings, and several production preferences are saved locally in the browser.
+- Never commit `.env.local`, provider keys, database credentials, or storage secrets.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start Next.js on port 9540 and restart local MinIO |
+| `npm run dev:restart` | Run the same development helper without `caffeinate` |
+| `npm run build` | Create a production Next.js build |
+| `npm run start` | Start the production server |
+| `npm run lint` | Run ESLint |
+
+## Project structure
+
+```text
 src/
-├── app/
-│   ├── page.tsx                    # Main dashboard
-│   └── api/
-│       ├── generate-tts/route.ts   # TTS + MinIO integration
-│       └── generate-video/route.ts # Local FFmpeg processing
-├── components/
-│   └── SceneCard.tsx              # Production interface
-└── lib/
-    └── baserow-actions.ts         # Database operations
+├── app/                 Next.js pages and API routes
+├── components/          Dashboard, scene editor, settings, and batch UI
+├── data/                TTS references and replacement data
+├── features/            Focused production workflows
+├── lib/                 Baserow, MinIO, AI provider, and export services
+├── server/              Server-only integrations and notifications
+├── store/               Zustand application state and pipeline presets
+└── utils/               FFmpeg, captions, uploads, and batch utilities
+
+docs/                    Operational and batch-pipeline guides
+scripts/                 Development and local processing helpers
+cohere-local/            Local Cohere transcription service notes
+omnivoice-local/         Local OmniVoice service notes
+REAL-Video-Enhancer/     Optional third-party enhancement backend
 ```
 
-## ⚙️ Configuration & Setup
+## Documentation
 
-### 1. Environment Configuration
+- [Batch Operations Guide](./docs/Batch-Operations-Guide.md)
+- [Pipeline Batch Operations Playbook](./docs/Pipeline-Batch-Operations-Playbook.md)
+- [Dubbed Audio Pipeline Procedure](./docs/Dubbed-Audio-Pipeline-Procedure.md)
+- [FFmpeg Fonts on macOS](./docs/FFMPEG-Fonts.md)
 
-Create a `.env.local` file in the root directory with your Baserow configuration:
+## Contributing
 
-**For Self-Hosted Baserow:**
+Contributions are welcome. Before opening a pull request:
 
-```env
-# Baserow API Configuration (Self-hosted)
-BASEROW_API_URL=http://host.docker.internal/api
-BASEROW_EMAIL=your_email@example.com
-BASEROW_PASSWORD=your_password
-BASEROW_TABLE_ID=your_table_id_here
-```
+1. Keep changes focused and avoid committing environment-specific secrets or generated media.
+2. Run `npm run lint` and, when relevant, `npm run build`.
+3. Document new environment variables, Baserow fields, external services, and pipeline steps.
+4. Include a concise description of the workflow tested and any local service requirements.
 
-**For Baserow Cloud:**
+## License
 
-```env
-# Baserow API Configuration (Cloud)
-BASEROW_API_URL=https://api.baserow.io/api
-BASEROW_EMAIL=your_email@example.com
-BASEROW_PASSWORD=your_password
-BASEROW_TABLE_ID=your_table_id_here
-```
+This project is licensed under the [MIT License](./LICENSE).
 
-### 2. Getting Your Baserow Credentials
-
-#### Email and Password
-
-Use your Baserow account login credentials. The application will authenticate using JWT tokens.
-
-#### Table ID
-
-1. Open your Baserow table in the browser
-2. Look at the URL: `http://your-baserow-host/database/{database_id}/table/{table_id}`
-3. Copy the `table_id` number to your `.env.local` file
-
-### 3. Install Dependencies
-
-```bash
-npm install
-```
-
-### 4. Run the Development Server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to view the application.
-
-## Project Structure
-
-```
-src/
-├── app/
-│   └── page.tsx              # Main dashboard page
-├── components/
-│   ├── DataTable.tsx         # Table component for displaying data
-│   └── AddDataForm.tsx       # Form component for adding new data
-└── lib/
-    └── baserow-actions.ts    # Server actions for Baserow API
-```
-
-## 🧠 AI & Processing Services
-
-### TTS Service Integration
-
-- **Endpoint**: `POST http://host.docker.internal:8004/generate-speech`
-- **Features**: High-quality AI speech synthesis
-- **Output**: WAV audio files uploaded to MinIO storage
-- **Storage**: Automatic MinIO bucket management
-
-### Parakeet Transcription Service
-
-- **Model**: NVIDIA Parakeet TDT 0.6B v3
-- **Features**: High-quality speech-to-text with automatic punctuation
-- **Output**: Word-level timestamps and segment organization
-- **Language**: Multilingual support (25 European languages)
-
-### Local FFmpeg Processing
-
-- **Capabilities**: Hardware-accelerated video processing
-- **Features**: Trimming, speed adjustment, concatenation, synchronization
-- **Algorithm**: Duration-ratio speed adjustment for perfect sync
-
-### MinIO Object Storage
-
-- **Bucket**: `nca-toolkit` for centralized media storage
-- **Access**: HTTP URLs for direct media playback
-- **Management**: Automatic cleanup and organization
-
-## 🔄 Workflow Automation
-
-### Manual Mode
-
-1. Edit scene text
-2. Click "Generate TTS" → Audio created and stored
-3. Click "Generate Video" → Video synchronized with audio
-4. Click "Play Produced" → Preview final result
-
-### Automated Mode
-
-1. Enable "Auto-Generate TTS" checkbox
-2. Enable "Auto-Generate Videos" checkbox
-3. Edit scene text → Entire pipeline executes automatically
-4. Final video ready for playback
-
-## 🚦 Production Features
-
-### Real-time Processing
-
-- **Optimistic UI Updates**: Immediate visual feedback
-- **Background Processing**: Non-blocking operations
-- **Progress Indicators**: Loading states for all operations
-- **Error Recovery**: Automatic rollback on failures
-
-### Media Management
-
-- **Centralized Storage**: All files in MinIO object storage
-- **URL Management**: Automatic URL generation and storage
-- **File Cleanup**: Organized bucket structure
-- **Direct Playback**: No download required for media preview
-
-## 🐳 Docker Services Required
-
-### Service Stack
-
-```yaml
-# Required services for full functionality
-services:
-  baserow: # Database and UI
-    port: 714
-  tts-service: # AI speech synthesis
-    port: 8004
-  parakeet-env: # Transcription environment
-    python: local
-  local-ffmpeg: # Video processing
-    capabilities: hardware-accelerated
-  minio: # Object storage
-    port: 9000
-```
-
-## 🎯 Achievement Summary
-
-### ✅ Completed Features
-
-- [x] **Full Baserow Integration** - CRUD operations with JWT authentication
-- [x] **TTS Generation Pipeline** - AI speech synthesis with MinIO storage
-- [x] **Video Synchronization** - Local FFmpeg processing with hardware acceleration
-- [x] **5-Button Production Interface** - Complete media workflow per scene
-- [x] **Automation Options** - Auto-TTS and Auto-Video generation
-- [x] **Responsive UI** - Card-based design with Tailwind CSS
-- [x] **Error Handling** - Graceful failure recovery throughout
-- [x] **Real-time Updates** - Optimistic UI with server sync
-- [x] **Media Playback** - Integrated audio/video players
-- [x] **File Management** - Centralized MinIO object storage
-
-### 🚀 Production Ready
-
-- TypeScript for type safety
-- Server-side API routes for security
-- Proper error boundaries and handling
-- Optimized for performance and UX
-- Scalable architecture with microservices
-
-## 📊 Performance & Scalability
-
-### Optimizations
-
-- **Server-side Processing**: All AI operations on dedicated services
-- **Optimistic Updates**: Immediate UI feedback
-- **Efficient Storage**: MinIO object storage for large media files
-- **Async Operations**: Non-blocking workflow processing
-- **Error Boundaries**: Isolated component failures
-
-### Metrics
-
-- **TTS Generation**: ~2-5 seconds per scene
-- **Video Synchronization**: ~10-30 seconds depending on video length
-- **File Storage**: Unlimited via MinIO scaling
-- **Concurrent Users**: Scalable with Next.js architecture
-
-## 🛠️ Development
-
-### Available Scripts
-
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build optimized production bundle
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint with TypeScript rules
-
-### Tech Stack Deep Dive
-
-- **Next.js 15**: App Router with Server Components
-- **React 18**: Hooks, refs, and modern patterns
-- **TypeScript 5**: Full type safety and IntelliSense
-- **Tailwind CSS 3**: Utility-first responsive design
-- **Server Actions**: Secure server-side API operations
-
-## 🤝 Contributing
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes with proper TypeScript types
-4. Test with all Docker services running
-5. Submit a pull request with detailed description
-
-### Coding Standards
-
-- TypeScript strict mode enabled
-- ESLint configuration for consistency
-- Tailwind CSS for all styling
-- Server Actions for API calls
-- Error boundaries for component isolation
-
-## 📄 License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- **Baserow**: Self-hosted database platform
-- **MinIO**: High-performance object storage
-- **NVIDIA Parakeet**: High-quality transcription model
-- **FFmpeg**: Powerful multimedia framework
-- **Next.js Team**: Amazing React framework
-- **Tailwind Labs**: Beautiful utility-first CSS
+Third-party projects and model code included in or used by this repository remain subject to their own licenses. See the license files within those directories for details.
