@@ -29,7 +29,10 @@ import { getBackgroundStyle } from 'advanced-cropper';
 import { ImageUploadRow } from './image-overlay-modal/ImageUploadRow';
 import { ImagePositionControls } from './image-overlay-modal/ImagePositionControls';
 import { TimingTintControls } from './image-overlay-modal/TimingTintControls';
-import { TranscriptionControls } from './image-overlay-modal/TranscriptionControls';
+import {
+  TranscriptionControls,
+  type MacWindowTheme,
+} from './image-overlay-modal/TranscriptionControls';
 import { TextOverlayControls } from './image-overlay-modal/TextOverlayControls';
 import { VideoEditModal } from './VideoEditModal';
 import type {
@@ -135,7 +138,11 @@ function circleCanvasFromSource(source: HTMLCanvasElement): HTMLCanvasElement {
   return out;
 }
 
-async function createMacWindowOverlay(text: string): Promise<File> {
+async function createMacWindowOverlay(
+  text: string,
+  title: string,
+  theme: MacWindowTheme,
+): Promise<File> {
   const width = 1600;
   const height = 900;
   const titleBarHeight = 128;
@@ -167,25 +174,46 @@ async function createMacWindowOverlay(text: string): Promise<File> {
   roundedRect(8, 8, width - 16, height - 16, 34);
   ctx.clip();
 
+  const palette =
+    theme === 'light'
+      ? {
+          bodyStart: '#f8fafc',
+          bodyEnd: '#e9eef5',
+          barStart: '#f1f5f9',
+          barEnd: '#dfe6ee',
+          border: 'rgba(15, 23, 42, 0.35)',
+          bodyText: '#172033',
+          titleText: '#334155',
+        }
+      : {
+          bodyStart: '#071522',
+          bodyEnd: '#0b1d2c',
+          barStart: '#172b3b',
+          barEnd: '#132536',
+          border: 'rgba(0, 0, 0, 0.7)',
+          bodyText: '#f4f7fb',
+          titleText: '#dce6ef',
+        };
+
   const bodyGradient = ctx.createLinearGradient(
     0,
     titleBarHeight,
     width,
     height,
   );
-  bodyGradient.addColorStop(0, '#071522');
-  bodyGradient.addColorStop(1, '#0b1d2c');
+  bodyGradient.addColorStop(0, palette.bodyStart);
+  bodyGradient.addColorStop(1, palette.bodyEnd);
   ctx.fillStyle = bodyGradient;
   ctx.fillRect(8, 8, width - 16, height - 16);
 
   const barGradient = ctx.createLinearGradient(0, 0, width, titleBarHeight);
-  barGradient.addColorStop(0, '#172b3b');
-  barGradient.addColorStop(1, '#132536');
+  barGradient.addColorStop(0, palette.barStart);
+  barGradient.addColorStop(1, palette.barEnd);
   ctx.fillStyle = barGradient;
   ctx.fillRect(8, 8, width - 16, titleBarHeight);
   ctx.restore();
 
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.strokeStyle = palette.border;
   ctx.lineWidth = 5;
   roundedRect(8, 8, width - 16, height - 16, 34);
   ctx.stroke();
@@ -202,13 +230,37 @@ async function createMacWindowOverlay(text: string): Promise<File> {
     ctx.fill();
   }
 
+  const trimmedTitle = title.trim();
+  if (trimmedTitle) {
+    const titleMaxWidth = width - 500;
+    ctx.font =
+      '600 38px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = palette.titleText;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    let visibleTitle = trimmedTitle;
+    if (ctx.measureText(visibleTitle).width > titleMaxWidth) {
+      const ellipsis = '…';
+      while (
+        visibleTitle.length > 1 &&
+        ctx.measureText(`${visibleTitle}${ellipsis}`).width > titleMaxWidth
+      ) {
+        visibleTitle = visibleTitle.slice(0, -1);
+      }
+      visibleTitle = `${visibleTitle.trimEnd()}${ellipsis}`;
+    }
+    ctx.fillText(visibleTitle, width / 2, 72, titleMaxWidth);
+  }
+
   const fontSize = 54;
   const lineHeight = 72;
   const left = 62;
   const top = titleBarHeight + 72;
   const maxWidth = width - left * 2;
   ctx.font = `500 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
-  ctx.fillStyle = '#f4f7fb';
+  ctx.fillStyle = palette.bodyText;
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
 
   const lines: string[] = [];
@@ -605,6 +657,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   >(null);
   const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string>('');
+  const [macWindowTitle, setMacWindowTitle] = useState('');
+  const [macWindowTheme, setMacWindowTheme] =
+    useState<MacWindowTheme>('dark');
   const [textOverlayPosition, setTextOverlayPosition] = useState({
     x: 50,
     y: 50,
@@ -5157,6 +5212,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               transcriptionWords={transcriptionWords}
               customText={customText}
               selectedWordText={selectedWordText}
+              macWindowTitle={macWindowTitle}
+              macWindowTheme={macWindowTheme}
               onWordClick={(wordData) => {
                 setStartTime(wordData.start);
                 const raw = (wordData.word || '').trim();
@@ -5190,6 +5247,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }
               }}
               onCustomTextChange={setCustomText}
+              onMacWindowTitleChange={setMacWindowTitle}
+              onMacWindowThemeChange={setMacWindowTheme}
               onCustomTextEnter={() => {
                 if (customText.trim()) {
                   setSelectedWordText(customText.trim());
@@ -5211,7 +5270,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 if (!text) return;
 
                 try {
-                  const file = await createMacWindowOverlay(text);
+                  const file = await createMacWindowOverlay(
+                    text,
+                    macWindowTitle,
+                    macWindowTheme,
+                  );
                   const localUrl = URL.createObjectURL(file);
 
                   if (overlayImageUrl?.startsWith('blob:')) {

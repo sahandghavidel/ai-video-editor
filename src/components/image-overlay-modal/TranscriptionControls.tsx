@@ -16,15 +16,21 @@ import {
 } from 'lucide-react';
 import type { TranscriptionWord } from './types';
 
+export type MacWindowTheme = 'dark' | 'light';
+
 type Props = {
   transcriptionWords: TranscriptionWord[] | null;
   customText: string;
   selectedWordText: string | null;
+  macWindowTitle: string;
+  macWindowTheme: MacWindowTheme;
 
   onWordClick: (word: TranscriptionWord) => void;
   onWordRightClick: (word: TranscriptionWord) => void;
   onWordDoubleClick: (word: TranscriptionWord) => void;
   onCustomTextChange: (v: string) => void;
+  onMacWindowTitleChange: (v: string) => void;
+  onMacWindowThemeChange: (v: MacWindowTheme) => void;
   onCustomTextEnter: () => void;
   onAddText: () => void;
   onAddMacWindow: () => void;
@@ -47,10 +53,14 @@ export function TranscriptionControls({
   transcriptionWords,
   customText,
   selectedWordText,
+  macWindowTitle,
+  macWindowTheme,
   onWordClick,
   onWordRightClick,
   onWordDoubleClick,
   onCustomTextChange,
+  onMacWindowTitleChange,
+  onMacWindowThemeChange,
   onCustomTextEnter,
   onAddText,
   onAddMacWindow,
@@ -275,6 +285,31 @@ export function TranscriptionControls({
             )}
           </button>
         )}
+      </div>
+
+      <div className='flex gap-2 items-center w-full'>
+        <input
+          type='text'
+          value={macWindowTitle}
+          onChange={(e) => onMacWindowTitleChange(e.target.value)}
+          placeholder='Optional window title'
+          aria-label='Mac window title'
+          className='min-w-0 flex-1 h-10 px-3 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+        />
+        <label className='flex items-center gap-2 text-sm text-gray-700'>
+          <span>Window theme</span>
+          <select
+            value={macWindowTheme}
+            onChange={(e) =>
+              onMacWindowThemeChange(e.target.value as MacWindowTheme)
+            }
+            aria-label='Mac window theme'
+            className='h-10 px-3 text-sm bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          >
+            <option value='dark'>Dark</option>
+            <option value='light'>Light</option>
+          </select>
+        </label>
       </div>
     </div>
   );
