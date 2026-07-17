@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "project": "javascript-king-merge-overlays",
+  "canvas": { "width": 3840, "height": 2160, "fps": 30, "alpha": true },
+  "asset_needs": [],
+  "compositions": [
+    {
+      "id": "jk-tech-transition",
+      "category": "transition-overlay",
+      "duration": 0.95,
+      "edit_point": 0.48,
+      "motion": ["cyan ignition", "angled navy cover", "electric-blue and gold blades", "full cover", "signal release"]
+    },
+    {
+      "id": "jk-tech-lower-third",
+      "category": "lower-thirds",
+      "duration": 3.2,
+      "variables": { "title": "INSTALL GIT" },
+      "motion": ["gold ignition", "cyan signal trace", "navy panel unfold", "text scan reveal", "single light sweep", "collapse"]
+    }
+  ]
+}

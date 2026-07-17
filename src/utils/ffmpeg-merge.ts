@@ -3,6 +3,10 @@ import { promisify } from 'util';
 import path from 'path';
 import { access, unlink, writeFile } from 'fs/promises';
 import { uploadToMinio } from './ffmpeg-direct';
+import {
+  prepareHyperFramesMergeOverlays,
+  type HyperFramesMergeOverlays,
+} from './hyperframes-merge-overlays';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -141,6 +145,20 @@ export async function concatenateVideosWithBrandedTransitions(
     `merged_transition_${Date.now()}_${Math.random().toString(36).slice(2, 11)}.mp4`;
   const fullOutputPath = path.resolve('/tmp', outputFileName);
   const filters: string[] = [];
+  let hyperFramesOverlays: HyperFramesMergeOverlays | null = null;
+  const incomingTitles = videoUrls.slice(1).map((videoUrl, index) => {
+    const suppliedTitle = titles[index + 1]?.trim();
+    return suppliedTitle || path.parse(path.basename(videoUrl)).name;
+  });
+
+  try {
+    hyperFramesOverlays = await prepareHyperFramesMergeOverlays(incomingTitles);
+  } catch (error) {
+    console.warn(
+      '[MERGE] HyperFrames overlays unavailable; using the FFmpeg brand fallback:',
+      error,
+    );
+  }
 
   probes.forEach((probe, index) => {
     filters.push(
@@ -192,10 +210,14 @@ export async function concatenateVideosWithBrandedTransitions(
     const transitionStart = accumulatedDuration - transitionDuration;
     transitionStarts.push(transitionStart);
     filters.push(
-      `[${videoLabel}][v${index}]xfade=transition=custom:` +
-        `duration=${transitionDuration.toFixed(3)}:` +
-        `offset=${transitionStart.toFixed(6)}:` +
-        `expr='${transitionExpression}'[vx${index}]`,
+      hyperFramesOverlays
+        ? `[${videoLabel}][v${index}]xfade=transition=fade:` +
+            `duration=${transitionDuration.toFixed(3)}:` +
+            `offset=${transitionStart.toFixed(6)}[vx${index}]`
+        : `[${videoLabel}][v${index}]xfade=transition=custom:` +
+            `duration=${transitionDuration.toFixed(3)}:` +
+            `offset=${transitionStart.toFixed(6)}:` +
+            `expr='${transitionExpression}'[vx${index}]`,
     );
     filters.push(
       `[${audioLabel}][a${index}]acrossfade=d=${transitionDuration.toFixed(3)}:` +
@@ -207,7 +229,45 @@ export async function concatenateVideosWithBrandedTransitions(
     accumulatedDuration += probes[index].duration - transitionDuration;
   }
 
-  if (titles.length > 1) {
+  if (hyperFramesOverlays) {
+    const firstOverlayInput = videoUrls.length;
+
+    for (let index = 0; index < transitionStarts.length; index++) {
+      const transitionInput = firstOverlayInput + index * 2;
+      const titleInput = transitionInput + 1;
+      const transitionStart = transitionStarts[index];
+      filters.push(
+        `[${transitionInput}:v]scale=${targetWidth}:${targetHeight},format=rgba,` +
+          `setpts=PTS-STARTPTS+${transitionStart.toFixed(6)}/TB[hftransition${index}]`,
+      );
+      filters.push(
+        `[${videoLabel}][hftransition${index}]overlay=0:0:` +
+          `eof_action=pass:format=auto[hftransitioned${index}]`,
+      );
+      videoLabel = `hftransitioned${index}`;
+
+      if (hyperFramesOverlays.titlePaths[index]) {
+        const titleStart = transitionStart + transitionDuration + 0.1;
+        const nextTransition = transitionStarts[index + 1] ?? Number.POSITIVE_INFINITY;
+        const visibleDuration = Math.min(
+          hyperFramesOverlays.titleDuration,
+          nextTransition - titleStart - 0.15,
+        );
+        if (visibleDuration >= 0.7) {
+          filters.push(
+            `[${titleInput}:v]trim=duration=${visibleDuration.toFixed(3)},` +
+              `scale=${targetWidth}:${targetHeight},format=rgba,` +
+              `setpts=PTS-STARTPTS+${titleStart.toFixed(6)}/TB[hftitle${index}]`,
+          );
+          filters.push(
+            `[${videoLabel}][hftitle${index}]overlay=0:0:` +
+              `eof_action=pass:format=auto[hftitled${index}]`,
+          );
+          videoLabel = `hftitled${index}`;
+        }
+      }
+    }
+  } else if (titles.length > 1) {
     const titleFiles = await Promise.all(
       titles.slice(1).map(async (title, index) => {
         const titlePath = path.join(
@@ -283,6 +343,18 @@ export async function concatenateVideosWithBrandedTransitions(
 
   const ffmpegArgs = ['-y'];
   videoUrls.forEach((url) => ffmpegArgs.push('-i', url));
+  if (hyperFramesOverlays) {
+    transitionStarts.forEach((_, index) => {
+      // FFmpeg's native VP9 decoder drops WebM alpha; libvpx-vp9 preserves it.
+      ffmpegArgs.push('-c:v', 'libvpx-vp9', '-i', hyperFramesOverlays.transitionPath);
+      ffmpegArgs.push(
+        '-c:v',
+        'libvpx-vp9',
+        '-i',
+        hyperFramesOverlays.titlePaths[index],
+      );
+    });
+  }
   ffmpegArgs.push(
     '-filter_complex',
     filters.join(';'),

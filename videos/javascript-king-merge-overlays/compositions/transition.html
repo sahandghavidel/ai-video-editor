@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=3840, height=2160" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 3840px; height: 2160px; overflow: hidden; background: transparent; }
+      #stage { position: relative; width: 3840px; height: 2160px; overflow: hidden; background: transparent; }
+      #transition-layer { position: absolute; inset: 0; overflow: hidden; }
+      #matte-group { position: absolute; left: -760px; top: -260px; width: 5400px; height: 2680px; filter: drop-shadow(0 0 58px rgba(40,231,255,.28)); }
+      .blade { position: absolute; top: 0; height: 100%; transform: skewX(-18deg); }
+      #navy-matte { left: 0; width: 5400px; background: linear-gradient(110deg,#050B18 0%,#081426 54%,#10243D 100%); }
+      #micro-grid { left: 0; width: 5400px; opacity: .08; background-image: linear-gradient(rgba(40,231,255,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(40,231,255,.22) 1px,transparent 1px); background-size: 84px 84px; }
+      #blue-blade { right: 300px; width: 760px; background: linear-gradient(90deg,#0B45B8,#1677FF 55%,#28E7FF); box-shadow: 0 0 54px rgba(22,119,255,.65); }
+      #gold-blade { right: 126px; width: 280px; background: linear-gradient(90deg,#E39B00,#FFD21C 58%,#FFF09A); box-shadow: 0 0 42px rgba(255,210,28,.58); }
+      #cyan-edge { right: 62px; width: 34px; background: #A9F7FF; box-shadow: 0 0 56px 18px rgba(40,231,255,.72); }
+      .echo { position: absolute; top: -200px; width: 22px; height: 2600px; background: #28E7FF; opacity: 0; transform: skewX(-18deg); filter: blur(3px); }
+      #echo-a { right: 30px; } #echo-b { right: -44px; } #echo-c { right: -116px; }
+    </style>
+  </head>
+  <body>
+    <div id="stage" data-composition-id="jk-tech-transition" data-start="0" data-duration="0.95" data-width="3840" data-height="2160" data-fps="30">
+      <section id="transition-layer" class="clip" data-start="0" data-duration="0.95" data-track-index="1">
+        <div id="matte-group">
+          <div id="navy-matte" class="blade"></div>
+          <div id="micro-grid" class="blade"></div>
+          <div id="blue-blade" class="blade"></div>
+          <div id="gold-blade" class="blade"></div>
+          <div id="cyan-edge" class="blade"></div>
+          <div id="echo-a" class="echo"></div><div id="echo-b" class="echo"></div><div id="echo-c" class="echo"></div>
+        </div>
+      </section>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo('#matte-group', { x: -5800 }, { x: 0, duration: 0.42, ease: 'power4.inOut' }, 0);
+      tl.fromTo('.echo', { opacity: 0, x: -280 }, { opacity: 0.5, x: 0, duration: 0.2, stagger: 0.025, ease: 'power2.out' }, 0.04);
+      tl.to('.echo', { opacity: 0, duration: 0.12, stagger: 0.018, ease: 'power2.in' }, 0.32);
+      tl.to('#matte-group', { x: 5800, duration: 0.39, ease: 'power4.inOut' }, 0.56);
+      tl.seek(0);
+      window.__timelines['jk-tech-transition'] = tl;
+    </script>
+  </body>
+</html>

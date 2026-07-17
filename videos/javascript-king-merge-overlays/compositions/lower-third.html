@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"title","type":"string","label":"Title","default":"INSTALL GIT","maxLength":80}]'>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=3840, height=2160" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: 'ImpactLocal'; src: local('Impact'); font-style: normal; font-weight: 400; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 3840px; height: 2160px; overflow: hidden; background: transparent; }
+      #stage { position: relative; width: 3840px; height: 2160px; overflow: hidden; background: transparent; font-family: 'ImpactLocal', sans-serif; }
+      #lower-third { position: absolute; inset: 0; overflow: hidden; }
+      #assembly { position: absolute; left: 210px; top: 1480px; width: 2500px; height: 340px; }
+      #panel-shadow,#panel,#panel-grid { position: absolute; left: 102px; top: 30px; width: 2120px; height: 230px; transform-origin: left center; clip-path: polygon(0 0,96% 0,100% 50%,96% 100%,0 100%); }
+      #panel-shadow { transform: translate(28px,25px); background: rgba(2,6,18,.58); filter: blur(15px); }
+      #panel { background: linear-gradient(105deg,rgba(5,11,24,.98),rgba(8,20,38,.96) 58%,rgba(16,36,61,.94)); border: 3px solid rgba(22,119,255,.82); box-shadow: inset 0 0 46px rgba(22,119,255,.18),0 0 32px rgba(40,231,255,.2); }
+      #panel-grid { opacity: .055; background-image: linear-gradient(rgba(40,231,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(40,231,255,.3) 1px,transparent 1px); background-size: 48px 48px; }
+      #ignition-halo { position: absolute; left: 25px; top: 82px; width: 128px; height: 128px; border-radius: 50%; background: radial-gradient(circle,rgba(255,210,28,.72),rgba(255,210,28,.16) 42%,transparent 70%); filter: blur(14px); }
+      #ignition-core { position: absolute; left: 69px; top: 126px; width: 40px; height: 40px; border-radius: 50%; background: #FFD21C; box-shadow: 0 0 28px rgba(255,210,28,.85),0 0 58px rgba(255,210,28,.45); }
+      #signal-trace { position: absolute; left: 89px; top: 143px; width: 360px; height: 7px; transform-origin: left center; background: linear-gradient(90deg,#FFD21C 0 12%,#28E7FF 36%,#A9F7FF); box-shadow: 0 0 24px rgba(40,231,255,.85); }
+      #title-mask { position: absolute; left: 162px; top: 52px; width: 1940px; height: 186px; overflow: hidden; transform-origin: left center; }
+      #title { display: inline-block; white-space: nowrap; color: #F7FAFF; font-size: 134px; line-height: 1.12; letter-spacing: .025em; -webkit-text-stroke: 5px rgba(22,119,255,.9); text-shadow: 0 5px 0 #071B3D,0 0 22px rgba(80,185,255,.45); }
+      #scan-edge { position: absolute; left: 152px; top: 44px; width: 15px; height: 205px; opacity: 0; background: #A9F7FF; box-shadow: 0 0 28px 11px rgba(40,231,255,.76); }
+      #light-sweep { position: absolute; left: 120px; top: 28px; width: 310px; height: 230px; opacity: 0; transform: skewX(-18deg); background: linear-gradient(90deg,transparent,rgba(169,247,255,.27),transparent); mix-blend-mode: screen; }
+    </style>
+  </head>
+  <body>
+    <div id="stage" data-composition-id="jk-tech-lower-third" data-start="0" data-duration="3.2" data-width="3840" data-height="2160" data-fps="30">
+      <section id="lower-third" class="clip" data-start="0" data-duration="3.2" data-track-index="1">
+        <div id="assembly">
+          <div id="panel-shadow"></div><div id="panel"></div><div id="panel-grid"></div>
+          <div id="ignition-halo"></div><div id="ignition-core"></div><div id="signal-trace"></div>
+          <div id="title-mask"><span id="title" data-var-text="title">INSTALL GIT</span></div>
+          <div id="scan-edge"></div><div id="light-sweep"></div>
+        </div>
+      </section>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const vars = window.__hyperframes.getVariables();
+      const title = String(vars.title || 'INSTALL GIT').toUpperCase().slice(0, 80);
+      const titleElement = document.getElementById('title');
+      titleElement.textContent = title;
+      const fittedSize = Math.max(78, Math.min(134, 134 - Math.max(0, title.length - 22) * 2.5));
+      titleElement.style.fontSize = `${fittedSize}px`;
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo('#ignition-core',{scale:0,opacity:0},{scale:1,opacity:1,duration:.16,ease:'back.out(2)'},0);
+      tl.fromTo('#ignition-halo',{scale:.4,opacity:0},{scale:1.7,opacity:.48,duration:.18,ease:'power2.out'},0);
+      tl.fromTo('#signal-trace',{scaleX:0,opacity:0},{scaleX:1,opacity:1,duration:.2,ease:'power3.out'},.08);
+      tl.fromTo(['#panel-shadow','#panel','#panel-grid'],{scaleX:0,opacity:0},{scaleX:1,opacity:1,duration:.28,ease:'power4.out'},.18);
+      tl.fromTo('#title-mask',{scaleX:0},{scaleX:1,duration:.32,ease:'power3.out'},.32);
+      tl.fromTo('#title',{x:-44,opacity:0},{x:0,opacity:1,duration:.3,ease:'power4.out'},.34);
+      tl.fromTo('#scan-edge',{x:0,opacity:0},{x:1960,opacity:.95,duration:.3,ease:'power3.out'},.32);
+      tl.to('#scan-edge',{opacity:0,duration:.08,ease:'power2.in'},.62);
+      tl.fromTo('#light-sweep',{x:-520,opacity:0},{x:2140,opacity:.3,duration:.28,ease:'power2.inOut'},.72);
+      tl.to('#light-sweep',{opacity:0,duration:.08,ease:'power2.out'},1);
+      tl.to('#title',{x:-34,opacity:0,duration:.24,ease:'power3.in'},2.72);
+      tl.to('#title-mask',{scaleX:0,duration:.26,ease:'power3.in'},2.76);
+      tl.to(['#panel-grid','#panel','#panel-shadow'],{scaleX:0,opacity:0,duration:.3,ease:'power4.in'},2.78);
+      tl.to('#signal-trace',{scaleX:0,opacity:0,duration:.25,ease:'power3.in'},2.86);
+      tl.to(['#ignition-core','#ignition-halo'],{scale:0,opacity:0,duration:.2,ease:'power2.in'},2.98);
+      tl.seek(0);
+      window.__timelines['jk-tech-lower-third'] = tl;
+    </script>
+  </body>
+</html>
