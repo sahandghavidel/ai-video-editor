@@ -3168,6 +3168,12 @@ export default function SceneCard({
     overlayVideoStartTime?: number,
     overlayVideoEndTime?: number,
     overlayVideoSegments?: { startTime: number; endTime: number }[],
+    overlayVideoCrop?: {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    },
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -3207,6 +3213,12 @@ export default function SceneCard({
             JSON.stringify(overlayVideoSegments),
           );
         }
+      }
+      if ((overlayImage || overlayVideo) && overlayVideoCrop) {
+        formData.append('overlayCropLeft', overlayVideoCrop.left.toString());
+        formData.append('overlayCropTop', overlayVideoCrop.top.toString());
+        formData.append('overlayCropWidth', overlayVideoCrop.width.toString());
+        formData.append('overlayCropHeight', overlayVideoCrop.height.toString());
       }
       if (overlayText) {
         formData.append('overlayText', overlayText);

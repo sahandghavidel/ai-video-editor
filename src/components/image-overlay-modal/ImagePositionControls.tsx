@@ -13,6 +13,7 @@ type Props = {
     React.SetStateAction<{ width: number; height: number }>
   >;
   actualImageDimensions: { width: number; height: number } | null;
+  sizeHeightPerWidth: number;
   onCrop: () => void;
   canCrop?: boolean;
   mediaLabel?: 'Image' | 'Video';
@@ -28,6 +29,7 @@ export function ImagePositionControls({
   overlaySize,
   setOverlaySize,
   actualImageDimensions,
+  sizeHeightPerWidth,
   onCrop,
   canCrop = true,
   mediaLabel = 'Image',
@@ -36,6 +38,48 @@ export function ImagePositionControls({
   onZoomOut,
   onZoomIn,
 }: Props) {
+  const clamp = (value: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
+
+  const updatePosition = (axis: 'x' | 'y', value: number) => {
+    const size = axis === 'x' ? overlaySize.width : overlaySize.height;
+    const halfSize = size / 2;
+    setOverlayPosition((previous) => ({
+      ...previous,
+      [axis]: clamp(value, halfSize, 100 - halfSize),
+    }));
+  };
+
+  const updateSize = (axis: 'width' | 'height', value: number) => {
+    const ratio =
+      Number.isFinite(sizeHeightPerWidth) && sizeHeightPerWidth > 0
+        ? sizeHeightPerWidth
+        : overlaySize.height / Math.max(overlaySize.width, 0.001);
+    const minWidth = Math.max(5, 5 / ratio);
+    const maxWidth = Math.min(100, 100 / ratio);
+    const requestedWidth = axis === 'width' ? value : value / ratio;
+    const nextWidth = clamp(requestedWidth, minWidth, maxWidth);
+    const nextSize = {
+      width: nextWidth,
+      height: nextWidth * ratio,
+    };
+    setOverlaySize(nextSize);
+    setOverlayPosition((previous) => {
+      return {
+        x: clamp(
+          previous.x,
+          nextSize.width / 2,
+          100 - nextSize.width / 2,
+        ),
+        y: clamp(
+          previous.y,
+          nextSize.height / 2,
+          100 - nextSize.height / 2,
+        ),
+      };
+    });
+  };
+
   return (
     <div className='space-y-2'>
       <div className='flex gap-2 items-end w-full'>
@@ -44,12 +88,7 @@ export function ImagePositionControls({
           <input
             type='number'
             value={overlayPosition.x}
-            onChange={(e) =>
-              setOverlayPosition((prev) => ({
-                ...prev,
-                x: Number(e.target.value),
-              }))
-            }
+            onChange={(e) => updatePosition('x', Number(e.target.value))}
             className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
             min='0'
             max='100'
@@ -60,12 +99,7 @@ export function ImagePositionControls({
           <input
             type='number'
             value={overlayPosition.y}
-            onChange={(e) =>
-              setOverlayPosition((prev) => ({
-                ...prev,
-                y: Number(e.target.value),
-              }))
-            }
+            onChange={(e) => updatePosition('y', Number(e.target.value))}
             className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
             min='0'
             max='100'
@@ -103,12 +137,7 @@ export function ImagePositionControls({
           <input
             type='number'
             value={overlaySize.width}
-            onChange={(e) =>
-              setOverlaySize((prev) => ({
-                ...prev,
-                width: Number(e.target.value),
-              }))
-            }
+            onChange={(e) => updateSize('width', Number(e.target.value))}
             className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
             min='5'
             max='100'
@@ -121,12 +150,7 @@ export function ImagePositionControls({
           <input
             type='number'
             value={overlaySize.height}
-            onChange={(e) =>
-              setOverlaySize((prev) => ({
-                ...prev,
-                height: Number(e.target.value),
-              }))
-            }
+            onChange={(e) => updateSize('height', Number(e.target.value))}
             className='w-full px-2 py-1 border border-gray-300 rounded text-sm'
             min='5'
             max='100'
@@ -181,6 +205,9 @@ export function ImagePositionControls({
           </button>
         </div>
       </div>
+      <p className='text-[11px] text-gray-500'>
+        Drag to move · Handles resize proportionally · Option/Alt + drag crops
+      </p>
     </div>
   );
 }

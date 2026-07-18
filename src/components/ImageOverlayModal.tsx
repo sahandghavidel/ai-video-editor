@@ -42,6 +42,33 @@ import type {
 } from './image-overlay-modal/types';
 
 type CropEditorMode = 'crop' | 'brightness' | 'contrast' | 'saturation' | 'hue';
+type MediaCrop = { left: number; top: number; width: number; height: number };
+const FULL_MEDIA_CROP: MediaCrop = { left: 0, top: 0, width: 100, height: 100 };
+type MediaTransformMode =
+  | 'move'
+  | 'n'
+  | 'ne'
+  | 'e'
+  | 'se'
+  | 's'
+  | 'sw'
+  | 'w'
+  | 'nw';
+
+const MEDIA_RESIZE_HANDLES: Array<{
+  mode: Exclude<MediaTransformMode, 'move'>;
+  className: string;
+  cursor: string;
+}> = [
+  { mode: 'nw', className: '-left-1.5 -top-1.5', cursor: 'cursor-nw-resize' },
+  { mode: 'n', className: 'left-1/2 -translate-x-1/2 -top-1.5', cursor: 'cursor-n-resize' },
+  { mode: 'ne', className: '-right-1.5 -top-1.5', cursor: 'cursor-ne-resize' },
+  { mode: 'e', className: '-right-1.5 top-1/2 -translate-y-1/2', cursor: 'cursor-e-resize' },
+  { mode: 'se', className: '-right-1.5 -bottom-1.5', cursor: 'cursor-se-resize' },
+  { mode: 's', className: 'left-1/2 -translate-x-1/2 -bottom-1.5', cursor: 'cursor-s-resize' },
+  { mode: 'sw', className: '-left-1.5 -bottom-1.5', cursor: 'cursor-sw-resize' },
+  { mode: 'w', className: '-left-1.5 top-1/2 -translate-y-1/2', cursor: 'cursor-w-resize' },
+];
 
 type CropAdjustments = {
   brightness: number;
@@ -510,6 +537,7 @@ interface ImageOverlayModalProps {
     overlayVideoStartTime?: number,
     overlayVideoEndTime?: number,
     overlayVideoSegments?: VideoSourceSegment[],
+    overlayVideoCrop?: MediaCrop,
   ) => Promise<{ videoUrl?: string } | void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -562,6 +590,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlayVideoSegments, setOverlayVideoSegments] = useState<
     VideoSourceSegment[]
   >([]);
+  const [overlayVideoCrop, setOverlayVideoCrop] =
+    useState<MediaCrop>(FULL_MEDIA_CROP);
+  const [videoCropFrameUrl, setVideoCropFrameUrl] = useState<string | null>(null);
   const [isPastingOverlayFromClipboard, setIsPastingOverlayFromClipboard] =
     useState(false);
   const [cropperViewportPx, setCropperViewportPx] = useState<{
@@ -615,6 +646,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
   const [, setIsDragging] = useState(false);
   const [, setIsResizing] = useState(false);
+  const [isModifierCropping, setIsModifierCropping] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isSubtitleHighlightLoading, setIsSubtitleHighlightLoading] =
@@ -790,10 +822,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       img.onload = () => {
         setActualImageDimensions({ width: img.width, height: img.height });
 
-        // We may not know the video's natural dimensions yet; use the same
-        // fallback defaults as elsewhere to derive a reasonable initial % size.
-        const videoWidth = 1920;
-        const videoHeight = 1080;
+        const videoWidth = videoRef.current?.videoWidth || 1920;
+        const videoHeight = videoRef.current?.videoHeight || 1080;
         const widthPercent = (img.width / videoWidth) * 100;
         const heightPercent = (img.height / videoHeight) * 100;
         setOverlaySize({
@@ -1091,6 +1121,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     width: number;
     height: number;
   } | null>(null);
+  const [videoContentBox, setVideoContentBox] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [videoToCssScale, setVideoToCssScale] = useState(1);
 
   // Cropping state
@@ -1114,6 +1150,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const isGifOverlay = overlayImage?.type === 'image/gif';
   const overlayMediaUrl = overlayVideoUrl || overlayImageUrl;
+  const cropSourceUrl = overlayVideo ? videoCropFrameUrl : overlayImageUrl;
+  const isCropAdjustmentDisabled = isGifOverlay || Boolean(overlayVideo);
   const overlayWindowDuration = Math.max(0, endTime - startTime);
   const automaticOverlayVideoSpeed =
     overlayVideoDuration > 0 && overlayWindowDuration > 0
@@ -1400,10 +1438,53 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const video = videoRef.current;
     if (!video) return null;
 
-    // Use the video element's rect for overlay positioning
     const rect = video.getBoundingClientRect();
-    return rect;
+    if (!video.videoWidth || !video.videoHeight || !rect.width || !rect.height) {
+      return rect;
+    }
+
+    const sourceAspect = video.videoWidth / video.videoHeight;
+    const elementAspect = rect.width / rect.height;
+    if (sourceAspect >= elementAspect) {
+      const height = rect.width / sourceAspect;
+      return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height,
+        right: rect.right,
+        bottom: rect.top + height,
+      };
+    }
+
+    const width = rect.height * sourceAspect;
+    const left = rect.left + (rect.width - width) / 2;
+    return {
+      left,
+      top: rect.top,
+      width,
+      height: rect.height,
+      right: left + width,
+      bottom: rect.bottom,
+    };
   }, []);
+
+  const syncVideoContentBox = useCallback(() => {
+    const video = videoRef.current;
+    const contentRect = getVideoContentRect();
+    if (!video || !contentRect) return;
+    const elementRect = video.getBoundingClientRect();
+    setContainerRect({
+      width: contentRect.width,
+      height: contentRect.height,
+    });
+    setVideoContentBox({
+      left: contentRect.left - elementRect.left,
+      top: contentRect.top - elementRect.top,
+      width: contentRect.width,
+      height: contentRect.height,
+    });
+  }, [getVideoContentRect]);
 
   const getVideoNaturalDimensions = useCallback(() => {
     const video = videoRef.current;
@@ -1428,6 +1509,27 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     [getVideoNaturalDimensions, setOverlaySize],
   );
 
+  const scaleOverlayFromCenter = useCallback(
+    (factor: number) => {
+      const nextSize = {
+        width: Math.min(100, Math.max(5, overlaySize.width * factor)),
+        height: Math.min(100, Math.max(5, overlaySize.height * factor)),
+      };
+      setOverlaySize(nextSize);
+      setOverlayPosition({
+        x: Math.max(
+          nextSize.width / 2,
+          Math.min(100 - nextSize.width / 2, overlayPosition.x),
+        ),
+        y: Math.max(
+          nextSize.height / 2,
+          Math.min(100 - nextSize.height / 2, overlayPosition.y),
+        ),
+      });
+    },
+    [overlayPosition, overlaySize, setOverlayPosition, setOverlaySize],
+  );
+
   const handleOverlayWheelZoom = useCallback(
     (e: React.WheelEvent) => {
       // Ignore browser pinch-zoom (trackpad pinch typically sets ctrlKey=true on macOS).
@@ -1436,13 +1538,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       e.preventDefault();
       e.stopPropagation();
 
-      const factor = e.deltaY < 0 ? 1.1 : 0.9;
-      setOverlaySize((prev) => ({
-        width: Math.min(100, Math.max(5, prev.width * factor)),
-        height: Math.min(100, Math.max(5, prev.height * factor)),
-      }));
+      scaleOverlayFromCenter(e.deltaY < 0 ? 1.1 : 0.9);
     },
-    [setOverlaySize],
+    [scaleOverlayFromCenter],
   );
 
   const handleTextOverlayWheelZoom = useCallback(
@@ -1500,6 +1598,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayVideoStartTime(0);
         setOverlayVideoEndTime(0);
         setOverlayVideoSegments([]);
+        setOverlayVideoCrop(FULL_MEDIA_CROP);
         setOverlayImage(file);
         const url = URL.createObjectURL(file);
         setOverlayImageUrl(url);
@@ -1535,6 +1634,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayVideoStartTime(0);
         setOverlayVideoEndTime(0);
         setOverlayVideoSegments([]);
+        setOverlayVideoCrop(FULL_MEDIA_CROP);
         setOverlayVideo(file);
         const url = URL.createObjectURL(file);
         setOverlayVideoUrl(url);
@@ -1556,6 +1656,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
     setOverlayVideoSegments([]);
+    setOverlayVideoCrop(FULL_MEDIA_CROP);
     setActualImageDimensions(null);
     setIsVideoEditModalOpen(false);
     if (videoFileInputRef.current) {
@@ -1578,6 +1679,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
     setOverlayVideoSegments([]);
+    setOverlayVideoCrop(FULL_MEDIA_CROP);
     setActualImageDimensions(null);
     // Prevent the auto-load effect from re-injecting the scene image
     // after the user explicitly removed it in this modal session.
@@ -1829,8 +1931,28 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     };
   }, [isOpen, setOverlayFromFile, isPastingOverlayFromClipboard]);
 
-  const openCropModal = useCallback(() => {
-    if (!overlayImageUrl) return;
+  const openCropModal = useCallback(async () => {
+    if (!overlayImageUrl && !overlayVideo) return;
+
+    if (overlayVideo) {
+      const video = overlayVideoPreviewRef.current;
+      if (!video?.videoWidth || !video.videoHeight) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frameBlob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/png'),
+      );
+      if (!frameBlob) return;
+      if (videoCropFrameUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(videoCropFrameUrl);
+      }
+      setVideoCropFrameUrl(URL.createObjectURL(frameBlob));
+    }
+
     setCropBorderRadius(0);
     setCropEditorMode('crop');
     setCropShape('rectangle');
@@ -1846,7 +1968,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setCropperViewportPx(null);
     didInitCropCoordinatesRef.current = null;
     setIsCropping(true);
-  }, [overlayImageUrl]);
+  }, [overlayImageUrl, overlayVideo, videoCropFrameUrl]);
 
   useEffect(() => {
     if (!isCropping) {
@@ -1856,7 +1978,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
     let cancelled = false;
     void (async () => {
-      const dims = await ensureOverlayImageDimensions();
+      const dims = overlayVideo
+        ? actualImageDimensions
+        : await ensureOverlayImageDimensions();
       if (cancelled || !dims) return;
 
       // Fit the cropper to the image, within the modal and viewport.
@@ -1877,7 +2001,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isCropping, ensureOverlayImageDimensions]);
+  }, [actualImageDimensions, isCropping, ensureOverlayImageDimensions, overlayVideo]);
 
   const handlePasteOverlayImageFromClipboard = useCallback(async () => {
     setIsPastingOverlayFromClipboard(true);
@@ -2039,8 +2163,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const applyCrop = useCallback(async () => {
     console.log('applyCrop called');
-    if (!cropperRef.current || !overlayImageUrl) {
-      console.log('Missing cropperRef.current or overlayImageUrl');
+    if (!cropperRef.current || !cropSourceUrl) {
+      console.log('Missing cropperRef.current or crop source');
       return;
     }
 
@@ -2055,17 +2179,85 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       return;
     }
 
+    if (overlayVideo && actualImageDimensions) {
+      const nextCrop = {
+        left: Math.max(
+          0,
+          Math.min(100, (coordinates.left / actualImageDimensions.width) * 100),
+        ),
+        top: Math.max(
+          0,
+          Math.min(100, (coordinates.top / actualImageDimensions.height) * 100),
+        ),
+        width: Math.max(
+          0.1,
+          Math.min(100, (coordinates.width / actualImageDimensions.width) * 100),
+        ),
+        height: Math.max(
+          0.1,
+          Math.min(100, (coordinates.height / actualImageDimensions.height) * 100),
+        ),
+      };
+      const nextSize = {
+        width: Math.min(
+          100,
+          Math.max(5, overlaySize.width * (nextCrop.width / overlayVideoCrop.width)),
+        ),
+        height: Math.min(
+          100,
+          Math.max(5, overlaySize.height * (nextCrop.height / overlayVideoCrop.height)),
+        ),
+      };
+      setOverlayVideoCrop(nextCrop);
+      setOverlaySize(nextSize);
+      setOverlayPosition({
+        x: Math.max(
+          nextSize.width / 2,
+          Math.min(100 - nextSize.width / 2, overlayPosition.x),
+        ),
+        y: Math.max(
+          nextSize.height / 2,
+          Math.min(100 - nextSize.height / 2, overlayPosition.y),
+        ),
+      });
+      setIsCropping(false);
+      return;
+    }
+
     const applyCroppedFile = (croppedFile: File, w: number, h: number) => {
       const croppedUrl = URL.createObjectURL(croppedFile);
+      const previousDimensions = actualImageDimensions;
+      const nextSize = previousDimensions
+        ? {
+            width: Math.min(
+              100,
+              Math.max(5, overlaySize.width * (w / previousDimensions.width)),
+            ),
+            height: Math.min(
+              100,
+              Math.max(5, overlaySize.height * (h / previousDimensions.height)),
+            ),
+          }
+        : { ...overlaySize };
 
       setOverlayImage(croppedFile);
       setOverlayImageUrl(croppedUrl);
+      // The crop is now baked into the replacement image/GIF. Reset the
+      // non-destructive crop so preview/export do not crop it a second time.
+      setOverlayVideoCrop(FULL_MEDIA_CROP);
 
       setActualImageDimensions({ width: w, height: h });
-
-      // Auto-reset overlay size to cropped image natural size
-      setOverlayPosition({ x: 50, y: 50 });
-      setOverlaySizeFromPixels(w, h);
+      setOverlaySize(nextSize);
+      setOverlayPosition({
+        x: Math.max(
+          nextSize.width / 2,
+          Math.min(100 - nextSize.width / 2, overlayPosition.x),
+        ),
+        y: Math.max(
+          nextSize.height / 2,
+          Math.min(100 - nextSize.height / 2, overlayPosition.y),
+        ),
+      });
 
       setIsCropping(false);
       console.log('Crop applied successfully');
@@ -2121,7 +2313,18 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         console.log('Failed to create blob');
       }
     }, 'image/png');
-  }, [cropperRef, overlayImageUrl, overlayImage, cropBorderRadius, cropShape]);
+  }, [
+    actualImageDimensions,
+    cropperRef,
+    cropSourceUrl,
+    overlayImage,
+    overlayVideo,
+    overlayVideoCrop,
+    cropBorderRadius,
+    cropShape,
+    overlayPosition,
+    overlaySize,
+  ]);
 
   const insetCropSelection = useCallback(() => {
     const cropper = cropperRef.current;
@@ -2154,14 +2357,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     const video = videoRef.current;
     if (video && video.duration) {
       setEndTime(video.duration);
-
-      // Update container rect when video loads
-      const rect = getVideoContentRect();
-      if (rect) {
-        setContainerRect({ width: rect.width, height: rect.height });
-      }
+      syncVideoContentBox();
     }
-  }, [getVideoContentRect]);
+  }, [syncVideoContentBox]);
 
   // Ensure video element updates when videoUrl changes
   useEffect(() => {
@@ -2173,175 +2371,233 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [originalVideoUrl]);
 
   const handleMouseDown = useCallback(
-    (event: React.PointerEvent) => {
+    (event: React.PointerEvent, mode: MediaTransformMode = 'move') => {
       if (!overlayMediaUrl) return;
 
       const contentRect = getVideoContentRect();
       if (!contentRect) return;
+      event.preventDefault();
+      event.stopPropagation();
 
-      const x = event.clientX - contentRect.left;
-      const y = event.clientY - contentRect.top;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startSize = { ...overlaySize };
+      const startPos = { ...overlayPosition };
+      const startCrop = { ...overlayVideoCrop };
+      const isCropGesture = event.altKey;
+      const pointerId = event.pointerId;
+      const captureTarget = event.currentTarget as Element;
+      const isLeft = mode.includes('w');
+      const isRight = mode.includes('e');
+      const isTop = mode.includes('n');
+      const isBottom = mode.includes('s');
+      const isCorner = (isLeft || isRight) && (isTop || isBottom);
 
-      // Check if clicking on the overlay image
-      const overlayX = overlayPosition.x - overlaySize.width / 2;
-      const overlayY = overlayPosition.y - overlaySize.height / 2;
+      if (isCropGesture) setIsModifierCropping(true);
+      else if (mode === 'move') setIsDragging(true);
+      else setIsResizing(true);
 
-      // Convert to pixels
-      const overlayX_px = (overlayX / 100) * contentRect.width;
-      const overlayY_px = (overlayY / 100) * contentRect.height;
-      const overlayWidth_px = (overlaySize.width / 100) * contentRect.width;
-      const overlayHeight_px = (overlaySize.height / 100) * contentRect.height;
+      const handleGlobalPointerMove = (moveEvent: PointerEvent) => {
+        const rect = getVideoContentRect();
+        if (!rect) return;
 
-      // Check if clicking near edges/corners for resizing (within 10px of edges)
-      const edgeThreshold = 10;
-      const nearLeftEdge =
-        x >= overlayX_px - edgeThreshold && x <= overlayX_px + edgeThreshold;
-      const nearRightEdge =
-        x >= overlayX_px + overlayWidth_px - edgeThreshold &&
-        x <= overlayX_px + overlayWidth_px + edgeThreshold;
-      const nearTopEdge =
-        y >= overlayY_px - edgeThreshold && y <= overlayY_px + edgeThreshold;
-      const nearBottomEdge =
-        y >= overlayY_px + overlayHeight_px - edgeThreshold &&
-        y <= overlayY_px + overlayHeight_px + edgeThreshold;
+        const deltaX = ((moveEvent.clientX - startX) / rect.width) * 100;
+        const deltaY = ((moveEvent.clientY - startY) / rect.height) * 100;
 
-      const isNearEdge =
-        nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
+        if (isCropGesture) {
+          const sourceDeltaX =
+            (deltaX * startCrop.width) / Math.max(startSize.width, 0.001);
+          const sourceDeltaY =
+            (deltaY * startCrop.height) / Math.max(startSize.height, 0.001);
 
-      if (isNearEdge) {
-        // Start resizing - determine resize direction based on which edges are near
-        const startX = event.clientX;
-        const startY = event.clientY;
-        const startSize = { ...overlaySize };
-        const startPos = { ...overlayPosition };
-        const pointerId = event.pointerId;
-
-        setIsResizing(true);
-
-        const handleGlobalPointerMove = (e: PointerEvent) => {
-          const rect = getVideoContentRect();
-          if (!rect) return;
-
-          let newWidth = startSize.width;
-          let newHeight = startSize.height;
-          let newX = startPos.x;
-          let newY = startPos.y;
-
-          // Allow free resizing without maintaining aspect ratio
-          // Handle horizontal resizing
-          if (nearLeftEdge) {
-            const deltaX = ((e.clientX - startX) / rect.width) * 100;
-            newWidth = Math.max(5, startSize.width - deltaX);
-            newX = startPos.x + deltaX / 2; // Move position to keep right edge in place
-          } else if (nearRightEdge) {
-            const deltaX = ((e.clientX - startX) / rect.width) * 100;
-            newWidth = Math.max(5, startSize.width + deltaX);
-          }
-
-          // Handle vertical resizing
-          if (nearTopEdge) {
-            const deltaY = ((e.clientY - startY) / rect.height) * 100;
-            newHeight = Math.max(5, startSize.height - deltaY);
-            newY = startPos.y + deltaY / 2; // Move position to keep bottom edge in place
-          } else if (nearBottomEdge) {
-            const deltaY = ((e.clientY - startY) / rect.height) * 100;
-            newHeight = Math.max(5, startSize.height + deltaY);
-          }
-
-          setOverlaySize({
-            width: Math.min(newWidth, 100),
-            height: Math.min(newHeight, 100),
-          });
-
-          // Update position if resizing from top/left
-          if (nearLeftEdge || nearTopEdge) {
-            setOverlayPosition({
-              x: Math.max(0, Math.min(100, newX)),
-              y: Math.max(0, Math.min(100, newY)),
+          if (mode === 'move') {
+            setOverlayVideoCrop({
+              ...startCrop,
+              left: Math.max(
+                0,
+                Math.min(100 - startCrop.width, startCrop.left - sourceDeltaX),
+              ),
+              top: Math.max(
+                0,
+                Math.min(100 - startCrop.height, startCrop.top - sourceDeltaY),
+              ),
             });
+            return;
           }
-        };
 
-        const handleGlobalPointerUp = () => {
-          setIsResizing(false);
-          document.removeEventListener('pointermove', handleGlobalPointerMove);
-          document.removeEventListener('pointerup', handleGlobalPointerUp);
-          // Release pointer capture
-          try {
-            (event.target as Element)?.releasePointerCapture(pointerId);
-          } catch {
-            // Ignore errors if pointer capture wasn't set
+          const minCropWidth = Math.max(
+            0.1,
+            (startCrop.width * 5) / Math.max(startSize.width, 0.001),
+          );
+          const minCropHeight = Math.max(
+            0.1,
+            (startCrop.height * 5) / Math.max(startSize.height, 0.001),
+          );
+          const maxCropWidth = Math.min(
+            100,
+            (startCrop.width * 100) / Math.max(startSize.width, 0.001),
+          );
+          const maxCropHeight = Math.min(
+            100,
+            (startCrop.height * 100) / Math.max(startSize.height, 0.001),
+          );
+          const startRight = startCrop.left + startCrop.width;
+          const startBottom = startCrop.top + startCrop.height;
+          let nextLeft = startCrop.left;
+          let nextTop = startCrop.top;
+          let nextRight = startRight;
+          let nextBottom = startBottom;
+
+          if (isLeft) {
+            nextLeft = Math.max(
+              Math.max(0, startRight - maxCropWidth),
+              Math.min(startRight - minCropWidth, startCrop.left + sourceDeltaX),
+            );
           }
-        };
+          if (isRight) {
+            nextRight = Math.max(
+              startCrop.left + minCropWidth,
+              Math.min(
+                Math.min(100, startCrop.left + maxCropWidth),
+                startRight + sourceDeltaX,
+              ),
+            );
+          }
+          if (isTop) {
+            nextTop = Math.max(
+              Math.max(0, startBottom - maxCropHeight),
+              Math.min(startBottom - minCropHeight, startCrop.top + sourceDeltaY),
+            );
+          }
+          if (isBottom) {
+            nextBottom = Math.max(
+              startCrop.top + minCropHeight,
+              Math.min(
+                Math.min(100, startCrop.top + maxCropHeight),
+                startBottom + sourceDeltaY,
+              ),
+            );
+          }
 
-        document.addEventListener('pointermove', handleGlobalPointerMove);
-        document.addEventListener('pointerup', handleGlobalPointerUp);
+          const nextCrop = {
+            left: nextLeft,
+            top: nextTop,
+            width: nextRight - nextLeft,
+            height: nextBottom - nextTop,
+          };
+          const nextWidth =
+            startSize.width * (nextCrop.width / startCrop.width);
+          const nextHeight =
+            startSize.height * (nextCrop.height / startCrop.height);
+          const boundedWidth = Math.max(5, nextWidth);
+          const boundedHeight = Math.max(5, nextHeight);
+          let nextX = startPos.x;
+          let nextY = startPos.y;
+          if (isLeft) nextX += (startSize.width - boundedWidth) / 2;
+          if (isRight) nextX += (boundedWidth - startSize.width) / 2;
+          if (isTop) nextY += (startSize.height - boundedHeight) / 2;
+          if (isBottom) nextY += (boundedHeight - startSize.height) / 2;
 
-        // Capture pointer to ensure mouse events are received even outside the element
-        (event.target as Element).setPointerCapture(event.pointerId);
-        event.preventDefault();
-      } else if (
-        x >= overlayX_px &&
-        x <= overlayX_px + overlayWidth_px &&
-        y >= overlayY_px &&
-        y <= overlayY_px + overlayHeight_px
-      ) {
-        // Start dragging (center area)
-        const startX = event.clientX;
-        const startY = event.clientY;
-        const startPos = { ...overlayPosition };
-        const pointerId = event.pointerId;
-
-        setIsDragging(true);
-
-        const handleGlobalPointerMove = (e: PointerEvent) => {
-          const rect = getVideoContentRect();
-          if (!rect) return;
-
-          const deltaX = ((e.clientX - startX) / rect.width) * 100;
-          const deltaY = ((e.clientY - startY) / rect.height) * 100;
-
+          setOverlayVideoCrop(nextCrop);
+          setOverlaySize({ width: boundedWidth, height: boundedHeight });
           setOverlayPosition({
-            x: Math.max(0, Math.min(100, startPos.x + deltaX)),
-            y: Math.max(0, Math.min(100, startPos.y + deltaY)),
+            x: Math.max(
+              boundedWidth / 2,
+              Math.min(100 - boundedWidth / 2, nextX),
+            ),
+            y: Math.max(
+              boundedHeight / 2,
+              Math.min(100 - boundedHeight / 2, nextY),
+            ),
           });
-        };
+          return;
+        }
 
-        const handleGlobalPointerUp = () => {
-          setIsDragging(false);
-          document.removeEventListener('pointermove', handleGlobalPointerMove);
-          document.removeEventListener('pointerup', handleGlobalPointerUp);
-          // Release pointer capture
-          try {
-            (event.target as Element)?.releasePointerCapture(pointerId);
-          } catch {
-            // Ignore errors if pointer capture wasn't set
-          }
-        };
+        if (mode === 'move') {
+          const halfWidth = startSize.width / 2;
+          const halfHeight = startSize.height / 2;
+          setOverlayPosition({
+            x: Math.max(
+              halfWidth,
+              Math.min(100 - halfWidth, startPos.x + deltaX),
+            ),
+            y: Math.max(
+              halfHeight,
+              Math.min(100 - halfHeight, startPos.y + deltaY),
+            ),
+          });
+          return;
+        }
 
-        document.addEventListener('pointermove', handleGlobalPointerMove);
-        document.addEventListener('pointerup', handleGlobalPointerUp);
+        const widthDelta = isLeft ? -deltaX : isRight ? deltaX : 0;
+        const heightDelta = isTop ? -deltaY : isBottom ? deltaY : 0;
+        const widthScale =
+          (startSize.width + widthDelta) / Math.max(startSize.width, 0.001);
+        const heightScale =
+          (startSize.height + heightDelta) / Math.max(startSize.height, 0.001);
+        let requestedScale = isLeft || isRight ? widthScale : heightScale;
+        if (isCorner) {
+          requestedScale =
+            Math.abs(widthScale - 1) >= Math.abs(heightScale - 1)
+              ? widthScale
+              : heightScale;
+        }
+        const minScale = Math.max(
+          5 / Math.max(startSize.width, 0.001),
+          5 / Math.max(startSize.height, 0.001),
+        );
+        const maxScale = Math.min(
+          100 / Math.max(startSize.width, 0.001),
+          100 / Math.max(startSize.height, 0.001),
+        );
+        const scale = Math.max(minScale, Math.min(maxScale, requestedScale));
+        const nextWidth = startSize.width * scale;
+        const nextHeight = startSize.height * scale;
 
-        // Capture pointer to ensure mouse events are received even outside the element
-        (event.target as Element).setPointerCapture(event.pointerId);
-        event.preventDefault();
-      }
+        let nextX = startPos.x;
+        let nextY = startPos.y;
+        if (isLeft) nextX += (startSize.width - nextWidth) / 2;
+        if (isRight) nextX += (nextWidth - startSize.width) / 2;
+        if (isTop) nextY += (startSize.height - nextHeight) / 2;
+        if (isBottom) nextY += (nextHeight - startSize.height) / 2;
+
+        nextX = Math.max(nextWidth / 2, Math.min(100 - nextWidth / 2, nextX));
+        nextY = Math.max(nextHeight / 2, Math.min(100 - nextHeight / 2, nextY));
+        setOverlaySize({ width: nextWidth, height: nextHeight });
+        setOverlayPosition({ x: nextX, y: nextY });
+      };
+
+      const handleGlobalPointerUp = () => {
+        setIsDragging(false);
+        setIsResizing(false);
+        setIsModifierCropping(false);
+        document.removeEventListener('pointermove', handleGlobalPointerMove);
+        document.removeEventListener('pointerup', handleGlobalPointerUp);
+        try {
+          captureTarget.releasePointerCapture(pointerId);
+        } catch {
+          // Ignore if capture was already released.
+        }
+      };
+
+      document.addEventListener('pointermove', handleGlobalPointerMove);
+      document.addEventListener('pointerup', handleGlobalPointerUp);
+      captureTarget.setPointerCapture(pointerId);
     },
-    [overlayMediaUrl, overlayPosition, overlaySize, getVideoContentRect],
+    [
+      getVideoContentRect,
+      overlayMediaUrl,
+      overlayPosition,
+      overlaySize,
+      overlayVideoCrop,
+    ],
   );
 
   const handleTextMouseDown = useCallback(
     (event: React.PointerEvent) => {
       if (!selectedWordText) return;
 
-      const contentRect = containerRect
-        ? {
-            width: containerRect.width,
-            height: containerRect.height,
-            left: 0,
-            top: 0,
-          }
-        : getVideoContentRect();
+      const contentRect = getVideoContentRect();
       if (!contentRect) return;
 
       const x = event.clientX - contentRect.left;
@@ -2375,15 +2631,25 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Check if clicking near edges/corners for resizing (within 10px of edges)
       const edgeThreshold = 10;
       const nearLeftEdge =
-        x >= textX_px - edgeThreshold && x <= textX_px + edgeThreshold;
+        x >= textX_px - edgeThreshold &&
+        x <= textX_px + edgeThreshold &&
+        y >= textY_px - edgeThreshold &&
+        y <= textY_px + textHeight_px + edgeThreshold;
       const nearRightEdge =
         x >= textX_px + textWidth_px - edgeThreshold &&
-        x <= textX_px + textWidth_px + edgeThreshold;
+        x <= textX_px + textWidth_px + edgeThreshold &&
+        y >= textY_px - edgeThreshold &&
+        y <= textY_px + textHeight_px + edgeThreshold;
       const nearTopEdge =
-        y >= textY_px - edgeThreshold && y <= textY_px + edgeThreshold;
+        y >= textY_px - edgeThreshold &&
+        y <= textY_px + edgeThreshold &&
+        x >= textX_px - edgeThreshold &&
+        x <= textX_px + textWidth_px + edgeThreshold;
       const nearBottomEdge =
         y >= textY_px + textHeight_px - edgeThreshold &&
-        y <= textY_px + textHeight_px + edgeThreshold;
+        y <= textY_px + textHeight_px + edgeThreshold &&
+        x >= textX_px - edgeThreshold &&
+        x <= textX_px + textWidth_px + edgeThreshold;
 
       const isNearEdge =
         nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
@@ -2415,6 +2681,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           } else if (nearRightEdge) {
             const deltaX = ((e.clientX - startX) / rect.width) * 100;
             newWidth = Math.max(5, startSize.width + deltaX);
+            newX = startPos.x + deltaX / 2;
           }
 
           // Handle vertical resizing
@@ -2425,6 +2692,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           } else if (nearBottomEdge) {
             const deltaY = ((e.clientY - startY) / rect.height) * 100;
             newHeight = Math.max(5, startSize.height + deltaY);
+            newY = startPos.y + deltaY / 2;
           }
 
           setTextOverlaySize({
@@ -2432,13 +2700,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             height: Math.min(newHeight, 100),
           });
 
-          // Update position if resizing from top/left
-          if (nearLeftEdge || nearTopEdge) {
-            setTextOverlayPosition({
-              x: Math.max(0, Math.min(100, newX)),
-              y: Math.max(0, Math.min(100, newY)),
-            });
-          }
+          setTextOverlayPosition({
+            x: Math.max(0, Math.min(100, newX)),
+            y: Math.max(0, Math.min(100, newY)),
+          });
         };
 
         const handleGlobalPointerUp = () => {
@@ -2481,8 +2746,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           const deltaY = ((e.clientY - startY) / rect.height) * 100;
 
           setTextOverlayPosition({
-            x: Math.max(0, Math.min(100, startPos.x + deltaX)),
-            y: Math.max(0, Math.min(100, startPos.y + deltaY)),
+            x: Math.max(
+              textWidthPercent / 2,
+              Math.min(100 - textWidthPercent / 2, startPos.x + deltaX),
+            ),
+            y: Math.max(
+              textHeightPercent / 2,
+              Math.min(100 - textHeightPercent / 2, startPos.y + deltaY),
+            ),
           });
         };
 
@@ -2511,68 +2782,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       textOverlayPosition,
       textOverlaySize,
       getVideoContentRect,
-      containerRect,
     ],
-  );
-
-  const handlePointerMove = useCallback(
-    (event: React.PointerEvent) => {
-      if (!overlayMediaUrl) return;
-
-      const contentRect = getVideoContentRect();
-      if (!contentRect) return;
-
-      const x = event.clientX - contentRect.left;
-      const y = event.clientY - contentRect.top;
-
-      // Check if hovering near edges/corners for resizing
-      const overlayX = overlayPosition.x - overlaySize.width / 2;
-      const overlayY = overlayPosition.y - overlaySize.height / 2;
-
-      // Convert to pixels
-      const overlayX_px = (overlayX / 100) * contentRect.width;
-      const overlayY_px = (overlayY / 100) * contentRect.height;
-      const overlayWidth_px = (overlaySize.width / 100) * contentRect.width;
-      const overlayHeight_px = (overlaySize.height / 100) * contentRect.height;
-
-      // Check if hovering near edges/corners (within 10px of edges)
-      const edgeThreshold = 10;
-      const nearLeftEdge =
-        x >= overlayX_px - edgeThreshold && x <= overlayX_px + edgeThreshold;
-      const nearRightEdge =
-        x >= overlayX_px + overlayWidth_px - edgeThreshold &&
-        x <= overlayX_px + overlayWidth_px + edgeThreshold;
-      const nearTopEdge =
-        y >= overlayY_px - edgeThreshold && y <= overlayY_px + edgeThreshold;
-      const nearBottomEdge =
-        y >= overlayY_px + overlayHeight_px - edgeThreshold &&
-        y <= overlayY_px + overlayHeight_px + edgeThreshold;
-
-      // Set cursor based on position
-      if (nearLeftEdge && nearTopEdge) {
-        document.body.style.cursor = 'nw-resize';
-      } else if (nearRightEdge && nearTopEdge) {
-        document.body.style.cursor = 'ne-resize';
-      } else if (nearLeftEdge && nearBottomEdge) {
-        document.body.style.cursor = 'sw-resize';
-      } else if (nearRightEdge && nearBottomEdge) {
-        document.body.style.cursor = 'se-resize';
-      } else if (nearLeftEdge || nearRightEdge) {
-        document.body.style.cursor = 'ew-resize';
-      } else if (nearTopEdge || nearBottomEdge) {
-        document.body.style.cursor = 'ns-resize';
-      } else if (
-        x >= overlayX_px &&
-        x <= overlayX_px + overlayWidth_px &&
-        y >= overlayY_px &&
-        y <= overlayY_px + overlayHeight_px
-      ) {
-        document.body.style.cursor = 'move';
-      } else {
-        document.body.style.cursor = 'default';
-      }
-    },
-    [overlayMediaUrl, overlayPosition, overlaySize, getVideoContentRect],
   );
 
   const handlePointerLeave = useCallback(() => {
@@ -2598,15 +2808,25 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       const edgeThreshold = 10;
       const nearLeftEdge =
-        x >= rectLeft_px - edgeThreshold && x <= rectLeft_px + edgeThreshold;
+        x >= rectLeft_px - edgeThreshold &&
+        x <= rectLeft_px + edgeThreshold &&
+        y >= rectTop_px - edgeThreshold &&
+        y <= rectTop_px + rectH_px + edgeThreshold;
       const nearRightEdge =
         x >= rectLeft_px + rectW_px - edgeThreshold &&
-        x <= rectLeft_px + rectW_px + edgeThreshold;
+        x <= rectLeft_px + rectW_px + edgeThreshold &&
+        y >= rectTop_px - edgeThreshold &&
+        y <= rectTop_px + rectH_px + edgeThreshold;
       const nearTopEdge =
-        y >= rectTop_px - edgeThreshold && y <= rectTop_px + edgeThreshold;
+        y >= rectTop_px - edgeThreshold &&
+        y <= rectTop_px + edgeThreshold &&
+        x >= rectLeft_px - edgeThreshold &&
+        x <= rectLeft_px + rectW_px + edgeThreshold;
       const nearBottomEdge =
         y >= rectTop_px + rectH_px - edgeThreshold &&
-        y <= rectTop_px + rectH_px + edgeThreshold;
+        y <= rectTop_px + rectH_px + edgeThreshold &&
+        x >= rectLeft_px - edgeThreshold &&
+        x <= rectLeft_px + rectW_px + edgeThreshold;
 
       const isNearEdge =
         nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
@@ -2636,6 +2856,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           } else if (nearRightEdge) {
             const deltaX = ((e.clientX - startX) / rect.width) * 100;
             newWidth = Math.max(minSizePct, startSize.width + deltaX);
+            newX = startPos.x + deltaX / 2;
           }
 
           if (nearTopEdge) {
@@ -2645,6 +2866,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           } else if (nearBottomEdge) {
             const deltaY = ((e.clientY - startY) / rect.height) * 100;
             newHeight = Math.max(minSizePct, startSize.height + deltaY);
+            newY = startPos.y + deltaY / 2;
           }
 
           setTintSize({
@@ -2652,12 +2874,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             height: Math.min(100, Math.max(minSizePct, newHeight)),
           });
 
-          if (nearLeftEdge || nearTopEdge) {
-            setTintPosition({
-              x: Math.max(0, Math.min(100, newX)),
-              y: Math.max(0, Math.min(100, newY)),
-            });
-          }
+          setTintPosition({
+            x: Math.max(0, Math.min(100, newX)),
+            y: Math.max(0, Math.min(100, newY)),
+          });
         };
 
         const handleGlobalPointerUp = () => {
@@ -2691,8 +2911,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           const deltaX = ((e.clientX - startX) / rect.width) * 100;
           const deltaY = ((e.clientY - startY) / rect.height) * 100;
           setTintPosition({
-            x: Math.max(0, Math.min(100, startPos.x + deltaX)),
-            y: Math.max(0, Math.min(100, startPos.y + deltaY)),
+            x: Math.max(
+              startSize.width / 2,
+              Math.min(100 - startSize.width / 2, startPos.x + deltaX),
+            ),
+            y: Math.max(
+              startSize.height / 2,
+              Math.min(100 - startSize.height / 2, startPos.y + deltaY),
+            ),
           });
         };
 
@@ -2743,15 +2969,25 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
       const edgeThreshold = 10;
       const nearLeftEdge =
-        x >= rectLeft_px - edgeThreshold && x <= rectLeft_px + edgeThreshold;
+        x >= rectLeft_px - edgeThreshold &&
+        x <= rectLeft_px + edgeThreshold &&
+        y >= rectTop_px - edgeThreshold &&
+        y <= rectTop_px + rectH_px + edgeThreshold;
       const nearRightEdge =
         x >= rectLeft_px + rectW_px - edgeThreshold &&
-        x <= rectLeft_px + rectW_px + edgeThreshold;
+        x <= rectLeft_px + rectW_px + edgeThreshold &&
+        y >= rectTop_px - edgeThreshold &&
+        y <= rectTop_px + rectH_px + edgeThreshold;
       const nearTopEdge =
-        y >= rectTop_px - edgeThreshold && y <= rectTop_px + edgeThreshold;
+        y >= rectTop_px - edgeThreshold &&
+        y <= rectTop_px + edgeThreshold &&
+        x >= rectLeft_px - edgeThreshold &&
+        x <= rectLeft_px + rectW_px + edgeThreshold;
       const nearBottomEdge =
         y >= rectTop_px + rectH_px - edgeThreshold &&
-        y <= rectTop_px + rectH_px + edgeThreshold;
+        y <= rectTop_px + rectH_px + edgeThreshold &&
+        x >= rectLeft_px - edgeThreshold &&
+        x <= rectLeft_px + rectW_px + edgeThreshold;
 
       if (nearLeftEdge && nearTopEdge) {
         document.body.style.cursor = 'nw-resize';
@@ -2838,6 +3074,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           JSON.stringify(overlayVideoSegments),
         );
       }
+    }
+    if (overlayFile || overlayVideo) {
+      formData.append('overlayCropLeft', overlayVideoCrop.left.toString());
+      formData.append('overlayCropTop', overlayVideoCrop.top.toString());
+      formData.append('overlayCropWidth', overlayVideoCrop.width.toString());
+      formData.append('overlayCropHeight', overlayVideoCrop.height.toString());
     }
     if (overlayText) {
       formData.append('overlayText', overlayText);
@@ -2927,6 +3169,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayVideoStartTime,
     overlayVideoEndTime,
     overlayVideoSegments,
+    overlayVideoCrop,
     fetchOverlayFileFromUrl,
     hasValidOverlayVideoTiming,
     loopGif,
@@ -3006,6 +3249,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         overlayVideoStartTime,
         overlayVideoEndTime,
         overlayVideoSegments,
+        overlayVideoCrop,
       );
 
       // Prefer the URL returned by onApply to avoid repeated scene polling.
@@ -3056,6 +3300,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOverlayVideoStartTime(0);
       setOverlayVideoEndTime(0);
       setOverlayVideoSegments([]);
+      setOverlayVideoCrop(FULL_MEDIA_CROP);
       setOverlayPosition({ x: 50, y: 50 });
       setOverlaySize({ width: 40, height: 40 });
       setPreviewUrl(null);
@@ -3110,6 +3355,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayVideoStartTime,
     overlayVideoEndTime,
     overlayVideoSegments,
+    overlayVideoCrop,
     hasValidOverlayVideoTiming,
     fetchOverlayFileFromUrl,
     loopGif,
@@ -4137,6 +4383,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (overlayVideoUrl?.startsWith('blob:')) {
       URL.revokeObjectURL(overlayVideoUrl);
     }
+    if (videoCropFrameUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(videoCropFrameUrl);
+    }
     setOverlayImage(null);
     setOverlayImageUrl(null);
     setOverlayVideo(null);
@@ -4144,6 +4393,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoDuration(0);
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
+    setOverlayVideoCrop(FULL_MEDIA_CROP);
+    setVideoCropFrameUrl(null);
     setOverlayVideoSegments([]);
     setOverlayPosition({ x: 50, y: 50 });
     setOverlaySize({ width: 40, height: 40 });
@@ -4171,7 +4422,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setSelectedWordText(null);
     setCustomText('');
     setSelectedWordText(null);
-  }, [onClose, overlayImageUrl, overlayVideoUrl]);
+  }, [onClose, overlayImageUrl, overlayVideoUrl, videoCropFrameUrl]);
 
   const withCacheBust = useCallback((url: string | null) => {
     const u = String(url || '').trim();
@@ -4659,22 +4910,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     isVideoEditModalOpen,
   ]);
 
-  // Update container dimensions
+  // Keep the interactive overlay canvas aligned to the visible video pixels.
   useEffect(() => {
-    const updateContainerRect = () => {
-      const rect = getVideoContentRect();
-      if (rect) {
-        setContainerRect({ width: rect.width, height: rect.height });
-      }
-    };
-
-    // Update immediately
-    updateContainerRect();
-
-    // Update on window resize
-    window.addEventListener('resize', updateContainerRect);
-    return () => window.removeEventListener('resize', updateContainerRect);
-  }, [getVideoContentRect]);
+    syncVideoContentBox();
+    window.addEventListener('resize', syncVideoContentBox);
+    return () => window.removeEventListener('resize', syncVideoContentBox);
+  }, [originalVideoUrl, syncVideoContentBox]);
 
   // Prevent scrolling the page behind the modal.
   useEffect(() => {
@@ -4701,23 +4942,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       body.style.paddingRight = prevBodyPaddingRight;
     };
   }, [isOpen]);
-
-  // Update container dimensions
-  useEffect(() => {
-    const updateContainerRect = () => {
-      const rect = getVideoContentRect();
-      if (rect) {
-        setContainerRect({ width: rect.width, height: rect.height });
-      }
-    };
-
-    // Update immediately
-    updateContainerRect();
-
-    // Update on window resize
-    window.addEventListener('resize', updateContainerRect);
-    return () => window.removeEventListener('resize', updateContainerRect);
-  }, [getVideoContentRect]);
 
   if (!isOpen) return null;
 
@@ -4931,9 +5155,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 items-start'>
           {/* Video Preview */}
           <div
-            className='relative lg:col-span-2 w-full aspect-video self-start'
-            onPointerDown={isEditingTintArea ? undefined : handleMouseDown}
-            onPointerMove={isEditingTintArea ? undefined : handlePointerMove}
+            className='relative lg:col-span-2 w-full aspect-video self-start overflow-hidden'
             onPointerLeave={handlePointerLeave}
           >
             {originalVideoUrl ? (
@@ -4954,6 +5176,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 </div>
               </div>
             )}
+            <div
+              className='absolute overflow-hidden pointer-events-none'
+              style={{
+                left: videoContentBox?.left ?? 0,
+                top: videoContentBox?.top ?? 0,
+                width: videoContentBox?.width ?? '100%',
+                height: videoContentBox?.height ?? '100%',
+              }}
+            >
             {shouldShowTintOverlay && videoTintColor && (
               <>
                 {!tintInvert ? (
@@ -5051,52 +5282,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 />
               </div>
             )}
-            {/* Invisible overlay to capture clicks when there's an overlay - excludes controls area */}
             {overlayMediaUrl && (
               <div
-                className='absolute pointer-events-auto z-5'
-                style={{
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: '40px', // Leave space for video controls at bottom
-                }}
-                onPointerDown={(e) => {
-                  // Only prevent default if clicking in overlay area
-                  const contentRect = getVideoContentRect();
-                  if (!contentRect) return;
-
-                  const x = e.clientX - contentRect.left;
-                  const y = e.clientY - contentRect.top;
-
-                  const overlayX = overlayPosition.x - overlaySize.width / 2;
-                  const overlayY = overlayPosition.y - overlaySize.height / 2;
-                  const overlayX_px = (overlayX / 100) * contentRect.width;
-                  const overlayY_px = (overlayY / 100) * contentRect.height;
-                  const overlayWidth_px =
-                    (overlaySize.width / 100) * contentRect.width;
-                  const overlayHeight_px =
-                    (overlaySize.height / 100) * contentRect.height;
-
-                  // If clicking within overlay bounds, handle overlay interaction
-                  if (
-                    x >= overlayX_px &&
-                    x <= overlayX_px + overlayWidth_px &&
-                    y >= overlayY_px &&
-                    y <= overlayY_px + overlayHeight_px
-                  ) {
-                    handleMouseDown(e);
-                  } else {
-                    // Outside overlay - allow video surface clicks (but not controls)
-                    // This will still prevent accidental play/pause on video surface
-                    e.preventDefault();
-                  }
-                }}
-              />
-            )}
-            {overlayMediaUrl && (
-              <div
-                className='absolute border-2 border-blue-500 cursor-move pointer-events-auto z-20'
+                className={`absolute border-2 cursor-move pointer-events-auto z-20 touch-none ${
+                  isModifierCropping
+                    ? 'border-amber-400 ring-2 ring-amber-300/70'
+                    : 'border-blue-500'
+                }`}
                 style={{
                   left: `${overlayPosition.x}%`,
                   top: `${overlayPosition.y}%`,
@@ -5109,7 +5301,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       ? 0
                       : 1,
                 }}
-                onPointerDown={handleMouseDown}
+                onPointerDown={(event) => handleMouseDown(event, 'move')}
                 onWheel={handleOverlayWheelZoom}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -5119,48 +5311,95 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 onDoubleClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (overlayImageUrl) openCropModal();
+                  if (overlayImageUrl || overlayVideo) void openCropModal();
                 }}
               >
-                {overlayVideoUrl ? (
-                  <video
-                    ref={overlayVideoPreviewRef}
-                    src={overlayVideoUrl}
-                    className='w-full h-full object-cover pointer-events-none'
-                    muted
-                    playsInline
-                    preload='auto'
-                    onLoadedMetadata={(event) => {
-                      const media = event.currentTarget;
-                      if (media.videoWidth > 0 && media.videoHeight > 0) {
-                        const dimensions = {
-                          width: media.videoWidth,
-                          height: media.videoHeight,
-                        };
-                        setActualImageDimensions(dimensions);
-                        setOverlaySizeFromPixels(
-                          dimensions.width,
-                          dimensions.height,
-                        );
+                <div className='absolute inset-0 overflow-hidden pointer-events-none'>
+                  {overlayVideoUrl ? (
+                    <video
+                      ref={overlayVideoPreviewRef}
+                      src={overlayVideoUrl}
+                      className={
+                        overlayVideoCrop.width === 100 &&
+                        overlayVideoCrop.height === 100
+                          ? 'w-full h-full object-cover'
+                          : 'absolute max-w-none object-contain'
                       }
-                      const baseVideo = videoRef.current;
-                      if (
-                        baseVideo &&
-                        !(baseVideo.currentTime >= startTime && baseVideo.currentTime < endTime)
-                      ) {
-                        baseVideo.currentTime = Math.max(0, startTime);
+                      style={
+                        overlayVideoCrop.width === 100 &&
+                        overlayVideoCrop.height === 100
+                          ? undefined
+                          : {
+                              width: `${10000 / overlayVideoCrop.width}%`,
+                              height: `${10000 / overlayVideoCrop.height}%`,
+                              left: `${(-overlayVideoCrop.left * 100) / overlayVideoCrop.width}%`,
+                              top: `${(-overlayVideoCrop.top * 100) / overlayVideoCrop.height}%`,
+                            }
                       }
-                    }}
+                      muted
+                      playsInline
+                      preload='auto'
+                      onLoadedMetadata={(event) => {
+                        const media = event.currentTarget;
+                        if (media.videoWidth > 0 && media.videoHeight > 0) {
+                          const dimensions = {
+                            width: media.videoWidth,
+                            height: media.videoHeight,
+                          };
+                          setActualImageDimensions(dimensions);
+                          setOverlaySizeFromPixels(
+                            dimensions.width,
+                            dimensions.height,
+                          );
+                        }
+                        const baseVideo = videoRef.current;
+                        if (
+                          baseVideo &&
+                          !(baseVideo.currentTime >= startTime && baseVideo.currentTime < endTime)
+                        ) {
+                          baseVideo.currentTime = Math.max(0, startTime);
+                        }
+                      }}
+                    />
+                  ) : overlayImageUrl ? (
+                    <img
+                      src={overlayImageUrl}
+                      alt='Overlay'
+                      className={
+                        overlayVideoCrop.width === 100 &&
+                        overlayVideoCrop.height === 100
+                          ? 'w-full h-full object-cover'
+                          : 'absolute max-w-none object-contain'
+                      }
+                      style={
+                        overlayVideoCrop.width === 100 &&
+                        overlayVideoCrop.height === 100
+                          ? undefined
+                          : {
+                              width: `${10000 / overlayVideoCrop.width}%`,
+                              height: `${10000 / overlayVideoCrop.height}%`,
+                              left: `${(-overlayVideoCrop.left * 100) / overlayVideoCrop.width}%`,
+                              top: `${(-overlayVideoCrop.top * 100) / overlayVideoCrop.height}%`,
+                            }
+                      }
+                      draggable={false}
+                    />
+                  ) : null}
+                </div>
+                {isModifierCropping && (
+                  <span className='absolute left-1 top-1 z-40 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-black pointer-events-none'>
+                    CROP
+                  </span>
+                )}
+                {MEDIA_RESIZE_HANDLES.map((handle) => (
+                  <span
+                    key={handle.mode}
+                    className={`absolute z-30 h-3 w-3 rounded-sm border bg-white ${
+                      isModifierCropping ? 'border-amber-600' : 'border-blue-700'
+                    } ${handle.className} ${handle.cursor}`}
+                    onPointerDown={(event) => handleMouseDown(event, handle.mode)}
                   />
-                ) : overlayImageUrl ? (
-                  <img
-                    src={overlayImageUrl}
-                    alt='Overlay'
-                    className='w-full h-full object-contain'
-                    draggable={false}
-                    onPointerDown={handleMouseDown}
-                  />
-                ) : null}
+                ))}
               </div>
             )}
             {selectedWordText && (
@@ -5251,6 +5490,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 </div>
               </div>
             )}
+            </div>
           </div>
 
           {/* Controls */}
@@ -5293,8 +5533,21 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 overlaySize={overlaySize}
                 setOverlaySize={setOverlaySize}
                 actualImageDimensions={actualImageDimensions}
+                sizeHeightPerWidth={(() => {
+                  const dimensions = actualImageDimensions;
+                  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
+                    return overlaySize.height / Math.max(overlaySize.width, 0.001);
+                  }
+                  const { videoWidth, videoHeight } = getVideoNaturalDimensions();
+                  const visibleWidth =
+                    dimensions.width * (overlayVideoCrop.width / 100);
+                  const visibleHeight =
+                    dimensions.height * (overlayVideoCrop.height / 100);
+                  const visibleAspect = visibleWidth / Math.max(visibleHeight, 0.001);
+                  return videoWidth / (videoHeight * visibleAspect);
+                })()}
                 onCrop={openCropModal}
-                canCrop={!overlayVideo}
+                canCrop
                 mediaLabel={overlayVideo ? 'Video' : 'Image'}
                 onCenterResetNatural={() => {
                   setOverlayPosition({ x: 50, y: 50 });
@@ -5305,7 +5558,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         ? null
                         : await ensureOverlayImageDimensions());
                     if (dims) {
-                      setOverlaySizeFromPixels(dims.width, dims.height);
+                      setOverlaySizeFromPixels(
+                        dims.width * (overlayVideoCrop.width / 100),
+                        dims.height * (overlayVideoCrop.height / 100),
+                      );
                       return;
                     }
                     setOverlaySize({ width: 25, height: 25 });
@@ -5313,19 +5569,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
                 onCenterMaximize={() => {
                   setOverlayPosition({ x: 50, y: 50 });
-                  setOverlaySize({ width: 100, height: 100 });
+                  const dimensions = actualImageDimensions;
+                  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
+                    const scale = Math.min(
+                      100 / Math.max(overlaySize.width, 0.001),
+                      100 / Math.max(overlaySize.height, 0.001),
+                    );
+                    setOverlaySize({
+                      width: overlaySize.width * scale,
+                      height: overlaySize.height * scale,
+                    });
+                    return;
+                  }
+                  const { videoWidth, videoHeight } = getVideoNaturalDimensions();
+                  const visibleAspect =
+                    (dimensions.width * overlayVideoCrop.width) /
+                    Math.max(dimensions.height * overlayVideoCrop.height, 0.001);
+                  const heightPerWidth =
+                    videoWidth / (videoHeight * visibleAspect);
+                  const width = Math.min(100, 100 / heightPerWidth);
+                  setOverlaySize({ width, height: width * heightPerWidth });
                 }}
                 onZoomOut={() => {
-                  setOverlaySize((prev) => ({
-                    width: Math.max(5, prev.width * 0.9),
-                    height: Math.max(5, prev.height * 0.9),
-                  }));
+                  scaleOverlayFromCenter(0.9);
                 }}
                 onZoomIn={() => {
-                  setOverlaySize((prev) => ({
-                    width: Math.min(100, prev.width * 1.1),
-                    height: Math.min(100, prev.height * 1.1),
-                  }));
+                  scaleOverlayFromCenter(1.1);
                 }}
               />
             )}
@@ -5842,11 +6111,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       </div>
 
       {/* Cropping Modal */}
-      {isCropping && overlayImageUrl && (
+      {isCropping && cropSourceUrl && (
         <div className='fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]'>
           <div className='bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] w-full mx-4'>
             <div className='flex justify-between items-center mb-4'>
-              <h3 className='text-lg font-semibold'>Crop Image</h3>
+              <h3 className='text-lg font-semibold'>
+                Crop {overlayVideo ? 'Video' : 'Image'}
+              </h3>
               <button
                 onClick={() => {
                   setIsCropping(false);
@@ -5866,7 +6137,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     onDoubleClick={async (e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (cropperRef.current && overlayImage) {
+                      if (cropperRef.current && (overlayImage || overlayVideo)) {
                         await applyCrop();
                       }
                     }}
@@ -5887,8 +6158,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       }
                     >
                       <Cropper
-                        key={`${overlayImageUrl}-${cropperModalKey}`}
-                        src={overlayImageUrl}
+                        key={`${cropSourceUrl}-${cropperModalKey}`}
+                        src={cropSourceUrl}
                         ref={cropperRef}
                         className={'w-full h-full'}
                         style={{
@@ -5931,7 +6202,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         stencilComponent={
                           cropShape === 'circle' ? CircleStencil : undefined
                         }
-                        {...(!isGifOverlay
+                        {...(!isCropAdjustmentDisabled
                           ? {
                               backgroundComponent: AdjustableCropperBackground,
                               backgroundProps: cropAdjustments,
@@ -5944,7 +6215,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
                           // Ensure the initial stencil starts flush to the image
                           // (no inset). Run once per open.
-                          const initKey = `${overlayImageUrl}-${cropperModalKey}`;
+                          const initKey = `${cropSourceUrl}-${cropperModalKey}`;
                           if (didInitCropCoordinatesRef.current === initKey) {
                             return;
                           }
@@ -5971,12 +6242,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                                   : null;
                               if (!(w && h && w > 0 && h > 0)) return;
 
+                              const baseLeft =
+                                typeof img.left === 'number' ? img.left : 0;
+                              const baseTop =
+                                typeof img.top === 'number' ? img.top : 0;
                               c.setCoordinates({
-                                width: w,
-                                height: h,
+                                width: (w * overlayVideoCrop.width) / 100,
+                                height: (h * overlayVideoCrop.height) / 100,
                                 left:
-                                  typeof img.left === 'number' ? img.left : 0,
-                                top: typeof img.top === 'number' ? img.top : 0,
+                                  baseLeft +
+                                  (w * overlayVideoCrop.left) / 100,
+                                top:
+                                  baseTop +
+                                  (h * overlayVideoCrop.top) / 100,
                               });
                             } catch {
                               // ignore
@@ -6013,7 +6291,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     key={key}
                     type='button'
                     onClick={() => setCropEditorMode(key)}
-                    disabled={isGifOverlay}
+                    disabled={isCropAdjustmentDisabled}
                     className={`px-3 py-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ${
                       cropEditorMode === key ? 'bg-gray-100' : 'border-gray-300'
                     }`}
@@ -6023,7 +6301,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 ))}
               </div>
 
-              {cropEditorMode !== 'crop' && !isGifOverlay && (
+              {cropEditorMode !== 'crop' && !isCropAdjustmentDisabled && (
                 <div className='flex items-center gap-3 w-full'>
                   <label className='text-sm text-gray-700 w-24'>
                     {cropEditorMode.charAt(0).toUpperCase() +
@@ -6078,7 +6356,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   <button
                     type='button'
                     onClick={() => setCropShape('circle')}
-                    disabled={isGifOverlay}
+                    disabled={isCropAdjustmentDisabled}
                     className={`px-3 py-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ${
                       cropShape === 'circle' ? 'bg-gray-100' : 'border-gray-300'
                     }`}
@@ -6103,7 +6381,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         cropRotationDegrees;
                       setCropRotationAbsolute(current - 90);
                     }}
-                    disabled={isGifOverlay}
+                    disabled={isCropAdjustmentDisabled}
                     className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                   >
                     Rotate Left
@@ -6116,7 +6394,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                         cropRotationDegrees;
                       setCropRotationAbsolute(current + 90);
                     }}
-                    disabled={isGifOverlay}
+                    disabled={isCropAdjustmentDisabled}
                     className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                   >
                     Rotate Right
@@ -6133,7 +6411,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       onChange={(e) =>
                         setCropRotationAbsolute(Number(e.target.value))
                       }
-                      disabled={isGifOverlay}
+                      disabled={isCropAdjustmentDisabled}
                       className='flex-1 disabled:opacity-50 disabled:cursor-not-allowed'
                     />
                     <input
@@ -6145,14 +6423,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       onChange={(e) =>
                         setCropRotationAbsolute(Number(e.target.value))
                       }
-                      disabled={isGifOverlay}
+                      disabled={isCropAdjustmentDisabled}
                       className='w-20 px-2 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed'
                     />
                   </div>
                   <button
                     type='button'
                     onClick={() => cropperRef.current?.flipImage(true, false)}
-                    disabled={isGifOverlay}
+                    disabled={isCropAdjustmentDisabled}
                     className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                   >
                     Flip Horizontal
@@ -6160,7 +6438,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   <button
                     type='button'
                     onClick={() => cropperRef.current?.flipImage(false, true)}
-                    disabled={isGifOverlay}
+                    disabled={isCropAdjustmentDisabled}
                     className='px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
                   >
                     Flip Vertical
@@ -6178,7 +6456,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       onChange={(e) =>
                         setCropBorderRadius(Number(e.target.value))
                       }
-                      disabled={isGifOverlay || cropShape === 'circle'}
+                      disabled={isCropAdjustmentDisabled || cropShape === 'circle'}
                       className='flex-1 disabled:opacity-50 disabled:cursor-not-allowed'
                     />
                     <span className='text-sm text-gray-700 w-12 text-right'>
@@ -6204,7 +6482,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       cropperRef.current,
                     );
                     console.log('overlayImage:', overlayImage);
-                    if (cropperRef.current && overlayImage) {
+                    if (cropperRef.current && (overlayImage || overlayVideo)) {
                       console.log('Calling applyCrop');
                       await applyCrop();
                     } else {
@@ -6212,7 +6490,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     }
                   }}
                   className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600'
-                  disabled={!overlayImage}
+                  disabled={!overlayImage && !overlayVideo}
                 >
                   Apply Crop
                 </button>

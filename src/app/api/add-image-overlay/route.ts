@@ -109,6 +109,10 @@ export async function POST(request: NextRequest) {
     const overlayVideoSegmentsRaw = formData.get(
       'overlayVideoSegments',
     ) as string | null;
+    const overlayCropLeft = Number(formData.get('overlayCropLeft') ?? 0);
+    const overlayCropTop = Number(formData.get('overlayCropTop') ?? 0);
+    const overlayCropWidth = Number(formData.get('overlayCropWidth') ?? 100);
+    const overlayCropHeight = Number(formData.get('overlayCropHeight') ?? 100);
     const overlayText = formData.get('overlayText') as string | null;
     const positionX = parseFloat(formData.get('positionX') as string);
     const positionY = parseFloat(formData.get('positionY') as string);
@@ -175,6 +179,12 @@ export async function POST(request: NextRequest) {
       isNaN(positionY) ||
       isNaN(sizeWidth) ||
       isNaN(sizeHeight) ||
+      !Number.isFinite(overlayCropLeft) ||
+      !Number.isFinite(overlayCropTop) ||
+      !Number.isFinite(overlayCropWidth) ||
+      !Number.isFinite(overlayCropHeight) ||
+      overlayCropWidth <= 0 ||
+      overlayCropHeight <= 0 ||
       isNaN(startTime) ||
       isNaN(endTime)
     ) {
@@ -620,6 +630,50 @@ export async function POST(request: NextRequest) {
       if (!overlayVideoStream) {
         throw new Error('No video stream found in overlay video');
       }
+      const overlaySourceWidth = Number(overlayVideoStream.width);
+      const overlaySourceHeight = Number(overlayVideoStream.height);
+      if (!(overlaySourceWidth > 0) || !(overlaySourceHeight > 0)) {
+        throw new Error('Overlay video dimensions could not be determined');
+      }
+      const cropLeftPct = Math.max(0, Math.min(100, overlayCropLeft));
+      const cropTopPct = Math.max(0, Math.min(100, overlayCropTop));
+      const cropWidthPct = Math.max(
+        0.1,
+        Math.min(100 - cropLeftPct, overlayCropWidth),
+      );
+      const cropHeightPct = Math.max(
+        0.1,
+        Math.min(100 - cropTopPct, overlayCropHeight),
+      );
+      const cropX = Math.min(
+        overlaySourceWidth - 1,
+        Math.max(0, Math.round((cropLeftPct / 100) * overlaySourceWidth)),
+      );
+      const cropY = Math.min(
+        overlaySourceHeight - 1,
+        Math.max(0, Math.round((cropTopPct / 100) * overlaySourceHeight)),
+      );
+      const cropWidthPx = Math.max(
+        1,
+        Math.min(
+          overlaySourceWidth - cropX,
+          Math.round((cropWidthPct / 100) * overlaySourceWidth),
+        ),
+      );
+      const cropHeightPx = Math.max(
+        1,
+        Math.min(
+          overlaySourceHeight - cropY,
+          Math.round((cropHeightPct / 100) * overlaySourceHeight),
+        ),
+      );
+      const sourceCropFilter =
+        cropX === 0 &&
+        cropY === 0 &&
+        cropWidthPx === overlaySourceWidth &&
+        cropHeightPx === overlaySourceHeight
+          ? ''
+          : `crop=${cropWidthPx}:${cropHeightPx}:${cropX}:${cropY},`;
 
       const parseOverlayDuration = (value?: string | number) => {
         if (value == null) return null;
@@ -731,7 +785,7 @@ export async function POST(request: NextRequest) {
 
       const sourceAssemblyFilters = sourceSegments.map(
         (segment, index) =>
-          `[1:v]trim=start=${segment.startTime}:end=${segment.endTime},setpts=PTS-STARTPTS[source${index}]`,
+          `[1:v]${sourceCropFilter}trim=start=${segment.startTime}:end=${segment.endTime},setpts=PTS-STARTPTS[source${index}]`,
       );
       sourceAssemblyFilters.push(
         `${sourceSegments.map((_, index) => `[source${index}]`).join('')}concat=n=${sourceSegments.length}:v=1:a=0[stitched]`,
@@ -904,6 +958,26 @@ export async function POST(request: NextRequest) {
       // - This makes the GIF *visually* start from its beginning when the overlay becomes active.
       // Note: setpts expressions are in timebase units, so shifting by seconds must use `/TB`.
       const overlayFilters: string[] = [];
+      const cropLeftPct = Math.max(0, Math.min(100, overlayCropLeft));
+      const cropTopPct = Math.max(0, Math.min(100, overlayCropTop));
+      const cropWidthPct = Math.max(
+        0.1,
+        Math.min(100 - cropLeftPct, overlayCropWidth),
+      );
+      const cropHeightPct = Math.max(
+        0.1,
+        Math.min(100 - cropTopPct, overlayCropHeight),
+      );
+      const hasSourceCrop =
+        cropLeftPct > 0.001 ||
+        cropTopPct > 0.001 ||
+        cropWidthPct < 99.999 ||
+        cropHeightPct < 99.999;
+      if (hasSourceCrop) {
+        overlayFilters.push(
+          `crop=iw*${cropWidthPct / 100}:ih*${cropHeightPct / 100}:iw*${cropLeftPct / 100}:ih*${cropTopPct / 100}`,
+        );
+      }
       if (isGif) {
         overlayFilters.push(`setpts=PTS-STARTPTS+(${tStart})/TB`);
       }
