@@ -305,6 +305,7 @@ export interface PipelineConfig {
   transcribeScenesAfterSync: boolean;
   fixFlaggedAfterFixTTS: boolean;
   fixIntroQaAfterFixFlagged: boolean;
+  fixIntroQaAllScenes: boolean;
   promptScenesAfterTranscribe: boolean;
 
   // Scene-level post-processing (batch ops)
@@ -785,6 +786,7 @@ const defaultPipelineConfig: PipelineConfig = {
   transcribeScenesAfterSync: true,
   fixFlaggedAfterFixTTS: true,
   fixIntroQaAfterFixFlagged: true,
+  fixIntroQaAllScenes: false,
   promptScenesAfterTranscribe: true,
 
   generateSubtitles: false,

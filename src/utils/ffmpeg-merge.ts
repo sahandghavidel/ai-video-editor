@@ -59,6 +59,7 @@ export interface BrandedTransitionOptions {
   outputPath?: string;
   duration?: number;
   includeSoundEffect?: boolean;
+  showTitles?: boolean;
   titles?: string[];
 }
 
@@ -124,6 +125,7 @@ export async function concatenateVideosWithBrandedTransitions(
     outputPath,
     duration = 0.95,
     includeSoundEffect = true,
+    showTitles = titles.length > 0,
     titles = [],
   } = options;
 
@@ -152,7 +154,9 @@ export async function concatenateVideosWithBrandedTransitions(
   });
 
   try {
-    hyperFramesOverlays = await prepareHyperFramesMergeOverlays(incomingTitles);
+    hyperFramesOverlays = await prepareHyperFramesMergeOverlays(
+      showTitles ? incomingTitles : [],
+    );
   } catch (error) {
     console.warn(
       '[MERGE] HyperFrames overlays unavailable; using the FFmpeg brand fallback:',
@@ -165,21 +169,38 @@ export async function concatenateVideosWithBrandedTransitions(
       `[${index}:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,` +
         `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black,` +
         'fps=30,format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS' +
-        `[v${index}]`,
+        `[vbase${index}]`,
     );
 
     if (probe.hasAudio) {
       filters.push(
         `[${index}:a]aresample=48000:async=1:first_pts=0,` +
           `aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
-          `apad,atrim=duration=${probe.duration.toFixed(6)},asetpts=PTS-STARTPTS[a${index}]`,
+          `apad,atrim=duration=${probe.duration.toFixed(6)},asetpts=PTS-STARTPTS[abase${index}]`,
       );
     } else {
       filters.push(
         `anullsrc=r=48000:cl=stereo,atrim=duration=${probe.duration.toFixed(6)},` +
-          `asetpts=PTS-STARTPTS[a${index}]`,
+          `asetpts=PTS-STARTPTS[abase${index}]`,
       );
     }
+
+    const audioFilters = [
+      index > 0 ? 'afade=t=in:st=0:d=0.005' : '',
+      index < probes.length - 1
+        ? `afade=t=out:st=${Math.max(0, probe.duration - 0.005).toFixed(6)}:d=0.005`
+        : '',
+      'asetpts=PTS-STARTPTS',
+    ].filter(Boolean);
+    filters.push(`[abase${index}]${audioFilters.join(',')}[a${index}]`);
+
+    const videoOutputs = [`vmain${index}`];
+    if (index > 0) videoOutputs.push(`vfirst${index}`);
+    if (index < probes.length - 1) videoOutputs.push(`vlast${index}`);
+    filters.push(
+      `[vbase${index}]split=${videoOutputs.length}` +
+        videoOutputs.map((label) => `[${label}]`).join(''),
+    );
   });
 
   // q is the pixel's diagonal position. f sweeps from off-screen left to
@@ -201,39 +222,58 @@ export async function concatenateVideosWithBrandedTransitions(
     `if(lt(${q},${f}+0.54),${gold},` +
     `if(lt(${q},${f}+0.56),${cyan},A)))))`;
 
-  let videoLabel = 'v0';
-  let audioLabel = 'a0';
   const transitionStarts: number[] = [];
   let accumulatedDuration = probes[0].duration;
+  const videoConcatInputs = ['[vmain0]'];
+  const audioConcatInputs = ['[a0]'];
+  const frameDuration = 1 / 30;
 
   for (let index = 1; index < probes.length; index++) {
-    const transitionStart = accumulatedDuration - transitionDuration;
+    const transitionStart = accumulatedDuration;
     transitionStarts.push(transitionStart);
     filters.push(
-      hyperFramesOverlays
-        ? `[${videoLabel}][v${index}]xfade=transition=fade:` +
-            `duration=${transitionDuration.toFixed(3)}:` +
-            `offset=${transitionStart.toFixed(6)}[vx${index}]`
-        : `[${videoLabel}][v${index}]xfade=transition=custom:` +
-            `duration=${transitionDuration.toFixed(3)}:` +
-            `offset=${transitionStart.toFixed(6)}:` +
-            `expr='${transitionExpression}'[vx${index}]`,
+      `[vlast${index - 1}]trim=start=${Math.max(
+        0,
+        probes[index - 1].duration - frameDuration,
+      ).toFixed(6)}:duration=${frameDuration.toFixed(6)},` +
+        `setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${transitionDuration.toFixed(3)},` +
+        `trim=duration=${transitionDuration.toFixed(3)},setpts=PTS-STARTPTS[holdlast${index}]`,
     );
     filters.push(
-      `[${audioLabel}][a${index}]acrossfade=d=${transitionDuration.toFixed(3)}:` +
-        'c1=tri:c2=tri' +
-        `[ax${index}]`,
+      `[vfirst${index}]trim=duration=${frameDuration.toFixed(6)},` +
+        `setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${transitionDuration.toFixed(3)},` +
+        `trim=duration=${transitionDuration.toFixed(3)},setpts=PTS-STARTPTS[holdfirst${index}]`,
     );
-    videoLabel = `vx${index}`;
-    audioLabel = `ax${index}`;
-    accumulatedDuration += probes[index].duration - transitionDuration;
+    filters.push(
+      `[holdlast${index}][holdfirst${index}]xfade=transition=custom:` +
+        `duration=${transitionDuration.toFixed(3)}:offset=0:` +
+        `expr='${transitionExpression}'[bridge${index}]`,
+    );
+    filters.push(
+      `anullsrc=r=48000:cl=stereo,atrim=duration=${transitionDuration.toFixed(3)},` +
+        `asetpts=PTS-STARTPTS[asilence${index}]`,
+    );
+    videoConcatInputs.push(`[bridge${index}]`, `[vmain${index}]`);
+    audioConcatInputs.push(`[asilence${index}]`, `[a${index}]`);
+    accumulatedDuration += transitionDuration + probes[index].duration;
   }
+
+  filters.push(
+    `${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[vjoined]`,
+  );
+  filters.push(
+    `${audioConcatInputs.join('')}concat=n=${audioConcatInputs.length}:v=0:a=1[ajoined]`,
+  );
+  let videoLabel = 'vjoined';
+  let audioLabel = 'ajoined';
 
   if (hyperFramesOverlays) {
     const firstOverlayInput = videoUrls.length;
 
     for (let index = 0; index < transitionStarts.length; index++) {
-      const transitionInput = firstOverlayInput + index * 2;
+      const transitionInput = showTitles
+        ? firstOverlayInput + index * 2
+        : firstOverlayInput + index;
       const titleInput = transitionInput + 1;
       const transitionStart = transitionStarts[index];
       filters.push(
@@ -246,7 +286,7 @@ export async function concatenateVideosWithBrandedTransitions(
       );
       videoLabel = `hftransitioned${index}`;
 
-      if (hyperFramesOverlays.titlePaths[index]) {
+      if (showTitles && hyperFramesOverlays.titlePaths[index]) {
         const titleStart = transitionStart + transitionDuration + 0.1;
         const nextTransition = transitionStarts[index + 1] ?? Number.POSITIVE_INFINITY;
         const visibleDuration = Math.min(
@@ -267,7 +307,7 @@ export async function concatenateVideosWithBrandedTransitions(
         }
       }
     }
-  } else if (titles.length > 1) {
+  } else if (showTitles && titles.length > 1) {
     const titleFiles = await Promise.all(
       titles.slice(1).map(async (title, index) => {
         const titlePath = path.join(
@@ -347,12 +387,14 @@ export async function concatenateVideosWithBrandedTransitions(
     transitionStarts.forEach((_, index) => {
       // FFmpeg's native VP9 decoder drops WebM alpha; libvpx-vp9 preserves it.
       ffmpegArgs.push('-c:v', 'libvpx-vp9', '-i', hyperFramesOverlays.transitionPath);
-      ffmpegArgs.push(
-        '-c:v',
-        'libvpx-vp9',
-        '-i',
-        hyperFramesOverlays.titlePaths[index],
-      );
+      if (showTitles && hyperFramesOverlays.titlePaths[index]) {
+        ffmpegArgs.push(
+          '-c:v',
+          'libvpx-vp9',
+          '-i',
+          hyperFramesOverlays.titlePaths[index],
+        );
+      }
     });
   }
   ffmpegArgs.push(

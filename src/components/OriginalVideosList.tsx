@@ -6550,17 +6550,18 @@ export default function OriginalVideosList({
     }
   };
 
-  const runFixIntroQaForProcessingScenesAllVideos =
-    async (): Promise<boolean> => {
-      if (
-        !sceneHandlers?.handleTTSProduce ||
-        !sceneHandlers?.handleVideoGenerate ||
-        !sceneHandlers?.handleTranscribeScene
-      ) {
-        throw new Error(
-          'Fix Intro QA handlers are not ready. Select a video first so scene actions initialize.',
-        );
-      }
+  const runFixIntroQaForProcessingScenesAllVideos = async (
+    processAllScenes = false,
+  ): Promise<boolean> => {
+    if (
+      !sceneHandlers?.handleTTSProduce ||
+      !sceneHandlers?.handleVideoGenerate ||
+      !sceneHandlers?.handleTranscribeScene
+    ) {
+      throw new Error(
+        'Fix Intro QA handlers are not ready. Select a video first so scene actions initialize.',
+      );
+    }
 
       const freshVideosData = await getOriginalVideosData();
 
@@ -6631,12 +6632,15 @@ export default function OriginalVideosList({
         const videoScenes = scenesByVideoId.get(video.id) || [];
         if (videoScenes.length === 0) continue;
 
-        const introScenes = [...videoScenes]
+        const orderedNonEmptyScenes = [...videoScenes]
           .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
           .filter(
             (scene) => String(scene['field_6890'] ?? '').trim().length > 0,
-          )
-          .slice(0, INTRO_QA_SCENE_LIMIT);
+          );
+
+        const introScenes = processAllScenes
+          ? orderedNonEmptyScenes
+          : orderedNonEmptyScenes.slice(0, INTRO_QA_SCENE_LIMIT);
 
         const eligibleIntroScenes = getFixTtsEligibleScenes(introScenes);
         for (const scene of eligibleIntroScenes) {
@@ -6649,8 +6653,11 @@ export default function OriginalVideosList({
       }
 
       if (introTargets.length === 0) {
+        const sceneScope = processAllScenes
+          ? 'eligible non-empty scenes'
+          : `intro scenes (first ${INTRO_QA_SCENE_LIMIT} non-empty sentence scenes per Processing video)`;
         console.log(
-          `No intro scenes (first ${INTRO_QA_SCENE_LIMIT} non-empty sentence scenes per Processing video) with final video + text found to fix.`,
+          `No ${sceneScope} with final video + text found to fix.`,
         );
         return false;
       }
@@ -7738,6 +7745,7 @@ export default function OriginalVideosList({
 
   const handleFixIntroQaProcessingScenesAllVideos = async (
     playSound = true,
+    processAllScenes = false,
   ) => {
     if (transcribingProcessingScenesAllVideos) return;
 
@@ -7746,7 +7754,9 @@ export default function OriginalVideosList({
       setFixTtsBatchMode('introQa');
       setTranscribingProcessingScenesAllVideos(true);
 
-      const didProcess = await runFixIntroQaForProcessingScenesAllVideos();
+      const didProcess = await runFixIntroQaForProcessingScenesAllVideos(
+        processAllScenes,
+      );
 
       if (didProcess) {
         console.log(
@@ -12012,7 +12022,10 @@ export default function OriginalVideosList({
         );
 
         try {
-          await handleFixIntroQaProcessingScenesAllVideos(false);
+          await handleFixIntroQaProcessingScenesAllVideos(
+            false,
+            pipelineConfig.fixIntroQaAllScenes,
+          );
           console.log(`✓ Step ${stepNumber} Complete: Fix Intro QA finished`);
 
           await maybeRunPostStepRefresh('fix-intro-qa-processing-scenes', true);

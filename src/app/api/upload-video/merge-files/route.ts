@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
             videoUrls: tempPaths,
             duration: 0.95,
             includeSoundEffect: includeTransitionSound,
+            showTitles: showTransitionTitles,
             titles: showTransitionTitles
               ? files.map((file, index) =>
                   sanitizeTransitionTitle(

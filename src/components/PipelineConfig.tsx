@@ -976,13 +976,23 @@ export default function PipelineConfig({
             {/* Remaining steps: speedUp onwards */}
             {stepsAfterTranscribeApply.map((step, index) => {
               const isEnabled = pipelineConfig[step.key];
+              const isFixIntroQa =
+                step.key === 'fixIntroQaAfterFixFlagged';
 
               return (
-                <button
+                <div
                   key={step.key}
+                  role='button'
+                  tabIndex={0}
                   onClick={() => togglePipelineStep(step.key)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      togglePipelineStep(step.key);
+                    }
+                  }}
                   className={`
-                    relative flex flex-col items-center gap-1.5 p-2.5 rounded-md border-2 transition-all
+                    relative flex flex-col items-center gap-1.5 p-2.5 rounded-md border-2 transition-all cursor-pointer
                     ${
                       isEnabled
                         ? 'border-purple-500 bg-purple-50 shadow-sm'
@@ -1011,6 +1021,30 @@ export default function PipelineConfig({
                     {step.label}
                   </span>
 
+                  {isFixIntroQa && (
+                    <label
+                      className={`flex items-center gap-1 text-[10px] font-medium ${
+                        isEnabled ? 'text-cyan-700' : 'text-gray-400'
+                      }`}
+                      title='Process every eligible non-empty scene instead of only the first 10 scenes per Processing video'
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type='checkbox'
+                        checked={pipelineConfig.fixIntroQaAllScenes}
+                        disabled={!isEnabled}
+                        onChange={(event) =>
+                          updatePipelineConfig({
+                            fixIntroQaAllScenes: event.target.checked,
+                          })
+                        }
+                        className='h-3 w-3 accent-cyan-500 disabled:cursor-not-allowed'
+                      />
+                      All scenes
+                    </label>
+                  )}
+
                   {/* Step Number Badge */}
                   <span
                     className={`
@@ -1024,7 +1058,7 @@ export default function PipelineConfig({
                   >
                     {stepsAfterTranscribeApplyStartNumber + index}
                   </span>
-                </button>
+                </div>
               );
             })}
 
