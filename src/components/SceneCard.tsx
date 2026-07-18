@@ -3174,6 +3174,7 @@ export default function SceneCard({
       width: number;
       height: number;
     },
+    brandedTextTemplate?: string | null,
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -3222,6 +3223,9 @@ export default function SceneCard({
       }
       if (overlayText) {
         formData.append('overlayText', overlayText);
+        if (brandedTextTemplate) {
+          formData.append('brandedTextTemplate', brandedTextTemplate);
+        }
         if (textStyling) {
           formData.append('textStyling', JSON.stringify(textStyling));
         }

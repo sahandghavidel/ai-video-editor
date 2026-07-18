@@ -1,0 +1,211 @@
+<!doctype html>
+<html
+  lang="en"
+  data-composition-variables='[{"id":"title","type":"string","label":"Title","default":"BUILD SOMETHING GREAT","maxLength":80},{"id":"duration","type":"number","label":"Duration","default":3.2,"min":1.5,"max":30,"step":0.1,"unit":"seconds"}]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=2560, height=420" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: 'ImpactLocal';
+        src: local('Impact');
+        font-style: normal;
+        font-weight: 400;
+      }
+
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 2560px;
+        height: 420px;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      #branded-text-root {
+        position: relative;
+        width: 2560px;
+        height: 420px;
+        overflow: hidden;
+        background: transparent;
+        font-family: 'ImpactLocal', sans-serif;
+      }
+
+      #branded-text-clip { position: absolute; inset: 0; overflow: hidden; }
+      #branded-text-shadow,
+      #branded-text-panel,
+      #branded-text-grid {
+        position: absolute;
+        left: 116px;
+        top: 65px;
+        width: 2260px;
+        height: 286px;
+        transform-origin: left center;
+        clip-path: polygon(0 0, 96% 0, 100% 50%, 96% 100%, 0 100%);
+      }
+
+      #branded-text-shadow {
+        transform: translate(28px, 24px);
+        background: rgba(2, 6, 18, 0.58);
+        filter: blur(16px);
+      }
+
+      #branded-text-panel {
+        background: linear-gradient(105deg, rgba(5, 11, 24, 0.98), rgba(8, 20, 38, 0.96) 58%, rgba(16, 36, 61, 0.94));
+        border: 4px solid rgba(22, 119, 255, 0.82);
+        box-shadow: inset 0 0 50px rgba(22, 119, 255, 0.18), 0 0 34px rgba(40, 231, 255, 0.2);
+      }
+
+      #branded-text-grid {
+        opacity: 0.055;
+        background-image:
+          linear-gradient(rgba(40, 231, 255, 0.35) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(40, 231, 255, 0.3) 1px, transparent 1px);
+        background-size: 48px 48px;
+      }
+
+      #branded-text-halo {
+        position: absolute;
+        left: 42px;
+        top: 126px;
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 210, 28, 0.72), rgba(255, 210, 28, 0.16) 42%, transparent 70%);
+        filter: blur(15px);
+      }
+
+      #branded-text-core {
+        position: absolute;
+        left: 94px;
+        top: 178px;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: #ffd21c;
+        box-shadow: 0 0 30px rgba(255, 210, 28, 0.85), 0 0 62px rgba(255, 210, 28, 0.45);
+      }
+
+      #branded-text-trace {
+        position: absolute;
+        left: 116px;
+        top: 198px;
+        width: 390px;
+        height: 8px;
+        transform-origin: left center;
+        background: linear-gradient(90deg, #ffd21c 0 12%, #28e7ff 36%, #a9f7ff);
+        box-shadow: 0 0 25px rgba(40, 231, 255, 0.85);
+      }
+
+      #branded-text-mask {
+        position: absolute;
+        left: 300px;
+        top: 91px;
+        width: 1940px;
+        height: 232px;
+        overflow: hidden;
+        transform-origin: left center;
+        display: flex;
+        align-items: center;
+      }
+
+      #branded-text-title {
+        display: inline-block;
+        white-space: nowrap;
+        color: #f7faff;
+        font-size: 158px;
+        line-height: 1;
+        letter-spacing: 0.025em;
+        -webkit-text-stroke: 5px rgba(22, 119, 255, 0.9);
+        text-shadow: 0 6px 0 #071b3d, 0 0 24px rgba(80, 185, 255, 0.45);
+      }
+
+      #branded-text-scan {
+        position: absolute;
+        left: 286px;
+        top: 88px;
+        width: 16px;
+        height: 238px;
+        opacity: 0;
+        background: #a9f7ff;
+        box-shadow: 0 0 30px 12px rgba(40, 231, 255, 0.76);
+      }
+
+      #branded-text-sweep {
+        position: absolute;
+        left: 210px;
+        top: 68px;
+        width: 330px;
+        height: 280px;
+        opacity: 0;
+        transform: skewX(-18deg);
+        background: linear-gradient(90deg, transparent, rgba(169, 247, 255, 0.27), transparent);
+        mix-blend-mode: screen;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="branded-text-root"
+      data-composition-id="javascript-king-branded-text"
+      data-width="2560"
+      data-height="420"
+      data-fps="30"
+      data-start="0"
+    >
+      <section
+        id="branded-text-clip"
+        class="clip"
+        data-start="0"
+        data-duration="3.2"
+        data-track-index="1"
+      >
+        <div id="branded-text-shadow"></div>
+        <div id="branded-text-panel"></div>
+        <div id="branded-text-grid"></div>
+        <div id="branded-text-halo"></div>
+        <div id="branded-text-core"></div>
+        <div id="branded-text-trace"></div>
+        <div id="branded-text-mask">
+          <span id="branded-text-title" data-var-text="title">BUILD SOMETHING GREAT</span>
+        </div>
+        <div id="branded-text-scan"></div>
+        <div id="branded-text-sweep"></div>
+      </section>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const variables = window.__hyperframes.getVariables();
+      const duration = Math.max(1.5, Math.min(30, Number(variables.duration) || 3.2));
+      const title = String(variables.title || 'BUILD SOMETHING GREAT').toUpperCase().slice(0, 80);
+      const titleElement = document.getElementById('branded-text-title');
+      const clipElement = document.getElementById('branded-text-clip');
+      titleElement.textContent = title;
+      clipElement.setAttribute('data-duration', String(duration));
+      const fittedSize = Math.max(76, Math.min(158, 158 - Math.max(0, title.length - 22) * 2.65));
+      titleElement.style.fontSize = `${fittedSize}px`;
+
+      const exitStart = duration - 0.48;
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo('#branded-text-core', { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.16, ease: 'back.out(2)' }, 0);
+      tl.fromTo('#branded-text-halo', { scale: 0.4, opacity: 0 }, { scale: 1.7, opacity: 0.48, duration: 0.18, ease: 'power2.out' }, 0);
+      tl.fromTo('#branded-text-trace', { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.2, ease: 'power3.out' }, 0.08);
+      tl.fromTo(['#branded-text-shadow', '#branded-text-panel', '#branded-text-grid'], { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.28, ease: 'power4.out' }, 0.18);
+      tl.fromTo('#branded-text-mask', { scaleX: 0 }, { scaleX: 1, duration: 0.32, ease: 'power3.out' }, 0.32);
+      tl.fromTo('#branded-text-title', { x: -44, opacity: 0 }, { x: 0, opacity: 1, duration: 0.3, ease: 'power4.out' }, 0.34);
+      tl.fromTo('#branded-text-scan', { x: 0, opacity: 0 }, { x: 1950, opacity: 0.95, duration: 0.3, ease: 'power3.out' }, 0.32);
+      tl.to('#branded-text-scan', { opacity: 0, duration: 0.08, ease: 'power2.in' }, 0.62);
+      tl.fromTo('#branded-text-sweep', { x: -520, opacity: 0 }, { x: 2160, opacity: 0.3, duration: 0.28, ease: 'power2.inOut' }, 0.72);
+      tl.to('#branded-text-sweep', { opacity: 0, duration: 0.08, ease: 'power2.out' }, 1);
+      tl.to('#branded-text-title', { x: -34, opacity: 0, duration: 0.24, ease: 'power3.in' }, exitStart);
+      tl.to('#branded-text-mask', { scaleX: 0, duration: 0.26, ease: 'power3.in' }, exitStart + 0.04);
+      tl.to(['#branded-text-grid', '#branded-text-panel', '#branded-text-shadow'], { scaleX: 0, opacity: 0, duration: 0.3, ease: 'power4.in' }, exitStart + 0.06);
+      tl.to('#branded-text-trace', { scaleX: 0, opacity: 0, duration: 0.25, ease: 'power3.in' }, exitStart + 0.08);
+      tl.to(['#branded-text-core', '#branded-text-halo'], { scale: 0, opacity: 0, duration: 0.2, ease: 'power2.in' }, duration - 0.2);
+      tl.seek(0);
+      window.__timelines['javascript-king-branded-text'] = tl;
+    </script>
+  </body>
+</html>

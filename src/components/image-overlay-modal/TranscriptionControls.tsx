@@ -33,6 +33,9 @@ type Props = {
   onMacWindowThemeChange: (v: MacWindowTheme) => void;
   onCustomTextEnter: () => void;
   onAddText: () => void;
+  onAddBrandedText: () => void;
+  isBrandedTextActive: boolean;
+  isBrandedTextLoading: boolean;
   onAddMacWindow: () => void;
   onClearText: () => void;
   onInsertFull: () => void;
@@ -63,6 +66,9 @@ export function TranscriptionControls({
   onMacWindowThemeChange,
   onCustomTextEnter,
   onAddText,
+  onAddBrandedText,
+  isBrandedTextActive,
+  isBrandedTextLoading,
   onAddMacWindow,
   onClearText,
   onInsertFull,
@@ -222,6 +228,24 @@ export function TranscriptionControls({
           aria-label='Add text as overlay'
         >
           <Plus className='h-4 w-4' />
+        </button>
+        <button
+          type='button'
+          onClick={onAddBrandedText}
+          disabled={!customText.trim() || isBrandedTextLoading}
+          className={`p-2 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${
+            isBrandedTextActive
+              ? 'bg-amber-500 hover:bg-amber-600'
+              : 'bg-blue-700 hover:bg-blue-800'
+          }`}
+          aria-label='Add branded text template'
+          title='Add the fixed JavaScript King branded text template'
+        >
+          {isBrandedTextLoading ? (
+            <Loader2 className='h-4 w-4 animate-spin' />
+          ) : (
+            <Wand2 className='h-4 w-4' />
+          )}
         </button>
         <button
           type='button'

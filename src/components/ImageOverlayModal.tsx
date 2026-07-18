@@ -11,6 +11,12 @@ import { useAppStore } from '@/store/useAppStore';
 import { X, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { getSceneById } from '@/lib/baserow-actions';
 import {
+  BRANDED_TEXT_ASPECT_RATIO,
+  BRANDED_TEXT_MAX_DURATION,
+  BRANDED_TEXT_MIN_DURATION,
+  BRANDED_TEXT_TEMPLATE_ID,
+} from '@/lib/branded-text-template';
+import {
   isHasTextRecordFreshForImage,
   parseSceneHasTextField,
 } from '@/utils/sceneHasText';
@@ -54,6 +60,7 @@ type MediaTransformMode =
   | 'sw'
   | 'w'
   | 'nw';
+type BrandedTextTransformMode = 'move' | 'nw' | 'ne' | 'se' | 'sw';
 
 const MEDIA_RESIZE_HANDLES: Array<{
   mode: Exclude<MediaTransformMode, 'move'>;
@@ -538,6 +545,7 @@ interface ImageOverlayModalProps {
     overlayVideoEndTime?: number,
     overlayVideoSegments?: VideoSourceSegment[],
     overlayVideoCrop?: MediaCrop,
+    brandedTextTemplate?: string | null,
   ) => Promise<{ videoUrl?: string } | void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -700,6 +708,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   >(null);
   const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string>('');
+  const [brandedTextTemplate, setBrandedTextTemplate] = useState<string | null>(
+    null,
+  );
+  const [brandedTextPreviewUrl, setBrandedTextPreviewUrl] = useState<
+    string | null
+  >(null);
+  const [isBrandedTextPreviewLoading, setIsBrandedTextPreviewLoading] =
+    useState(false);
+  const [brandedTextPreviewError, setBrandedTextPreviewError] = useState<
+    string | null
+  >(null);
   const [macWindowTitle, setMacWindowTitle] = useState('');
   const [macWindowTheme, setMacWindowTheme] =
     useState<MacWindowTheme>('dark');
@@ -1234,6 +1253,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayVideoPreviewRef = useRef<HTMLVideoElement>(null);
+  const brandedTextPreviewRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null!);
   const videoFileInputRef = useRef<HTMLInputElement>(null!);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -1384,6 +1404,183 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayVideoEndTime,
     overlayVideoStartTime,
     overlayVideoUrl,
+    startTime,
+  ]);
+
+  const isBrandedTextActive =
+    brandedTextTemplate === BRANDED_TEXT_TEMPLATE_ID;
+  const brandedTextDuration = endTime - startTime;
+  const brandedTextValue = (customText.trim() || selectedWordText || '')
+    .trim()
+    .toUpperCase();
+
+  useEffect(() => {
+    if (!selectedWordText && brandedTextTemplate) {
+      setBrandedTextTemplate(null);
+    }
+  }, [brandedTextTemplate, selectedWordText]);
+
+  useEffect(() => {
+    if (!isBrandedTextActive || !selectedWordText) {
+      setIsBrandedTextPreviewLoading(false);
+      setBrandedTextPreviewError(null);
+      setBrandedTextPreviewUrl((previous) => {
+        if (previous?.startsWith('blob:')) URL.revokeObjectURL(previous);
+        return null;
+      });
+      return;
+    }
+
+    if (
+      !brandedTextValue ||
+      brandedTextDuration < BRANDED_TEXT_MIN_DURATION ||
+      brandedTextDuration > BRANDED_TEXT_MAX_DURATION
+    ) {
+      setIsBrandedTextPreviewLoading(false);
+      setBrandedTextPreviewError(
+        `Choose a duration between ${BRANDED_TEXT_MIN_DURATION} and ${BRANDED_TEXT_MAX_DURATION} seconds.`,
+      );
+      return;
+    }
+
+    const abortController = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsBrandedTextPreviewLoading(true);
+      setBrandedTextPreviewError(null);
+      try {
+        const response = await fetch('/api/render-branded-text-overlay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: brandedTextValue,
+            duration: brandedTextDuration,
+          }),
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          const result = (await response.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(result?.error || 'Failed to render branded text.');
+        }
+        const blob = await response.blob();
+        const nextUrl = URL.createObjectURL(blob);
+        setBrandedTextPreviewUrl((previous) => {
+          if (previous?.startsWith('blob:')) URL.revokeObjectURL(previous);
+          return nextUrl;
+        });
+      } catch (error) {
+        if (abortController.signal.aborted) return;
+        setBrandedTextPreviewError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to render branded text.',
+        );
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsBrandedTextPreviewLoading(false);
+        }
+      }
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timer);
+      abortController.abort();
+    };
+  }, [
+    brandedTextDuration,
+    brandedTextValue,
+    isBrandedTextActive,
+    selectedWordText,
+  ]);
+
+  useEffect(() => {
+    const baseVideo = videoRef.current;
+    const brandedPreview = brandedTextPreviewRef.current;
+    if (
+      !baseVideo ||
+      !brandedPreview ||
+      !brandedTextPreviewUrl ||
+      !isBrandedTextActive
+    ) {
+      return;
+    }
+
+    let animationFrame = 0;
+    const syncBrandedPreview = (forceSeek = false) => {
+      const baseTime = baseVideo.currentTime || 0;
+      const isActive = baseTime >= startTime && baseTime <= endTime;
+      const localTime = Math.max(
+        0,
+        Math.min(brandedTextDuration, baseTime - startTime),
+      );
+
+      if (!isActive) {
+        brandedPreview.pause();
+        if (baseTime < startTime && brandedPreview.currentTime !== 0) {
+          brandedPreview.currentTime = 0;
+        }
+        return;
+      }
+
+      const playbackRate = Math.max(
+        0.1,
+        Math.min(5, baseVideo.playbackRate || 1),
+      );
+      if (Math.abs(brandedPreview.playbackRate - playbackRate) > 0.001) {
+        brandedPreview.playbackRate = playbackRate;
+      }
+      if (
+        forceSeek ||
+        Math.abs(brandedPreview.currentTime - localTime) > 0.1
+      ) {
+        brandedPreview.currentTime = localTime;
+      }
+
+      if (baseVideo.paused || baseVideo.ended) {
+        brandedPreview.pause();
+      } else if (brandedPreview.paused) {
+        void brandedPreview.play().catch(() => {
+          // Browser autoplay restrictions do not affect the final render.
+        });
+      }
+    };
+
+    const followPlayback = () => {
+      syncBrandedPreview(false);
+      if (!baseVideo.paused && !baseVideo.ended) {
+        animationFrame = window.requestAnimationFrame(followPlayback);
+      }
+    };
+    const handlePlay = () => {
+      window.cancelAnimationFrame(animationFrame);
+      followPlayback();
+    };
+    const handlePause = () => syncBrandedPreview(true);
+    const handleSeek = () => syncBrandedPreview(true);
+
+    baseVideo.addEventListener('play', handlePlay);
+    baseVideo.addEventListener('pause', handlePause);
+    baseVideo.addEventListener('seeking', handleSeek);
+    baseVideo.addEventListener('seeked', handleSeek);
+    baseVideo.addEventListener('ratechange', handleSeek);
+    syncBrandedPreview(true);
+    if (!baseVideo.paused) handlePlay();
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      brandedPreview.pause();
+      baseVideo.removeEventListener('play', handlePlay);
+      baseVideo.removeEventListener('pause', handlePause);
+      baseVideo.removeEventListener('seeking', handleSeek);
+      baseVideo.removeEventListener('seeked', handleSeek);
+      baseVideo.removeEventListener('ratechange', handleSeek);
+    };
+  }, [
+    brandedTextDuration,
+    brandedTextPreviewUrl,
+    endTime,
+    isBrandedTextActive,
     startTime,
   ]);
 
@@ -1691,6 +1888,49 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       videoFileInputRef.current.value = '';
     }
   }, [overlayImageUrl, overlayVideoUrl]);
+
+  const handleAddBrandedText = useCallback(() => {
+    const text = customText.trim();
+    if (!text) return;
+
+    handleRemoveImage();
+    setSelectedWordText(text);
+    setBrandedTextTemplate(BRANDED_TEXT_TEMPLATE_ID);
+    setBrandedTextPreviewError(null);
+
+    const { videoWidth, videoHeight } = getVideoNaturalDimensions();
+    const width = 72;
+    const height = Math.max(
+      5,
+      Math.min(
+        100,
+        (width * videoWidth) / (videoHeight * BRANDED_TEXT_ASPECT_RATIO),
+      ),
+    );
+    setTextOverlaySize({ width, height });
+    setTextOverlayPosition({
+      x: 50,
+      y: Math.min(80, 100 - height / 2),
+    });
+
+    if (endTime - startTime < BRANDED_TEXT_MIN_DURATION) {
+      const videoDuration = videoRef.current?.duration || 0;
+      const suggestedEnd = startTime + 3.2;
+      if (suggestedEnd <= videoDuration) {
+        setEndTime(suggestedEnd);
+      } else {
+        setBrandedTextPreviewError(
+          `Choose at least ${BRANDED_TEXT_MIN_DURATION} seconds for branded text.`,
+        );
+      }
+    }
+  }, [
+    customText,
+    endTime,
+    getVideoNaturalDimensions,
+    handleRemoveImage,
+    startTime,
+  ]);
 
   const handleScreenshot = useCallback(() => {
     const video = videoRef.current;
@@ -2593,6 +2833,126 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     ],
   );
 
+  const handleBrandedTextPointerDown = useCallback(
+    (
+      event: React.PointerEvent,
+      mode: BrandedTextTransformMode = 'move',
+    ) => {
+      if (!isBrandedTextActive || !selectedWordText) return;
+      const contentRect = getVideoContentRect();
+      if (!contentRect) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startSize = { ...textOverlaySize };
+      const startPosition = { ...textOverlayPosition };
+      const pointerId = event.pointerId;
+      const captureTarget = event.currentTarget as Element;
+      const isLeft = mode === 'nw' || mode === 'sw';
+      const isTop = mode === 'nw' || mode === 'ne';
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const rect = getVideoContentRect();
+        if (!rect) return;
+        const deltaX = ((moveEvent.clientX - startX) / rect.width) * 100;
+        const deltaY = ((moveEvent.clientY - startY) / rect.height) * 100;
+
+        if (mode === 'move') {
+          setTextOverlayPosition({
+            x: Math.max(
+              startSize.width / 2,
+              Math.min(
+                100 - startSize.width / 2,
+                startPosition.x + deltaX,
+              ),
+            ),
+            y: Math.max(
+              startSize.height / 2,
+              Math.min(
+                100 - startSize.height / 2,
+                startPosition.y + deltaY,
+              ),
+            ),
+          });
+          return;
+        }
+
+        const widthScale =
+          (startSize.width + (isLeft ? -deltaX : deltaX)) /
+          Math.max(startSize.width, 0.001);
+        const heightScale =
+          (startSize.height + (isTop ? -deltaY : deltaY)) /
+          Math.max(startSize.height, 0.001);
+        const requestedScale =
+          Math.abs(widthScale - 1) >= Math.abs(heightScale - 1)
+            ? widthScale
+            : heightScale;
+        const minScale = Math.max(
+          5 / Math.max(startSize.width, 0.001),
+          5 / Math.max(startSize.height, 0.001),
+        );
+        const maxScale = Math.min(
+          100 / Math.max(startSize.width, 0.001),
+          100 / Math.max(startSize.height, 0.001),
+        );
+        const scale = Math.max(
+          minScale,
+          Math.min(maxScale, requestedScale),
+        );
+        const nextSize = {
+          width: startSize.width * scale,
+          height: startSize.height * scale,
+        };
+        const nextPosition = {
+          x:
+            startPosition.x +
+            (isLeft
+              ? (startSize.width - nextSize.width) / 2
+              : (nextSize.width - startSize.width) / 2),
+          y:
+            startPosition.y +
+            (isTop
+              ? (startSize.height - nextSize.height) / 2
+              : (nextSize.height - startSize.height) / 2),
+        };
+        setTextOverlaySize(nextSize);
+        setTextOverlayPosition({
+          x: Math.max(
+            nextSize.width / 2,
+            Math.min(100 - nextSize.width / 2, nextPosition.x),
+          ),
+          y: Math.max(
+            nextSize.height / 2,
+            Math.min(100 - nextSize.height / 2, nextPosition.y),
+          ),
+        });
+      };
+
+      const handlePointerUp = () => {
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+        try {
+          captureTarget.releasePointerCapture(pointerId);
+        } catch {
+          // Pointer capture may already be released.
+        }
+      };
+
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerUp);
+      captureTarget.setPointerCapture(pointerId);
+    },
+    [
+      getVideoContentRect,
+      isBrandedTextActive,
+      selectedWordText,
+      textOverlayPosition,
+      textOverlaySize,
+    ],
+  );
+
   const handleTextMouseDown = useCallback(
     (event: React.PointerEvent) => {
       if (!selectedWordText) return;
@@ -3083,6 +3443,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }
     if (overlayText) {
       formData.append('overlayText', overlayText);
+      if (isBrandedTextActive) {
+        formData.append('brandedTextTemplate', BRANDED_TEXT_TEMPLATE_ID);
+      }
     }
     formData.append(
       'positionX',
@@ -3128,7 +3491,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       formData.append('overlaySound', selectedSoundName);
     }
     formData.append('overlayAnimation', overlayAnimation);
-    if (overlayText && textStyling) {
+    if (overlayText && textStyling && !isBrandedTextActive) {
       formData.append('textStyling', JSON.stringify(textStyling));
     }
 
@@ -3194,6 +3557,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     tintSize.width,
     selectedSoundName,
     overlayAnimation,
+    isBrandedTextActive,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -3218,7 +3582,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     try {
       console.log(
         'handleApply: sending textStyling',
-        overlayText ? textStyling : undefined,
+        overlayText && !isBrandedTextActive ? textStyling : undefined,
       );
 
       const overlayFile = overlayImage
@@ -3237,7 +3601,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         overlayFile || overlayVideo ? overlaySize : textOverlaySize,
         startTime,
         endTime,
-        overlayText ? textStyling : undefined,
+        overlayText && !isBrandedTextActive ? textStyling : undefined,
         videoTintColor,
         videoTintOpacity,
         tintPosition,
@@ -3250,6 +3614,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         overlayVideoEndTime,
         overlayVideoSegments,
         overlayVideoCrop,
+        isBrandedTextActive ? BRANDED_TEXT_TEMPLATE_ID : null,
       );
 
       // Prefer the URL returned by onApply to avoid repeated scene polling.
@@ -3307,6 +3672,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setIsPreviewLoading(false);
       setSelectedWordText(null);
       setCustomText('');
+      setBrandedTextTemplate(null);
       setStartTime(0);
       setEndTime(0);
       setVideoTintColor(null);
@@ -3376,6 +3742,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     startTime,
     endTime,
     overlayAnimation,
+    isBrandedTextActive,
     onApply,
     onUpdateModalVideoUrl,
     originalVideoUrl,
@@ -5402,7 +5769,62 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 ))}
               </div>
             )}
-            {selectedWordText && (
+            {selectedWordText && isBrandedTextActive && (
+              <div
+                className='absolute border-2 border-amber-400 cursor-move pointer-events-auto z-20 touch-none rounded-sm'
+                style={{
+                  left: `${textOverlayPosition.x}%`,
+                  top: `${textOverlayPosition.y}%`,
+                  width: `${textOverlaySize.width}%`,
+                  height: `${textOverlaySize.height}%`,
+                  transform: 'translate(-50%, -50%)',
+                  opacity:
+                    currentVideoTime >= startTime && currentVideoTime <= endTime
+                      ? 1
+                      : 0,
+                }}
+                onPointerDown={(event) =>
+                  handleBrandedTextPointerDown(event, 'move')
+                }
+              >
+                {brandedTextPreviewUrl ? (
+                  <video
+                    ref={brandedTextPreviewRef}
+                    src={brandedTextPreviewUrl}
+                    className='w-full h-full object-contain pointer-events-none'
+                    muted
+                    playsInline
+                    preload='auto'
+                  />
+                ) : (
+                  <div className='w-full h-full flex items-center justify-center bg-slate-950/80 text-white text-xs pointer-events-none'>
+                    {isBrandedTextPreviewLoading
+                      ? 'Rendering branded text…'
+                      : brandedTextPreviewError || 'Preparing branded text…'}
+                  </div>
+                )}
+                <span className='absolute left-1 top-1 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-black pointer-events-none'>
+                  BRANDED
+                </span>
+                {(
+                  [
+                    ['nw', '-left-1.5 -top-1.5 cursor-nw-resize'],
+                    ['ne', '-right-1.5 -top-1.5 cursor-ne-resize'],
+                    ['se', '-right-1.5 -bottom-1.5 cursor-se-resize'],
+                    ['sw', '-left-1.5 -bottom-1.5 cursor-sw-resize'],
+                  ] as const
+                ).map(([mode, className]) => (
+                  <span
+                    key={mode}
+                    className={`absolute z-30 h-3 w-3 rounded-sm border border-amber-700 bg-white ${className}`}
+                    onPointerDown={(event) =>
+                      handleBrandedTextPointerDown(event, mode)
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {selectedWordText && !isBrandedTextActive && (
               <div
                 className='absolute border border-green-500 cursor-move pointer-events-auto z-10 rounded'
                 style={{
@@ -5722,26 +6144,30 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     <span>Animation</span>
                     {!isAnimationSectionOpen && (
                       <span className='text-xs text-gray-500 truncate'>
-                        {animationLabel}
+                        {isBrandedTextActive
+                          ? 'Fixed by template'
+                          : animationLabel}
                       </span>
                     )}
                   </div>
 
                   <div className='flex items-center gap-2'>
-                    <button
-                      type='button'
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOverlayAnimation('none');
-                      }}
-                      className={`px-2 py-1 text-xs rounded border bg-white ${
-                        overlayAnimation === 'none'
-                          ? 'border-gray-700 text-gray-900'
-                          : 'border-gray-300 text-gray-700'
-                      }`}
-                    >
-                      None
-                    </button>
+                    {!isBrandedTextActive && (
+                      <button
+                        type='button'
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOverlayAnimation('none');
+                        }}
+                        className={`px-2 py-1 text-xs rounded border bg-white ${
+                          overlayAnimation === 'none'
+                            ? 'border-gray-700 text-gray-900'
+                            : 'border-gray-300 text-gray-700'
+                        }`}
+                      >
+                        None
+                      </button>
+                    )}
                     {isAnimationSectionOpen ? (
                       <ChevronDown className='h-4 w-4' />
                     ) : (
@@ -5750,7 +6176,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </div>
                 </div>
 
-                {isAnimationSectionOpen && (
+                {isAnimationSectionOpen && !isBrandedTextActive && (
                   <div className='mt-2 grid grid-cols-3 gap-2'>
                     {(
                       [
@@ -5812,6 +6238,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 // Match + button behavior: set input and add to canvas (text overlay), and clear image overlay.
                 setCustomText(text);
                 setSelectedWordText(text);
+                setBrandedTextTemplate(null);
                 setOverlayImage(null);
                 setOverlayImageUrl(null);
                 if (fileInputRef.current) fileInputRef.current.value = '';
@@ -5826,6 +6253,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               onCustomTextEnter={() => {
                 if (customText.trim()) {
                   setSelectedWordText(customText.trim());
+                  setBrandedTextTemplate(null);
                   setOverlayImage(null);
                   setOverlayImageUrl(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
@@ -5834,11 +6262,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               onAddText={() => {
                 if (customText.trim()) {
                   setSelectedWordText(customText.trim());
+                  setBrandedTextTemplate(null);
                   setOverlayImage(null);
                   setOverlayImageUrl(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }
               }}
+              onAddBrandedText={handleAddBrandedText}
+              isBrandedTextActive={isBrandedTextActive}
+              isBrandedTextLoading={isBrandedTextPreviewLoading}
               onAddMacWindow={async () => {
                 const text = customText.trim();
                 if (!text) return;
@@ -5867,6 +6299,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   setOverlayPosition({ x: 50, y: 50 });
                   setOverlaySize({ width: 72, height: 40.5 });
                   setSelectedWordText(null);
+                  setBrandedTextTemplate(null);
                   setCustomText('');
                   setPreviewUrl(null);
                   setIsPreviewLoading(false);
@@ -5879,6 +6312,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               onClearText={() => {
                 setSelectedWordText(null);
                 setCustomText('');
+                setBrandedTextTemplate(null);
                 setPreviewUrl(null);
                 setIsPreviewLoading(false);
               }}
@@ -5952,7 +6386,21 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               }
             />
 
-            {selectedWordText && (
+            {selectedWordText && isBrandedTextActive && (
+              <div className='rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950'>
+                <div className='font-semibold'>JavaScript King branded text</div>
+                <div className='mt-1 text-amber-800'>
+                  Fixed design · drag to move · corner handles resize
+                </div>
+                {brandedTextPreviewError ? (
+                  <div className='mt-1 text-red-700'>
+                    {brandedTextPreviewError}
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {selectedWordText && !isBrandedTextActive && (
               <TextOverlayControls
                 textOverlayPosition={textOverlayPosition}
                 setTextOverlayPosition={setTextOverlayPosition}
@@ -6017,6 +6465,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 videoTintColor
               ) ||
               !hasValidOverlayVideoTiming ||
+              (isBrandedTextActive &&
+                (isBrandedTextPreviewLoading ||
+                  !!brandedTextPreviewError ||
+                  !brandedTextPreviewUrl)) ||
               isApplying ||
               isPreviewLoading
             }
@@ -6097,6 +6549,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 videoTintColor
               ) ||
               !hasValidOverlayVideoTiming ||
+              (isBrandedTextActive &&
+                (isBrandedTextPreviewLoading ||
+                  !!brandedTextPreviewError ||
+                  !brandedTextPreviewUrl)) ||
               isApplying
             }
             className='flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'

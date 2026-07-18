@@ -15,6 +15,12 @@ import {
 import ffmpegFonts from '../../../../docs/ffmpeg-fonts.json';
 import { updateSceneRow } from '@/lib/baserow-actions';
 import sharp from 'sharp';
+import {
+  BRANDED_TEXT_MAX_DURATION,
+  BRANDED_TEXT_MIN_DURATION,
+  BRANDED_TEXT_TEMPLATE_ID,
+} from '@/lib/branded-text-template';
+import { renderBrandedTextOverlay } from '@/utils/hyperframes-branded-text';
 
 export const runtime = 'nodejs';
 
@@ -114,6 +120,9 @@ export async function POST(request: NextRequest) {
     const overlayCropWidth = Number(formData.get('overlayCropWidth') ?? 100);
     const overlayCropHeight = Number(formData.get('overlayCropHeight') ?? 100);
     const overlayText = formData.get('overlayText') as string | null;
+    const brandedTextTemplate = formData.get('brandedTextTemplate') as
+      | string
+      | null;
     const positionX = parseFloat(formData.get('positionX') as string);
     const positionY = parseFloat(formData.get('positionY') as string);
     const sizeWidth = parseFloat(formData.get('sizeWidth') as string);
@@ -152,6 +161,7 @@ export async function POST(request: NextRequest) {
       overlayVideoEndTime: overlayVideoEndTimeRaw,
       overlayVideoSegments: overlayVideoSegmentsRaw,
       overlayText,
+      brandedTextTemplate,
       positionX,
       positionY,
       sizeWidth,
@@ -197,6 +207,16 @@ export async function POST(request: NextRequest) {
     if (overlayImage && overlayVideo) {
       return NextResponse.json(
         { error: 'Choose either an image overlay or a video overlay.' },
+        { status: 400 },
+      );
+    }
+
+    if (
+      brandedTextTemplate &&
+      brandedTextTemplate !== BRANDED_TEXT_TEMPLATE_ID
+    ) {
+      return NextResponse.json(
+        { error: 'Unknown branded text template.' },
         { status: 400 },
       );
     }
@@ -1067,6 +1087,73 @@ export async function POST(request: NextRequest) {
             preview ? previewAudioEncodeArgs : '-c:a copy'
           } ${preview ? previewVideoEncodeArgs : finalVideoEncodeArgs} -shortest "${outputPath}"`;
         }
+      }
+    } else if (overlayText && brandedTextTemplate) {
+      const brandedDuration = endTime - startTime;
+      if (
+        brandedDuration < BRANDED_TEXT_MIN_DURATION ||
+        brandedDuration > BRANDED_TEXT_MAX_DURATION
+      ) {
+        return NextResponse.json(
+          {
+            error: `Branded text duration must be between ${BRANDED_TEXT_MIN_DURATION} and ${BRANDED_TEXT_MAX_DURATION} seconds.`,
+          },
+          { status: 400 },
+        );
+      }
+
+      const brandedFps: 24 | 30 | 60 = preview
+        ? 24
+        : videoFps >= 45
+          ? 60
+          : videoFps < 27
+            ? 24
+            : 30;
+      const brandedOverlayPath = await renderBrandedTextOverlay({
+        text: overlayText,
+        duration: brandedDuration,
+        fps: brandedFps,
+        quality: preview ? 'draft' : 'standard',
+      });
+      // FFmpeg's native VP9 decoder does not expose WebM's alpha plane. Force
+      // libvpx for this HyperFrames input so transparent pixels stay transparent.
+      const brandedOverlayInput = `-c:v libvpx-vp9 -i "${brandedOverlayPath}"`;
+      const overlayEnable = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
+      const brandedLayer = `[1:v]setpts=PTS-STARTPTS+(${tStart})/TB,scale=${overlayWidth}:${overlayHeight}:flags=lanczos,format=rgba[branded]`;
+      const baseVideo = preview
+        ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
+        : tintFilter
+          ? `[0:v]${tintFilter}[base]`
+          : null;
+      const baseRef = preview || tintFilter ? '[base]' : '[0:v]';
+      const brandedOverlay = `${baseRef}[branded]overlay=x=W*${positionX / 100}-overlay_w/2:y=H*${positionY / 100}-overlay_h/2:${overlayEnable}:eof_action=pass:repeatlast=0:format=auto[vout]`;
+      const previewDurationArg = preview ? `-t ${segmentDuration}` : '';
+
+      if (overlaySoundPath) {
+        const audio = buildAudioFilter(2);
+        const parts = [baseVideo, brandedLayer, brandedOverlay, audio].filter(
+          Boolean,
+        );
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${brandedOverlayInput} -i "${overlaySoundPath}" -filter_complex "${parts.join(
+          ';',
+        )}" -map "[vout]" -map "[aout]" ${
+          preview
+            ? previewAudioEncodeArgs
+            : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+                mixedAudioBitrate / 1000,
+              )}k -ac ${originalAudioChannels}`
+        } ${
+          preview ? previewVideoEncodeArgs : finalVideoEncodeArgs
+        } ${previewDurationArg} -avoid_negative_ts make_zero "${outputPath}"`;
+      } else {
+        const parts = [baseVideo, brandedLayer, brandedOverlay].filter(Boolean);
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${brandedOverlayInput} -filter_complex "${parts.join(
+          ';',
+        )}" -map "[vout]" -map 0:a? ${
+          preview ? previewAudioEncodeArgs : '-c:a copy'
+        } ${
+          preview ? previewVideoEncodeArgs : finalVideoEncodeArgs
+        } ${previewDurationArg} -avoid_negative_ts make_zero "${outputPath}"`;
       }
     } else if (overlayText) {
       // Handle text overlay - sizeWidth controls font size (5-100%)
