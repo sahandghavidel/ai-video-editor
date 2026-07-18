@@ -752,6 +752,23 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid overlay video timing');
       }
 
+      // A finite video stream's last PTS is normally one source frame before
+      // its nominal duration. After retiming, that gap is stretched too and can
+      // leave the final enabled base-video frame without an overlay frame.
+      // Clone enough tail to cross the requested end boundary; overlayEnable
+      // remains the hard boundary, so this never extends visibility past tEnd.
+      const overlaySourceFps =
+        parseFps(overlayVideoStream.avg_frame_rate) ??
+        parseFps(overlayVideoStream.r_frame_rate) ??
+        30;
+      const outputFrameDuration =
+        1 / Math.max(1, preview ? previewOutputFps : videoFps);
+      const stretchedOverlayFrameDuration =
+        stretchFactor / Math.max(1, overlaySourceFps);
+      const overlayTailPadDuration =
+        Math.max(outputFrameDuration, stretchedOverlayFrameDuration) +
+        outputFrameDuration;
+
       const overlayEnable = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
       const needsScaleAnim =
         overlayAnimation === 'miniZoom' ||
@@ -792,6 +809,7 @@ export async function POST(request: NextRequest) {
       );
       const overlayFilters = [
         `setpts=(PTS-STARTPTS)*${stretchFactor}+(${tStart})/TB`,
+        `tpad=stop_mode=clone:stop_duration=${overlayTailPadDuration}`,
         `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase`,
         `crop=${overlayWidth}:${overlayHeight}`,
         'format=rgba',
