@@ -94,16 +94,12 @@ export async function POST(request: NextRequest) {
       .map((segment) => ({
         startTime: Math.max(0, Math.min(duration, segment.startTime)),
         endTime: Math.max(0, Math.min(duration, segment.endTime)),
-      }))
-      .sort((a, b) => a.startTime - b.startTime);
+      }));
     if (segments.length === 0) throw new Error('Add at least one section');
     for (let index = 0; index < segments.length; index += 1) {
       const segment = segments[index];
       if (!(segment.endTime > segment.startTime)) {
         throw new Error(`Section ${index + 1} has invalid timing`);
-      }
-      if (index > 0 && segment.startTime < segments[index - 1].endTime) {
-        throw new Error(`Section ${index + 1} overlaps the previous section`);
       }
     }
 

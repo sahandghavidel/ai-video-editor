@@ -680,18 +680,11 @@ export async function POST(request: NextRequest) {
             0,
             Math.min(overlaySourceDuration, segment.endTime),
           ),
-        }))
-        .sort((a, b) => a.startTime - b.startTime);
+        }));
       for (let index = 0; index < sourceSegments.length; index += 1) {
         const segment = sourceSegments[index];
         if (!(segment.endTime > segment.startTime)) {
           throw new Error(`Overlay video section ${index + 1} is invalid`);
-        }
-        if (
-          index > 0 &&
-          segment.startTime < sourceSegments[index - 1].endTime
-        ) {
-          throw new Error(`Overlay video section ${index + 1} overlaps`);
         }
       }
       const selectedSourceDuration = sourceSegments.reduce(
