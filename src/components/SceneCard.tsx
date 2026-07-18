@@ -3167,6 +3167,7 @@ export default function SceneCard({
     gifLoop?: boolean,
     overlayVideoStartTime?: number,
     overlayVideoEndTime?: number,
+    overlayVideoSegments?: { startTime: number; endTime: number }[],
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -3198,6 +3199,12 @@ export default function SceneCard({
           formData.append(
             'overlayVideoEndTime',
             overlayVideoEndTime.toString(),
+          );
+        }
+        if (overlayVideoSegments && overlayVideoSegments.length > 0) {
+          formData.append(
+            'overlayVideoSegments',
+            JSON.stringify(overlayVideoSegments),
           );
         }
       }

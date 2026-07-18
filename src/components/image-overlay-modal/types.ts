@@ -17,3 +17,8 @@ export type TranscriptionWord = {
   start: number;
   end: number;
 };
+
+export type VideoSourceSegment = {
+  startTime: number;
+  endTime: number;
+};

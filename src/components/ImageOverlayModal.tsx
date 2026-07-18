@@ -38,6 +38,7 @@ import { VideoEditModal } from './VideoEditModal';
 import type {
   TextStyling,
   TranscriptionWord,
+  VideoSourceSegment,
 } from './image-overlay-modal/types';
 
 type CropEditorMode = 'crop' | 'brightness' | 'contrast' | 'saturation' | 'hue';
@@ -508,6 +509,7 @@ interface ImageOverlayModalProps {
     gifLoop?: boolean,
     overlayVideoStartTime?: number,
     overlayVideoEndTime?: number,
+    overlayVideoSegments?: VideoSourceSegment[],
   ) => Promise<{ videoUrl?: string } | void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -557,6 +559,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlayVideoDuration, setOverlayVideoDuration] = useState(0);
   const [overlayVideoStartTime, setOverlayVideoStartTime] = useState(0);
   const [overlayVideoEndTime, setOverlayVideoEndTime] = useState(0);
+  const [overlayVideoSegments, setOverlayVideoSegments] = useState<
+    VideoSourceSegment[]
+  >([]);
   const [isPastingOverlayFromClipboard, setIsPastingOverlayFromClipboard] =
     useState(false);
   const [cropperViewportPx, setCropperViewportPx] = useState<{
@@ -1494,6 +1499,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayVideoDuration(0);
         setOverlayVideoStartTime(0);
         setOverlayVideoEndTime(0);
+        setOverlayVideoSegments([]);
         setOverlayImage(file);
         const url = URL.createObjectURL(file);
         setOverlayImageUrl(url);
@@ -1528,6 +1534,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayVideoDuration(0);
         setOverlayVideoStartTime(0);
         setOverlayVideoEndTime(0);
+        setOverlayVideoSegments([]);
         setOverlayVideo(file);
         const url = URL.createObjectURL(file);
         setOverlayVideoUrl(url);
@@ -1548,6 +1555,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoDuration(0);
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
+    setOverlayVideoSegments([]);
     setActualImageDimensions(null);
     setIsVideoEditModalOpen(false);
     if (videoFileInputRef.current) {
@@ -1569,6 +1577,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoDuration(0);
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
+    setOverlayVideoSegments([]);
     setActualImageDimensions(null);
     // Prevent the auto-load effect from re-injecting the scene image
     // after the user explicitly removed it in this modal session.
@@ -2823,6 +2832,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         overlayVideoStartTime.toString(),
       );
       formData.append('overlayVideoEndTime', overlayVideoEndTime.toString());
+      if (overlayVideoSegments.length > 0) {
+        formData.append(
+          'overlayVideoSegments',
+          JSON.stringify(overlayVideoSegments),
+        );
+      }
     }
     if (overlayText) {
       formData.append('overlayText', overlayText);
@@ -2911,6 +2926,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayVideo,
     overlayVideoStartTime,
     overlayVideoEndTime,
+    overlayVideoSegments,
     fetchOverlayFileFromUrl,
     hasValidOverlayVideoTiming,
     loopGif,
@@ -2989,6 +3005,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         loopGif,
         overlayVideoStartTime,
         overlayVideoEndTime,
+        overlayVideoSegments,
       );
 
       // Prefer the URL returned by onApply to avoid repeated scene polling.
@@ -3038,6 +3055,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOverlayVideoDuration(0);
       setOverlayVideoStartTime(0);
       setOverlayVideoEndTime(0);
+      setOverlayVideoSegments([]);
       setOverlayPosition({ x: 50, y: 50 });
       setOverlaySize({ width: 40, height: 40 });
       setPreviewUrl(null);
@@ -3091,6 +3109,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayVideoUrl,
     overlayVideoStartTime,
     overlayVideoEndTime,
+    overlayVideoSegments,
     hasValidOverlayVideoTiming,
     fetchOverlayFileFromUrl,
     loopGif,
@@ -4125,6 +4144,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoDuration(0);
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
+    setOverlayVideoSegments([]);
     setOverlayPosition({ x: 50, y: 50 });
     setOverlaySize({ width: 40, height: 40 });
     setStartTime(0);
@@ -5573,6 +5593,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   setOverlayVideoDuration(0);
                   setOverlayVideoStartTime(0);
                   setOverlayVideoEndTime(0);
+                  setOverlayVideoSegments([]);
                   setActualImageDimensions({ width: 1600, height: 900 });
                   setOverlayPosition({ x: 50, y: 50 });
                   setOverlaySize({ width: 72, height: 40.5 });
@@ -6344,10 +6365,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         onClose={handleCancelVideoEdit}
         videoFile={overlayVideo}
         videoUrl={overlayVideoUrl}
-        onUseVideo={({ startTime: sourceStart, endTime: sourceEnd }) => {
-          setOverlayVideoStartTime(sourceStart);
-          setOverlayVideoEndTime(sourceEnd);
-          setOverlayVideoDuration(Math.max(0, sourceEnd - sourceStart));
+        onUseVideo={({ segments, previewBlob }) => {
+          const combinedDuration = segments.reduce(
+            (total, segment) =>
+              total + Math.max(0, segment.endTime - segment.startTime),
+            0,
+          );
+          if (overlayVideoUrl?.startsWith('blob:')) {
+            URL.revokeObjectURL(overlayVideoUrl);
+          }
+          setOverlayVideoUrl(URL.createObjectURL(previewBlob));
+          setOverlayVideoSegments(segments);
+          setOverlayVideoStartTime(0);
+          setOverlayVideoEndTime(combinedDuration);
+          setOverlayVideoDuration(combinedDuration);
           setIsVideoEditModalOpen(false);
           const baseVideo = videoRef.current;
           if (baseVideo) {

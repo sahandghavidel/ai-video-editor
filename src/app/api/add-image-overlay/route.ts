@@ -106,6 +106,9 @@ export async function POST(request: NextRequest) {
     const overlayVideoEndTimeRaw = formData.get(
       'overlayVideoEndTime',
     ) as string | null;
+    const overlayVideoSegmentsRaw = formData.get(
+      'overlayVideoSegments',
+    ) as string | null;
     const overlayText = formData.get('overlayText') as string | null;
     const positionX = parseFloat(formData.get('positionX') as string);
     const positionY = parseFloat(formData.get('positionY') as string);
@@ -143,6 +146,7 @@ export async function POST(request: NextRequest) {
       overlayVideo: !!overlayVideo,
       overlayVideoStartTime: overlayVideoStartTimeRaw,
       overlayVideoEndTime: overlayVideoEndTimeRaw,
+      overlayVideoSegments: overlayVideoSegmentsRaw,
       overlayText,
       positionX,
       positionY,
@@ -629,24 +633,71 @@ export async function POST(request: NextRequest) {
         throw new Error('Overlay video duration could not be determined');
       }
 
-      const requestedSourceStart =
-        overlayVideoStartTimeRaw == null
-          ? Number.NaN
-          : Number(overlayVideoStartTimeRaw);
-      const requestedSourceEnd =
-        overlayVideoEndTimeRaw == null
-          ? Number.NaN
-          : Number(overlayVideoEndTimeRaw);
-      const overlaySourceStart = Number.isFinite(requestedSourceStart)
-        ? Math.max(0, Math.min(overlaySourceDuration, requestedSourceStart))
-        : 0;
-      const overlaySourceEnd = Number.isFinite(requestedSourceEnd)
-        ? Math.max(0, Math.min(overlaySourceDuration, requestedSourceEnd))
-        : overlaySourceDuration;
-      if (!(overlaySourceEnd > overlaySourceStart)) {
-        throw new Error('Overlay video source End must be greater than Start');
+      let requestedSegments: { startTime: number; endTime: number }[] = [];
+      if (overlayVideoSegmentsRaw) {
+        try {
+          const parsed = JSON.parse(overlayVideoSegmentsRaw) as unknown;
+          if (Array.isArray(parsed)) {
+            requestedSegments = parsed.map((item) => {
+              const value = item as {
+                startTime?: unknown;
+                endTime?: unknown;
+              };
+              return {
+                startTime: Number(value.startTime),
+                endTime: Number(value.endTime),
+              };
+            });
+          }
+        } catch {
+          throw new Error('Overlay video sections are invalid');
+        }
       }
-      const selectedSourceDuration = overlaySourceEnd - overlaySourceStart;
+      if (requestedSegments.length === 0) {
+        const requestedSourceStart =
+          overlayVideoStartTimeRaw == null
+            ? 0
+            : Number(overlayVideoStartTimeRaw);
+        const requestedSourceEnd =
+          overlayVideoEndTimeRaw == null
+            ? overlaySourceDuration
+            : Number(overlayVideoEndTimeRaw);
+        requestedSegments = [
+          {
+            startTime: requestedSourceStart,
+            endTime: requestedSourceEnd,
+          },
+        ];
+      }
+
+      const sourceSegments = requestedSegments
+        .map((segment) => ({
+          startTime: Math.max(
+            0,
+            Math.min(overlaySourceDuration, segment.startTime),
+          ),
+          endTime: Math.max(
+            0,
+            Math.min(overlaySourceDuration, segment.endTime),
+          ),
+        }))
+        .sort((a, b) => a.startTime - b.startTime);
+      for (let index = 0; index < sourceSegments.length; index += 1) {
+        const segment = sourceSegments[index];
+        if (!(segment.endTime > segment.startTime)) {
+          throw new Error(`Overlay video section ${index + 1} is invalid`);
+        }
+        if (
+          index > 0 &&
+          segment.startTime < sourceSegments[index - 1].endTime
+        ) {
+          throw new Error(`Overlay video section ${index + 1} overlaps`);
+        }
+      }
+      const selectedSourceDuration = sourceSegments.reduce(
+        (total, segment) => total + segment.endTime - segment.startTime,
+        0,
+      );
 
       const requestedWindowDuration = endTime - startTime;
       const stretchFactor = requestedWindowDuration / selectedSourceDuration;
@@ -685,8 +736,14 @@ export async function POST(request: NextRequest) {
         `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`,
       );
 
+      const sourceAssemblyFilters = sourceSegments.map(
+        (segment, index) =>
+          `[1:v]trim=start=${segment.startTime}:end=${segment.endTime},setpts=PTS-STARTPTS[source${index}]`,
+      );
+      sourceAssemblyFilters.push(
+        `${sourceSegments.map((_, index) => `[source${index}]`).join('')}concat=n=${sourceSegments.length}:v=1:a=0[stitched]`,
+      );
       const overlayFilters = [
-        `trim=start=${overlaySourceStart}:end=${overlaySourceEnd}`,
         `setpts=(PTS-STARTPTS)*${stretchFactor}+(${tStart})/TB`,
         `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase`,
         `crop=${overlayWidth}:${overlayHeight}`,
@@ -699,7 +756,7 @@ export async function POST(request: NextRequest) {
       if (needsFadeAnim) {
         overlayChain += `,fade=t=in:st=${tStart}:d=${entranceAnimDuration}:alpha=1`;
       }
-      const overlayScale = `[1:v]${overlayChain}[overlay]`;
+      const overlayScale = `${sourceAssemblyFilters.join(';')};[stitched]${overlayChain}[overlay]`;
       const slideDX =
         overlayAnimation === 'slideLeft'
           ? `(W*0.25*(1-${easeGlobal}))`
