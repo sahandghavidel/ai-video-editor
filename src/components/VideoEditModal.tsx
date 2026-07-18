@@ -79,12 +79,16 @@ export function VideoEditModal({
     const updateDuration = () => {
       if (!Number.isFinite(video.duration) || video.duration === Infinity) return;
       setDuration(video.duration);
+      video.currentTime = 0;
+      setCurrentTime(0);
       setDraftStart(0);
       setDraftEnd(video.duration);
-      setSegments([]);
+      setSegments([{ startTime: 0, endTime: video.duration }]);
       setUndoStack([]);
       setRedoStack([]);
-      setActiveSegmentIndex(null);
+      setActiveSegmentIndex(0);
+      setIsPreviewingSelection(false);
+      setPreviewSegmentIndex(0);
       setErrorMessage(null);
     };
 
@@ -196,7 +200,9 @@ export function VideoEditModal({
   const seekTo = (time: number, play = false) => {
     const video = videoRef.current;
     if (!video) return;
-    video.currentTime = clampTime(time);
+    const nextTime = clampTime(time);
+    video.currentTime = nextTime;
+    setCurrentTime(nextTime);
     if (play) {
       void video.play().catch(() => {
         // The user can press play manually if autoplay is blocked.
@@ -205,9 +211,13 @@ export function VideoEditModal({
   };
 
   const stepFrame = (direction: -1 | 1) => {
-    videoRef.current?.pause();
     setIsPreviewingSelection(false);
     seekTo(currentTime + direction * FRAME_SECONDS);
+  };
+
+  const seekBySeconds = (seconds: number) => {
+    setIsPreviewingSelection(false);
+    seekTo(currentTime + seconds);
   };
 
   const addDraftSection = () => {
@@ -336,8 +346,11 @@ export function VideoEditModal({
     const startX = event.clientX;
     const initial = cloneSegments(segments);
     const original = { ...segments[index] };
+    let hasMoved = false;
 
     const handleMove = (moveEvent: PointerEvent) => {
+      if (Math.abs(moveEvent.clientX - startX) < 3) return;
+      hasMoved = true;
       const deltaSeconds =
         ((moveEvent.clientX - startX) / timeline.getBoundingClientRect().width) *
         duration;
@@ -370,8 +383,10 @@ export function VideoEditModal({
       setSegments(next);
     };
     const handleUp = () => {
-      setUndoStack((history) => [...history.slice(-49), initial]);
-      setRedoStack([]);
+      if (hasMoved) {
+        setUndoStack((history) => [...history.slice(-49), initial]);
+        setRedoStack([]);
+      }
       document.removeEventListener('pointermove', handleMove);
       document.removeEventListener('pointerup', handleUp);
     };
@@ -430,11 +445,29 @@ export function VideoEditModal({
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        setIsPreviewingSelection(false);
+        const video = videoRef.current;
+        if (!video) return;
+        if (video.paused) {
+          void video.play().catch(() => {
+            // The user can try again if the browser blocks playback.
+          });
+        } else {
+          video.pause();
+        }
+        return;
+      }
+
       const target = event.target as HTMLElement | null;
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
       ) {
         return;
       }
@@ -444,17 +477,23 @@ export function VideoEditModal({
         else undo();
         return;
       }
-      if (event.key === '[') setDraftStart(currentTime);
-      if (event.key === ']') setDraftEnd(currentTime);
-      if (event.key.toLowerCase() === 's') splitAtPlayhead();
+      if (event.metaKey || event.ctrlKey) return;
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
-        stepFrame(-1);
+        if (event.altKey) stepFrame(-1);
+        else seekBySeconds(event.shiftKey ? -5 : -1);
+        return;
       }
       if (event.key === 'ArrowRight') {
         event.preventDefault();
-        stepFrame(1);
+        if (event.altKey) stepFrame(1);
+        else seekBySeconds(event.shiftKey ? 5 : 1);
+        return;
       }
+      if (event.altKey || event.shiftKey) return;
+      if (event.key === '[') setDraftStart(currentTime);
+      if (event.key === ']') setDraftEnd(currentTime);
+      if (event.key.toLowerCase() === 's') splitAtPlayhead();
       if (
         (event.key === 'Delete' || event.key === 'Backspace') &&
         activeSegmentIndex != null
@@ -561,6 +600,9 @@ export function VideoEditModal({
                   {isPreviewingSelection ? <Pause className='h-4 w-4' /> : <Play className='h-4 w-4' />}
                   {isPreviewingSelection ? 'Stop Selected Preview' : 'Preview Selected Sections'}
                 </button>
+                <span className='self-center text-xs text-gray-500'>
+                  Arrow: 1s · Shift+Arrow: 5s · Option/Alt+Arrow: 1 frame
+                </span>
               </div>
               <label className='flex items-center gap-2 text-sm'>
                 Timeline zoom
@@ -617,9 +659,26 @@ export function VideoEditModal({
                         left: `${(segment.startTime / Math.max(duration, 0.001)) * 100}%`,
                         width: `${((segment.endTime - segment.startTime) / Math.max(duration, 0.001)) * 100}%`,
                       }}
+                      title='Drag to move. Double-click to move the playhead to this section.'
                       onPointerDown={(event) => startSegmentDrag(event, index, 'move')}
+                      onDoubleClick={(event) => {
+                        if (
+                          (event.target as HTMLElement).closest(
+                            '[data-segment-resize-handle]',
+                          )
+                        ) {
+                          return;
+                        }
+                        event.preventDefault();
+                        event.stopPropagation();
+                        videoRef.current?.pause();
+                        setIsPreviewingSelection(false);
+                        setActiveSegmentIndex(index);
+                        seekTo(segment.startTime);
+                      }}
                     >
                       <div
+                        data-segment-resize-handle
                         className='absolute inset-y-0 left-0 w-3 bg-white/80 cursor-ew-resize'
                         onPointerDown={(event) => startSegmentDrag(event, index, 'start')}
                       />
@@ -627,6 +686,7 @@ export function VideoEditModal({
                         #{index + 1}
                       </div>
                       <div
+                        data-segment-resize-handle
                         className='absolute inset-y-0 right-0 w-3 bg-white/80 cursor-ew-resize'
                         onPointerDown={(event) => startSegmentDrag(event, index, 'end')}
                       />
