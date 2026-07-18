@@ -3132,6 +3132,7 @@ export default function SceneCard({
   const handleApplyImageOverlay = async (
     sceneId: number,
     overlayImage: File | null,
+    overlayVideo: File | null,
     overlayText: string | null,
     position: { x: number; y: number },
     size: { width: number; height: number },
@@ -3164,6 +3165,8 @@ export default function SceneCard({
       | 'slideRight'
       | 'slideUp',
     gifLoop?: boolean,
+    overlayVideoStartTime?: number,
+    overlayVideoEndTime?: number,
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -3175,6 +3178,27 @@ export default function SceneCard({
         formData.append('overlayImage', overlayImage);
         if (overlayImage.type === 'image/gif') {
           formData.append('gifLoop', gifLoop === false ? 'false' : 'true');
+        }
+      }
+      if (overlayVideo) {
+        formData.append('overlayVideo', overlayVideo);
+        if (
+          typeof overlayVideoStartTime === 'number' &&
+          Number.isFinite(overlayVideoStartTime)
+        ) {
+          formData.append(
+            'overlayVideoStartTime',
+            overlayVideoStartTime.toString(),
+          );
+        }
+        if (
+          typeof overlayVideoEndTime === 'number' &&
+          Number.isFinite(overlayVideoEndTime)
+        ) {
+          formData.append(
+            'overlayVideoEndTime',
+            overlayVideoEndTime.toString(),
+          );
         }
       }
       if (overlayText) {

@@ -491,6 +491,7 @@ interface ImageOverlayModalProps {
   onApply: (
     sceneId: number,
     overlayImage: File | null,
+    overlayVideo: File | null,
     overlayText: string | null,
     position: { x: number; y: number },
     size: { width: number; height: number },
@@ -505,6 +506,8 @@ interface ImageOverlayModalProps {
     overlaySound?: string | null,
     overlayAnimation?: OverlayAnimation,
     gifLoop?: boolean,
+    overlayVideoStartTime?: number,
+    overlayVideoEndTime?: number,
   ) => Promise<{ videoUrl?: string } | void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -551,6 +554,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const didAutoLoadSceneOverlayRef = useRef(false);
   const [overlayVideo, setOverlayVideo] = useState<File | null>(null);
   const [overlayVideoUrl, setOverlayVideoUrl] = useState<string | null>(null);
+  const [overlayVideoDuration, setOverlayVideoDuration] = useState(0);
+  const [overlayVideoStartTime, setOverlayVideoStartTime] = useState(0);
+  const [overlayVideoEndTime, setOverlayVideoEndTime] = useState(0);
   const [isPastingOverlayFromClipboard, setIsPastingOverlayFromClipboard] =
     useState(false);
   const [cropperViewportPx, setCropperViewportPx] = useState<{
@@ -799,7 +805,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   useEffect(() => {
     if (!isOpen || !sceneId) return;
     if (didAutoLoadSceneOverlayRef.current) return;
-    if (overlayImage || overlayImageUrl) return;
+    if (overlayImage || overlayImageUrl || overlayVideo) return;
 
     let cancelled = false;
     (async () => {
@@ -834,6 +840,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     sceneId,
     overlayImage,
     overlayImageUrl,
+    overlayVideo,
     getLocalSceneSnapshot,
     getSceneStringField,
     fetchLatestSceneData,
@@ -1089,8 +1096,6 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [cropBorderRadius, setCropBorderRadius] = useState(0);
   const [cropShape, setCropShape] = useState<CropShape>('rectangle');
   const [cropRotationDegrees, setCropRotationDegrees] = useState(0);
-
-  // Video editing state
   const [isVideoEditModalOpen, setIsVideoEditModalOpen] = useState(false);
 
   const [cropEditorMode, setCropEditorMode] = useState<CropEditorMode>('crop');
@@ -1103,6 +1108,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [isCropStencilLocked, setIsCropStencilLocked] = useState(true);
 
   const isGifOverlay = overlayImage?.type === 'image/gif';
+  const overlayMediaUrl = overlayVideoUrl || overlayImageUrl;
+  const overlayWindowDuration = Math.max(0, endTime - startTime);
+  const automaticOverlayVideoSpeed =
+    overlayVideoDuration > 0 && overlayWindowDuration > 0
+      ? overlayVideoDuration / overlayWindowDuration
+      : 0;
+  const hasValidOverlayVideoTiming =
+    !overlayVideo ||
+    (overlayVideoDuration > 0 &&
+      automaticOverlayVideoSpeed > 0 &&
+      Number.isFinite(automaticOverlayVideoSpeed));
   const [loopGif, setLoopGif] = useState(false);
 
   // Default: if a GIF is selected, loop is ON.
@@ -1174,6 +1190,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [previousVideoUrl, setPreviousVideoUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const overlayVideoPreviewRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null!);
   const videoFileInputRef = useRef<HTMLInputElement>(null!);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -1229,6 +1246,103 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       video.removeEventListener('seeked', update);
     };
   }, [isOpen, originalVideoUrl]);
+
+  useEffect(() => {
+    const baseVideo = videoRef.current;
+    const overlayPreview = overlayVideoPreviewRef.current;
+    if (!baseVideo || !overlayPreview || !overlayVideoUrl) return;
+    if (!(overlayVideoDuration > 0) || !(endTime > startTime)) {
+      overlayPreview.pause();
+      return;
+    }
+
+    let animationFrame = 0;
+    const syncOverlayVideo = (forceSeek = false) => {
+      const baseTime = baseVideo.currentTime || 0;
+      const isActive = baseTime >= startTime && baseTime < endTime;
+
+      if (!isActive) {
+        overlayPreview.pause();
+        if (
+          baseTime < startTime &&
+          overlayPreview.currentTime !== overlayVideoStartTime
+        ) {
+          overlayPreview.currentTime = overlayVideoStartTime;
+        }
+        return;
+      }
+
+      const sourceTime = Math.min(
+        overlayVideoEndTime,
+        Math.max(
+          overlayVideoStartTime,
+          overlayVideoStartTime +
+            (baseTime - startTime) * automaticOverlayVideoSpeed,
+        ),
+      );
+      const requestedRate =
+        automaticOverlayVideoSpeed * Math.max(0.0625, baseVideo.playbackRate || 1);
+      const browserRate = Math.max(0.0625, Math.min(16, requestedRate));
+
+      if (Math.abs(overlayPreview.playbackRate - browserRate) > 0.001) {
+        overlayPreview.playbackRate = browserRate;
+      }
+      if (
+        forceSeek ||
+        requestedRate !== browserRate ||
+        Math.abs(overlayPreview.currentTime - sourceTime) > 0.12
+      ) {
+        overlayPreview.currentTime = sourceTime;
+      }
+
+      if (baseVideo.paused || baseVideo.ended) {
+        overlayPreview.pause();
+      } else if (overlayPreview.paused) {
+        void overlayPreview.play().catch(() => {
+          // Browser autoplay restrictions do not affect the rendered result.
+        });
+      }
+    };
+
+    const followPlayback = () => {
+      syncOverlayVideo(false);
+      if (!baseVideo.paused && !baseVideo.ended) {
+        animationFrame = window.requestAnimationFrame(followPlayback);
+      }
+    };
+    const handlePlay = () => {
+      window.cancelAnimationFrame(animationFrame);
+      followPlayback();
+    };
+    const handlePause = () => syncOverlayVideo(true);
+    const handleSeek = () => syncOverlayVideo(true);
+
+    baseVideo.addEventListener('play', handlePlay);
+    baseVideo.addEventListener('pause', handlePause);
+    baseVideo.addEventListener('seeking', handleSeek);
+    baseVideo.addEventListener('seeked', handleSeek);
+    baseVideo.addEventListener('ratechange', handleSeek);
+    syncOverlayVideo(true);
+    if (!baseVideo.paused) handlePlay();
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      overlayPreview.pause();
+      baseVideo.removeEventListener('play', handlePlay);
+      baseVideo.removeEventListener('pause', handlePause);
+      baseVideo.removeEventListener('seeking', handleSeek);
+      baseVideo.removeEventListener('seeked', handleSeek);
+      baseVideo.removeEventListener('ratechange', handleSeek);
+    };
+  }, [
+    automaticOverlayVideoSpeed,
+    endTime,
+    overlayVideoDuration,
+    overlayVideoEndTime,
+    overlayVideoStartTime,
+    overlayVideoUrl,
+    startTime,
+  ]);
 
   const isTintActive =
     !!videoTintColor &&
@@ -1372,6 +1486,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file && file.type.startsWith('image/')) {
+        if (overlayVideoUrl?.startsWith('blob:')) {
+          URL.revokeObjectURL(overlayVideoUrl);
+        }
+        setOverlayVideo(null);
+        setOverlayVideoUrl(null);
+        setOverlayVideoDuration(0);
+        setOverlayVideoStartTime(0);
+        setOverlayVideoEndTime(0);
         setOverlayImage(file);
         const url = URL.createObjectURL(file);
         setOverlayImageUrl(url);
@@ -1387,33 +1509,77 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         img.src = url;
       }
     },
-    [setOverlaySizeFromPixels],
+    [overlayVideoUrl, setOverlaySizeFromPixels],
   );
 
   const handleVideoUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file && file.type.startsWith('video/')) {
+        if (overlayImageUrl?.startsWith('blob:')) {
+          URL.revokeObjectURL(overlayImageUrl);
+        }
+        if (overlayVideoUrl?.startsWith('blob:')) {
+          URL.revokeObjectURL(overlayVideoUrl);
+        }
+        setOverlayImage(null);
+        setOverlayImageUrl(null);
+        setActualImageDimensions(null);
+        setOverlayVideoDuration(0);
+        setOverlayVideoStartTime(0);
+        setOverlayVideoEndTime(0);
         setOverlayVideo(file);
         const url = URL.createObjectURL(file);
         setOverlayVideoUrl(url);
-        // Open video editing modal
+        setSelectedWordText(null);
+        setCustomText('');
         setIsVideoEditModalOpen(true);
       }
     },
-    [],
+    [overlayImageUrl, overlayVideoUrl],
   );
 
+  const handleCancelVideoEdit = useCallback(() => {
+    if (overlayVideoUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(overlayVideoUrl);
+    }
+    setOverlayVideo(null);
+    setOverlayVideoUrl(null);
+    setOverlayVideoDuration(0);
+    setOverlayVideoStartTime(0);
+    setOverlayVideoEndTime(0);
+    setActualImageDimensions(null);
+    setIsVideoEditModalOpen(false);
+    if (videoFileInputRef.current) {
+      videoFileInputRef.current.value = '';
+    }
+  }, [overlayVideoUrl]);
+
   const handleRemoveImage = useCallback(() => {
+    if (overlayImageUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(overlayImageUrl);
+    }
+    if (overlayVideoUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(overlayVideoUrl);
+    }
     setOverlayImage(null);
     setOverlayImageUrl(null);
+    setOverlayVideo(null);
+    setOverlayVideoUrl(null);
+    setOverlayVideoDuration(0);
+    setOverlayVideoStartTime(0);
+    setOverlayVideoEndTime(0);
+    setActualImageDimensions(null);
     // Prevent the auto-load effect from re-injecting the scene image
     // after the user explicitly removed it in this modal session.
     didAutoLoadSceneOverlayRef.current = true;
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, []);
+    if (videoFileInputRef.current) {
+      videoFileInputRef.current.value = '';
+    }
+  }, [overlayImageUrl, overlayVideoUrl]);
 
   const handleScreenshot = useCallback(() => {
     const video = videoRef.current;
@@ -1999,7 +2165,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const handleMouseDown = useCallback(
     (event: React.PointerEvent) => {
-      if (!overlayImageUrl) return;
+      if (!overlayMediaUrl) return;
 
       const contentRect = getVideoContentRect();
       if (!contentRect) return;
@@ -2152,7 +2318,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         event.preventDefault();
       }
     },
-    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect],
+    [overlayMediaUrl, overlayPosition, overlaySize, getVideoContentRect],
   );
 
   const handleTextMouseDown = useCallback(
@@ -2342,7 +2508,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent) => {
-      if (!overlayImageUrl) return;
+      if (!overlayMediaUrl) return;
 
       const contentRect = getVideoContentRect();
       if (!contentRect) return;
@@ -2397,7 +2563,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         document.body.style.cursor = 'default';
       }
     },
-    [overlayImageUrl, overlayPosition, overlaySize, getVideoContentRect],
+    [overlayMediaUrl, overlayPosition, overlaySize, getVideoContentRect],
   );
 
   const handlePointerLeave = useCallback(() => {
@@ -2610,8 +2776,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       : selectedWordText
         ? selectedWordText
         : null;
-    if (!overlayImage && !overlayImageUrl && !overlayText && !videoTintColor)
+    if (
+      !overlayImage &&
+      !overlayImageUrl &&
+      !overlayVideo &&
+      !overlayText &&
+      !videoTintColor
+    )
       return;
+    if (overlayVideo && !hasValidOverlayVideoTiming) return;
     if (!originalVideoUrl) return;
     console.log('handlePreview: textStyling', textStyling);
 
@@ -2643,24 +2816,44 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         formData.append('gifLoop', loopGif ? 'true' : 'false');
       }
     }
+    if (overlayVideo) {
+      formData.append('overlayVideo', overlayVideo);
+      formData.append(
+        'overlayVideoStartTime',
+        overlayVideoStartTime.toString(),
+      );
+      formData.append('overlayVideoEndTime', overlayVideoEndTime.toString());
+    }
     if (overlayText) {
       formData.append('overlayText', overlayText);
     }
     formData.append(
       'positionX',
-      (overlayFile ? overlayPosition.x : textOverlayPosition.x).toString(),
+      (overlayFile || overlayVideo
+        ? overlayPosition.x
+        : textOverlayPosition.x
+      ).toString(),
     );
     formData.append(
       'positionY',
-      (overlayFile ? overlayPosition.y : textOverlayPosition.y).toString(),
+      (overlayFile || overlayVideo
+        ? overlayPosition.y
+        : textOverlayPosition.y
+      ).toString(),
     );
     formData.append(
       'sizeWidth',
-      (overlayFile ? overlaySize.width : textOverlaySize.width).toString(),
+      (overlayFile || overlayVideo
+        ? overlaySize.width
+        : textOverlaySize.width
+      ).toString(),
     );
     formData.append(
       'sizeHeight',
-      (overlayFile ? overlaySize.height : textOverlaySize.height).toString(),
+      (overlayFile || overlayVideo
+        ? overlaySize.height
+        : textOverlaySize.height
+      ).toString(),
     );
     formData.append('startTime', startTime.toString());
     formData.append('endTime', endTime.toString());
@@ -2715,7 +2908,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     overlayImage,
     overlayImageUrl,
+    overlayVideo,
+    overlayVideoStartTime,
+    overlayVideoEndTime,
     fetchOverlayFileFromUrl,
+    hasValidOverlayVideoTiming,
     loopGif,
     selectedWordText,
     customText,
@@ -2746,8 +2943,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       : selectedWordText
         ? selectedWordText
         : null;
-    if (!overlayImage && !overlayImageUrl && !overlayText && !videoTintColor)
+    if (
+      !overlayImage &&
+      !overlayImageUrl &&
+      !overlayVideo &&
+      !overlayText &&
+      !videoTintColor
+    )
       return;
+    if (overlayVideo && !hasValidOverlayVideoTiming) return;
 
     const undoKey = sceneId ? `scene-undo-video-url:${sceneId}` : null;
     const urlBeforeApply = originalVideoUrl;
@@ -2768,9 +2972,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       const applyResult = await onApply(
         sceneId,
         overlayFile,
+        overlayVideo,
         overlayText,
-        overlayFile ? overlayPosition : textOverlayPosition,
-        overlayFile ? overlaySize : textOverlaySize,
+        overlayFile || overlayVideo ? overlayPosition : textOverlayPosition,
+        overlayFile || overlayVideo ? overlaySize : textOverlaySize,
         startTime,
         endTime,
         overlayText ? textStyling : undefined,
@@ -2782,6 +2987,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         selectedSoundName,
         overlayAnimation,
         loopGif,
+        overlayVideoStartTime,
+        overlayVideoEndTime,
       );
 
       // Prefer the URL returned by onApply to avoid repeated scene polling.
@@ -2823,6 +3030,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       // Reset overlay state to defaults (like opening a fresh modal) but keep it open
       setOverlayImage(null);
       setOverlayImageUrl(null);
+      if (overlayVideoUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(overlayVideoUrl);
+      }
+      setOverlayVideo(null);
+      setOverlayVideoUrl(null);
+      setOverlayVideoDuration(0);
+      setOverlayVideoStartTime(0);
+      setOverlayVideoEndTime(0);
       setOverlayPosition({ x: 50, y: 50 });
       setOverlaySize({ width: 40, height: 40 });
       setPreviewUrl(null);
@@ -2872,6 +3087,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     overlayImage,
     overlayImageUrl,
+    overlayVideo,
+    overlayVideoUrl,
+    overlayVideoStartTime,
+    overlayVideoEndTime,
+    hasValidOverlayVideoTiming,
     fetchOverlayFileFromUrl,
     loopGif,
     selectedWordText,
@@ -3892,8 +4112,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const handleClose = useCallback(() => {
     onClose();
     // Reset state
+    if (overlayImageUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(overlayImageUrl);
+    }
+    if (overlayVideoUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(overlayVideoUrl);
+    }
     setOverlayImage(null);
     setOverlayImageUrl(null);
+    setOverlayVideo(null);
+    setOverlayVideoUrl(null);
+    setOverlayVideoDuration(0);
+    setOverlayVideoStartTime(0);
+    setOverlayVideoEndTime(0);
     setOverlayPosition({ x: 50, y: 50 });
     setOverlaySize({ width: 40, height: 40 });
     setStartTime(0);
@@ -3920,7 +4151,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setSelectedWordText(null);
     setCustomText('');
     setSelectedWordText(null);
-  }, [onClose]);
+  }, [onClose, overlayImageUrl, overlayVideoUrl]);
 
   const withCacheBust = useCallback((url: string | null) => {
     const u = String(url || '').trim();
@@ -4122,10 +4353,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      // If VideoEditModal is open, don't handle keyboard events in this modal
-      if (isVideoEditModalOpen) {
-        return;
-      }
+      if (isVideoEditModalOpen) return;
 
       if (event.code === 'Tab') {
         // When the preview overlay is open, Tab should close it.
@@ -4143,9 +4371,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             !(
               overlayImage ||
               overlayImageUrl ||
+              overlayVideo ||
               selectedWordText ||
               videoTintColor
             ) ||
+            !hasValidOverlayVideoTiming ||
             isApplying ||
             isPreviewLoading;
 
@@ -4195,8 +4425,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         }
 
         // 2) Clear overlays on canvas first (image/text)
-        if (overlayImageUrl || selectedWordText) {
-          if (overlayImageUrl) {
+        if (overlayMediaUrl || selectedWordText) {
+          if (overlayMediaUrl) {
             handleRemoveImage();
           }
           if (selectedWordText) {
@@ -4351,7 +4581,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       if (isCropping) return;
 
       const isPreviewDisabled =
-        !(overlayImage || selectedWordText || videoTintColor) ||
+        !(
+          overlayImage ||
+          overlayImageUrl ||
+          overlayVideo ||
+          selectedWordText ||
+          videoTintColor
+        ) ||
+        !hasValidOverlayVideoTiming ||
         isApplying ||
         isPreviewLoading;
 
@@ -4387,11 +4624,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     previewUrl,
     handleClose,
     overlayImageUrl,
+    overlayMediaUrl,
     selectedWordText,
     handleRemoveImage,
     isCropping,
     overlayImage,
+    overlayVideo,
     videoTintColor,
+    hasValidOverlayVideoTiming,
     isApplying,
     isPreviewLoading,
     handlePreview,
@@ -4792,7 +5032,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               </div>
             )}
             {/* Invisible overlay to capture clicks when there's an overlay - excludes controls area */}
-            {overlayImageUrl && (
+            {overlayMediaUrl && (
               <div
                 className='absolute pointer-events-auto z-5'
                 style={{
@@ -4834,7 +5074,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 }}
               />
             )}
-            {overlayImageUrl && (
+            {overlayMediaUrl && (
               <div
                 className='absolute border-2 border-blue-500 cursor-move pointer-events-auto z-20'
                 style={{
@@ -4843,6 +5083,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   width: `${overlaySize.width}%`,
                   height: `${overlaySize.height}%`,
                   transform: 'translate(-50%, -50%)',
+                  opacity:
+                    overlayVideo &&
+                    !(currentVideoTime >= startTime && currentVideoTime < endTime)
+                      ? 0
+                      : 1,
                 }}
                 onPointerDown={handleMouseDown}
                 onWheel={handleOverlayWheelZoom}
@@ -4854,16 +5099,48 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 onDoubleClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  openCropModal();
+                  if (overlayImageUrl) openCropModal();
                 }}
               >
-                <img
-                  src={overlayImageUrl}
-                  alt='Overlay'
-                  className='w-full h-full object-contain'
-                  draggable={false}
-                  onPointerDown={handleMouseDown}
-                />
+                {overlayVideoUrl ? (
+                  <video
+                    ref={overlayVideoPreviewRef}
+                    src={overlayVideoUrl}
+                    className='w-full h-full object-cover pointer-events-none'
+                    muted
+                    playsInline
+                    preload='auto'
+                    onLoadedMetadata={(event) => {
+                      const media = event.currentTarget;
+                      if (media.videoWidth > 0 && media.videoHeight > 0) {
+                        const dimensions = {
+                          width: media.videoWidth,
+                          height: media.videoHeight,
+                        };
+                        setActualImageDimensions(dimensions);
+                        setOverlaySizeFromPixels(
+                          dimensions.width,
+                          dimensions.height,
+                        );
+                      }
+                      const baseVideo = videoRef.current;
+                      if (
+                        baseVideo &&
+                        !(baseVideo.currentTime >= startTime && baseVideo.currentTime < endTime)
+                      ) {
+                        baseVideo.currentTime = Math.max(0, startTime);
+                      }
+                    }}
+                  />
+                ) : overlayImageUrl ? (
+                  <img
+                    src={overlayImageUrl}
+                    alt='Overlay'
+                    className='w-full h-full object-contain'
+                    draggable={false}
+                    onPointerDown={handleMouseDown}
+                  />
+                ) : null}
               </div>
             )}
             {selectedWordText && (
@@ -4971,6 +5248,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             <ImageUploadRow
               fileInputRef={fileInputRef}
               overlayImage={overlayImage}
+              overlayVideo={overlayVideo}
               isGifOverlay={isGifOverlay}
               loopGif={loopGif}
               onChangeLoopGif={setLoopGif}
@@ -4988,7 +5266,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
             {/* Position Controls */}
             {/* Position and Size Controls */}
-            {overlayImageUrl && (
+            {overlayMediaUrl && (
               <ImagePositionControls
                 overlayPosition={overlayPosition}
                 setOverlayPosition={setOverlayPosition}
@@ -4996,12 +5274,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 setOverlaySize={setOverlaySize}
                 actualImageDimensions={actualImageDimensions}
                 onCrop={openCropModal}
+                canCrop={!overlayVideo}
+                mediaLabel={overlayVideo ? 'Video' : 'Image'}
                 onCenterResetNatural={() => {
                   setOverlayPosition({ x: 50, y: 50 });
                   void (async () => {
                     const dims =
                       actualImageDimensions ??
-                      (await ensureOverlayImageDimensions());
+                      (overlayVideo
+                        ? null
+                        : await ensureOverlayImageDimensions());
                     if (dims) {
                       setOverlaySizeFromPixels(dims.width, dims.height);
                       return;
@@ -5042,6 +5324,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 const video = videoRef.current;
                 if (video) setEndTime(video.currentTime);
               }}
+              overlayVideoDuration={
+                overlayVideo ? overlayVideoDuration : null
+              }
               isTintSectionOpen={isTintSectionOpen}
               setIsTintSectionOpen={setIsTintSectionOpen}
               tintPalette={tintPalette}
@@ -5285,6 +5570,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   setOverlayImageUrl(localUrl);
                   setOverlayVideo(null);
                   setOverlayVideoUrl(null);
+                  setOverlayVideoDuration(0);
+                  setOverlayVideoStartTime(0);
+                  setOverlayVideoEndTime(0);
                   setActualImageDimensions({ width: 1600, height: 900 });
                   setOverlayPosition({ x: 50, y: 50 });
                   setOverlaySize({ width: 72, height: 40.5 });
@@ -5434,9 +5722,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               !(
                 overlayImage ||
                 overlayImageUrl ||
+                overlayVideo ||
                 selectedWordText ||
                 videoTintColor
               ) ||
+              !hasValidOverlayVideoTiming ||
               isApplying ||
               isPreviewLoading
             }
@@ -5512,9 +5802,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               !(
                 overlayImage ||
                 overlayImageUrl ||
+                overlayVideo ||
                 selectedWordText ||
                 videoTintColor
-              ) || isApplying
+              ) ||
+              !hasValidOverlayVideoTiming ||
+              isApplying
             }
             className='flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
           >
@@ -6046,24 +6339,23 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         </div>
       )}
 
-      {/* Video Edit Modal */}
       <VideoEditModal
         isOpen={isVideoEditModalOpen}
-        onClose={() => setIsVideoEditModalOpen(false)}
+        onClose={handleCancelVideoEdit}
         videoFile={overlayVideo}
         videoUrl={overlayVideoUrl}
-        onSaveGif={(gifBlob) => {
-          // Convert blob to file and set as overlay image
-          const gifFile = new File([gifBlob], 'video-gif.gif', {
-            type: 'image/gif',
-          });
-          setOverlayImage(gifFile);
-          setOverlayImageUrl(URL.createObjectURL(gifFile));
-          setOverlayVideo(null);
-          setOverlayVideoUrl(null);
+        onUseVideo={({ startTime: sourceStart, endTime: sourceEnd }) => {
+          setOverlayVideoStartTime(sourceStart);
+          setOverlayVideoEndTime(sourceEnd);
+          setOverlayVideoDuration(Math.max(0, sourceEnd - sourceStart));
           setIsVideoEditModalOpen(false);
+          const baseVideo = videoRef.current;
+          if (baseVideo) {
+            baseVideo.currentTime = Math.max(0, startTime);
+          }
         }}
       />
+
     </div>
   );
 };

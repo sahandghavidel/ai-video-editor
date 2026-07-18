@@ -4,6 +4,9 @@ import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
+import type { ReadableStream as NodeReadableStream } from 'stream/web';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
 import {
   ensureVideoCached,
@@ -96,6 +99,13 @@ export async function POST(request: NextRequest) {
     const sceneId = parseInt(sceneIdString, 10);
     const videoUrl = formData.get('videoUrl') as string;
     const overlayImage = formData.get('overlayImage') as File | null;
+    const overlayVideo = formData.get('overlayVideo') as File | null;
+    const overlayVideoStartTimeRaw = formData.get(
+      'overlayVideoStartTime',
+    ) as string | null;
+    const overlayVideoEndTimeRaw = formData.get(
+      'overlayVideoEndTime',
+    ) as string | null;
     const overlayText = formData.get('overlayText') as string | null;
     const positionX = parseFloat(formData.get('positionX') as string);
     const positionY = parseFloat(formData.get('positionY') as string);
@@ -130,6 +140,9 @@ export async function POST(request: NextRequest) {
       sceneId,
       videoUrl,
       overlayImage: !!overlayImage,
+      overlayVideo: !!overlayVideo,
+      overlayVideoStartTime: overlayVideoStartTimeRaw,
+      overlayVideoEndTime: overlayVideoEndTimeRaw,
       overlayText,
       positionX,
       positionY,
@@ -153,7 +166,7 @@ export async function POST(request: NextRequest) {
     if (
       isNaN(sceneId) ||
       !videoUrl ||
-      (!overlayImage && !overlayText && !videoTintColorRaw) ||
+      (!overlayImage && !overlayVideo && !overlayText && !videoTintColorRaw) ||
       isNaN(positionX) ||
       isNaN(positionY) ||
       isNaN(sizeWidth) ||
@@ -165,6 +178,28 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required parameters' },
         { status: 400 },
       );
+    }
+
+    if (overlayImage && overlayVideo) {
+      return NextResponse.json(
+        { error: 'Choose either an image overlay or a video overlay.' },
+        { status: 400 },
+      );
+    }
+
+    if (overlayVideo) {
+      if (!overlayVideo.type.startsWith('video/')) {
+        return NextResponse.json(
+          { error: 'Expected a video overlay file.' },
+          { status: 400 },
+        );
+      }
+      if (!(endTime > startTime)) {
+        return NextResponse.json(
+          { error: 'End Time must be greater than Start Time.' },
+          { status: 400 },
+        );
+      }
     }
 
     const normalizeColor = (c: string | undefined | null) => {
@@ -562,7 +597,160 @@ export async function POST(request: NextRequest) {
       return `${a0};${a1};${amix}`;
     };
 
-    if (overlayImage) {
+    if (overlayVideo) {
+      const overlayVideoPath = path.join(tempDir, 'overlay-video.input');
+      await pipeline(
+        Readable.fromWeb(
+          overlayVideo.stream() as unknown as NodeReadableStream<Uint8Array>,
+        ),
+        fs.createWriteStream(overlayVideoPath),
+      );
+
+      const { stdout: overlayProbeOutput } = await execAsync(
+        `ffprobe -v quiet -print_format json -show_format -show_streams "${overlayVideoPath}"`,
+      );
+      const overlayProbeData = JSON.parse(overlayProbeOutput) as FFprobeOutput;
+      const overlayVideoStream = overlayProbeData.streams?.find(
+        (stream) => stream.codec_type === 'video',
+      );
+      if (!overlayVideoStream) {
+        throw new Error('No video stream found in overlay video');
+      }
+
+      const parseOverlayDuration = (value?: string | number) => {
+        if (value == null) return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+      };
+      const overlaySourceDuration =
+        parseOverlayDuration(overlayProbeData.format?.duration) ??
+        parseOverlayDuration(overlayVideoStream.duration);
+      if (!overlaySourceDuration) {
+        throw new Error('Overlay video duration could not be determined');
+      }
+
+      const requestedSourceStart =
+        overlayVideoStartTimeRaw == null
+          ? Number.NaN
+          : Number(overlayVideoStartTimeRaw);
+      const requestedSourceEnd =
+        overlayVideoEndTimeRaw == null
+          ? Number.NaN
+          : Number(overlayVideoEndTimeRaw);
+      const overlaySourceStart = Number.isFinite(requestedSourceStart)
+        ? Math.max(0, Math.min(overlaySourceDuration, requestedSourceStart))
+        : 0;
+      const overlaySourceEnd = Number.isFinite(requestedSourceEnd)
+        ? Math.max(0, Math.min(overlaySourceDuration, requestedSourceEnd))
+        : overlaySourceDuration;
+      if (!(overlaySourceEnd > overlaySourceStart)) {
+        throw new Error('Overlay video source End must be greater than Start');
+      }
+      const selectedSourceDuration = overlaySourceEnd - overlaySourceStart;
+
+      const requestedWindowDuration = endTime - startTime;
+      const stretchFactor = requestedWindowDuration / selectedSourceDuration;
+      if (!Number.isFinite(stretchFactor) || stretchFactor <= 0) {
+        throw new Error('Invalid overlay video timing');
+      }
+
+      const overlayEnable = `enable='gte(t\\,${tStart})*lte(t\\,${tEnd})'`;
+      const needsScaleAnim =
+        overlayAnimation === 'miniZoom' ||
+        overlayAnimation === 'zoomIn' ||
+        overlayAnimation === 'bounceIn' ||
+        overlayAnimation === 'spring';
+      const needsFadeAnim = overlayAnimation === 'fadeIn';
+      const escExpr = (value: string) =>
+        value.replace(/(?<!\\),/g, '\\,');
+      const pGlobal = escExpr(
+        `min(max((t-${tStart})/${entranceAnimDuration},0),1)`,
+      );
+      const easeGlobal = escExpr(`(1-pow(1-${pGlobal},3))`);
+      const scaleGlobal = (() => {
+        switch (overlayAnimation) {
+          case 'miniZoom':
+            return `(0.92+(1-0.92)*${easeGlobal})`;
+          case 'zoomIn':
+            return `(0.75+(1-0.75)*${easeGlobal})`;
+          case 'bounceIn':
+            return `((0.7+(1-0.7)*${easeGlobal})*(1+0.12*exp(-6*${pGlobal})*sin(12*${pGlobal})))`;
+          case 'spring':
+            return `((0.85+(1-0.85)*${easeGlobal})*(1+0.08*exp(-5*${pGlobal})*sin(16*${pGlobal})))`;
+          default:
+            return '1';
+        }
+      })();
+      const scaleExpr = escExpr(
+        `if(lt(t,${tStart + entranceAnimDuration}),${scaleGlobal},1)`,
+      );
+
+      const overlayFilters = [
+        `trim=start=${overlaySourceStart}:end=${overlaySourceEnd}`,
+        `setpts=(PTS-STARTPTS)*${stretchFactor}+(${tStart})/TB`,
+        `scale=w=${overlayWidth}:h=${overlayHeight}:force_original_aspect_ratio=increase`,
+        `crop=${overlayWidth}:${overlayHeight}`,
+        'format=rgba',
+      ];
+      let overlayChain = overlayFilters.join(',');
+      if (needsScaleAnim) {
+        overlayChain += `,scale=iw*(${scaleExpr}):ih*(${scaleExpr}):eval=frame`;
+      }
+      if (needsFadeAnim) {
+        overlayChain += `,fade=t=in:st=${tStart}:d=${entranceAnimDuration}:alpha=1`;
+      }
+      const overlayScale = `[1:v]${overlayChain}[overlay]`;
+      const slideDX =
+        overlayAnimation === 'slideLeft'
+          ? `(W*0.25*(1-${easeGlobal}))`
+          : overlayAnimation === 'slideRight'
+            ? `(-W*0.25*(1-${easeGlobal}))`
+            : '0';
+      const slideDY =
+        overlayAnimation === 'slideUp' ? `(H*0.25*(1-${easeGlobal}))` : '0';
+      const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
+      const yExpr = `H*${positionY / 100}-overlay_h/2+(${slideDY})`;
+      const baseVideo = preview
+        ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
+        : tintFilter
+          ? `[0:v]${tintFilter}[base]`
+          : null;
+      const baseRef = preview || tintFilter ? '[base]' : '[0:v]';
+      const overlayFilter = `${baseRef}[overlay]overlay=x=${xExpr}:y=${yExpr}:${overlayEnable}:eof_action=repeat:repeatlast=1[vout]`;
+      const videoPost =
+        preview && previewPostFilter
+          ? `;[vout]${previewPostFilter}[voutp]`
+          : '';
+      const vmap = preview && previewPostFilter ? '[voutp]' : '[vout]';
+      const previewDurationArg = preview ? `-t ${segmentDuration}` : '';
+
+      if (overlaySoundPath) {
+        const audio = buildAudioFilter(2);
+        const parts = [baseVideo, overlayScale, overlayFilter, audio].filter(
+          Boolean,
+        );
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -i "${overlayVideoPath}" -i "${overlaySoundPath}" -filter_complex "${parts.join(
+          ';',
+        )}${videoPost}" -map "${vmap}" -map "[aout]" ${
+          preview
+            ? previewAudioEncodeArgs
+            : `-ar ${originalAudioSampleRate} -c:a ${originalAudioCodec} -b:a ${Math.round(
+                mixedAudioBitrate / 1000,
+              )}k -ac ${originalAudioChannels}`
+        } ${
+          preview ? previewVideoEncodeArgs : finalVideoEncodeArgs
+        } ${previewDurationArg} -avoid_negative_ts make_zero "${outputPath}"`;
+      } else {
+        const parts = [baseVideo, overlayScale, overlayFilter].filter(Boolean);
+        ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" -i "${overlayVideoPath}" -filter_complex "${parts.join(
+          ';',
+        )}${videoPost}" -map "${vmap}" -map 0:a? ${
+          preview ? previewAudioEncodeArgs : '-c:a copy'
+        } ${
+          preview ? previewVideoEncodeArgs : finalVideoEncodeArgs
+        } ${previewDurationArg} -avoid_negative_ts make_zero "${outputPath}"`;
+      }
+    } else if (overlayImage) {
       // Handle image overlay
       const imageBuffer = await overlayImage.arrayBuffer();
       const imageBytes = Buffer.from(imageBuffer);

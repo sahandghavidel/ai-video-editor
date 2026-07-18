@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Scissors } from 'lucide-react';
 
 interface VideoEditModalProps {
@@ -8,7 +8,7 @@ interface VideoEditModalProps {
   onClose: () => void;
   videoFile: File | null;
   videoUrl: string | null;
-  onSaveGif: (gifBlob: Blob) => void;
+  onUseVideo: (selection: { startTime: number; endTime: number }) => void;
 }
 
 export function VideoEditModal({
@@ -16,14 +16,13 @@ export function VideoEditModal({
   onClose,
   videoFile,
   videoUrl,
-  onSaveGif,
+  onUseVideo,
 }: VideoEditModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [videoDimensions, setVideoDimensions] = useState({
     width: 0,
     height: 0,
@@ -39,6 +38,7 @@ export function VideoEditModal({
         if (!Number.isFinite(video.duration) || video.duration === Infinity)
           return;
         setDuration(video.duration);
+        setStartTime(0);
         setEndTime(video.duration);
         // Set video dimensions for aspect ratio
         if (video.videoWidth && video.videoHeight) {
@@ -126,36 +126,11 @@ export function VideoEditModal({
     setTimeout(() => videoRef.current?.focus(), 0);
   };
 
-  const convertToGif = useCallback(async () => {
+  const useSelectedVideo = () => {
     if (!videoFile) return;
-
-    setIsProcessing(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('video', videoFile);
-      formData.append('startTime', startTime.toString());
-      formData.append('endTime', endTime.toString());
-
-      const response = await fetch('/api/video-to-gif', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to convert video');
-      }
-
-      const gifBlob = await response.blob();
-      onSaveGif(gifBlob);
-    } catch (error) {
-      console.error('Error converting video to GIF:', error);
-      alert('Failed to convert video to GIF. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [videoFile, startTime, endTime, onSaveGif]);
+    if (!(endTime > startTime)) return;
+    onUseVideo({ startTime, endTime });
+  };
 
   if (!isOpen) return null;
 
@@ -202,7 +177,7 @@ export function VideoEditModal({
 
           {/* Trim Controls */}
           <div className='space-y-2'>
-            <h4 className='font-medium'>Trim Video</h4>
+            <h4 className='font-medium'>Choose Video Section</h4>
             <div className='flex items-center space-x-2'>
               <button
                 onClick={handleTrim}
@@ -219,6 +194,11 @@ export function VideoEditModal({
                 <span>Set End ({endTime.toFixed(1)}s)</span>
               </button>
             </div>
+            <p className='text-sm text-gray-600'>
+              Selected {Math.max(0, endTime - startTime).toFixed(2)}s of{' '}
+              {duration.toFixed(2)}s. This section will automatically fit the
+              Start and End Time selected in Add Image Overlay.
+            </p>
           </div>
 
           {/* Save Button */}
@@ -230,11 +210,11 @@ export function VideoEditModal({
               Cancel
             </button>
             <button
-              onClick={convertToGif}
-              disabled={isProcessing}
+              onClick={useSelectedVideo}
+              disabled={!videoFile || !(endTime > startTime)}
               className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50'
             >
-              {isProcessing ? 'Processing...' : 'Save as GIF'}
+              Use Selected Video
             </button>
           </div>
         </div>

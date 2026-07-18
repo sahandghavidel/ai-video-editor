@@ -58,11 +58,7 @@ npm run lint -- src/path/to/changed-file.ts src/path/to/changed-component.tsx
 
 Do not use the repository-wide `npm run lint` as the default check for a focused change. Report any pre-existing or unrelated failures separately from failures caused by the changed files.
 
-For changes that can affect compilation, routing, or production behavior, also run:
-
-```bash
-npm run build
-```
+Do not run `npm run build` as routine validation. It can interfere with an active development session. Run it only when the user explicitly requests a production build.
 
 Before handing off a change:
 

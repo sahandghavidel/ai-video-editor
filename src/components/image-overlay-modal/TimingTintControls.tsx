@@ -10,6 +10,7 @@ type Props = {
   setEndTime: (v: number) => void;
   onSetStartFromCurrent: () => void;
   onSetEndFromCurrent: () => void;
+  overlayVideoDuration?: number | null;
 
   isTintSectionOpen: boolean;
   setIsTintSectionOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -35,6 +36,7 @@ export function TimingTintControls({
   setEndTime,
   onSetStartFromCurrent,
   onSetEndFromCurrent,
+  overlayVideoDuration,
   isTintSectionOpen,
   setIsTintSectionOpen,
   tintPalette,
@@ -97,6 +99,20 @@ export function TimingTintControls({
           </div>
         </div>
       </div>
+
+      {overlayVideoDuration != null && overlayVideoDuration > 0 && (
+        <div className='mt-2 rounded border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs text-blue-900'>
+          {endTime > startTime ? (
+            <>
+              Video {overlayVideoDuration.toFixed(2)}s → overlay window{' '}
+              {(endTime - startTime).toFixed(2)}s → automatic speed{' '}
+              {(overlayVideoDuration / (endTime - startTime)).toFixed(2)}×
+            </>
+          ) : (
+            <>End Time must be greater than Start Time.</>
+          )}
+        </div>
+      )}
 
       <button
         type='button'

@@ -14,6 +14,7 @@ import {
 type Props = {
   fileInputRef: React.RefObject<HTMLInputElement>;
   overlayImage: File | null;
+  overlayVideo?: File | null;
   isGifOverlay?: boolean;
   loopGif?: boolean;
   onChangeLoopGif?: (next: boolean) => void;
@@ -32,6 +33,7 @@ type Props = {
 export function ImageUploadRow({
   fileInputRef,
   overlayImage,
+  overlayVideo,
   isGifOverlay,
   loopGif,
   onChangeLoopGif,
@@ -46,6 +48,8 @@ export function ImageUploadRow({
   onVideoUpload,
   onPickVideoFile,
 }: Props) {
+  const overlayMedia = overlayVideo || overlayImage;
+
   return (
     <div>
       <input
@@ -111,7 +115,7 @@ export function ImageUploadRow({
             <Clipboard className='h-4 w-4' />
           )}
         </button>
-        {overlayImage && (
+        {overlayMedia && (
           <button
             onClick={onRemoveImage}
             className='flex items-center justify-center px-2 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50 hover:border-red-400 h-10 w-10'
@@ -132,9 +136,9 @@ export function ImageUploadRow({
             <span>Loop GIF</span>
           </label>
         )}
-        {overlayImage && (
+        {overlayMedia && (
           <p className='text-xs text-gray-600 ml-2 truncate max-w-[180px]'>
-            {overlayImage.name}
+            {overlayMedia.name}
           </p>
         )}
       </div>

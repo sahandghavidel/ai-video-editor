@@ -14,6 +14,8 @@ type Props = {
   >;
   actualImageDimensions: { width: number; height: number } | null;
   onCrop: () => void;
+  canCrop?: boolean;
+  mediaLabel?: 'Image' | 'Video';
   onCenterResetNatural: () => void;
   onCenterMaximize: () => void;
   onZoomOut: () => void;
@@ -27,6 +29,8 @@ export function ImagePositionControls({
   setOverlaySize,
   actualImageDimensions,
   onCrop,
+  canCrop = true,
+  mediaLabel = 'Image',
   onCenterResetNatural,
   onCenterMaximize,
   onZoomOut,
@@ -69,7 +73,7 @@ export function ImagePositionControls({
         </div>
         <div className='flex-1'>
           <label className='block text-xs text-gray-600'>
-            Image Width (px)
+            {mediaLabel} Width (px)
           </label>
           <input
             type='number'
@@ -80,7 +84,7 @@ export function ImagePositionControls({
         </div>
         <div className='flex-1'>
           <label className='block text-xs text-gray-600'>
-            Image Height (px)
+            {mediaLabel} Height (px)
           </label>
           <input
             type='number'
@@ -147,15 +151,17 @@ export function ImagePositionControls({
             <Maximize className='h-3 w-3' />
           </button>
         </div>
-        <div className='flex-shrink-0 mt-4'>
-          <button
-            onClick={onCrop}
-            className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
-            title='Crop image'
-          >
-            <Crop className='h-3 w-3' />
-          </button>
-        </div>
+        {canCrop && (
+          <div className='flex-shrink-0 mt-4'>
+            <button
+              onClick={onCrop}
+              className='px-1 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-800 h-8 flex items-center justify-center'
+              title='Crop image'
+            >
+              <Crop className='h-3 w-3' />
+            </button>
+          </div>
+        )}
         <div className='flex-shrink-0 mt-4'>
           <button
             onClick={onZoomOut}
