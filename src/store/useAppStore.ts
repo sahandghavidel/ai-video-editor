@@ -43,6 +43,7 @@ export interface TTSSettings {
 
 // Speed up filtering modes
 export type SpeedUpMode = 'all' | 'emptyOnly' | 'withTextOnly';
+export type AllVideosTargetStatus = 'processing' | 'pending';
 
 // Video processing settings interface
 export interface VideoSettings {
@@ -50,6 +51,7 @@ export interface VideoSettings {
   muteAudio: boolean;
   autoGenerateVideo: boolean;
   autoGenerateTTS: boolean;
+  allVideosTargetStatus: AllVideosTargetStatus;
   skipVideosWithUploadedUrl6881InAllVideosBatch: boolean;
   skipVideosWithoutUploadedUrl6881InAllVideosBatch: boolean;
   speedUpMode: SpeedUpMode;
@@ -627,6 +629,7 @@ const defaultVideoSettings: VideoSettings = {
   muteAudio: true,
   autoGenerateVideo: true,
   autoGenerateTTS: true,
+  allVideosTargetStatus: 'processing',
   skipVideosWithUploadedUrl6881InAllVideosBatch: true,
   skipVideosWithoutUploadedUrl6881InAllVideosBatch: true,
   speedUpMode: 'all',
@@ -2501,6 +2504,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.removeItem('pipelineConfig');
       localStorage.removeItem(PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY);
       localStorage.removeItem('pipelineTemplates');
+      localStorage.removeItem('videoSettings');
       localStorage.removeItem('subtitleGenerationSettings');
       localStorage.removeItem('combineScenesSettings');
       localStorage.removeItem('sceneVideoGenerationSettings');

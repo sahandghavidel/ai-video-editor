@@ -265,7 +265,7 @@ type AudioReferenceLanguageEntry = {
       }
 
       const freshVideosData = await getOriginalVideosData();
-      const processingVideos = getProcessingVideosForAllVideosOps(
+      const processingVideos = getTargetVideosForAllVideosOps(
         freshVideosData,
       );
 
@@ -864,7 +864,8 @@ export default function OriginalVideosList({
   const [transcribeApplyGenClipsSceneId, setTranscribeApplyGenClipsSceneId] =
     useState<number | null>(null);
   const [runningFullPipeline, setRunningFullPipeline] = useState(false);
-  const [pipelineStep, setPipelineStep] = useState<string>('');
+  const [pipelineStep, setPipelineStepRaw] = useState<string>('');
+  const pipelineTargetStatusRef = useRef<'processing' | 'pending' | null>(null);
   const [combiningLongTextPairsAllVideos, setCombiningLongTextPairsAllVideos] =
     useState(false);
   const [
@@ -1444,7 +1445,40 @@ export default function OriginalVideosList({
     [extractUrl],
   );
 
-  const getProcessingVideosForAllVideosOps = useCallback(
+  const allVideosTargetStatus =
+    videoSettings.allVideosTargetStatus === 'pending'
+      ? 'pending'
+      : 'processing';
+  const allVideosTargetStatusLabel =
+    allVideosTargetStatus === 'pending' ? 'Pending' : 'Processing';
+
+  const setPipelineStep = useCallback(
+    (step: string) => {
+      const targetStatusLabel =
+        pipelineTargetStatusRef.current === 'pending'
+          ? 'Pending'
+          : pipelineTargetStatusRef.current === 'processing'
+            ? 'Processing'
+            : allVideosTargetStatusLabel;
+      setPipelineStepRaw(
+        step.replaceAll('Processing', targetStatusLabel),
+      );
+    },
+    [allVideosTargetStatusLabel],
+  );
+
+  const isAllVideosTargetVideo = useCallback(
+    (video: BaserowRow): boolean => {
+      const targetStatus =
+        pipelineTargetStatusRef.current ?? allVideosTargetStatus;
+      return (
+        extractFieldValue(video.field_6864).trim().toLowerCase() === targetStatus
+      );
+    },
+    [allVideosTargetStatus, extractFieldValue],
+  );
+
+  const getTargetVideosForAllVideosOps = useCallback(
     (
       videos: BaserowRow[],
       options?: { operation?: UploadedUrlSkipOperation },
@@ -1464,8 +1498,7 @@ export default function OriginalVideosList({
         );
 
       return videos.filter((video) => {
-        const status = extractFieldValue(video.field_6864).trim().toLowerCase();
-        if (status !== 'processing') {
+        if (!isAllVideosTargetVideo(video)) {
           return false;
         }
 
@@ -1491,7 +1524,7 @@ export default function OriginalVideosList({
       });
     },
     [
-      extractFieldValue,
+      isAllVideosTargetVideo,
       videoHasUploadedUrl6881,
       videoSettings.skipVideosWithUploadedUrl6881InAllVideosBatch,
       videoSettings.skipVideosWithoutUploadedUrl6881InAllVideosBatch,
@@ -1650,10 +1683,7 @@ export default function OriginalVideosList({
     try {
       // Fetch once at start to avoid mid-batch refresh loops
       const videos = await getOriginalVideosData();
-      const processingVideos = videos.filter((v) => {
-        const status = extractFieldValue(v.field_6864).trim().toLowerCase();
-        return status === 'processing';
-      });
+      const processingVideos = videos.filter(isAllVideosTargetVideo);
 
       for (const video of processingVideos) {
         const hasTtsAudio = !!extractUrl(video.field_6859);
@@ -2099,10 +2129,7 @@ export default function OriginalVideosList({
     try {
       // Fetch once at start to avoid mid-batch refresh loops
       const videos = await getOriginalVideosData();
-      const processingVideos = videos.filter((v) => {
-        const status = extractFieldValue(v.field_6864).trim().toLowerCase();
-        return status === 'processing';
-      });
+      const processingVideos = videos.filter(isAllVideosTargetVideo);
 
       for (const video of processingVideos) {
         const script =
@@ -2407,11 +2434,8 @@ export default function OriginalVideosList({
   const filteredOriginalVideos = useMemo(() => {
     if (!showProcessingOnly) return originalVideos;
 
-    return originalVideos.filter((video) => {
-      const status = extractFieldValue(video.field_6864).trim().toLowerCase();
-      return status === 'processing';
-    });
-  }, [showProcessingOnly, originalVideos, extractFieldValue]);
+    return originalVideos.filter(isAllVideosTargetVideo);
+  }, [showProcessingOnly, originalVideos, isAllVideosTargetVideo]);
 
   const videoTableViewportHeightPx = showProcessingOnly
     ? VIDEO_TABLE_VIEWPORT_HALF_HEIGHT_PX
@@ -3336,8 +3360,7 @@ export default function OriginalVideosList({
       const videosToTranscribe = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const captionsUrl = extractUrl(video.field_6861);
-        const status = extractFieldValue(video.field_6864);
-        return videoUrl && !captionsUrl && status === 'Processing'; // Has video, no captions, and Processing status
+        return videoUrl && !captionsUrl && isAllVideosTargetVideo(video);
       });
 
       if (videosToTranscribe.length === 0) {
@@ -3481,12 +3504,13 @@ export default function OriginalVideosList({
       // so existing captions are overwritten with fresh output.
       const videosToTranscribe = freshVideosData.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858);
-        const status = extractFieldValue(video.field_6864);
-        return finalVideoUrl && status === 'Processing';
+        return finalVideoUrl && isAllVideosTargetVideo(video);
       });
 
       if (videosToTranscribe.length === 0) {
-        console.log('No Processing videos with Final Merged Video URL found');
+        console.log(
+          `No ${allVideosTargetStatusLabel} videos with Final Merged Video URL found`,
+        );
         return;
       }
 
@@ -3611,13 +3635,12 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
 
-      const processingVideos = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return status === 'Processing';
-      });
+      const processingVideos = freshVideosData.filter(isAllVideosTargetVideo);
 
       if (processingVideos.length === 0) {
-        console.log('No Processing videos found for Create En Srt');
+        console.log(
+          `No ${allVideosTargetStatusLabel} videos found for Create En Srt`,
+        );
         return;
       }
 
@@ -3882,11 +3905,11 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
       const processingVideos =
-        getProcessingVideosForAllVideosOps(freshVideosData);
+        getTargetVideosForAllVideosOps(freshVideosData);
 
       if (processingVideos.length === 0) {
         console.log(
-          `No Processing videos found for Create Dubbed ${runnableLanguages
+          `No ${allVideosTargetStatusLabel} videos found for Create Dubbed ${runnableLanguages
             .map((languageCode) => languageCode.toUpperCase())
             .join(', ')}`,
         );
@@ -4132,14 +4155,13 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
 
       const processingVideoIds = freshVideosData
-        .filter((video) => extractFieldValue(video.field_6864) === 'Processing')
+        .filter(isAllVideosTargetVideo)
         .map((video) => video.id);
 
       const sceneTextByVideoId =
         await buildSceneSentenceTextByScopedVideoIds(processingVideoIds);
 
       const videosToDescribe = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
         const sceneText = sceneTextByVideoId.get(video.id) ?? '';
         const existingDescription =
           typeof video.field_6869 === 'string'
@@ -4147,7 +4169,7 @@ export default function OriginalVideosList({
             : extractFieldValue(video.field_6869).trim();
 
         return (
-          status === 'Processing' &&
+          isAllVideosTargetVideo(video) &&
           sceneText.length > 0 &&
           !existingDescription
         );
@@ -4155,7 +4177,7 @@ export default function OriginalVideosList({
 
       if (videosToDescribe.length === 0) {
         console.log(
-          'No Processing videos found with scene sentences that need YouTube description generation',
+          `No ${allVideosTargetStatusLabel} videos found with scene sentences that need YouTube description generation`,
         );
         return;
       }
@@ -4256,14 +4278,13 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
 
       const processingVideoIds = freshVideosData
-        .filter((video) => extractFieldValue(video.field_6864) === 'Processing')
+        .filter(isAllVideosTargetVideo)
         .map((video) => video.id);
 
       const sceneTextByVideoId =
         await buildSceneSentenceTextByScopedVideoIds(processingVideoIds);
 
       const videosToTag = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
         const sceneText = sceneTextByVideoId.get(video.id) ?? '';
         const existingKeywords =
           typeof video.field_6871 === 'string'
@@ -4271,13 +4292,15 @@ export default function OriginalVideosList({
             : extractFieldValue(video.field_6871).trim();
 
         return (
-          status === 'Processing' && sceneText.length > 0 && !existingKeywords
+          isAllVideosTargetVideo(video) &&
+          sceneText.length > 0 &&
+          !existingKeywords
         );
       });
 
       if (videosToTag.length === 0) {
         console.log(
-          'No Processing videos found with scene sentences that need YouTube keyword generation',
+          `No ${allVideosTargetStatusLabel} videos found with scene sentences that need YouTube keyword generation`,
         );
         return;
       }
@@ -4396,14 +4419,13 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
 
       const processingVideoIds = freshVideosData
-        .filter((video) => extractFieldValue(video.field_6864) === 'Processing')
+        .filter(isAllVideosTargetVideo)
         .map((video) => video.id);
 
       const sceneTextByVideoId =
         await buildSceneSentenceTextByScopedVideoIds(processingVideoIds);
 
       const videosToTitle = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
         const sceneText = sceneTextByVideoId.get(video.id) ?? '';
         const existingTitle =
           typeof video.field_6870 === 'string'
@@ -4411,13 +4433,13 @@ export default function OriginalVideosList({
             : extractFieldValue(video.field_6870).trim();
 
         return (
-          status === 'Processing' && sceneText.length > 0 && !existingTitle
+          isAllVideosTargetVideo(video) && sceneText.length > 0 && !existingTitle
         );
       });
 
       if (videosToTitle.length === 0) {
         console.log(
-          'No Processing videos found with scene sentences that need YouTube title generation',
+          `No ${allVideosTargetStatusLabel} videos found with scene sentences that need YouTube title generation`,
         );
         return;
       }
@@ -4537,7 +4559,6 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
 
       const videosToTimestamp = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
         const finalCaptionsUrl = extractUrl(video.field_6872);
         const existingTimestamps =
           typeof video.field_6873 === 'string'
@@ -4545,7 +4566,7 @@ export default function OriginalVideosList({
             : extractFieldValue(video.field_6873).trim();
 
         return (
-          status === 'Processing' &&
+          isAllVideosTargetVideo(video) &&
           !!finalCaptionsUrl &&
           finalCaptionsUrl.trim().length > 0 &&
           !existingTimestamps
@@ -4554,7 +4575,7 @@ export default function OriginalVideosList({
 
       if (videosToTimestamp.length === 0) {
         console.log(
-          'No Processing videos found that need YouTube timestamps generation',
+          `No ${allVideosTargetStatusLabel} videos found that need YouTube timestamps generation`,
         );
         return;
       }
@@ -4654,7 +4675,7 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
 
-      const videosToProcess = getProcessingVideosForAllVideosOps(
+      const videosToProcess = getTargetVideosForAllVideosOps(
         freshVideosData,
         { operation: 'scriptFromTitle' },
       ).filter((video) => {
@@ -4673,7 +4694,9 @@ export default function OriginalVideosList({
       });
 
       if (videosToProcess.length === 0) {
-        console.log('No Processing videos matched Script-from-Title criteria');
+        console.log(
+          `No ${allVideosTargetStatusLabel} videos matched Script-from-Title criteria`,
+        );
         return;
       }
 
@@ -4776,7 +4799,7 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
 
-      const videosToProcess = getProcessingVideosForAllVideosOps(
+      const videosToProcess = getTargetVideosForAllVideosOps(
         freshVideosData,
         { operation: 'generateThumbnails' },
       ).filter((video) => {
@@ -4800,7 +4823,7 @@ export default function OriginalVideosList({
 
       if (videosToProcess.length === 0) {
         console.log(
-          'No Processing videos found that need thumbnail generation',
+          `No ${allVideosTargetStatusLabel} videos found that need thumbnail generation`,
         );
         return;
       }
@@ -5139,15 +5162,17 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
       const videosToProcess =
-        getProcessingVideosForAllVideosOps(freshVideosData);
+        getTargetVideosForAllVideosOps(freshVideosData);
 
       if (videosToProcess.length === 0) {
-        console.log('No Processing videos found for asset folder export');
+        console.log(
+          `No ${allVideosTargetStatusLabel} videos found for asset folder export`,
+        );
         return;
       }
 
       console.log(
-        `Exporting asset folders for ${videosToProcess.length} Processing videos...`,
+        `Exporting asset folders for ${videosToProcess.length} ${allVideosTargetStatusLabel} videos...`,
       );
 
       for (const video of videosToProcess) {
@@ -5656,14 +5681,13 @@ export default function OriginalVideosList({
           typeof video.field_6854 === 'string' &&
           video.field_6854.trim().length > 0;
         const scenesExist = hasScenes(video);
-        const status = extractFieldValue(video.field_6864);
         console.log(
-          `Video ${video.id}: captions=${hasCaptions}, script=${hasScript}, scenes=${scenesExist}, status=${status}`,
+          `Video ${video.id}: captions=${hasCaptions}, script=${hasScript}, scenes=${scenesExist}, status=${extractFieldValue(video.field_6864)}`,
         );
         return (
           (hasCaptions || hasScript) &&
           !hasScenes(video) &&
-          status === 'Processing'
+          isAllVideosTargetVideo(video)
         );
       });
 
@@ -5777,7 +5801,7 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
 
       // Filter videos by Processing status
-      const videosToProcess = getProcessingVideosForAllVideosOps(
+      const videosToProcess = getTargetVideosForAllVideosOps(
         freshVideosData,
         { operation: 'improveAll' },
       );
@@ -5803,16 +5827,20 @@ export default function OriginalVideosList({
         return;
       }
 
-      console.log(`Videos with Processing status: ${videosToProcess.length}`);
+      console.log(
+        `Videos with ${allVideosTargetStatusLabel} status: ${videosToProcess.length}`,
+      );
       console.log(`Scenes to process: ${scenesToProcess.length}`);
 
       if (scenesToProcess.length === 0) {
-        console.log('No scenes to process for videos with Processing status');
+        console.log(
+          `No scenes to process for videos with ${allVideosTargetStatusLabel} status`,
+        );
         return;
       }
 
       console.log(
-        `Starting AI improvement for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
+        `Starting AI improvement for ${videosToProcess.length} videos (status: ${allVideosTargetStatusLabel}) with ${scenesToProcess.length} scenes...`,
       );
 
       const handleSentenceImprovementWithOptions =
@@ -5903,25 +5931,25 @@ export default function OriginalVideosList({
       setGeneratingAllTTSForAllVideos(true);
 
       // Fetch fresh original videos data to check status
-      const freshVideosData = await getOriginalVideosData();
+      const {
+        processingVideos: videosToProcess,
+        scenesForProcessingVideos: scenesToProcess,
+      } = await fetchProcessingScenes();
 
-      // Filter videos by Processing status
-      const videosToProcess =
-        getProcessingVideosForAllVideosOps(freshVideosData);
-
-      const { scenesForProcessingVideos: scenesToProcess } =
-        await fetchProcessingScenes();
-
-      console.log(`Videos with Processing status: ${videosToProcess.length}`);
+      console.log(
+        `Videos with ${allVideosTargetStatusLabel} status: ${videosToProcess.length}`,
+      );
       console.log(`Scenes to process: ${scenesToProcess.length}`);
 
       if (scenesToProcess.length === 0) {
-        console.log('No scenes to process for videos with Processing status');
+        console.log(
+          `No scenes to process for videos with ${allVideosTargetStatusLabel} status`,
+        );
         return;
       }
 
       console.log(
-        `Starting TTS generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
+        `Starting TTS generation for ${videosToProcess.length} videos (status: ${allVideosTargetStatusLabel}) with ${scenesToProcess.length} scenes...`,
       );
 
       const ttsVoiceByVideoId = new Map<number, string>();
@@ -6013,16 +6041,20 @@ export default function OriginalVideosList({
 
       const scenesToProcess = scenesForProcessingVideos;
 
-      console.log(`Videos with Processing status: ${videosToProcess.length}`);
+      console.log(
+        `Videos with ${allVideosTargetStatusLabel} status: ${videosToProcess.length}`,
+      );
       console.log(`Scenes to process: ${scenesToProcess.length}`);
 
       if (scenesToProcess.length === 0) {
-        console.log('No scenes to process for videos with Processing status');
+        console.log(
+          `No scenes to process for videos with ${allVideosTargetStatusLabel} status`,
+        );
         return;
       }
 
       console.log(
-        `Starting video generation for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
+        `Starting video generation for ${videosToProcess.length} videos (status: ${allVideosTargetStatusLabel}) with ${scenesToProcess.length} scenes...`,
       );
 
       const handleVideoGenerateWithOptions =
@@ -6103,16 +6135,20 @@ export default function OriginalVideosList({
 
       const scenesToProcess = scenesForProcessingVideos;
 
-      console.log(`Videos with Processing status: ${videosToProcess.length}`);
+      console.log(
+        `Videos with ${allVideosTargetStatusLabel} status: ${videosToProcess.length}`,
+      );
       console.log(`Scenes to process: ${scenesToProcess.length}`);
 
       if (scenesToProcess.length === 0) {
-        console.log('No scenes to process for videos with Processing status');
+        console.log(
+          `No scenes to process for videos with ${allVideosTargetStatusLabel} status`,
+        );
         return;
       }
 
       console.log(
-        `Starting speed up for ${videosToProcess.length} videos (status: Processing) with ${scenesToProcess.length} scenes...`,
+        `Starting speed up for ${videosToProcess.length} videos (status: ${allVideosTargetStatusLabel}) with ${scenesToProcess.length} scenes...`,
       );
 
       await handleSpeedUpAllVideosForAllScenes(
@@ -6206,7 +6242,7 @@ export default function OriginalVideosList({
 
       // Filter videos by Processing status
       const processingVideos =
-        getProcessingVideosForAllVideosOps(freshVideosData);
+        getTargetVideosForAllVideosOps(freshVideosData);
 
       const scopedScenesByVideo = await Promise.all(
         processingVideos.map(async (video) => {
@@ -6242,14 +6278,18 @@ export default function OriginalVideosList({
         return sentence === '' && original === '';
       });
 
-      console.log(`Processing videos: ${processingVideos.length}`);
       console.log(
-        `Scenes in Processing videos: ${scenesForProcessingVideos.length}`,
+        `${allVideosTargetStatusLabel} videos: ${processingVideos.length}`,
+      );
+      console.log(
+        `Scenes in ${allVideosTargetStatusLabel} videos: ${scenesForProcessingVideos.length}`,
       );
       console.log(`Empty scenes to delete: ${emptyScenes.length}`);
 
       if (emptyScenes.length === 0) {
-        console.log('No empty scenes found for Processing videos');
+        console.log(
+          `No empty scenes found for ${allVideosTargetStatusLabel} videos`,
+        );
         return;
       }
 
@@ -6315,10 +6355,7 @@ export default function OriginalVideosList({
     const freshVideosData = await getOriginalVideosData();
 
     // Filter videos by Processing status
-    const processingVideos = freshVideosData.filter((video) => {
-      const status = extractFieldValue(video.field_6864);
-      return status === 'Processing';
-    });
+    const processingVideos = freshVideosData.filter(isAllVideosTargetVideo);
 
     const ttsVoiceByVideoId = new Map<number, string>();
     for (const video of processingVideos) {
@@ -6358,9 +6395,11 @@ export default function OriginalVideosList({
       ? eligibleScenesToFix.filter((scene) => isSceneFlaggedForFixTts(scene))
       : eligibleScenesToFix;
 
-    console.log(`Processing videos: ${processingVideos.length}`);
     console.log(
-      `Scenes in Processing videos: ${scenesForProcessingVideos.length}`,
+      `${allVideosTargetStatusLabel} videos: ${processingVideos.length}`,
+    );
+    console.log(
+      `Scenes in ${allVideosTargetStatusLabel} videos: ${scenesForProcessingVideos.length}`,
     );
     console.log(
       flaggedOnly
@@ -6371,8 +6410,8 @@ export default function OriginalVideosList({
     if (scenesToFix.length === 0) {
       console.log(
         flaggedOnly
-          ? 'No flagged Processing scenes found that are eligible for Fix TTS (need final video + text)'
-          : 'No Processing scenes found that are eligible for Fix TTS (need final video + text)',
+          ? `No flagged ${allVideosTargetStatusLabel} scenes found that are eligible for Fix TTS (need final video + text)`
+          : `No ${allVideosTargetStatusLabel} scenes found that are eligible for Fix TTS (need final video + text)`,
       );
       return false;
     }
@@ -6480,14 +6519,17 @@ export default function OriginalVideosList({
         }
       }
     } catch (error) {
-      console.error('Error fixing TTS for scenes in Processing videos:', error);
+      console.error(
+        `Error fixing TTS for scenes in ${allVideosTargetStatusLabel} videos:`,
+        error,
+      );
 
       if (playSound) {
         playErrorSound();
       }
 
       setError(
-        `Failed to Fix TTS for Processing scenes: ${
+        `Failed to Fix TTS for ${allVideosTargetStatusLabel} scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -6530,7 +6572,7 @@ export default function OriginalVideosList({
       }
     } catch (error) {
       console.error(
-        'Error fixing flagged TTS for scenes in Processing videos:',
+        `Error fixing flagged TTS for scenes in ${allVideosTargetStatusLabel} videos:`,
         error,
       );
 
@@ -6539,7 +6581,7 @@ export default function OriginalVideosList({
       }
 
       setError(
-        `Failed to Fix flagged TTS for Processing scenes: ${
+        `Failed to Fix flagged TTS for ${allVideosTargetStatusLabel} scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -6566,10 +6608,7 @@ export default function OriginalVideosList({
       const freshVideosData = await getOriginalVideosData();
 
       const processingVideos = freshVideosData
-        .filter((video) => {
-          const status = extractFieldValue(video.field_6864);
-          return status === 'Processing';
-        })
+        .filter(isAllVideosTargetVideo)
         .sort(
           (a, b) =>
             (Number(a.field_6902) || a.id) - (Number(b.field_6902) || b.id),
@@ -6655,7 +6694,7 @@ export default function OriginalVideosList({
       if (introTargets.length === 0) {
         const sceneScope = processAllScenes
           ? 'eligible non-empty scenes'
-          : `intro scenes (first ${INTRO_QA_SCENE_LIMIT} non-empty sentence scenes per Processing video)`;
+          : `intro scenes (first ${INTRO_QA_SCENE_LIMIT} non-empty sentence scenes per ${allVideosTargetStatusLabel} video)`;
         console.log(
           `No ${sceneScope} with final video + text found to fix.`,
         );
@@ -7775,7 +7814,7 @@ export default function OriginalVideosList({
       }
     } catch (error) {
       console.error(
-        'Error fixing intro QA for scenes in Processing videos:',
+        `Error fixing intro QA for scenes in ${allVideosTargetStatusLabel} videos:`,
         error,
       );
 
@@ -7784,7 +7823,7 @@ export default function OriginalVideosList({
       }
 
       setError(
-        `Failed to Fix Intro QA for Processing scenes: ${
+        `Failed to Fix Intro QA for ${allVideosTargetStatusLabel} scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -7869,7 +7908,7 @@ export default function OriginalVideosList({
 
       // Processing-only videos
       const processingVideos =
-        getProcessingVideosForAllVideosOps(freshVideosData);
+        getTargetVideosForAllVideosOps(freshVideosData);
 
       const scopedScenesByVideo = await Promise.all(
         processingVideos.map(async (video) => {
@@ -7980,7 +8019,10 @@ export default function OriginalVideosList({
         await playSuccessAndNotifyBatchCompletion('Prompt Scenes');
       }
     } catch (error) {
-      console.error('Prompt scenes (Processing) failed:', error);
+      console.error(
+        `Prompt scenes (${allVideosTargetStatusLabel}) failed:`,
+        error,
+      );
       // No UI error messages; keep silent on failure.
     } finally {
       setPromptingProcessingScenesAllVideos(false);
@@ -8190,7 +8232,7 @@ export default function OriginalVideosList({
     try {
       const freshVideosData = await getOriginalVideosData();
 
-      const processingVideos = getProcessingVideosForAllVideosOps(
+      const processingVideos = getTargetVideosForAllVideosOps(
         freshVideosData,
         {
           operation: 'fixLanguageAll',
@@ -8747,7 +8789,7 @@ export default function OriginalVideosList({
       }
 
       setError(
-        `Failed to fix language for Processing scenes: ${
+        `Failed to fix language for ${allVideosTargetStatusLabel} scenes: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -8812,7 +8854,7 @@ export default function OriginalVideosList({
   }> => {
     const freshVideosData = await getOriginalVideosData();
 
-    const processingVideos = getProcessingVideosForAllVideosOps(
+    const processingVideos = getTargetVideosForAllVideosOps(
       freshVideosData,
       options,
     );
@@ -9300,14 +9342,14 @@ export default function OriginalVideosList({
       }
     } catch (error) {
       console.error(
-        'Combine long-text pairs for Processing videos failed:',
+        `Combine long-text pairs for ${allVideosTargetStatusLabel} videos failed:`,
         error,
       );
       if (playSound) {
         playErrorSound();
       }
       setError(
-        `Failed to combine long-text pairs for Processing videos: ${
+        `Failed to combine long-text pairs for ${allVideosTargetStatusLabel} videos: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -9776,8 +9818,7 @@ export default function OriginalVideosList({
       const videosToOptimize = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const silencedUrl = extractUrl(video.field_6907);
-        const status = extractFieldValue(video.field_6864);
-        return videoUrl && !silencedUrl && status === 'Processing'; // Has video URL, no silenced version, and Processing status
+        return videoUrl && !silencedUrl && isAllVideosTargetVideo(video);
       });
 
       if (videosToOptimize.length === 0) {
@@ -9942,8 +9983,7 @@ export default function OriginalVideosList({
       const videosToNormalize = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const normalizedUrl = extractUrl(video.field_6903);
-        const status = extractFieldValue(video.field_6864);
-        return videoUrl && !normalizedUrl && status === 'Processing'; // Has video URL, no normalized version, and Processing status
+        return videoUrl && !normalizedUrl && isAllVideosTargetVideo(video);
       });
 
       if (videosToNormalize.length === 0) {
@@ -10108,8 +10148,7 @@ export default function OriginalVideosList({
       const videosToConvert = freshVideosData.filter((video) => {
         const videoUrl = extractUrl(video.field_6881);
         const cfrUrl = extractUrl(video.field_6908);
-        const status = extractFieldValue(video.field_6864);
-        return videoUrl && !cfrUrl && status === 'Processing'; // Has video URL, no CFR version, and Processing status
+        return videoUrl && !cfrUrl && isAllVideosTargetVideo(video);
       });
 
       if (videosToConvert.length === 0) {
@@ -10254,9 +10293,10 @@ export default function OriginalVideosList({
       // Filter videos that have Final Merged Video URLs AND status is "Processing"
       const videosToConvert = freshVideosData.filter((video) => {
         const finalVideoUrl = extractUrl(video.field_6858);
-        const status = extractFieldValue(video.field_6864);
         const isAlreadyCFR = finalVideoUrl && finalVideoUrl.includes('_cfr');
-        return finalVideoUrl && status === 'Processing' && !isAlreadyCFR; // Has final video URL, Processing status, and not already CFR
+        return (
+          finalVideoUrl && isAllVideosTargetVideo(video) && !isAlreadyCFR
+        );
       });
 
       if (videosToConvert.length === 0) {
@@ -10404,17 +10444,18 @@ export default function OriginalVideosList({
       setError(null);
       setMergingScenesForProcessingVideos(true);
 
-      const freshVideosData = await getOriginalVideosData();
-      const { scenesForProcessingVideos } = await fetchProcessingScenes();
+      const { processingVideos: targetVideos, scenesForProcessingVideos } =
+        await fetchProcessingScenes();
 
-      const processingVideos = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
+      const processingVideos = targetVideos.filter((video) => {
         const existingMergedUrl = extractUrl(video.field_6858);
-        return status === 'Processing' && !existingMergedUrl;
+        return !existingMergedUrl;
       });
 
       if (processingVideos.length === 0) {
-        console.log('No Processing videos found for scene merging');
+        console.log(
+          `No ${allVideosTargetStatusLabel} videos found for scene merging`,
+        );
         return;
       }
 
@@ -10485,7 +10526,7 @@ export default function OriginalVideosList({
           console.log(`Video #${video.id}: merged scene videos successfully`);
         } catch (error) {
           console.error(
-            `Failed to merge scenes for Processing video ${video.id}:`,
+            `Failed to merge scenes for ${allVideosTargetStatusLabel} video ${video.id}:`,
             error,
           );
           // Continue processing remaining videos
@@ -10503,14 +10544,17 @@ export default function OriginalVideosList({
         await playSuccessAndNotifyBatchCompletion('Merge Scenes');
       }
     } catch (error) {
-      console.error('Error merging scenes for Processing videos:', error);
+      console.error(
+        `Error merging scenes for ${allVideosTargetStatusLabel} videos:`,
+        error,
+      );
 
       if (playSound) {
         playErrorSound();
       }
 
       setError(
-        `Failed to merge scenes for Processing videos: ${
+        `Failed to merge scenes for ${allVideosTargetStatusLabel} videos: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -10542,17 +10586,17 @@ export default function OriginalVideosList({
           finalVideoUrl &&
           order !== null &&
           order !== undefined &&
-          status === 'Processing'
+          isAllVideosTargetVideo(video)
         );
       });
 
       console.log(
-        `Found ${videosWithFinalVideos.length} videos with final merged videos and "Processing" status`,
+        `Found ${videosWithFinalVideos.length} videos with final merged videos and "${allVideosTargetStatusLabel}" status`,
       );
 
       if (videosWithFinalVideos.length === 0) {
         console.log(
-          'No videos found with final merged videos and "Processing" status to merge',
+          `No videos found with final merged videos and "${allVideosTargetStatusLabel}" status to merge`,
         );
         return;
       }
@@ -10721,11 +10765,11 @@ export default function OriginalVideosList({
 
       const freshVideosData = await getOriginalVideosData();
       const processingVideos =
-        getProcessingVideosForAllVideosOps(freshVideosData);
+        getTargetVideosForAllVideosOps(freshVideosData);
 
       if (processingVideos.length === 0) {
         console.log(
-          '[MERGE AUDIO] No Processing videos found for merging dubbed audio',
+          `[MERGE AUDIO] No ${allVideosTargetStatusLabel} videos found for merging dubbed audio`,
         );
         return;
       }
@@ -10766,19 +10810,18 @@ export default function OriginalVideosList({
         const finalVideoUrl = extractUrl(video.field_6858); // Final Merged Video URL
         const title = video.field_6852; // Title field
         const order = video.field_6902; // Order field
-        const status = extractFieldValue(video.field_6864); // Status field
         return (
           finalVideoUrl &&
           title &&
           order !== null &&
           order !== undefined &&
-          status === 'Processing'
+          isAllVideosTargetVideo(video)
         );
       });
 
       if (videosWithTimestamps.length === 0) {
         console.log(
-          'No videos found with final merged videos, titles, order values, and "Processing" status',
+          `No videos found with final merged videos, titles, order values, and "${allVideosTargetStatusLabel}" status`,
         );
         return;
       }
@@ -10924,8 +10967,7 @@ export default function OriginalVideosList({
 
       // Filter videos that have scenes AND status is "Processing"
       const videosWithScenes = freshVideosData.filter((video) => {
-        const status = extractFieldValue(video.field_6864);
-        return hasScenes(video) && status === 'Processing';
+        return hasScenes(video) && isAllVideosTargetVideo(video);
       });
 
       if (videosWithScenes.length === 0) {
@@ -11276,7 +11318,7 @@ export default function OriginalVideosList({
       }
     } catch (error) {
       console.error(
-        'Error in Transcribe + Apply + Gen Clips for Processing videos:',
+        `Error in Transcribe + Apply + Gen Clips for ${allVideosTargetStatusLabel} videos:`,
         error,
       );
 
@@ -11285,7 +11327,7 @@ export default function OriginalVideosList({
       }
 
       setError(
-        `Failed to run Transcribe + Apply + Gen Clips for Processing videos: ${
+        `Failed to run Transcribe + Apply + Gen Clips for ${allVideosTargetStatusLabel} videos: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
@@ -11309,6 +11351,8 @@ export default function OriginalVideosList({
       );
       return;
     }
+
+    pipelineTargetStatusRef.current = allVideosTargetStatus;
 
     try {
       setRunningFullPipeline(true);
@@ -12758,6 +12802,7 @@ export default function OriginalVideosList({
 
       setPipelineStep('');
     } finally {
+      pipelineTargetStatusRef.current = null;
       setRunningFullPipeline(false);
     }
   };
@@ -13109,7 +13154,8 @@ export default function OriginalVideosList({
               <div className='flex items-center gap-2'>
                 <Zap className='w-4 h-4 text-orange-600' />
                 <h3 className='text-sm font-semibold text-gray-900'>
-                  Batch Operations For all Videos with Processing Scenes
+                  Batch Operations For all Videos with{' '}
+                  {allVideosTargetStatusLabel} Scenes
                 </h3>
                 <span className='text-xs text-gray-500'>({44} actions)</span>
               </div>
@@ -13250,7 +13296,7 @@ export default function OriginalVideosList({
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-green-500 hover:bg-green-600'
                       } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
-                      title='Generate TTS audio from Script for Processing videos'
+                      title={`Generate TTS audio from Script for ${allVideosTargetStatusLabel} videos`}
                     >
                       {generatingTtsFromScripts ? (
                         <>
@@ -13286,7 +13332,7 @@ export default function OriginalVideosList({
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-green-500 hover:bg-green-600'
                       } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
-                      title='Generate video from TTS audio for Processing videos (skips ones with video URL)'
+                      title={`Generate video from TTS audio for ${allVideosTargetStatusLabel} videos (skips ones with video URL)`}
                     >
                       {generatingVideoFromTtsAudioAll ? (
                         <>
@@ -13804,7 +13850,7 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-lime-600 hover:bg-lime-700 disabled:bg-lime-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         creatingEnSrtAll
-                          ? 'Creating En Srt: calculating durations then generating SRT for all Processing videos...'
+                          ? `Creating En Srt: calculating durations then generating SRT for all ${allVideosTargetStatusLabel} videos...`
                           : 'Create En Srt: calculate Final Video Duration then generate SRT and save URL to field_6872'
                       }
                     >
@@ -13917,7 +13963,7 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         creatingDubbedLanguageAllVideos
-                          ? `Creating dubbed ${creatingDubbedLanguageCurrentLanguageLabel || selectedDubbedLanguagesAllVideosLabel} audio (${creatingDubbedLanguageCurrentLanguageIndex}/${creatingDubbedLanguageTotalLanguages}) for Processing videos...`
+                          ? `Creating dubbed ${creatingDubbedLanguageCurrentLanguageLabel || selectedDubbedLanguagesAllVideosLabel} audio (${creatingDubbedLanguageCurrentLanguageIndex}/${creatingDubbedLanguageTotalLanguages}) for ${allVideosTargetStatusLabel} videos...`
                           : `Run Create Dubbed for selected languages in order: ${selectedDubbedLanguagesAllVideosLabel}`
                       }
                     >
@@ -14098,7 +14144,7 @@ export default function OriginalVideosList({
                       title={
                         generatingThumbnailsAll
                           ? 'Generating 3 thumbnail variants with GPT Image 2...'
-                          : 'Generate missing thumbnails for Processing videos with the shared GPT Image 2 title/description prompt'
+                          : `Generate missing thumbnails for ${allVideosTargetStatusLabel} videos with the shared GPT Image 2 title/description prompt`
                       }
                     >
                       <Sparkles
@@ -14499,8 +14545,8 @@ export default function OriginalVideosList({
                           : transcribeApplyGenClipsAllVideos
                             ? transcribeApplyGenClipsSceneId !== null
                               ? `Running Transcribe + Apply + Gen Clips for scene ${transcribeApplyGenClipsSceneId}`
-                              : 'Running Transcribe + Apply + Gen Clips for Processing scenes...'
-                            : `Transcribe original captions, apply scene separation, and generate clips for resulting scenes in Processing videos (min chars from Pipeline A: ${Math.max(0, Math.floor(pipelineConfig.transcribeApplyGenClipsMinChars))})`
+                              : `Running Transcribe + Apply + Gen Clips for ${allVideosTargetStatusLabel} scenes...`
+                            : `Transcribe original captions, apply scene separation, and generate clips for resulting scenes in ${allVideosTargetStatusLabel} videos (min chars from Pipeline A: ${Math.max(0, Math.floor(pipelineConfig.transcribeApplyGenClipsMinChars))})`
                       }
                     >
                       <Wand2
@@ -14564,7 +14610,7 @@ export default function OriginalVideosList({
                       title={
                         mergingDubbedAudioAllVideos
                           ? 'Merging dubbed audio...'
-                          : 'Fast-concat all final dubbed audio per language for Processing videos'
+                          : `Fast-concat all final dubbed audio per language for ${allVideosTargetStatusLabel} videos`
                       }
                     >
                       <Volume2
@@ -14596,7 +14642,7 @@ export default function OriginalVideosList({
                       title={
                         mergingScenesForProcessingVideos
                           ? 'Merging scenes per Processing video...'
-                          : 'Merge scenes of a single video for all videos with Processing status'
+                          : `Merge scenes of a single video for all videos with ${allVideosTargetStatusLabel} status`
                       }
                     >
                       <Film
@@ -14666,8 +14712,8 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         deletingEmptyScenesAllVideos
-                          ? 'Deleting empty scenes for Processing videos...'
-                          : 'Delete scenes that have empty text fields for videos with Processing status'
+                          ? `Deleting empty scenes for ${allVideosTargetStatusLabel} videos...`
+                          : `Delete scenes that have empty text fields for videos with ${allVideosTargetStatusLabel} status`
                       }
                     >
                       <Trash2
@@ -14710,7 +14756,7 @@ export default function OriginalVideosList({
                         transcribingProcessingScenesAllVideos
                           ? fixTtsBatchMode === 'flagged'
                             ? 'Fix Flagged is running...'
-                            : 'Fixing TTS for scenes in Processing videos...'
+                            : `Fixing TTS for scenes in ${allVideosTargetStatusLabel} videos...`
                           : !sceneHandlers?.handleAutoFixMismatch
                             ? 'Select a video first so Fix TTS handlers initialize'
                             : 'Fix TTS by retrying TTS + sync + transcribe until it matches scene text'
@@ -14759,10 +14805,10 @@ export default function OriginalVideosList({
                       title={
                         transcribingProcessingScenesAllVideos &&
                         fixTtsBatchMode === 'flagged'
-                          ? 'Fixing flagged scenes for Processing videos...'
+                          ? `Fixing flagged scenes for ${allVideosTargetStatusLabel} videos...`
                           : !sceneHandlers?.handleAutoFixMismatch
                             ? 'Select a video first so Fix TTS handlers initialize'
-                            : 'Fix only scenes where Flagged (7096) is true in videos with Processing status'
+                            : `Fix only scenes where Flagged (7096) is true in videos with ${allVideosTargetStatusLabel} status`
                       }
                     >
                       <Wand2
@@ -14810,12 +14856,12 @@ export default function OriginalVideosList({
                       title={
                         transcribingProcessingScenesAllVideos &&
                         fixTtsBatchMode === 'introQa'
-                          ? 'Fixing intro QA scenes for Processing videos...'
+                          ? `Fixing intro QA scenes for ${allVideosTargetStatusLabel} videos...`
                           : !sceneHandlers?.handleTTSProduce ||
                               !sceneHandlers?.handleVideoGenerate ||
                               !sceneHandlers?.handleTranscribeScene
                             ? 'Select a video first so Intro QA handlers initialize'
-                            : `Fix intro QA on first ${INTRO_QA_SCENE_LIMIT} non-empty scenes per Processing video`
+                            : `Fix intro QA on first ${INTRO_QA_SCENE_LIMIT} non-empty scenes per ${allVideosTargetStatusLabel} video`
                       }
                     >
                       <Wand2
@@ -14862,10 +14908,10 @@ export default function OriginalVideosList({
                         fixingLanguageProcessingScenesAllVideos
                           ? fixingLanguageProcessingSceneId !== null
                             ? `Fixing language for scene ${fixingLanguageProcessingSceneId}...`
-                            : 'Fixing language for scenes in Processing videos...'
+                            : `Fixing language for scenes in ${allVideosTargetStatusLabel} videos...`
                           : !modelSelection.selectedModel
                             ? 'Select an AI model first'
-                            : 'Fix language for non-empty scenes in videos with Processing status (batched)'
+                            : `Fix language for non-empty scenes in videos with ${allVideosTargetStatusLabel} status (batched)`
                       }
                     >
                       <Sparkles
@@ -14907,8 +14953,8 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         promptingProcessingScenesAllVideos
-                          ? 'Generating prompts for scenes in Processing videos...'
-                          : 'Generate and save prompts for non-empty scenes in videos with Processing status'
+                          ? `Generating prompts for scenes in ${allVideosTargetStatusLabel} videos...`
+                          : `Generate and save prompts for non-empty scenes in videos with ${allVideosTargetStatusLabel} status`
                       }
                     >
                       <Sparkles
@@ -14950,9 +14996,9 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         combiningLongTextPairsAllVideos
-                          ? 'Combining long-text scene pairs for Processing videos...'
+                          ? `Combining long-text scene pairs for ${allVideosTargetStatusLabel} videos...`
                           : subtitleGenerationSettings.enableCharLimit
-                            ? `Combine consecutive long-text pairs for Processing videos (scene text length >= ${Math.max(
+                            ? `Combine consecutive long-text pairs for ${allVideosTargetStatusLabel} videos (scene text length >= ${Math.max(
                                 1,
                                 Math.floor(subtitleGenerationSettings.maxChars),
                               )}), skipping first ${Math.max(0, Math.floor(combineScenesSettings.skipFirstScenes))} scene(s) per video`
@@ -14994,7 +15040,7 @@ export default function OriginalVideosList({
                             );
                             playErrorSound();
                             setError(
-                              `Failed to generate subtitles for Processing scenes: ${
+                              `Failed to generate subtitles for ${allVideosTargetStatusLabel} scenes: ${
                                 error instanceof Error
                                   ? error.message
                                   : 'Unknown error'
@@ -15015,7 +15061,7 @@ export default function OriginalVideosList({
                         deletingEmptyScenesAllVideos
                       }
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-teal-500 hover:bg-teal-600 disabled:bg-teal-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-                      title='Generate subtitles for final scene videos in Processing videos (skips already-subtitled scenes)'
+                      title={`Generate subtitles for final scene videos in ${allVideosTargetStatusLabel} videos (skips already-subtitled scenes)`}
                     >
                       <Subtitles
                         className={`w-4 h-4 ${
@@ -15049,7 +15095,7 @@ export default function OriginalVideosList({
                             );
                             playErrorSound();
                             setError(
-                              `Failed to generate scene images for Processing scenes: ${
+                              `Failed to generate scene images for ${allVideosTargetStatusLabel} scenes: ${
                                 error instanceof Error
                                   ? error.message
                                   : 'Unknown error'
@@ -15070,7 +15116,7 @@ export default function OriginalVideosList({
                         deletingEmptyScenesAllVideos
                       }
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-                      title='Generate missing scene images for Processing scenes (skips scenes with subtitles in URL)'
+                      title={`Generate missing scene images for ${allVideosTargetStatusLabel} scenes (skips scenes with subtitles in URL)`}
                     >
                       <Grid3x3
                         className={`w-4 h-4 ${
@@ -15106,7 +15152,7 @@ export default function OriginalVideosList({
                             );
                             playErrorSound();
                             setError(
-                              `Failed to upscale images for Processing scenes: ${
+                              `Failed to upscale images for ${allVideosTargetStatusLabel} scenes: ${
                                 error instanceof Error
                                   ? error.message
                                   : 'Unknown error'
@@ -15127,7 +15173,7 @@ export default function OriginalVideosList({
                         deletingEmptyScenesAllVideos
                       }
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-                      title='Upscale scene images for Processing scenes (only when original image exists and upscaled is missing)'
+                      title={`Upscale scene images for ${allVideosTargetStatusLabel} scenes (only when original image exists and upscaled is missing)`}
                     >
                       <Zap
                         className={`w-4 h-4 ${
@@ -15163,7 +15209,7 @@ export default function OriginalVideosList({
                             );
                             playErrorSound();
                             setError(
-                              `Failed to generate scene videos for Processing scenes: ${
+                              `Failed to generate scene videos for ${allVideosTargetStatusLabel} scenes: ${
                                 error instanceof Error
                                   ? error.message
                                   : 'Unknown error'
@@ -15184,7 +15230,7 @@ export default function OriginalVideosList({
                         deletingEmptyScenesAllVideos
                       }
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-                      title='Generate missing scene videos for Processing scenes (uses duration-range and text-detection settings)'
+                      title={`Generate missing scene videos for ${allVideosTargetStatusLabel} scenes (uses duration-range and text-detection settings)`}
                     >
                       <Video
                         className={`w-4 h-4 ${
@@ -15220,7 +15266,7 @@ export default function OriginalVideosList({
                             );
                             playErrorSound();
                             setError(
-                              `Failed to enhance scene videos for Processing scenes: ${
+                              `Failed to enhance scene videos for ${allVideosTargetStatusLabel} scenes: ${
                                 error instanceof Error
                                   ? error.message
                                   : 'Unknown error'
@@ -15241,7 +15287,7 @@ export default function OriginalVideosList({
                         deletingEmptyScenesAllVideos
                       }
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-                      title='Enhance (RVE) scene videos for Processing scenes (skips already enhanced URLs)'
+                      title={`Enhance (RVE) scene videos for ${allVideosTargetStatusLabel} scenes (skips already enhanced URLs)`}
                     >
                       <Sparkles
                         className={`w-4 h-4 ${
@@ -15277,7 +15323,7 @@ export default function OriginalVideosList({
                             );
                             playErrorSound();
                             setError(
-                              `Failed to apply enhanced videos for Processing scenes: ${
+                              `Failed to apply enhanced videos for ${allVideosTargetStatusLabel} scenes: ${
                                 error instanceof Error
                                   ? error.message
                                   : 'Unknown error'
@@ -15298,7 +15344,7 @@ export default function OriginalVideosList({
                         deletingEmptyScenesAllVideos
                       }
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-                      title='Apply enhanced scene videos onto final scene videos for Processing scenes'
+                      title={`Apply enhanced scene videos onto final scene videos for ${allVideosTargetStatusLabel} scenes`}
                     >
                       <CheckCircle
                         className={`w-4 h-4 ${
@@ -15334,7 +15380,7 @@ export default function OriginalVideosList({
                             );
                             playErrorSound();
                             setError(
-                              `Failed to apply upscaled images for Processing scenes: ${
+                              `Failed to apply upscaled images for ${allVideosTargetStatusLabel} scenes: ${
                                 error instanceof Error
                                   ? error.message
                                   : 'Unknown error'
@@ -15355,7 +15401,7 @@ export default function OriginalVideosList({
                         deletingEmptyScenesAllVideos
                       }
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
-                      title='Apply upscaled scene images onto final scene videos for Processing scenes'
+                      title={`Apply upscaled scene images onto final scene videos for ${allVideosTargetStatusLabel} scenes`}
                     >
                       <Check
                         className={`w-4 h-4 ${
@@ -15415,8 +15461,8 @@ export default function OriginalVideosList({
                       className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 truncate bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer'
                       title={
                         downloadingAssetsZipAll
-                          ? 'Exporting asset folders and translated SRTs for Processing videos...'
-                          : 'Export assets, including English and translated SRT files, into local video ID folders for all videos with Processing status'
+                          ? `Exporting asset folders and translated SRTs for ${allVideosTargetStatusLabel} videos...`
+                          : `Export assets, including English and translated SRT files, into local video ID folders for all videos with ${allVideosTargetStatusLabel} status`
                       }
                     >
                       <Download
@@ -15699,13 +15745,13 @@ export default function OriginalVideosList({
                   }`}
                   title={
                     showProcessingOnly
-                      ? 'Showing only videos with Processing status'
+                      ? `Showing only videos with ${allVideosTargetStatusLabel} status`
                       : 'Showing videos of all statuses'
                   }
                 >
                   {showProcessingOnly
-                    ? 'Processing Only: ON'
-                    : 'Processing Only: OFF'}
+                    ? `${allVideosTargetStatusLabel} Only: ON`
+                    : `${allVideosTargetStatusLabel} Only: OFF`}
                 </button>
               </div>
             </div>

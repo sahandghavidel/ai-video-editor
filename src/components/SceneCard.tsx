@@ -222,6 +222,11 @@ export default function SceneCard({
   >([]);
   const [loadingProcessingScenesData, setLoadingProcessingScenesData] =
     useState<boolean>(false);
+  const allVideosTargetStatus = useAppStore((state) =>
+    state.videoSettings.allVideosTargetStatus === 'pending'
+      ? 'pending'
+      : 'processing',
+  );
 
   const loadProcessingScenesForAllVideos = useCallback(async () => {
     setLoadingProcessingScenesData(true);
@@ -231,12 +236,11 @@ export default function SceneCard({
         await import('@/lib/baserow-actions');
 
       const originalVideos = await getOriginalVideosData();
-
       const processingVideos = originalVideos.filter((video) => {
         const status = extractFieldValueAsText(video.field_6864)
           .trim()
           .toLowerCase();
-        return status === 'processing';
+        return status === allVideosTargetStatus;
       });
 
       const scopedSceneLists = await Promise.all(
@@ -259,7 +263,7 @@ export default function SceneCard({
     } finally {
       setLoadingProcessingScenesData(false);
     }
-  }, []);
+  }, [allVideosTargetStatus]);
 
   const handleToggleProcessingScenesAllVideos = () => {
     if (showProcessingScenesAllVideos) {
@@ -268,8 +272,12 @@ export default function SceneCard({
     }
 
     setShowProcessingScenesAllVideos(true);
-    void loadProcessingScenesForAllVideos();
   };
+
+  useEffect(() => {
+    if (!showProcessingScenesAllVideos) return;
+    void loadProcessingScenesForAllVideos();
+  }, [loadProcessingScenesForAllVideos, showProcessingScenesAllVideos]);
 
   const data = showProcessingScenesAllVideos
     ? processingScenesData
@@ -420,6 +428,8 @@ export default function SceneCard({
     selectedOriginalVideo,
     setSelectedOriginalVideo,
   } = useAppStore();
+  const allVideosTargetStatusLabel =
+    allVideosTargetStatus === 'pending' ? 'Pending' : 'Processing';
 
   // Keep Flagged filter active by default whenever a video is selected.
   // This applies on initial load (including page refresh with restored
@@ -6208,10 +6218,10 @@ export default function SceneCard({
       <div className='flex flex-col items-center justify-center min-h-[300px] text-gray-500'>
         <Loader2 className='w-7 h-7 animate-spin mb-3 text-emerald-600' />
         <h3 className='text-lg font-semibold mb-1'>
-          Loading Processing scenes
+          Loading {allVideosTargetStatusLabel} scenes
         </h3>
         <p className='text-sm text-center'>
-          Fetching scenes from all Processing videos...
+          Fetching scenes from all {allVideosTargetStatusLabel} videos...
         </p>
       </div>
     );
@@ -6223,12 +6233,12 @@ export default function SceneCard({
         <div className='text-6xl mb-4'>📋</div>
         <h3 className='text-xl font-semibold mb-2'>
           {showProcessingScenesAllVideos
-            ? 'No Processing Scenes Found'
+            ? `No ${allVideosTargetStatusLabel} Scenes Found`
             : 'No Data Available'}
         </h3>
         <p className='text-center max-w-md'>
           {showProcessingScenesAllVideos
-            ? 'No scenes are linked to videos with status Processing.'
+            ? `No scenes are linked to videos with status ${allVideosTargetStatusLabel}.`
             : 'No scenes found in your Baserow table. Add some data to get started!'}
         </p>
         <div className='mt-6 space-y-2'>
@@ -6503,13 +6513,14 @@ export default function SceneCard({
                       ? 'bg-emerald-600 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                   } ${loadingProcessingScenesData ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  title='Show scenes for all videos where status is Processing'
+                  title={`Show scenes for all videos where status is ${allVideosTargetStatusLabel}`}
                 >
                   {loadingProcessingScenesData ? (
                     <Loader2 className='w-2.5 h-2.5 animate-spin' />
                   ) : null}
                   <span>
-                    {showProcessingScenesAllVideos ? '✓ ' : ''}Processing All
+                    {showProcessingScenesAllVideos ? '✓ ' : ''}
+                    {allVideosTargetStatusLabel} All
                   </span>
                 </button>
               </div>

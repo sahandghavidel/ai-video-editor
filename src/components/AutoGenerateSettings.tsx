@@ -1,10 +1,14 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { Link2, Mic, Video, Zap } from 'lucide-react';
+import { Link2, ListFilter, Mic, Video, Zap } from 'lucide-react';
 
 export default function AutoGenerateSettings() {
   const { videoSettings, updateVideoSettings } = useAppStore();
+  const allVideosTargetStatusLabel =
+    videoSettings.allVideosTargetStatus === 'pending'
+      ? 'Pending'
+      : 'Processing';
 
   return (
     <div className='mb-6 p-4 sm:p-6 rounded-xl border border-gray-200 bg-gradient-to-br from-white to-gray-50 shadow-sm hover:shadow-md transition-shadow duration-200'>
@@ -84,6 +88,48 @@ export default function AutoGenerateSettings() {
           </label>
         </div>
 
+        {/* Browser-local target for full pipeline and all-video batch actions */}
+        <div className='relative'>
+          <label className='flex items-start space-x-4 cursor-pointer group'>
+            <div className='relative flex-shrink-0 mt-1'>
+              <input
+                type='checkbox'
+                checked={videoSettings.allVideosTargetStatus === 'pending'}
+                onChange={(e) =>
+                  updateVideoSettings({
+                    allVideosTargetStatus: e.target.checked
+                      ? 'pending'
+                      : 'processing',
+                  })
+                }
+                className='w-5 h-5 text-amber-600 bg-white border-2 border-gray-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200'
+              />
+            </div>
+            <div className='flex-1 min-w-0'>
+              <div className='flex items-center space-x-2 mb-2'>
+                <div className='p-1.5 bg-amber-100 rounded-lg'>
+                  <ListFilter className='w-4 h-4 text-amber-600' />
+                </div>
+                <span className='text-sm font-semibold text-gray-900 group-hover:text-amber-700 transition-colors'>
+                  Target Pending videos instead of Processing
+                </span>
+                {videoSettings.allVideosTargetStatus === 'pending' && (
+                  <div className='px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium'>
+                    Active
+                  </div>
+                )}
+              </div>
+              <p className='text-xs text-gray-500'>
+                Full Pipeline and all-video batch operations currently target{' '}
+                <span className='font-semibold'>
+                  {allVideosTargetStatusLabel}
+                </span>
+                . Saved only in this browser.
+              </p>
+            </div>
+          </label>
+        </div>
+
         {/* Skip Videos With Uploaded URL (6881) in all-videos Processing batch/pipeline */}
         <div className='relative'>
           <label className='flex items-start space-x-4 cursor-pointer group'>
@@ -117,8 +163,8 @@ export default function AutoGenerateSettings() {
                 )}
               </div>
               <p className='text-xs text-gray-500'>
-                Applies to full pipeline + all-videos Processing batch actions
-                only.
+                Applies to full pipeline + all-videos{' '}
+                {allVideosTargetStatusLabel} batch actions only.
               </p>
             </div>
           </label>
@@ -157,8 +203,8 @@ export default function AutoGenerateSettings() {
                 )}
               </div>
               <p className='text-xs text-gray-500'>
-                Applies to full pipeline + all-videos Processing batch actions
-                only.
+                Applies to full pipeline + all-videos{' '}
+                {allVideosTargetStatusLabel} batch actions only.
               </p>
             </div>
           </label>
