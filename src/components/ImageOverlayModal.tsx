@@ -591,6 +591,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
   const didAutoLoadSceneOverlayRef = useRef(false);
   const [overlayVideo, setOverlayVideo] = useState<File | null>(null);
+  const overlayVideoPreviewFileRef = useRef<File | null>(null);
   const [overlayVideoUrl, setOverlayVideoUrl] = useState<string | null>(null);
   const [overlayVideoDuration, setOverlayVideoDuration] = useState(0);
   const [overlayVideoStartTime, setOverlayVideoStartTime] = useState(0);
@@ -1329,7 +1330,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         overlayPreview.pause();
         if (
           baseTime < startTime &&
-          overlayPreview.currentTime !== overlayVideoStartTime
+          Math.abs(overlayPreview.currentTime - overlayVideoStartTime) > 0.035
         ) {
           overlayPreview.currentTime = overlayVideoStartTime;
         }
@@ -1351,11 +1352,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       if (Math.abs(overlayPreview.playbackRate - browserRate) > 0.001) {
         overlayPreview.playbackRate = browserRate;
       }
-      if (
-        forceSeek ||
-        requestedRate !== browserRate ||
-        Math.abs(overlayPreview.currentTime - sourceTime) > 0.12
-      ) {
+      const playbackRateWasClamped =
+        Math.abs(requestedRate - browserRate) > 0.001;
+      const drift = Math.abs(overlayPreview.currentTime - sourceTime);
+      const driftThreshold = forceSeek
+        ? 0.035
+        : playbackRateWasClamped
+          ? 0.2
+          : 0.12;
+      if (drift > driftThreshold) {
         overlayPreview.currentTime = sourceTime;
       }
 
@@ -1378,7 +1383,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       window.cancelAnimationFrame(animationFrame);
       followPlayback();
     };
-    const handlePause = () => syncOverlayVideo(true);
+    const handlePause = () => syncOverlayVideo(false);
     const handleSeek = () => syncOverlayVideo(true);
 
     baseVideo.addEventListener('play', handlePlay);
@@ -1824,6 +1829,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           URL.revokeObjectURL(overlayVideoUrl);
         }
         setOverlayVideo(null);
+        overlayVideoPreviewFileRef.current = null;
         setOverlayVideoUrl(null);
         setOverlayVideoDuration(0);
         setOverlayVideoStartTime(0);
@@ -1866,6 +1872,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayVideoEndTime(0);
         setOverlayVideoSegments([]);
         setOverlayVideoCrop(FULL_MEDIA_CROP);
+        overlayVideoPreviewFileRef.current = null;
         setOverlayVideo(file);
         const url = URL.createObjectURL(file);
         setOverlayVideoUrl(url);
@@ -1883,6 +1890,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       URL.revokeObjectURL(overlayVideoUrl);
     }
     setOverlayVideo(null);
+    overlayVideoPreviewFileRef.current = null;
     setOverlayVideoUrl(null);
     setOverlayVideoDuration(0);
     setOverlayVideoStartTime(0);
@@ -1906,6 +1914,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayImage(null);
     setOverlayImageUrl(null);
     setOverlayVideo(null);
+    overlayVideoPreviewFileRef.current = null;
     setOverlayVideoUrl(null);
     setOverlayVideoDuration(0);
     setOverlayVideoStartTime(0);
@@ -3411,6 +3420,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
 
   const handlePreview = useCallback(async () => {
+    const previewOverlayVideo =
+      overlayVideoPreviewFileRef.current ?? overlayVideo;
     const overlayText = customText.trim()
       ? customText.trim()
       : selectedWordText
@@ -3456,21 +3467,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         formData.append('gifLoop', loopGif ? 'true' : 'false');
       }
     }
-    if (overlayVideo) {
-      formData.append('overlayVideo', overlayVideo);
+    if (previewOverlayVideo) {
+      formData.append('overlayVideo', previewOverlayVideo);
       formData.append(
         'overlayVideoStartTime',
-        overlayVideoStartTime.toString(),
+        overlayVideoPreviewFileRef.current
+          ? '0'
+          : overlayVideoStartTime.toString(),
       );
-      formData.append('overlayVideoEndTime', overlayVideoEndTime.toString());
-      if (overlayVideoSegments.length > 0) {
+      formData.append(
+        'overlayVideoEndTime',
+        (overlayVideoPreviewFileRef.current
+          ? overlayVideoDuration
+          : overlayVideoEndTime
+        ).toString(),
+      );
+      if (
+        !overlayVideoPreviewFileRef.current &&
+        overlayVideoSegments.length > 0
+      ) {
         formData.append(
           'overlayVideoSegments',
           JSON.stringify(overlayVideoSegments),
         );
       }
     }
-    if (overlayFile || overlayVideo) {
+    if (overlayFile || previewOverlayVideo) {
       formData.append('overlayCropLeft', overlayVideoCrop.left.toString());
       formData.append('overlayCropTop', overlayVideoCrop.top.toString());
       formData.append('overlayCropWidth', overlayVideoCrop.width.toString());
@@ -3564,6 +3586,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayImage,
     overlayImageUrl,
     overlayVideo,
+    overlayVideoDuration,
     overlayVideoStartTime,
     overlayVideoEndTime,
     overlayVideoSegments,
@@ -3695,6 +3718,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         URL.revokeObjectURL(overlayVideoUrl);
       }
       setOverlayVideo(null);
+      overlayVideoPreviewFileRef.current = null;
       setOverlayVideoUrl(null);
       setOverlayVideoDuration(0);
       setOverlayVideoStartTime(0);
@@ -4791,6 +4815,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayImage(null);
     setOverlayImageUrl(null);
     setOverlayVideo(null);
+    overlayVideoPreviewFileRef.current = null;
     setOverlayVideoUrl(null);
     setOverlayVideoDuration(0);
     setOverlayVideoStartTime(0);
@@ -6310,6 +6335,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   setOverlayImage(file);
                   setOverlayImageUrl(localUrl);
                   setOverlayVideo(null);
+                  overlayVideoPreviewFileRef.current = null;
                   setOverlayVideoUrl(null);
                   setOverlayVideoDuration(0);
                   setOverlayVideoStartTime(0);
@@ -7129,6 +7155,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           if (overlayVideoUrl?.startsWith('blob:')) {
             URL.revokeObjectURL(overlayVideoUrl);
           }
+          overlayVideoPreviewFileRef.current = new File(
+            [previewBlob],
+            'overlay-preview.mp4',
+            { type: previewBlob.type || 'video/mp4' },
+          );
           setOverlayVideoUrl(URL.createObjectURL(previewBlob));
           setOverlayVideoSegments(segments);
           setOverlayVideoStartTime(0);

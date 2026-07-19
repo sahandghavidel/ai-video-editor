@@ -407,31 +407,14 @@ export async function POST(request: NextRequest) {
     const previewBaseH =
       preview && previewScaleFactor !== 1 ? previewOutputHeight : videoHeight;
 
-    // Image/video previews must use the same pixel geometry as the final apply.
-    // Composite at source resolution first, then downscale the completed frame.
-    // This avoids crop/aspect/rounding differences caused by scaling the base
-    // before the overlay. Other preview types keep the faster early-scale path.
-    const previewUsesFinalMediaGeometry =
-      preview && Boolean(overlayImage || overlayVideo);
-    const baseVideoWidth = previewUsesFinalMediaGeometry
-      ? videoWidth
-      : preview
-        ? previewBaseW
-        : videoWidth;
-    const baseVideoHeight = previewUsesFinalMediaGeometry
-      ? videoHeight
-      : preview
-        ? previewBaseH
-        : videoHeight;
+    const isMediaPreview = preview && Boolean(overlayImage || overlayVideo);
+    const baseVideoWidth = preview ? previewBaseW : videoWidth;
+    const baseVideoHeight = preview ? previewBaseH : videoHeight;
 
     const previewBaseFilter = preview
-      ? previewUsesFinalMediaGeometry
-        ? `fps=${previewOutputFps}`
-        : `fps=${previewOutputFps},scale=${previewBaseW}:${previewBaseH}:flags=fast_bilinear`
+      ? `fps=${previewOutputFps},scale=${previewBaseW}:${previewBaseH}:flags=fast_bilinear`
       : '';
-    const previewPostFilter = previewUsesFinalMediaGeometry
-      ? `scale=${previewBaseW}:${previewBaseH}:flags=fast_bilinear`
-      : null;
+    const previewPostFilter: string | null = null;
 
     const parseFps = (v?: string) => {
       if (!v || typeof v !== 'string') return null;
@@ -621,9 +604,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate overlay dimensions in pixels
-    const overlayWidth = Math.round((sizeWidth / 100) * baseVideoWidth);
-    const overlayHeight = Math.round((sizeHeight / 100) * baseVideoHeight);
+    // For fast image/video previews, map the final integer pixel box onto the
+    // 720p canvas. This keeps final-render geometry while scaling the base first.
+    const finalOverlayWidth = Math.round((sizeWidth / 100) * videoWidth);
+    const finalOverlayHeight = Math.round((sizeHeight / 100) * videoHeight);
+    const mediaPreviewScale = isMediaPreview
+      ? previewBaseH / videoHeight
+      : 1;
+    const overlayWidth = isMediaPreview
+      ? Math.max(1, Math.round(finalOverlayWidth * mediaPreviewScale))
+      : Math.round((sizeWidth / 100) * baseVideoWidth);
+    const overlayHeight = isMediaPreview
+      ? Math.max(1, Math.round(finalOverlayHeight * mediaPreviewScale))
+      : Math.round((sizeHeight / 100) * baseVideoHeight);
+    const mediaPreviewCenterX = Math.round(
+      (positionX / 100) * videoWidth * mediaPreviewScale,
+    );
+    const mediaPreviewCenterY = Math.round(
+      (positionY / 100) * videoHeight * mediaPreviewScale,
+    );
 
     let ffmpegCommand: string;
     const soundDelayMs = Math.max(0, Math.round(tStart * 1000));
@@ -865,8 +864,14 @@ export async function POST(request: NextRequest) {
             : '0';
       const slideDY =
         overlayAnimation === 'slideUp' ? `(H*0.25*(1-${easeGlobal}))` : '0';
-      const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
-      const yExpr = `H*${positionY / 100}-overlay_h/2+(${slideDY})`;
+      const overlayCenterX = isMediaPreview
+        ? String(mediaPreviewCenterX)
+        : `W*${positionX / 100}`;
+      const overlayCenterY = isMediaPreview
+        ? String(mediaPreviewCenterY)
+        : `H*${positionY / 100}`;
+      const xExpr = `${overlayCenterX}-overlay_w/2+(${slideDX})`;
+      const yExpr = `${overlayCenterY}-overlay_h/2+(${slideDY})`;
       const baseVideo = preview
         ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
         : tintFilter
@@ -1056,8 +1061,14 @@ export async function POST(request: NextRequest) {
             : `0`;
       const slideDY =
         overlayAnimation === 'slideUp' ? `(H*0.25*(1-${easeGlobal}))` : `0`;
-      const xExpr = `W*${positionX / 100}-overlay_w/2+(${slideDX})`;
-      const yExpr = `H*${positionY / 100}-overlay_h/2+(${slideDY})`;
+      const overlayCenterX = isMediaPreview
+        ? String(mediaPreviewCenterX)
+        : `W*${positionX / 100}`;
+      const overlayCenterY = isMediaPreview
+        ? String(mediaPreviewCenterY)
+        : `H*${positionY / 100}`;
+      const xExpr = `${overlayCenterX}-overlay_w/2+(${slideDX})`;
+      const yExpr = `${overlayCenterY}-overlay_h/2+(${slideDY})`;
 
       const baseVideo = preview
         ? `[0:v]${tintFilter ? tintFilter + ',' : ''}${previewBaseFilter}[base]`
@@ -1098,7 +1109,10 @@ export async function POST(request: NextRequest) {
             preview ? previewAudioEncodeArgs : '-c:a copy'
           } ${preview ? previewVideoEncodeArgs : finalVideoEncodeArgs} -shortest "${outputPath}"`;
         } else {
-          ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -filter_complex "${overlayScale};${overlayFilter}${videoPost}" -map "${vmap}" -map 0:a? ${
+          const parts = [baseVideo, overlayScale, overlayFilter].filter(Boolean);
+          ffmpegCommand = `ffmpeg -hide_banner -loglevel error ${ffmpegPreviewInputArgs} -i "${videoInput}" ${imageInputLoop} -i "${imagePath}" -filter_complex "${parts.join(
+            ';',
+          )}${videoPost}" -map "${vmap}" -map 0:a? ${
             preview ? previewAudioEncodeArgs : '-c:a copy'
           } ${preview ? previewVideoEncodeArgs : finalVideoEncodeArgs} -shortest "${outputPath}"`;
         }
