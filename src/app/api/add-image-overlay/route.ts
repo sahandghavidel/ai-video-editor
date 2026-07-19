@@ -299,10 +299,6 @@ export async function POST(request: NextRequest) {
     const previewMaxSeconds = 4;
     const videoCacheMaxAgeMs = 30 * 60 * 1000;
 
-    // NOTE: We apply fps/scale early for preview (on the base video) to reduce
-    // the amount of work overlay filters do.
-    const previewPostFilter: string | null = null;
-
     const previewVideoEncodeArgs = preview
       ? '-c:v libx264 -preset ultrafast -crf 33 -tune zerolatency -pix_fmt yuv420p -movflags +faststart'
       : '';
@@ -411,12 +407,31 @@ export async function POST(request: NextRequest) {
     const previewBaseH =
       preview && previewScaleFactor !== 1 ? previewOutputHeight : videoHeight;
 
-    const baseVideoWidth = preview ? previewBaseW : videoWidth;
-    const baseVideoHeight = preview ? previewBaseH : videoHeight;
+    // Image/video previews must use the same pixel geometry as the final apply.
+    // Composite at source resolution first, then downscale the completed frame.
+    // This avoids crop/aspect/rounding differences caused by scaling the base
+    // before the overlay. Other preview types keep the faster early-scale path.
+    const previewUsesFinalMediaGeometry =
+      preview && Boolean(overlayImage || overlayVideo);
+    const baseVideoWidth = previewUsesFinalMediaGeometry
+      ? videoWidth
+      : preview
+        ? previewBaseW
+        : videoWidth;
+    const baseVideoHeight = previewUsesFinalMediaGeometry
+      ? videoHeight
+      : preview
+        ? previewBaseH
+        : videoHeight;
 
     const previewBaseFilter = preview
-      ? `fps=${previewOutputFps},scale=${previewBaseW}:${previewBaseH}:flags=fast_bilinear`
+      ? previewUsesFinalMediaGeometry
+        ? `fps=${previewOutputFps}`
+        : `fps=${previewOutputFps},scale=${previewBaseW}:${previewBaseH}:flags=fast_bilinear`
       : '';
+    const previewPostFilter = previewUsesFinalMediaGeometry
+      ? `scale=${previewBaseW}:${previewBaseH}:flags=fast_bilinear`
+      : null;
 
     const parseFps = (v?: string) => {
       if (!v || typeof v !== 'string') return null;

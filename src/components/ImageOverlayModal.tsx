@@ -1253,6 +1253,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayVideoPreviewRef = useRef<HTMLVideoElement>(null);
+  const shouldMaximizeAcceptedVideoRef = useRef(false);
   const brandedTextPreviewRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null!);
   const videoFileInputRef = useRef<HTMLInputElement>(null!);
@@ -1706,6 +1707,39 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     [getVideoNaturalDimensions, setOverlaySize],
   );
 
+  const centerAndMaximizeOverlay = useCallback(
+    (dimensions = actualImageDimensions) => {
+      setOverlayPosition({ x: 50, y: 50 });
+      if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
+        const scale = Math.min(
+          100 / Math.max(overlaySize.width, 0.001),
+          100 / Math.max(overlaySize.height, 0.001),
+        );
+        setOverlaySize({
+          width: overlaySize.width * scale,
+          height: overlaySize.height * scale,
+        });
+        return;
+      }
+
+      const { videoWidth, videoHeight } = getVideoNaturalDimensions();
+      const visibleAspect =
+        (dimensions.width * overlayVideoCrop.width) /
+        Math.max(dimensions.height * overlayVideoCrop.height, 0.001);
+      const heightPerWidth = videoWidth / (videoHeight * visibleAspect);
+      const width = Math.min(100, 100 / heightPerWidth);
+      setOverlaySize({ width, height: width * heightPerWidth });
+    },
+    [
+      actualImageDimensions,
+      getVideoNaturalDimensions,
+      overlaySize.height,
+      overlaySize.width,
+      overlayVideoCrop.height,
+      overlayVideoCrop.width,
+    ],
+  );
+
   const scaleOverlayFromCenter = useCallback(
     (factor: number) => {
       const nextSize = {
@@ -1844,6 +1878,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   );
 
   const handleCancelVideoEdit = useCallback(() => {
+    shouldMaximizeAcceptedVideoRef.current = false;
     if (overlayVideoUrl?.startsWith('blob:')) {
       URL.revokeObjectURL(overlayVideoUrl);
     }
@@ -5714,10 +5749,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                             height: media.videoHeight,
                           };
                           setActualImageDimensions(dimensions);
-                          setOverlaySizeFromPixels(
-                            dimensions.width,
-                            dimensions.height,
-                          );
+                          if (shouldMaximizeAcceptedVideoRef.current) {
+                            shouldMaximizeAcceptedVideoRef.current = false;
+                            centerAndMaximizeOverlay(dimensions);
+                          } else {
+                            setOverlaySizeFromPixels(
+                              dimensions.width,
+                              dimensions.height,
+                            );
+                          }
                         }
                         const baseVideo = videoRef.current;
                         if (
@@ -5990,27 +6030,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   })();
                 }}
                 onCenterMaximize={() => {
-                  setOverlayPosition({ x: 50, y: 50 });
-                  const dimensions = actualImageDimensions;
-                  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
-                    const scale = Math.min(
-                      100 / Math.max(overlaySize.width, 0.001),
-                      100 / Math.max(overlaySize.height, 0.001),
-                    );
-                    setOverlaySize({
-                      width: overlaySize.width * scale,
-                      height: overlaySize.height * scale,
-                    });
-                    return;
-                  }
-                  const { videoWidth, videoHeight } = getVideoNaturalDimensions();
-                  const visibleAspect =
-                    (dimensions.width * overlayVideoCrop.width) /
-                    Math.max(dimensions.height * overlayVideoCrop.height, 0.001);
-                  const heightPerWidth =
-                    videoWidth / (videoHeight * visibleAspect);
-                  const width = Math.min(100, 100 / heightPerWidth);
-                  setOverlaySize({ width, height: width * heightPerWidth });
+                  centerAndMaximizeOverlay();
                 }}
                 onZoomOut={() => {
                   scaleOverlayFromCenter(0.9);
@@ -7100,6 +7120,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         videoFile={overlayVideo}
         videoUrl={overlayVideoUrl}
         onUseVideo={({ segments, previewBlob }) => {
+          shouldMaximizeAcceptedVideoRef.current = true;
           const combinedDuration = segments.reduce(
             (total, segment) =>
               total + Math.max(0, segment.endTime - segment.startTime),
