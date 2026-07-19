@@ -1545,6 +1545,8 @@ export async function POST(request: NextRequest) {
         headers: {
           'Content-Type': 'video/mp4',
           'Cache-Control': 'no-store',
+          'X-Preview-Overlay-Start': String(tStart),
+          'X-Preview-Overlay-End': String(tEnd),
         },
       });
     }

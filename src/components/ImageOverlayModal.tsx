@@ -657,6 +657,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [, setIsResizing] = useState(false);
   const [isModifierCropping, setIsModifierCropping] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewCacheRef = useRef<{
+    key: string;
+    url: string;
+    overlayStart: number;
+  } | null>(null);
+  const [previewOverlayStartSeconds, setPreviewOverlayStartSeconds] =
+    useState(0);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isSubtitleHighlightLoading, setIsSubtitleHighlightLoading] =
     useState(false);
@@ -1263,6 +1270,15 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0);
   const [previewCurrentTimeSeconds, setPreviewCurrentTimeSeconds] = useState(0);
   const [isPreviewPaused, setIsPreviewPaused] = useState(true);
+
+  const clearPreviewCache = useCallback(() => {
+    const cached = previewCacheRef.current;
+    if (cached?.url.startsWith('blob:')) {
+      URL.revokeObjectURL(cached.url);
+    }
+    previewCacheRef.current = null;
+    setPreviewOverlayStartSeconds(0);
+  }, []);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -3439,17 +3455,52 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     if (!originalVideoUrl) return;
     console.log('handlePreview: textStyling', textStyling);
 
-    setIsPreviewLoading(true);
-    setPreviewUrl((prev) => {
-      if (prev && prev.startsWith('blob:')) {
-        try {
-          URL.revokeObjectURL(prev);
-        } catch {
-          // ignore
-        }
-      }
-      return null;
+    const previewVideoFile = overlayVideoPreviewFileRef.current;
+    const previewCacheKey = JSON.stringify({
+      originalVideoUrl,
+      overlayImage: overlayImage
+        ? [overlayImage.name, overlayImage.size, overlayImage.lastModified]
+        : overlayImageUrl,
+      overlayVideo: overlayVideo
+        ? [overlayVideo.name, overlayVideo.size, overlayVideo.lastModified]
+        : null,
+      preparedVideo: previewVideoFile
+        ? [previewVideoFile.size, previewVideoFile.lastModified]
+        : null,
+      overlayVideoStartTime,
+      overlayVideoEndTime,
+      overlayVideoDuration,
+      overlayVideoSegments,
+      overlayVideoCrop,
+      overlayPosition,
+      overlaySize,
+      overlayText,
+      textOverlayPosition,
+      textOverlaySize,
+      textStyling,
+      startTime,
+      endTime,
+      videoTintColor,
+      videoTintOpacity,
+      tintPosition,
+      tintSize,
+      tintInvert,
+      selectedSoundName,
+      overlayAnimation,
+      loopGif,
+      isBrandedTextActive,
     });
+    const cachedPreview = previewCacheRef.current;
+    if (cachedPreview?.key === previewCacheKey) {
+      setPreviewOverlayStartSeconds(cachedPreview.overlayStart);
+      setPreviewUrl(cachedPreview.url);
+      setIsPreviewLoading(false);
+      return;
+    }
+    clearPreviewCache();
+
+    setIsPreviewLoading(true);
+    setPreviewUrl(null);
 
     const formData = new FormData();
     formData.append('videoUrl', originalVideoUrl);
@@ -3565,8 +3616,20 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           alert('Preview failed');
           return;
         }
+        const overlayStart = Number(
+          response.headers.get('x-preview-overlay-start') ?? 0,
+        );
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
+        const safeOverlayStart = Number.isFinite(overlayStart)
+          ? Math.max(0, overlayStart)
+          : 0;
+        previewCacheRef.current = {
+          key: previewCacheKey,
+          url,
+          overlayStart: safeOverlayStart,
+        };
+        setPreviewOverlayStartSeconds(safeOverlayStart);
         setPreviewUrl(url);
         return;
       }
@@ -3616,6 +3679,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     selectedSoundName,
     overlayAnimation,
     isBrandedTextActive,
+    clearPreviewCache,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -3728,6 +3792,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOverlayPosition({ x: 50, y: 50 });
       setOverlaySize({ width: 40, height: 40 });
       setPreviewUrl(null);
+      clearPreviewCache();
       setIsPreviewLoading(false);
       setSelectedWordText(null);
       setCustomText('');
@@ -3802,6 +3867,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     endTime,
     overlayAnimation,
     isBrandedTextActive,
+    clearPreviewCache,
     onApply,
     onUpdateModalVideoUrl,
     originalVideoUrl,
@@ -4840,6 +4906,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsSoundSectionOpen(false);
     setIsAnimationSectionOpen(false);
     setPreviewUrl(null);
+    clearPreviewCache();
     setIsPreviewLoading(false);
     setIsSubtitleHighlightLoading(false);
     setIsGeneratingScenePrompt(false);
@@ -4849,7 +4916,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setSelectedWordText(null);
     setCustomText('');
     setSelectedWordText(null);
-  }, [onClose, overlayImageUrl, overlayVideoUrl, videoCropFrameUrl]);
+  }, [
+    clearPreviewCache,
+    onClose,
+    overlayImageUrl,
+    overlayVideoUrl,
+    videoCropFrameUrl,
+  ]);
 
   const withCacheBust = useCallback((url: string | null) => {
     const u = String(url || '').trim();
@@ -4879,6 +4952,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
     // Clear any leftover preview state when modal opens.
     setPreviewUrl(null);
+    clearPreviewCache();
     setIsPreviewLoading(false);
 
     const normalizedVideoUrl =
@@ -4912,7 +4986,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     }).catch(() => {
       // ignore
     });
-  }, [isOpen, sceneId, videoUrl]);
+  }, [clearPreviewCache, isOpen, sceneId, videoUrl]);
 
   // Fetch transcription data.
   useEffect(() => {
@@ -5224,7 +5298,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         stopAll(event);
         const video = previewUrl ? previewVideoRef.current : videoRef.current;
         if (video) {
-          video.currentTime = 0;
+          if (event.repeat) return;
+          video.currentTime = previewUrl ? previewOverlayStartSeconds : 0;
           video.play().catch(() => {
             // Ignore autoplay/gesture errors; user explicitly pressed a key.
           });
@@ -5249,6 +5324,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         const video = previewUrl ? previewVideoRef.current : videoRef.current;
         if (video) {
           if (video.paused) {
+            if (
+              previewUrl &&
+              (video.ended ||
+                (Number.isFinite(video.duration) &&
+                  video.currentTime >= video.duration - 0.05))
+            ) {
+              video.currentTime = previewOverlayStartSeconds;
+            }
             video.play();
           } else {
             video.pause();
@@ -5320,6 +5403,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     isOpen,
     previewUrl,
+    previewOverlayStartSeconds,
     handleClose,
     overlayImageUrl,
     overlayMediaUrl,
@@ -7007,16 +7091,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         <div
           className='fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]'
           onClick={() => {
-            setPreviewUrl((prev) => {
-              if (prev && prev.startsWith('blob:')) {
-                try {
-                  URL.revokeObjectURL(prev);
-                } catch {
-                  // ignore
-                }
-              }
-              return null;
-            });
+            setPreviewUrl(null);
             setIsPreviewLoading(false);
           }}
         >
@@ -7024,16 +7099,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setPreviewUrl((prev) => {
-                  if (prev && prev.startsWith('blob:')) {
-                    try {
-                      URL.revokeObjectURL(prev);
-                    } catch {
-                      // ignore
-                    }
-                  }
-                  return null;
-                });
+                setPreviewUrl(null);
                 setIsPreviewLoading(false);
               }}
               className='absolute -top-10 right-0 text-white hover:text-gray-300 text-xl font-bold'
@@ -7045,6 +7111,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                 <video
                   src={previewUrl as string}
                   autoPlay
+                  preload='auto'
                   playsInline
                   disablePictureInPicture
                   crossOrigin='anonymous'
@@ -7071,18 +7138,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                       void handleApply();
                     }
 
-                    // Close preview immediately (and revoke blob URLs) to avoid the
-                    // perception that nothing happened.
-                    setPreviewUrl((prev) => {
-                      if (prev && prev.startsWith('blob:')) {
-                        try {
-                          URL.revokeObjectURL(prev);
-                        } catch {
-                          // ignore
-                        }
-                      }
-                      return null;
-                    });
+                    // Close the preview but keep its blob cached until settings change.
+                    setPreviewUrl(null);
                     setIsPreviewLoading(false);
                   }}
                 />
@@ -7099,6 +7156,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                     const v = previewVideoRef.current;
                     if (!v) return;
                     if (v.paused) {
+                      if (
+                        v.ended ||
+                        (Number.isFinite(v.duration) &&
+                          v.currentTime >= v.duration - 0.05)
+                      ) {
+                        v.currentTime = previewOverlayStartSeconds;
+                      }
                       v.play().catch(() => {
                         // ignore
                       });
