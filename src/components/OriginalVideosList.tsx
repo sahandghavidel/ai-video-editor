@@ -17657,14 +17657,10 @@ export default function OriginalVideosList({
                                         throw new Error('No selected video ID');
                                       }
 
-	                                    const rawBaseName = (
-	                                      entry.fileName || `merged-audio-${lang}`
-	                                    ).replace(/\.[^.]+$/, '');
-	                                    const baseName = `${displayName} - ${rawBaseName}`;
 	                                    await exportUrlFileForVideo(
                                       currentVideoId,
 	                                      entry.url,
-                                      `English - ${baseName}.m4a`,
+	                                      `${displayName} - audio`,
 	                                    );
                                     playSuccessSound();
                                   } catch (err) {
