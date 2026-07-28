@@ -788,6 +788,12 @@ export default function OriginalVideosList({
     useState<number | null>(null);
   const [downloadingThumbnailVariant, setDownloadingThumbnailVariant] =
     useState<1 | 2 | 3 | null>(null);
+  const [uploadingThumbnailVideoId, setUploadingThumbnailVideoId] = useState<
+    number | null
+  >(null);
+  const [uploadingThumbnailVariant, setUploadingThumbnailVariant] = useState<
+    1 | 2 | 3 | null
+  >(null);
   const [downloadingAssetsZipVideoId, setDownloadingAssetsZipVideoId] =
     useState<number | null>(null);
   const [downloadingAssetsZipAll, setDownloadingAssetsZipAll] = useState(false);
@@ -812,6 +818,14 @@ export default function OriginalVideosList({
     message: string;
     tone: 'success' | 'warning' | 'error';
   } | null>(null);
+  const [translatingMetadataJsonVideoId, setTranslatingMetadataJsonVideoId] =
+    useState<number | null>(null);
+  const [metadataJsonTranslationStatus, setMetadataJsonTranslationStatus] =
+    useState<{
+      videoId: number;
+      message: string;
+      tone: 'success' | 'warning' | 'error';
+    } | null>(null);
   const [generatingScenes, setGeneratingScenes] = useState<number | null>(null);
   const [generatingScenesAll, setGeneratingScenesAll] = useState(false);
   const [normalizing, setNormalizing] = useState<number | null>(null);
@@ -4964,6 +4978,54 @@ export default function OriginalVideosList({
     }
   };
 
+  const handleUploadThumbnail = async (
+    videoId: number,
+    variant: 1 | 2 | 3,
+    file: File,
+  ) => {
+    try {
+      setUploadingThumbnailVideoId(videoId);
+      setUploadingThumbnailVariant(variant);
+      setError(null);
+
+      const form = new FormData();
+      form.append('file', file);
+      form.append('videoId', String(videoId));
+      form.append('variant', String(variant));
+
+      const response = await fetch('/api/upload-thumbnail-reference', {
+        method: 'POST',
+        body: form,
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || `Thumbnail upload failed (${response.status})`,
+        );
+      }
+
+      await handleRefresh();
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        `Failed to upload thumbnail ${variant} for video #${videoId}:`,
+        error,
+      );
+      playErrorSound();
+      setError(
+        `Failed to upload thumbnail ${variant}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setUploadingThumbnailVideoId(null);
+      setUploadingThumbnailVariant(null);
+    }
+  };
+
   const handleChoosePrimaryThumbnail = async (
     video: BaserowRow,
     variant: 1 | 2 | 3,
@@ -5287,6 +5349,31 @@ export default function OriginalVideosList({
       .join('\n\n');
   };
 
+  const buildVideoMetadataJsonTranslationInput = (video: BaserowRow) => {
+    const title = (extractFieldValue(video.field_6870) || '')
+      .split('\n')
+      .map((line) =>
+        line
+          .replace(/^\s*\d+[\).:-]?\s*/, '')
+          .replace(/^\s*[-*•]\s*/, '')
+          .trim(),
+      )
+      .find(Boolean);
+    const description = (extractFieldValue(video.field_6869) || '').trim();
+    const timestamps = (extractFieldValue(video.field_6873) || '').trim();
+    const timestampsSection = timestamps ? `Timestamps\n${timestamps}` : '';
+    const fullDescription = [description, timestampsSection]
+      .filter(Boolean)
+      .join('\n\n');
+
+    if (!title || !fullDescription) return null;
+
+    return {
+      title,
+      description: fullDescription,
+    };
+  };
+
   const handleCopyVideoSentences = async (video: BaserowRow) => {
     try {
       setCopyingSentencesVideoId(video.id);
@@ -5524,6 +5611,114 @@ export default function OriginalVideosList({
       });
     } finally {
       setTranslatingMetadataVideoId(null);
+    }
+  };
+
+  const handleTranslateVideoMetadataAsJson = async (video: BaserowRow) => {
+    const languages = effectivePipelineDubbedLanguages;
+    const metadata = buildVideoMetadataJsonTranslationInput(video);
+
+    if (languages.length === 0) {
+      setMetadataJsonTranslationStatus({
+        videoId: video.id,
+        message: 'No pipeline languages selected for JSON metadata translation.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    if (!metadata) {
+      setMetadataJsonTranslationStatus({
+        videoId: video.id,
+        message:
+          'A title and a description or timestamp section are required for JSON metadata translation.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    try {
+      setTranslatingMetadataJsonVideoId(video.id);
+      setMetadataJsonTranslationStatus(null);
+      setError(null);
+
+      const response = await fetch('/api/translate-metadata-json-languages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: video.id,
+          languages,
+          metadata,
+          model: modelSelection.selectedModel,
+          provider: modelSelection.provider,
+          localEndpoint: modelSelection.localEndpoint,
+          localApiKey: modelSelection.localApiKey,
+          localAdminApiKey: modelSelection.localAdminApiKey,
+          preferFastProvider: modelSelection.provider === 'online',
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        saved?: unknown[];
+        skipped?: unknown[];
+        failed?: unknown[];
+        exportDir?: unknown;
+        provider?: unknown;
+        effectiveModel?: unknown;
+        batchSize?: unknown;
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ||
+            `JSON metadata translation failed (${response.status})`,
+        );
+      }
+
+      const savedCount = Array.isArray(payload?.saved)
+        ? payload.saved.length
+        : 0;
+      const skippedCount = Array.isArray(payload?.skipped)
+        ? payload.skipped.length
+        : 0;
+      const failedCount = Array.isArray(payload?.failed)
+        ? payload.failed.length
+        : 0;
+
+      console.log(
+        `Translated JSON metadata for video #${video.id}: saved=${savedCount}, skipped=${skippedCount}, failed=${failedCount}, provider=${String(payload?.provider || '')}, model=${String(payload?.effectiveModel || '')}, batchSize=${String(payload?.batchSize || '')}, folder=${String(payload?.exportDir || '')}`,
+      );
+
+      if (failedCount > 0) {
+        console.warn(
+          `JSON metadata translations completed with failed languages for video #${video.id}:`,
+          payload?.failed,
+        );
+      }
+
+      setMetadataJsonTranslationStatus({
+        videoId: video.id,
+        message: `JSON metadata translations complete: ${savedCount} saved, ${skippedCount} skipped, ${failedCount} failed.`,
+        tone: failedCount > 0 ? 'warning' : 'success',
+      });
+      playSuccessSound();
+    } catch (error) {
+      console.error(
+        `Failed to translate JSON metadata for video #${video.id}:`,
+        error,
+      );
+      setMetadataJsonTranslationStatus({
+        videoId: video.id,
+        message: `JSON metadata translation could not start or finish: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+        tone: 'error',
+      });
+    } finally {
+      setTranslatingMetadataJsonVideoId(null);
     }
   };
 
@@ -16523,6 +16718,9 @@ export default function OriginalVideosList({
                               downloadingThumbnailVideoId ===
                                 selectedVideo.id &&
                               downloadingThumbnailVariant === thumb.variant;
+                            const isUploading =
+                              uploadingThumbnailVideoId === selectedVideo.id &&
+                              uploadingThumbnailVariant === thumb.variant;
                             const isPrimaryThumbnail = thumb.variant === 1;
                             const isSelectingThumbnail =
                               selectingThumbnailVideoId === selectedVideo.id &&
@@ -16568,8 +16766,10 @@ export default function OriginalVideosList({
                                       !thumbUrl ||
                                       isPrimaryThumbnail ||
                                       isRegenerating ||
+                                      isUploading ||
                                       selectingThumbnailVideoId !== null ||
                                       regeneratingThumbnailVideoId !== null ||
+                                      uploadingThumbnailVideoId !== null ||
                                       downloadingThumbnailVideoId !== null ||
                                       generatingThumbnailsAll
                                     }
@@ -16597,7 +16797,7 @@ export default function OriginalVideosList({
                                       </>
                                     )}
                                   </button>
-                                  <div className='grid grid-cols-2 gap-2'>
+                                  <div className='grid grid-cols-3 gap-2'>
                                     <button
                                       onClick={() =>
                                         handleRegenerateThumbnail(
@@ -16609,6 +16809,7 @@ export default function OriginalVideosList({
                                         regeneratingThumbnailVideoId !== null ||
                                         selectingThumbnailVideoId !== null ||
                                         generatingThumbnailsAll ||
+                                        uploadingThumbnailVideoId !== null ||
                                         downloadingThumbnailVideoId !== null
                                       }
                                       className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white transition-colors disabled:cursor-not-allowed'
@@ -16624,6 +16825,58 @@ export default function OriginalVideosList({
                                       )}
                                     </button>
 
+                                    <label
+                                      className={`w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded text-white transition-colors ${
+                                        regeneratingThumbnailVideoId !== null ||
+                                        selectingThumbnailVideoId !== null ||
+                                        generatingThumbnailsAll ||
+                                        uploadingThumbnailVideoId !== null ||
+                                        downloadingThumbnailVideoId !== null
+                                          ? 'bg-violet-300 cursor-not-allowed'
+                                          : 'bg-violet-600 hover:bg-violet-700 cursor-pointer'
+                                      }`}
+                                      title={`Upload a PNG, JPEG, or WebP image into thumbnail slot ${thumb.variant}`}
+                                    >
+                                      {isUploading ? (
+                                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                                      ) : (
+                                        <Upload className='w-3.5 h-3.5' />
+                                      )}
+                                      {isUploading ? 'Uploading...' : 'Upload'}
+                                      <input
+                                        type='file'
+                                        accept='image/png,image/jpeg,image/webp'
+                                        className='hidden'
+                                        disabled={
+                                          regeneratingThumbnailVideoId !== null ||
+                                          selectingThumbnailVideoId !== null ||
+                                          generatingThumbnailsAll ||
+                                          uploadingThumbnailVideoId !== null ||
+                                          downloadingThumbnailVideoId !== null
+                                        }
+                                        onChange={(event) => {
+                                          const file = event.target.files?.[0];
+                                          event.target.value = '';
+                                          if (!file) return;
+
+                                          if (
+                                            thumbUrl &&
+                                            !window.confirm(
+                                              `Replace thumbnail ${thumb.variant} with "${file.name}"?`,
+                                            )
+                                          ) {
+                                            return;
+                                          }
+
+                                          void handleUploadThumbnail(
+                                            selectedVideo.id,
+                                            thumb.variant,
+                                            file,
+                                          );
+                                        }}
+                                      />
+                                    </label>
+
                                     <button
                                       onClick={() =>
                                         thumbUrl &&
@@ -16636,8 +16889,10 @@ export default function OriginalVideosList({
                                       disabled={
                                         !thumbUrl ||
                                         isRegenerating ||
+                                        isUploading ||
                                         regeneratingThumbnailVideoId !== null ||
                                         selectingThumbnailVideoId !== null ||
+                                        uploadingThumbnailVideoId !== null ||
                                         downloadingThumbnailVideoId !== null ||
                                         generatingThumbnailsAll
                                       }
@@ -16671,6 +16926,7 @@ export default function OriginalVideosList({
                               downloadingAssetsZipVideoId !== null ||
                               regeneratingThumbnailVideoId !== null ||
                               selectingThumbnailVideoId !== null ||
+                              uploadingThumbnailVideoId !== null ||
                               generatingThumbnailsAll
                             }
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
@@ -16740,6 +16996,7 @@ export default function OriginalVideosList({
                               translatingThumbnailVideoId !== null ||
                               regeneratingThumbnailVideoId !== null ||
                               selectingThumbnailVideoId !== null ||
+                              uploadingThumbnailVideoId !== null ||
                               generatingThumbnailsAll ||
                               !extractUrl(selectedVideo.field_7100)
                             }
@@ -16792,6 +17049,37 @@ export default function OriginalVideosList({
                               </>
                             )}
                           </button>
+
+                          <button
+                            onClick={() =>
+                              handleTranslateVideoMetadataAsJson(selectedVideo)
+                            }
+                            disabled={
+                              translatingMetadataJsonVideoId !== null ||
+                              !buildVideoMetadataJsonTranslationInput(
+                                selectedVideo,
+                              )
+                            }
+                            className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-indigo-700 hover:bg-indigo-800 disabled:bg-indigo-300 text-white transition-colors disabled:cursor-not-allowed'
+                            title={`Translate the first title plus the description and timestamp section into separate JSON fields for pipeline languages: ${effectivePipelineDubbedLanguages
+                              .map((languageCode) =>
+                                getLanguageDisplayName(languageCode),
+                              )
+                              .join(', ')}`}
+                          >
+                            {translatingMetadataJsonVideoId ===
+                            selectedVideo.id ? (
+                              <>
+                                <Loader2 className='w-4 h-4 animate-spin' />
+                                Translating JSON...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className='w-4 h-4' />
+                                Translate Metadata as JSON
+                              </>
+                            )}
+                          </button>
                         </div>
                         {thumbnailTranslationStatus?.videoId ===
                           selectedVideo.id && (
@@ -16819,6 +17107,21 @@ export default function OriginalVideosList({
                             }`}
                           >
                             {metadataTranslationStatus.message}
+                          </div>
+                        )}
+                        {metadataJsonTranslationStatus?.videoId ===
+                          selectedVideo.id && (
+                          <div
+                            className={`mt-2 rounded border px-3 py-2 text-xs ${
+                              metadataJsonTranslationStatus.tone === 'success'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : metadataJsonTranslationStatus.tone ===
+                                    'warning'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                  : 'border-red-200 bg-red-50 text-red-700'
+                            }`}
+                          >
+                            {metadataJsonTranslationStatus.message}
                           </div>
                         )}
                       </div>

@@ -41,6 +41,7 @@ import {
 } from './image-overlay-modal/TranscriptionControls';
 import { TextOverlayControls } from './image-overlay-modal/TextOverlayControls';
 import { VideoEditModal } from './VideoEditModal';
+import { AiIntroVideoSectionsModal } from './ai-intro-overlay/AiIntroVideoSectionsModal';
 import type {
   TextStyling,
   TranscriptionWord,
@@ -546,6 +547,7 @@ interface ImageOverlayModalProps {
     overlayVideoSegments?: VideoSourceSegment[],
     overlayVideoCrop?: MediaCrop,
     brandedTextTemplate?: string | null,
+    overlayVideoSource?: 'upload' | 'original',
   ) => Promise<{ videoUrl?: string } | void>;
   isApplying?: boolean;
   handleTranscribeScene?: (
@@ -599,6 +601,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [overlayVideoSegments, setOverlayVideoSegments] = useState<
     VideoSourceSegment[]
   >([]);
+  const [overlayVideoSource, setOverlayVideoSource] = useState<
+    'upload' | 'original'
+  >('upload');
   const [overlayVideoCrop, setOverlayVideoCrop] =
     useState<MediaCrop>(FULL_MEDIA_CROP);
   const [videoCropFrameUrl, setVideoCropFrameUrl] = useState<string | null>(null);
@@ -714,6 +719,10 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [transcriptionWords, setTranscriptionWords] = useState<
     TranscriptionWord[] | null
   >(null);
+  const [
+    isOriginalVideoEditModalOpen,
+    setIsOriginalVideoEditModalOpen,
+  ] = useState(false);
   const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string>('');
   const [brandedTextTemplate, setBrandedTextTemplate] = useState<string | null>(
@@ -1851,6 +1860,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayVideoStartTime(0);
         setOverlayVideoEndTime(0);
         setOverlayVideoSegments([]);
+        setOverlayVideoSource('upload');
         setOverlayVideoCrop(FULL_MEDIA_CROP);
         setOverlayImage(file);
         const url = URL.createObjectURL(file);
@@ -1890,6 +1900,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setOverlayVideoCrop(FULL_MEDIA_CROP);
         overlayVideoPreviewFileRef.current = null;
         setOverlayVideo(file);
+        setOverlayVideoSource('upload');
         const url = URL.createObjectURL(file);
         setOverlayVideoUrl(url);
         setSelectedWordText(null);
@@ -1912,6 +1923,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
     setOverlayVideoSegments([]);
+    setOverlayVideoSource('upload');
     setOverlayVideoCrop(FULL_MEDIA_CROP);
     setActualImageDimensions(null);
     setIsVideoEditModalOpen(false);
@@ -1919,6 +1931,65 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       videoFileInputRef.current.value = '';
     }
   }, [overlayVideoUrl]);
+
+  const handleUseOriginalVideo = useCallback(
+    ({
+      segments,
+      previewBlob,
+    }: {
+      segments: VideoSourceSegment[];
+      previewBlob: Blob;
+    }) => {
+      if (overlayImageUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(overlayImageUrl);
+      }
+      if (overlayVideoUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(overlayVideoUrl);
+      }
+
+      const combinedDuration = segments.reduce(
+        (total, segment) =>
+          total + Math.max(0, segment.endTime - segment.startTime),
+        0,
+      );
+      const builtFile = new File(
+        [previewBlob],
+        'original-video-overlay.mp4',
+        { type: previewBlob.type || 'video/mp4' },
+      );
+
+      shouldMaximizeAcceptedVideoRef.current = true;
+      setOverlayImage(null);
+      setOverlayImageUrl(null);
+      setActualImageDimensions(null);
+      setOverlayVideo(builtFile);
+      overlayVideoPreviewFileRef.current = builtFile;
+      setOverlayVideoUrl(URL.createObjectURL(builtFile));
+      setOverlayVideoDuration(combinedDuration);
+      setOverlayVideoStartTime(0);
+      setOverlayVideoEndTime(combinedDuration);
+      setOverlayVideoSegments(segments.map((segment) => ({ ...segment })));
+      setOverlayVideoSource('original');
+      setOverlayVideoCrop(FULL_MEDIA_CROP);
+      setSelectedWordText(null);
+      setCustomText('');
+      setPreviewUrl(null);
+      clearPreviewCache();
+      setIsPreviewLoading(false);
+      setIsOriginalVideoEditModalOpen(false);
+
+      const baseVideo = videoRef.current;
+      if (baseVideo) {
+        baseVideo.currentTime = Math.max(0, startTime);
+      }
+    },
+    [
+      clearPreviewCache,
+      overlayImageUrl,
+      overlayVideoUrl,
+      startTime,
+    ],
+  );
 
   const handleRemoveImage = useCallback(() => {
     if (overlayImageUrl?.startsWith('blob:')) {
@@ -1936,6 +2007,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoStartTime(0);
     setOverlayVideoEndTime(0);
     setOverlayVideoSegments([]);
+    setOverlayVideoSource('upload');
     setOverlayVideoCrop(FULL_MEDIA_CROP);
     setActualImageDimensions(null);
     // Prevent the auto-load effect from re-injecting the scene image
@@ -3737,6 +3809,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         overlayVideoSegments,
         overlayVideoCrop,
         isBrandedTextActive ? BRANDED_TEXT_TEMPLATE_ID : null,
+        overlayVideoSource,
       );
 
       // Prefer the URL returned by onApply to avoid repeated scene polling.
@@ -3788,6 +3861,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setOverlayVideoStartTime(0);
       setOverlayVideoEndTime(0);
       setOverlayVideoSegments([]);
+      setOverlayVideoSource('upload');
       setOverlayVideoCrop(FULL_MEDIA_CROP);
       setOverlayPosition({ x: 50, y: 50 });
       setOverlaySize({ width: 40, height: 40 });
@@ -3845,6 +3919,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     overlayVideoStartTime,
     overlayVideoEndTime,
     overlayVideoSegments,
+    overlayVideoSource,
     overlayVideoCrop,
     hasValidOverlayVideoTiming,
     fetchOverlayFileFromUrl,
@@ -4889,6 +4964,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setOverlayVideoCrop(FULL_MEDIA_CROP);
     setVideoCropFrameUrl(null);
     setOverlayVideoSegments([]);
+    setOverlayVideoSource('upload');
     setOverlayPosition({ x: 50, y: 50 });
     setOverlaySize({ width: 40, height: 40 });
     setStartTime(0);
@@ -4913,6 +4989,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setScenePromptStatus(null);
     setSceneImageStatus(null);
     setTranscriptionWords(null);
+    setIsOriginalVideoEditModalOpen(false);
     setSelectedWordText(null);
     setCustomText('');
     setSelectedWordText(null);
@@ -5125,7 +5202,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isVideoEditModalOpen) return;
+      if (isVideoEditModalOpen || isOriginalVideoEditModalOpen) return;
 
       if (event.code === 'Tab') {
         // When the preview overlay is open, Tab should close it.
@@ -5341,6 +5418,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
+      if (isOriginalVideoEditModalOpen) return;
       if (event.code !== 'Tab') return;
       if (!tabKeyDown) return;
 
@@ -5419,6 +5497,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     handlePreview,
     handlePasteOverlayImageFromClipboard,
     isVideoEditModalOpen,
+    isOriginalVideoEditModalOpen,
   ]);
 
   // Keep the interactive overlay canvas aligned to the visible video pixels.
@@ -6093,6 +6172,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               videoFileInputRef={videoFileInputRef}
               onVideoUpload={handleVideoUpload}
               onPickVideoFile={() => videoFileInputRef.current?.click()}
+              onPickOriginalVideo={() =>
+                setIsOriginalVideoEditModalOpen(true)
+              }
             />
 
             {/* Position Controls */}
@@ -6425,6 +6507,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   setOverlayVideoStartTime(0);
                   setOverlayVideoEndTime(0);
                   setOverlayVideoSegments([]);
+                  setOverlayVideoSource('upload');
                   setActualImageDimensions({ width: 1600, height: 900 });
                   setOverlayPosition({ x: 50, y: 50 });
                   setOverlaySize({ width: 72, height: 40.5 });
@@ -7203,6 +7286,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           </div>
         </div>
       )}
+
+      <AiIntroVideoSectionsModal
+        isOpen={isOriginalVideoEditModalOpen}
+        sceneId={sceneId}
+        sourceVideoUrl={`/api/ai-intro-source-video?sceneId=${encodeURIComponent(
+          sceneId,
+        )}`}
+        targetStartTime={startTime}
+        targetEndTime={endTime}
+        model={selectedOpenRouterModel}
+        onClose={() => setIsOriginalVideoEditModalOpen(false)}
+        onUseVideo={handleUseOriginalVideo}
+      />
 
       <VideoEditModal
         isOpen={isVideoEditModalOpen}

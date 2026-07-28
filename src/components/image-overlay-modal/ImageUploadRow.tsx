@@ -5,6 +5,7 @@ import {
   Camera,
   Clipboard,
   Copy,
+  Film,
   Loader2,
   Upload,
   Video,
@@ -28,6 +29,7 @@ type Props = {
   videoFileInputRef: React.RefObject<HTMLInputElement>;
   onVideoUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onPickVideoFile: () => void;
+  onPickOriginalVideo: () => void;
 };
 
 export function ImageUploadRow({
@@ -47,6 +49,7 @@ export function ImageUploadRow({
   videoFileInputRef,
   onVideoUpload,
   onPickVideoFile,
+  onPickOriginalVideo,
 }: Props) {
   const overlayMedia = overlayVideo || overlayImage;
 
@@ -82,6 +85,15 @@ export function ImageUploadRow({
           aria-label='Upload Video'
         >
           <Video className='h-4 w-4' />
+        </button>
+        <button
+          type='button'
+          onClick={onPickOriginalVideo}
+          className='flex h-10 w-10 items-center justify-center rounded border border-gray-300 px-2 py-2 hover:bg-gray-50'
+          title='Choose from Original Video'
+          aria-label='Choose from Original Video'
+        >
+          <Film className='h-4 w-4' />
         </button>
         <button
           onClick={onScreenshot}

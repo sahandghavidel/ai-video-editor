@@ -21,6 +21,7 @@ import {
   BRANDED_TEXT_TEMPLATE_ID,
 } from '@/lib/branded-text-template';
 import { renderBrandedTextOverlay } from '@/utils/hyperframes-branded-text';
+import { loadAiIntroContext } from '@/lib/ai-intro-overlay';
 
 export const runtime = 'nodejs';
 
@@ -106,6 +107,12 @@ export async function POST(request: NextRequest) {
     const videoUrl = formData.get('videoUrl') as string;
     const overlayImage = formData.get('overlayImage') as File | null;
     const overlayVideo = formData.get('overlayVideo') as File | null;
+    const overlayVideoSourceRaw = formData.get('overlayVideoSource') as
+      | string
+      | null;
+    const usesOriginalVideoSource =
+      overlayVideoSourceRaw?.trim().toLowerCase() === 'original';
+    const hasOverlayVideo = Boolean(overlayVideo) || usesOriginalVideoSource;
     const overlayVideoStartTimeRaw = formData.get(
       'overlayVideoStartTime',
     ) as string | null;
@@ -157,6 +164,7 @@ export async function POST(request: NextRequest) {
       videoUrl,
       overlayImage: !!overlayImage,
       overlayVideo: !!overlayVideo,
+      overlayVideoSource: overlayVideoSourceRaw,
       overlayVideoStartTime: overlayVideoStartTimeRaw,
       overlayVideoEndTime: overlayVideoEndTimeRaw,
       overlayVideoSegments: overlayVideoSegmentsRaw,
@@ -184,7 +192,7 @@ export async function POST(request: NextRequest) {
     if (
       isNaN(sceneId) ||
       !videoUrl ||
-      (!overlayImage && !overlayVideo && !overlayText && !videoTintColorRaw) ||
+      (!overlayImage && !hasOverlayVideo && !overlayText && !videoTintColorRaw) ||
       isNaN(positionX) ||
       isNaN(positionY) ||
       isNaN(sizeWidth) ||
@@ -204,9 +212,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (overlayImage && overlayVideo) {
+    if (overlayImage && hasOverlayVideo) {
       return NextResponse.json(
         { error: 'Choose either an image overlay or a video overlay.' },
+        { status: 400 },
+      );
+    }
+
+    if (overlayVideo && usesOriginalVideoSource) {
+      return NextResponse.json(
+        {
+          error:
+            'Choose either an uploaded overlay video or the original video.',
+        },
+        { status: 400 },
+      );
+    }
+
+    if (overlayVideoSourceRaw && !usesOriginalVideoSource) {
+      return NextResponse.json(
+        { error: 'Unknown overlay video source.' },
         { status: 400 },
       );
     }
@@ -221,13 +246,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (overlayVideo) {
-      if (!overlayVideo.type.startsWith('video/')) {
-        return NextResponse.json(
-          { error: 'Expected a video overlay file.' },
-          { status: 400 },
-        );
-      }
+    if (overlayVideo && !overlayVideo.type.startsWith('video/')) {
+      return NextResponse.json(
+        { error: 'Expected a video overlay file.' },
+        { status: 400 },
+      );
+    }
+    if (hasOverlayVideo) {
       if (!(endTime > startTime)) {
         return NextResponse.json(
           { error: 'End Time must be greater than Start Time.' },
@@ -407,7 +432,8 @@ export async function POST(request: NextRequest) {
     const previewBaseH =
       preview && previewScaleFactor !== 1 ? previewOutputHeight : videoHeight;
 
-    const isMediaPreview = preview && Boolean(overlayImage || overlayVideo);
+    const isMediaPreview =
+      preview && Boolean(overlayImage || hasOverlayVideo);
     const baseVideoWidth = preview ? previewBaseW : videoWidth;
     const baseVideoHeight = preview ? previewBaseH : videoHeight;
 
@@ -645,14 +671,25 @@ export async function POST(request: NextRequest) {
       return `${a0};${a1};${amix}`;
     };
 
-    if (overlayVideo) {
-      const overlayVideoPath = path.join(tempDir, 'overlay-video.input');
-      await pipeline(
-        Readable.fromWeb(
-          overlayVideo.stream() as unknown as NodeReadableStream<Uint8Array>,
-        ),
-        fs.createWriteStream(overlayVideoPath),
-      );
+    if (hasOverlayVideo) {
+      let overlayVideoPath: string;
+      if (usesOriginalVideoSource) {
+        const context = await loadAiIntroContext(sceneId);
+        overlayVideoPath = await ensureVideoCached(context.sourceVideoUrl, {
+          maxAgeMs: videoCacheMaxAgeMs,
+        });
+      } else {
+        if (!overlayVideo) {
+          throw new Error('Expected a video overlay file.');
+        }
+        overlayVideoPath = path.join(tempDir, 'overlay-video.input');
+        await pipeline(
+          Readable.fromWeb(
+            overlayVideo.stream() as unknown as NodeReadableStream<Uint8Array>,
+          ),
+          fs.createWriteStream(overlayVideoPath),
+        );
+      }
 
       const { stdout: overlayProbeOutput } = await execAsync(
         `ffprobe -v quiet -print_format json -show_format -show_streams "${overlayVideoPath}"`,

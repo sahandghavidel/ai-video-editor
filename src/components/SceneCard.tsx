@@ -3185,6 +3185,7 @@ export default function SceneCard({
       height: number;
     },
     brandedTextTemplate?: string | null,
+    overlayVideoSource?: 'upload' | 'original',
   ) => {
     try {
       setAddingImageOverlay(sceneId);
@@ -3198,8 +3199,14 @@ export default function SceneCard({
           formData.append('gifLoop', gifLoop === false ? 'false' : 'true');
         }
       }
-      if (overlayVideo) {
+      const usesOriginalVideoSource = overlayVideoSource === 'original';
+      if (overlayVideo && !usesOriginalVideoSource) {
         formData.append('overlayVideo', overlayVideo);
+      }
+      if (overlayVideo || usesOriginalVideoSource) {
+        if (usesOriginalVideoSource) {
+          formData.append('overlayVideoSource', 'original');
+        }
         if (
           typeof overlayVideoStartTime === 'number' &&
           Number.isFinite(overlayVideoStartTime)
@@ -3225,7 +3232,10 @@ export default function SceneCard({
           );
         }
       }
-      if ((overlayImage || overlayVideo) && overlayVideoCrop) {
+      if (
+        (overlayImage || overlayVideo || usesOriginalVideoSource) &&
+        overlayVideoCrop
+      ) {
         formData.append('overlayCropLeft', overlayVideoCrop.left.toString());
         formData.append('overlayCropTop', overlayVideoCrop.top.toString());
         formData.append('overlayCropWidth', overlayVideoCrop.width.toString());
