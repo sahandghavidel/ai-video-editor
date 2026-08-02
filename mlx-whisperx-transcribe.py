@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MLX Whisper + WhisperX alignment transcription script.
-Uses MLX Whisper for Metal-accelerated ASR on Apple Silicon,
+Uses WhisperX VAD to isolate speech before Metal-accelerated MLX Whisper ASR,
 then WhisperX's wav2vec2 alignment for accurate word-level timestamps.
 """
 
@@ -21,6 +21,10 @@ logging.getLogger().setLevel(logging.ERROR)
 
 import warnings
 warnings.filterwarnings("ignore")
+
+SAMPLE_RATE = 16000
+MAX_VAD_CHUNK_SECONDS = 28.0
+CHUNK_PADDING_SECONDS = 0.15
 
 # Bypass SSL verification for model downloads
 import ssl
@@ -51,6 +55,43 @@ def download_and_convert_media(url: str) -> str:
         os.unlink(temp_input.name)
         return wav_path
 
+def build_vad_chunks(speech_timestamps: list[dict], audio_duration: float) -> list[dict]:
+    """Merge nearby VAD regions without crossing meaningful silence gaps."""
+    merged = []
+
+    for timestamp in speech_timestamps:
+        start = max(0.0, float(timestamp["start"]))
+        end = min(audio_duration, float(timestamp["end"]))
+        if end <= start:
+            continue
+
+        if not merged:
+            merged.append({"start": start, "end": end})
+            continue
+
+        previous = merged[-1]
+        merged_duration = end - previous["start"]
+        # Match WhisperX's VAD batching: retain context and short internal
+        # pauses while keeping every ASR window below Whisper's 30s limit.
+        if merged_duration <= MAX_VAD_CHUNK_SECONDS:
+            previous["end"] = max(previous["end"], end)
+        else:
+            merged.append({"start": start, "end": end})
+
+    padded = []
+    for index, chunk in enumerate(merged):
+        start = max(0.0, chunk["start"] - CHUNK_PADDING_SECONDS)
+        end = min(audio_duration, chunk["end"] + CHUNK_PADDING_SECONDS)
+
+        if padded and start < padded[-1]["end"]:
+            midpoint = (chunk["start"] + merged[index - 1]["end"]) / 2
+            padded[-1]["end"] = midpoint
+            start = midpoint
+
+        padded.append({"start": start, "end": end})
+
+    return padded
+
 def transcribe_with_mlx_whisperx(audio_path: str) -> dict:
     """Transcribe using MLX Whisper (Metal GPU) + WhisperX alignment (wav2vec2)"""
 
@@ -76,46 +117,64 @@ def transcribe_with_mlx_whisperx(audio_path: str) -> dict:
         speech_regions = binarize(vad_result)
         speech_timestamps = [{"start": seg.start, "end": seg.end} for seg in speech_regions.get_timeline()]
 
-        # Step 2: Transcribe with MLX Whisper (runs on Metal GPU)
-        mlx_result = mlx_whisper.transcribe(
-            audio_path,
-            path_or_hf_repo="mlx-community/whisper-large-v3-mlx",
-            language="en",
-            word_timestamps=True,
-            condition_on_previous_text=False,
-            no_speech_threshold=0.6,
+        # Step 2: Build speech-only chunks before ASR. This preserves meaningful
+        # silence gaps and avoids asking Whisper to decode non-speech audio.
+        audio_duration = len(audio) / SAMPLE_RATE
+        vad_chunks = build_vad_chunks(speech_timestamps, audio_duration)
+        print(
+            f"MLX WhisperX VAD: {len(speech_timestamps)} regions -> "
+            f"{len(vad_chunks)} speech chunks",
+            file=sys.stderr,
         )
 
-        # Step 3: Filter segments — keep only those overlapping with VAD speech regions
-        def overlaps_speech(seg_start, seg_end, speech_regions):
-            for region in speech_regions:
-                r_start, r_end = region["start"], region["end"]
-                if seg_start < r_end and seg_end > r_start:
-                    return True
-            return False
-
+        # Step 3: Transcribe each speech chunk with MLX Whisper on Metal and
+        # lift its local segment timestamps back onto the full audio timeline.
         mlx_segments = []
-        for seg in mlx_result.get("segments", []):
-            if overlaps_speech(seg["start"], seg["end"], speech_timestamps):
+        for chunk in vad_chunks:
+            start_sample = max(0, int(chunk["start"] * SAMPLE_RATE))
+            end_sample = min(len(audio), int(chunk["end"] * SAMPLE_RATE))
+            if end_sample <= start_sample:
+                continue
+
+            mlx_result = mlx_whisper.transcribe(
+                audio[start_sample:end_sample],
+                path_or_hf_repo="mlx-community/whisper-large-v3-mlx",
+                language="en",
+                word_timestamps=False,
+                condition_on_previous_text=False,
+                no_speech_threshold=0.6,
+            )
+
+            text = str(mlx_result.get("text", "")).strip()
+            if text:
+                # WhisperX aligns one transcript per VAD window. Giving the
+                # aligner the full window avoids constraining words with
+                # Whisper's less precise internal segment timestamps.
                 mlx_segments.append({
-                    "start": seg["start"],
-                    "end": seg["end"],
-                    "text": seg["text"],
+                    "start": chunk["start"],
+                    "end": chunk["end"],
+                    "text": text,
                 })
 
-        # Step 4: Align with WhisperX's wav2vec2 for accurate word timestamps
-        model_a, metadata = whisperx.load_align_model(
-            language_code="en",
-            device=device,
-        )
-        aligned = whisperx.align(
-            mlx_segments,
-            model_a,
-            metadata,
-            audio,
-            device,
-            return_char_alignments=False,
-        )
+        mlx_segments.sort(key=lambda segment: (segment["start"], segment["end"]))
+
+        # Step 4: Keep WhisperX's wav2vec2 forced alignment unchanged for
+        # accurate word boundaries. Empty audio returns a valid empty result.
+        if mlx_segments:
+            model_a, metadata = whisperx.load_align_model(
+                language_code="en",
+                device=device,
+            )
+            aligned = whisperx.align(
+                mlx_segments,
+                model_a,
+                metadata,
+                audio,
+                device,
+                return_char_alignments=False,
+            )
+        else:
+            aligned = {"segments": []}
 
         # Restore stdout
         sys.stdout = original_stdout
@@ -145,16 +204,6 @@ def transcribe_with_mlx_whisperx(audio_path: str) -> dict:
             })
 
         transcription = " ".join(full_text_parts)
-
-        # Get audio duration
-        import torchaudio
-        audio_duration = None
-        try:
-            waveform, sample_rate = torchaudio.load(audio_path)
-            audio_duration = float(waveform.shape[1] / sample_rate)
-        except:
-            if segments:
-                audio_duration = segments[-1]["end"]
 
         response = {
             "response": {

@@ -7,6 +7,7 @@ export const runtime = 'nodejs';
 
 const KIE_FILE_UPLOAD_URL =
   'https://kieai.redpandaai.co/api/file-stream-upload';
+const KIE_UPLOAD_TIMEOUT_MS = 60_000;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
   'image/jpeg',
@@ -102,14 +103,32 @@ export async function POST(req: Request) {
       `thumbnail-video-${videoId}-variant-${config.variant}-${Date.now()}.${getExtension(file)}`,
     );
 
-    const uploadResponse = await fetch(KIE_FILE_UPLOAD_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: kieForm,
-      cache: 'no-store',
-    });
+    console.log(
+      `upload-thumbnail-reference: uploading video #${videoId}, variant ${config.variant} to Kie`,
+    );
+
+    let uploadResponse: Response;
+    try {
+      uploadResponse = await fetch(KIE_FILE_UPLOAD_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: kieForm,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(KIE_UPLOAD_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError')
+      ) {
+        throw new Error(
+          `Kie file upload timed out after ${KIE_UPLOAD_TIMEOUT_MS / 1000} seconds`,
+        );
+      }
+      throw error;
+    }
 
     const payload = (await uploadResponse
       .json()
@@ -127,7 +146,13 @@ export async function POST(req: Request) {
       throw new Error('Kie file upload returned no usable image URL');
     }
 
+    console.log(
+      `upload-thumbnail-reference: saving video #${videoId}, variant ${config.variant} URL to Baserow`,
+    );
     await saveThumbnailResult(videoId, config.fieldKey, imageUrl);
+    console.log(
+      `upload-thumbnail-reference: completed video #${videoId}, variant ${config.variant}`,
+    );
 
     return Response.json({
       videoId,

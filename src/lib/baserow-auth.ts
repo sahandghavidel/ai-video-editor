@@ -13,6 +13,9 @@
 /*  Token acquisition                                                         */
 /* -------------------------------------------------------------------------- */
 
+let cachedJwtToken: string | null = null;
+let cachedJwtTokenExpiry = 0;
+
 export async function getBaserowToken(forceRefresh = false): Promise<string> {
   const useDatabaseToken =
     process.env.BASEROW_USE_DATABASE_TOKEN?.trim().toLowerCase() === 'true';

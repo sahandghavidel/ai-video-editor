@@ -4983,6 +4983,9 @@ export default function OriginalVideosList({
     variant: 1 | 2 | 3,
     file: File,
   ) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 75_000);
+
     try {
       setUploadingThumbnailVideoId(videoId);
       setUploadingThumbnailVariant(variant);
@@ -4996,6 +4999,7 @@ export default function OriginalVideosList({
       const response = await fetch('/api/upload-thumbnail-reference', {
         method: 'POST',
         body: form,
+        signal: controller.signal,
       });
       const payload = (await response.json().catch(() => null)) as {
         error?: string;
@@ -5015,12 +5019,17 @@ export default function OriginalVideosList({
         error,
       );
       playErrorSound();
+      const message =
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'Upload timed out after 75 seconds. Please try again.'
+          : error instanceof Error
+            ? error.message
+            : 'Unknown error';
       setError(
-        `Failed to upload thumbnail ${variant}: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
+        `Failed to upload thumbnail ${variant}: ${message}`,
       );
     } finally {
+      window.clearTimeout(timeoutId);
       setUploadingThumbnailVideoId(null);
       setUploadingThumbnailVariant(null);
     }
