@@ -62,7 +62,7 @@ The order below is the actual execution order in code.
 4. `normalizeAudio` → `handleNormalizeAudioAll(false)`
 5. `convertToCFR` → `handleConvertToCFRAll(false)`
 6. `optimizeSilence` → `handleOptimizeSilenceAll(false)`
-7. `transcribe` → `handleTranscribeAll(false, 'whisperx')`
+7. `transcribe` → `handleTranscribeAll(false, 'mlx-whisperx')`
 8. `generateScenes` → `handleGenerateScenesAll(false)`
 9. `combinePairsEnabledA/B/C/D` (four optional passes) → `handleCombineLongTextPairsForProcessingVideos(skip, false)`
 10. `deleteEmpty` → `handleDeleteEmptyScenesAllVideos(false)`

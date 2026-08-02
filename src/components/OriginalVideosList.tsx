@@ -11801,7 +11801,7 @@ export default function OriginalVideosList({
         setPipelineStep(`Step ${stepNumber}: Transcribing all videos...`);
         console.log(`Step ${stepNumber}: Transcribing all videos`);
         try {
-          await handleTranscribeAll(false, 'whisperx');
+          await handleTranscribeAll(false, 'mlx-whisperx');
           console.log(`✓ Step ${stepNumber} Complete: Transcription finished`);
 
           await maybeRunPostStepRefresh('transcribe-all', true);
