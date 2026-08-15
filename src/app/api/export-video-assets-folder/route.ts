@@ -1,11 +1,11 @@
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
 import {
-  ensureVideoExportDir,
   parseVideoExportId,
+  resolveNamedVideoExportDir,
   sanitizeExportFileName,
-  writeBufferToVideoExportDir,
-  writeTextToVideoExportDir,
+  writeBufferToResolvedVideoExportDir,
+  writeTextToResolvedVideoExportDir,
 } from '@/lib/local-video-export';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 
@@ -305,11 +305,11 @@ export async function POST(req: Request) {
     const { entries: audioReferenceEntries } =
       await loadTtsAudioReferencesStore();
 
-    const exportDir = await ensureVideoExportDir(videoId);
     const title = sanitizeExportFileName(
       pickTitleFromField(row.field_6870, videoId),
       `video_${videoId}`,
     );
+    const exportDir = await resolveNamedVideoExportDir(videoId, title);
     const sentenceText = buildSentencesText(sceneRows);
     const metadataText = buildMetadataText(row);
     const writtenFiles: string[] = [];
@@ -323,8 +323,8 @@ export async function POST(req: Request) {
           selectedThumbnailUrl,
           asset.contentType,
         );
-        const filePath = await writeBufferToVideoExportDir(
-          videoId,
+        const filePath = await writeBufferToResolvedVideoExportDir(
+          exportDir,
           withEnglishPrefix(`thumbnail${ext}`),
           asset.data,
         );
@@ -344,8 +344,8 @@ export async function POST(req: Request) {
           finalVideoUrl,
           finalAsset.contentType,
         );
-        const filePath = await writeBufferToVideoExportDir(
-          videoId,
+        const filePath = await writeBufferToResolvedVideoExportDir(
+          exportDir,
           withEnglishPrefix(`${title}${finalExt}`),
           finalAsset.data,
         );
@@ -361,8 +361,8 @@ export async function POST(req: Request) {
     if (englishSrtUrl) {
       try {
         const srtAsset = await fetchAsset(englishSrtUrl);
-        const filePath = await writeBufferToVideoExportDir(
-          videoId,
+        const filePath = await writeBufferToResolvedVideoExportDir(
+          exportDir,
           'English - United Kingdom.srt',
           srtAsset.data,
         );
@@ -411,8 +411,8 @@ export async function POST(req: Request) {
 
       try {
         const srtAsset = await fetchAsset(translatedSrtUrl);
-        const filePath = await writeBufferToVideoExportDir(
-          videoId,
+        const filePath = await writeBufferToResolvedVideoExportDir(
+          exportDir,
           `${languageName}.srt`,
           srtAsset.data,
         );
@@ -450,8 +450,8 @@ export async function POST(req: Request) {
           formatLanguageNameForFile(languageCode),
           languageCode.toUpperCase(),
         );
-        const filePath = await writeBufferToVideoExportDir(
-          videoId,
+        const filePath = await writeBufferToResolvedVideoExportDir(
+          exportDir,
           `${languageName} - audio${audioExt}`,
           dubbedAudioAsset.data,
         );
@@ -467,8 +467,8 @@ export async function POST(req: Request) {
 
     if (sentenceText.trim()) {
       writtenFiles.push(
-        await writeTextToVideoExportDir(
-          videoId,
+        await writeTextToResolvedVideoExportDir(
+          exportDir,
           withEnglishPrefix('sentences.txt'),
           sentenceText,
         ),
@@ -477,8 +477,8 @@ export async function POST(req: Request) {
 
     if (metadataText.trim()) {
       writtenFiles.push(
-        await writeTextToVideoExportDir(
-          videoId,
+        await writeTextToResolvedVideoExportDir(
+          exportDir,
           withEnglishPrefix('metadata.txt'),
           metadataText,
         ),
@@ -487,8 +487,8 @@ export async function POST(req: Request) {
 
     if (skippedAssets.length > 0) {
       writtenFiles.push(
-        await writeTextToVideoExportDir(
-          videoId,
+        await writeTextToResolvedVideoExportDir(
+          exportDir,
           'skipped-assets.txt',
           `Some assets could not be exported and were skipped:\n\n${skippedAssets.join('\n')}`,
         ),
@@ -497,8 +497,8 @@ export async function POST(req: Request) {
 
     if (writtenFiles.length === 0) {
       writtenFiles.push(
-        await writeTextToVideoExportDir(
-          videoId,
+        await writeTextToResolvedVideoExportDir(
+          exportDir,
           'note.txt',
           'No exportable assets were available for this video at this time.',
         ),
