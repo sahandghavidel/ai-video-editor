@@ -4,9 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { resolveOpenAIClient } from '@/lib/ai-provider';
 import {
-  ensureVideoExportDir,
+  resolveNamedVideoExportDir,
   sanitizeExportFileName,
-  writeTextToVideoExportDir,
+  writeTextToResolvedVideoExportDir,
 } from '@/lib/local-video-export';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 
@@ -186,7 +186,17 @@ export async function POST(request: NextRequest) {
         ? `${model}:nitro`
         : model;
 
-    const exportDir = await ensureVideoExportDir(Math.floor(videoId));
+    const normalizedVideoId = Math.floor(videoId);
+    const currentTitle =
+      metadataText
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((line) => line.trim())
+        .find(Boolean) || `video_${normalizedVideoId}`;
+    const exportDir = await resolveNamedVideoExportDir(
+      normalizedVideoId,
+      currentTitle,
+    );
     const batchSize = provider === 'local' ? LOCAL_BATCH_SIZE : ONLINE_BATCH_SIZE;
     const saved: SavedLanguage[] = [];
     const skipped: SkippedLanguage[] = [];
@@ -236,8 +246,8 @@ export async function POST(request: NextRequest) {
         throw new Error('No translated metadata returned');
       }
 
-      const writtenPath = await writeTextToVideoExportDir(
-        Math.floor(videoId),
+      const writtenPath = await writeTextToResolvedVideoExportDir(
+        exportDir,
         fileName,
         translatedText,
       );
@@ -280,7 +290,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      videoId: Math.floor(videoId),
+      videoId: normalizedVideoId,
       provider,
       model,
       effectiveModel,

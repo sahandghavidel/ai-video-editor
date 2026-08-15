@@ -4,9 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { resolveOpenAIClient } from '@/lib/ai-provider';
 import {
-  ensureVideoExportDir,
+  resolveNamedVideoExportDir,
   sanitizeExportFileName,
-  writeTextToVideoExportDir,
+  writeTextToResolvedVideoExportDir,
 } from '@/lib/local-video-export';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 
@@ -304,7 +304,10 @@ export async function POST(request: NextRequest) {
         : model;
 
     const normalizedVideoId = Math.floor(videoId);
-    const exportDir = await ensureVideoExportDir(normalizedVideoId);
+    const exportDir = await resolveNamedVideoExportDir(
+      normalizedVideoId,
+      metadata.title,
+    );
     const batchSize =
       provider === 'local' ? LOCAL_BATCH_SIZE : ONLINE_BATCH_SIZE;
     const saved: SavedLanguage[] = [];
@@ -382,8 +385,8 @@ export async function POST(request: NextRequest) {
         title: translated.title,
         description: translated.description,
       };
-      const writtenPath = await writeTextToVideoExportDir(
-        normalizedVideoId,
+      const writtenPath = await writeTextToResolvedVideoExportDir(
+        exportDir,
         fileName,
         `${JSON.stringify(output, null, 2)}\n`,
       );

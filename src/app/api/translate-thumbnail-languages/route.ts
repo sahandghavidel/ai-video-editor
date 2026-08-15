@@ -9,9 +9,9 @@ import {
   THUMBNAIL_POLL_INTERVAL_MS,
 } from '@/lib/thumbnail-generation';
 import {
-  ensureVideoExportDir,
+  resolveNamedVideoExportDir,
   sanitizeExportFileName,
-  writeBufferToVideoExportDir,
+  writeBufferToResolvedVideoExportDir,
 } from '@/lib/local-video-export';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 
@@ -55,6 +55,30 @@ const delay = (ms: number) =>
 function normalizeLanguageCode(value: unknown): string {
   if (typeof value !== 'string') return '';
   return value.trim().toLowerCase();
+}
+
+function extractTextFromField(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim();
+  if (typeof raw === 'number' || typeof raw === 'boolean') {
+    return String(raw).trim();
+  }
+  if (Array.isArray(raw)) {
+    return raw.map(extractTextFromField).filter(Boolean).join('\n').trim();
+  }
+  if (raw && typeof raw === 'object') {
+    const value = raw as Record<string, unknown>;
+    return extractTextFromField(
+      value.value ?? value.name ?? value.text ?? value.title,
+    );
+  }
+  return '';
+}
+
+function cleanTitleLine(line: string): string {
+  return line
+    .replace(/^\s*\d+[\).:-]?\s*/, '')
+    .replace(/^\s*[-*•]\s*/, '')
+    .trim();
 }
 
 function parseLanguages(raw: unknown): string[] {
@@ -142,14 +166,18 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 async function saveTranslatedThumbnail(
-  videoId: number,
+  exportDir: string,
   languageName: string,
   imageUrl: string,
 ): Promise<SavedLanguage> {
   const asset = await fetchAsset(imageUrl);
   const ext = getExtensionFromUrlOrType(imageUrl, asset.contentType);
   const fileName = `${languageName} - Thumbnail${ext}`;
-  const filePath = await writeBufferToVideoExportDir(videoId, fileName, asset.data);
+  const filePath = await writeBufferToResolvedVideoExportDir(
+    exportDir,
+    fileName,
+    asset.data,
+  );
 
   return {
     languageCode: '',
@@ -188,7 +216,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const exportDir = await ensureVideoExportDir(Math.floor(videoId));
+    const normalizedVideoId = Math.floor(videoId);
+    const currentTitle = extractTextFromField(video.field_6870)
+      .split('\n')
+      .map(cleanTitleLine)
+      .find(Boolean) || `video_${normalizedVideoId}`;
+    const exportDir = await resolveNamedVideoExportDir(
+      normalizedVideoId,
+      currentTitle,
+    );
     const saved: SavedLanguage[] = [];
     const skipped: SkippedLanguage[] = [];
     const failedByLanguage = new Map<string, FailedLanguage>();
@@ -307,7 +343,7 @@ export async function POST(req: Request) {
             if (poll.pollResult.imageUrl) {
               try {
                 const savedLanguage = await saveTranslatedThumbnail(
-                  Math.floor(videoId),
+                  exportDir,
                   poll.task.languageName,
                   poll.pollResult.imageUrl,
                 );
@@ -351,7 +387,7 @@ export async function POST(req: Request) {
     }
 
     return Response.json({
-      videoId: Math.floor(videoId),
+      videoId: normalizedVideoId,
       exportDir,
       saved,
       skipped,
