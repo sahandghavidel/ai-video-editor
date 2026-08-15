@@ -1,6 +1,8 @@
 import {
   parseVideoExportId,
+  resolveNamedVideoExportDir,
   sanitizeExportFileName,
+  writeTextToResolvedVideoExportDir,
   writeTextToVideoExportDir,
 } from '@/lib/local-video-export';
 
@@ -12,6 +14,7 @@ export async function POST(req: Request) {
       videoId?: unknown;
       fileName?: unknown;
       text?: unknown;
+      title?: unknown;
     } | null;
 
     let videoId: number;
@@ -36,7 +39,14 @@ export async function POST(req: Request) {
       return Response.json({ error: 'text is required' }, { status: 400 });
     }
 
-    const filePath = await writeTextToVideoExportDir(videoId, fileName, text);
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const filePath = title
+      ? await writeTextToResolvedVideoExportDir(
+          await resolveNamedVideoExportDir(videoId, title),
+          fileName,
+          text,
+        )
+      : await writeTextToVideoExportDir(videoId, fileName, text);
 
     return Response.json({ ok: true, filePath });
   } catch (error) {

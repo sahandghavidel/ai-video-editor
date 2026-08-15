@@ -1,6 +1,8 @@
 import {
   parseVideoExportId,
+  resolveNamedVideoExportDir,
   sanitizeExportFileName,
+  writeBufferToResolvedVideoExportDir,
   writeBufferToVideoExportDir,
 } from '@/lib/local-video-export';
 
@@ -42,6 +44,7 @@ export async function POST(req: Request) {
       videoId?: unknown;
       url?: unknown;
       fileName?: unknown;
+      title?: unknown;
     } | null;
 
     let videoId: number;
@@ -79,11 +82,15 @@ export async function POST(req: Request) {
     const fileName = hasExtension(safeBaseName)
       ? safeBaseName
       : `${safeBaseName}${getExtensionFromUrlOrType(url, contentType)}`;
-    const filePath = await writeBufferToVideoExportDir(
-      videoId,
-      fileName,
-      await response.arrayBuffer(),
-    );
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const data = await response.arrayBuffer();
+    const filePath = title
+      ? await writeBufferToResolvedVideoExportDir(
+          await resolveNamedVideoExportDir(videoId, title),
+          fileName,
+          data,
+        )
+      : await writeBufferToVideoExportDir(videoId, fileName, data);
 
     return Response.json({ ok: true, filePath });
   } catch (error) {

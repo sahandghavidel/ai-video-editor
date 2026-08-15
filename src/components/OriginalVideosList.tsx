@@ -5086,10 +5086,22 @@ export default function OriginalVideosList({
     }
   };
 
+  const getVideoExportTitle = (video: BaserowRow): string =>
+    (extractFieldValue(video.field_6870) || '')
+      .split('\n')
+      .map((line) =>
+        line
+          .replace(/^\s*\d+[\).:-]?\s*/, '')
+          .replace(/^\s*[-*•]\s*/, '')
+          .trim(),
+      )
+      .find(Boolean) || `video_${video.id}`;
+
   const handleDownloadSingleThumbnail = async (
     videoId: number,
     variant: 1 | 2 | 3,
     thumbnailUrl: string,
+    title: string,
   ) => {
     try {
       if (!thumbnailUrl) {
@@ -5104,6 +5116,7 @@ export default function OriginalVideosList({
         videoId,
         thumbnailUrl,
         `English - thumbnail_${variant}`,
+        title,
       );
       playSuccessSound();
     } catch (error) {
@@ -5127,13 +5140,14 @@ export default function OriginalVideosList({
     videoId: number,
     url: string,
     fileName: string,
+    title: string,
   ) => {
     const response = await fetch('/api/export-video-url-file', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ videoId, url, fileName }),
+      body: JSON.stringify({ videoId, url, fileName, title }),
     });
 
     const payload = (await response.json().catch(() => null)) as {
@@ -5151,13 +5165,14 @@ export default function OriginalVideosList({
     videoId: number,
     fileName: string,
     text: string,
+    title: string,
   ) => {
     const response = await fetch('/api/export-video-text-file', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ videoId, fileName, text }),
+      body: JSON.stringify({ videoId, fileName, text, title }),
     });
 
     const payload = (await response.json().catch(() => null)) as {
@@ -5320,6 +5335,7 @@ export default function OriginalVideosList({
         video.id,
         'English - metadata.txt',
         metadataText,
+        getVideoExportTitle(video),
       );
 
       playSuccessSound();
@@ -5405,6 +5421,7 @@ export default function OriginalVideosList({
         video.id,
         'English - sentences.txt',
         sentenceText,
+        getVideoExportTitle(video),
       );
 
       playSuccessSound();
@@ -16893,6 +16910,7 @@ export default function OriginalVideosList({
                                           selectedVideo.id,
                                           thumb.variant,
                                           thumbUrl,
+                                          getVideoExportTitle(selectedVideo),
                                         )
                                       }
                                       disabled={
@@ -16906,7 +16924,7 @@ export default function OriginalVideosList({
                                         generatingThumbnailsAll
                                       }
                                       className='w-full inline-flex items-center justify-center gap-2 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white transition-colors disabled:cursor-not-allowed'
-                                      title='Export this thumbnail into the local video ID folder'
+                                      title='Export this thumbnail into the local video ID-and-title folder'
                                     >
                                       {isDownloadingSingle ? (
                                         <>
@@ -16961,7 +16979,7 @@ export default function OriginalVideosList({
                             }
                             disabled={copyingMetadataVideoId !== null}
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Copy titles, description, timestamps, and keywords to clipboard and export metadata.txt into the local video ID folder'
+                            title='Copy titles, description, timestamps, and keywords to clipboard and export metadata.txt into the local video ID-and-title folder'
                           >
                             {copyingMetadataVideoId === selectedVideo.id ? (
                               <>
@@ -16982,7 +17000,7 @@ export default function OriginalVideosList({
                             }
                             disabled={copyingSentencesVideoId !== null}
                             className='w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white transition-colors disabled:cursor-not-allowed'
-                            title='Copy all Sentence (6890) lines to clipboard and export sentences.txt into the local video ID folder'
+                            title='Copy all Sentence (6890) lines to clipboard and export sentences.txt into the local video ID-and-title folder'
                           >
                             {copyingSentencesVideoId === selectedVideo.id ? (
                               <>
@@ -17670,6 +17688,7 @@ export default function OriginalVideosList({
                                       currentVideoId,
 	                                      entry.url,
 	                                      `${displayName} - audio`,
+	                                      getVideoExportTitle(selectedVideo),
 	                                    );
                                     playSuccessSound();
                                   } catch (err) {
@@ -17685,7 +17704,7 @@ export default function OriginalVideosList({
                                   }
                                 }}
                                 className='inline-flex items-center gap-1 px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-md transition-colors'
-                                title={`Export ${lang.toUpperCase()} merged audio (${entry.startId}–${entry.endId}) into the local video ID folder`}
+                                title={`Export ${lang.toUpperCase()} merged audio (${entry.startId}–${entry.endId}) into the local video ID-and-title folder`}
                               >
                                 <Download className='w-3.5 h-3.5' />
                                 Export
