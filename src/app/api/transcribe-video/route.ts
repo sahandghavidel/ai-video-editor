@@ -279,9 +279,12 @@ export async function POST(request: NextRequest) {
               );
             }
           } else {
+            const failureOutput = [stderr.trim(), stdout.trim()]
+              .filter(Boolean)
+              .join('\n');
             reject(
               new Error(
-                `Whisper tiny transcription failed with code ${code}: ${stderr}`,
+                `Whisper tiny transcription failed with code ${code}: ${failureOutput}`,
               ),
             );
           }
@@ -609,9 +612,12 @@ export async function POST(request: NextRequest) {
               );
             }
           } else {
+            const failureOutput = [stderr.trim(), stdout.trim()]
+              .filter(Boolean)
+              .join('\n');
             reject(
               new Error(
-                `MLX WhisperX transcription failed with code ${code}: ${stderr}`,
+                `MLX WhisperX transcription failed with code ${code}: ${failureOutput}`,
               ),
             );
           }

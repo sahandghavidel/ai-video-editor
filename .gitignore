@@ -49,6 +49,8 @@ public/sounds/*
 public/photos/character.png
 omnivoice-env/*
 parakeet-env/*
+/whisper-env/
+__pycache__/
 omnivoice-local/references/*
 
 # keep one OmniVoice patched file tracked

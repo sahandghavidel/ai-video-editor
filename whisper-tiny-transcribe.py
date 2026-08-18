@@ -112,12 +112,13 @@ def transcribe_with_whisper_tiny(audio_path: str) -> dict:
             })
 
         # Get audio duration
-        import torchaudio
         audio_duration = None
         try:
+            import torchaudio
+
             waveform, sample_rate = torchaudio.load(audio_path)
             audio_duration = round(waveform.shape[1] / sample_rate, 2)
-        except:
+        except Exception:
             # If torchaudio fails, try to get from segments
             if segments:
                 audio_duration = segments[-1]["end"]
