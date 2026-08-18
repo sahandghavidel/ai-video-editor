@@ -52,13 +52,13 @@ function summarizeScenesForLog(scenes: InputScene[]) {
   }));
 }
 
-function extractReturnedSceneIds(parsed: unknown): number[] | null {
+function extractReturnedSceneIndexes(parsed: unknown): number[] | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const raw = (parsed as { sentences?: unknown }).sentences;
   if (!Array.isArray(raw)) return null;
 
   return raw
-    .map((item) => Number((item as { sceneId?: unknown })?.sceneId))
+    .map((item) => Number((item as { sceneIndex?: unknown })?.sceneIndex))
     .filter((n) => Number.isFinite(n) && n > 0);
 }
 
@@ -226,11 +226,7 @@ function validateAndNormalizeModelOutput(
   inputScenes: InputScene[],
   onFuzzyMatch?: (sceneId: number, diffPreview: string) => void,
 ): ParsedSentence[] {
-  const inputSceneIds = inputScenes.map((scene) => scene.sceneId);
-  const inputTextById = new Map<number, string>(
-    inputScenes.map((scene) => [scene.sceneId, scene.text]),
-  );
-  const expectedCount = inputSceneIds.length;
+  const expectedCount = inputScenes.length;
 
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Model JSON payload must be an object');
@@ -247,37 +243,39 @@ function validateAndNormalizeModelOutput(
     );
   }
 
-  const allowedIds = new Set(inputSceneIds);
-  const seenIds = new Set<number>();
-  const byId = new Map<number, ParsedSentence>();
+  const seenIndexes = new Set<number>();
+  const byIndex = new Map<number, ParsedSentence>();
 
   sentencesRaw.forEach((item, index) => {
     if (!item || typeof item !== 'object') {
       throw new Error(`Invalid sentence object at index ${index}`);
     }
 
-    const sceneIdRaw = (item as { sceneId?: unknown }).sceneId;
+    const sceneIndexRaw = (item as { sceneIndex?: unknown }).sceneIndex;
     const sourceTextRaw = (item as { sourceText?: unknown }).sourceText;
     const fixedSentenceRaw = (item as { fixedSentence?: unknown })
       .fixedSentence;
 
-    const sceneId = Number(sceneIdRaw);
+    const sceneIndex = Number(sceneIndexRaw);
     const sourceText =
       typeof sourceTextRaw === 'string' ? sourceTextRaw.trim() : '';
     const fixedSentence =
       typeof fixedSentenceRaw === 'string' ? fixedSentenceRaw.trim() : '';
 
-    if (!Number.isFinite(sceneId) || sceneId <= 0) {
-      throw new Error(`Invalid sceneId at output index ${index}`);
+    if (!Number.isInteger(sceneIndex) || sceneIndex <= 0) {
+      throw new Error(`Invalid sceneIndex at output index ${index}`);
     }
 
-    if (!allowedIds.has(sceneId)) {
-      throw new Error(`Model returned unexpected sceneId: ${sceneId}`);
+    if (sceneIndex > expectedCount) {
+      throw new Error(`Model returned unexpected sceneIndex: ${sceneIndex}`);
     }
 
-    if (seenIds.has(sceneId)) {
-      throw new Error(`Model returned duplicate sceneId: ${sceneId}`);
+    if (seenIndexes.has(sceneIndex)) {
+      throw new Error(`Model returned duplicate sceneIndex: ${sceneIndex}`);
     }
+
+    const inputScene = inputScenes[sceneIndex - 1];
+    const sceneId = inputScene.sceneId;
 
     if (!fixedSentence) {
       throw new Error(
@@ -289,7 +287,7 @@ function validateAndNormalizeModelOutput(
       throw new Error(`Model returned empty sourceText for scene ${sceneId}`);
     }
 
-    const expectedSourceText = inputTextById.get(sceneId) || '';
+    const expectedSourceText = inputScene.text;
     const expectedNormalized = normalizeTextForComparison(expectedSourceText);
     const returnedNormalized = normalizeTextForComparison(sourceText);
 
@@ -317,23 +315,30 @@ function validateAndNormalizeModelOutput(
       onFuzzyMatch?.(sceneId, fuzzy.diffPreview ?? 'unknown diff');
     }
 
-    seenIds.add(sceneId);
-    byId.set(sceneId, {
+    seenIndexes.add(sceneIndex);
+    byIndex.set(sceneIndex, {
       sceneId,
       sourceText: useOriginalText ? expectedSourceText : sourceText,
       fixedSentence,
     });
   });
 
-  const missing = inputSceneIds.filter((id) => !seenIds.has(id));
-  if (missing.length > 0) {
-    throw new Error(`Model response missing sceneIds: ${missing.join(', ')}`);
+  const missingIndexes = inputScenes
+    .map((_, index) => index + 1)
+    .filter((sceneIndex) => !seenIndexes.has(sceneIndex));
+  if (missingIndexes.length > 0) {
+    throw new Error(
+      `Model response missing sceneIndexes: ${missingIndexes.join(', ')}`,
+    );
   }
 
-  return inputSceneIds.map((sceneId) => {
-    const item = byId.get(sceneId);
+  return inputScenes.map((_, index) => {
+    const sceneIndex = index + 1;
+    const item = byIndex.get(sceneIndex);
     if (!item) {
-      throw new Error(`Model response missing normalized entry for ${sceneId}`);
+      throw new Error(
+        `Model response missing normalized entry for sceneIndex ${sceneIndex}`,
+      );
     }
     return item;
   });
@@ -423,6 +428,7 @@ export async function POST(request: Request) {
         : model;
 
     const sceneIds = scenes.map((scene) => scene.sceneId);
+    const sceneIndexes = scenes.map((_, index) => index + 1);
 
     console.info(`${logPrefix} Input validated.`, {
       model,
@@ -437,7 +443,7 @@ export async function POST(request: Request) {
     const scenesPayload = scenes
       .map(
         (scene, index) =>
-          `${index + 1}. sceneId=${scene.sceneId}\ntext=${scene.text}`,
+          `${index + 1}. sceneIndex=${index + 1}\ntext=${scene.text}`,
       )
       .join('\n\n');
 
@@ -452,14 +458,15 @@ Rules:
   - Keep each fixedSentence focused on its own scene content while still sounding coherent with nearby scenes.
   - Do not change the step order.
 - You will receive between 1 and ${MAX_BATCH_SIZE} scenes.
-- Return ALL ${sceneIds.length} scenes exactly once.
+- Return ALL ${sceneIndexes.length} scenes exactly once.
 - The output MUST be valid JSON and follow this exact shape:
 {
   "sentences": [
-    { "sceneId": 123, "sourceText": "<EXACT input text for that sceneId>", "fixedSentence": "..." }
+    { "sceneIndex": 1, "sourceText": "<EXACT input text for that sceneIndex>", "fixedSentence": "..." }
   ]
 }
-- The sourceText value MUST exactly match the input text for the same sceneId.
+- sceneIndex is the small, 1-based position shown in the input. Return each sceneIndex from 1 through ${sceneIndexes.length} exactly once.
+- The sourceText value MUST exactly match the input text for the same sceneIndex.
 - Do not paraphrase, shorten, or alter sourceText.
 - Do not include markdown or extra keys.
 
@@ -677,8 +684,8 @@ ${scenesPayload}`;
           : 'Model response failed validation';
       console.warn(`${logPrefix} Model response validation failed.`, {
         error: errorMessage,
-        expectedSceneIds: sceneIds,
-        returnedSceneIds: extractReturnedSceneIds(parsed),
+        expectedSceneIndexes: sceneIndexes,
+        returnedSceneIndexes: extractReturnedSceneIndexes(parsed),
       });
 
       const validationFailurePayload = {
@@ -697,6 +704,7 @@ ${scenesPayload}`;
 
     console.info(`${logPrefix} Validation succeeded.`, {
       returnedSceneIds: sentences.map((s) => s.sceneId),
+      returnedSceneIndexes: sceneIndexes,
       attemptedBatchSize: scenes.length,
       durationMs: Date.now() - startedAt,
     });
