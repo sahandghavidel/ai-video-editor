@@ -600,27 +600,31 @@ export async function POST(request: NextRequest) {
         });
 
         pythonProcess.on('close', (code) => {
-          if (code === 0) {
-            try {
-              const result = JSON.parse(stdout);
+          try {
+            const result = JSON.parse(stdout) as TranscriptionResult;
+            if (code === 0 || result.response) {
               resolve(result);
-            } catch (parseError) {
+              return;
+            }
+          } catch (parseError) {
+            if (code === 0) {
               reject(
                 new Error(
                   `Failed to parse transcription result: ${parseError}`,
                 ),
               );
+              return;
             }
-          } else {
-            const failureOutput = [stderr.trim(), stdout.trim()]
-              .filter(Boolean)
-              .join('\n');
-            reject(
-              new Error(
-                `MLX WhisperX transcription failed with code ${code}: ${failureOutput}`,
-              ),
-            );
           }
+
+          const failureOutput = [stderr.trim(), stdout.trim()]
+            .filter(Boolean)
+            .join('\n');
+          reject(
+            new Error(
+              `MLX WhisperX transcription failed with code ${code}: ${failureOutput}`,
+            ),
+          );
         });
 
         pythonProcess.on('error', (error) => {

@@ -221,8 +221,8 @@ def transcribe_with_mlx_whisperx(audio_path: str) -> dict:
 
 def main():
     if len(sys.argv) != 2:
-        print(json.dumps({"error": "Usage: python mlx-whisperx-transcribe.py <media_url>"}))
-        sys.exit(1)
+        print(json.dumps({"error": "Usage: python mlx-whisperx-transcribe.py <media_url>"}), flush=True)
+        os._exit(1)
 
     media_url = sys.argv[1]
 
@@ -230,14 +230,18 @@ def main():
         audio_path = download_and_convert_media(media_url)
         result = transcribe_with_mlx_whisperx(audio_path)
         os.unlink(audio_path)
-        print(json.dumps(result))
+        print(json.dumps(result), flush=True)
+        # Torch/MLX can segfault while deregistering native operators during
+        # interpreter teardown. This worker is one-shot and has already
+        # cleaned up its temporary media, so bypass native shutdown handlers.
+        os._exit(0)
 
     except Exception as e:
         error_response = {
             "error": f"MLX WhisperX transcription failed: {str(e)}"
         }
-        print(json.dumps(error_response))
-        sys.exit(1)
+        print(json.dumps(error_response), flush=True)
+        os._exit(1)
 
 if __name__ == "__main__":
     main()
