@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic';
 
 // Resolve a fresh yt-dlp binary at module load. Precedence:
 //   1. YTDLP_BIN env override (full path to a binary or venv script)
-//   2. <project>/.venv/bin/yt-dlp (the venv shipped with this app)
-//   3. yt-dlp on PATH (system / Homebrew fallback)
+//   2. <project>/.yt-dlp-nightly/bin/yt-dlp (the tested nightly build)
+//   3. <project>/.venv/bin/yt-dlp (the venv shipped with this app)
+//   4. yt-dlp on PATH (system / Homebrew fallback)
 //
 // We log which one was chosen so it is obvious in dev logs.
 function resolveYtDlpBinary(): { command: string; label: string } {
@@ -26,6 +27,7 @@ function resolveYtDlpBinary(): { command: string; label: string } {
   // projectRoot is <repo>/src/app/api/download-youtube-subtitles -> 4 levels up.
   const projectRoot = path.resolve(process.cwd());
   const candidates = [
+    path.join(projectRoot, '.yt-dlp-nightly', 'bin', 'yt-dlp'),
     path.join(projectRoot, '.venv', 'bin', 'yt-dlp'),
     path.join(projectRoot, 'venv', 'bin', 'yt-dlp'),
   ];
