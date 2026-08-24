@@ -356,11 +356,10 @@ function buildSentenceSegmentsFromTranscription(
       return false;
     }
 
-    const withoutTrailing = trimmed.replace(/[.!?]+$/, '');
-    if (/[a-z0-9]\.[a-z0-9]/i.test(withoutTrailing)) {
-      return false;
-    }
-
+    // A terminal punctuation mark is sufficient to end the sentence, even
+    // when the word is a dotted filename such as "index.js.". Tokens without
+    // terminal punctuation (for example, "next.js") already return false
+    // above, so dotted words inside a sentence remain unaffected.
     return true;
   }
 
