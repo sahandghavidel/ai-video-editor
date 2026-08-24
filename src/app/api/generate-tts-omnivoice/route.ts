@@ -37,6 +37,7 @@ interface RequestBody {
   text?: unknown;
   sceneId?: unknown;
   videoId?: unknown;
+  numStepOverride?: unknown;
   referenceAudioFilename?: unknown;
   aggressiveEdgeTrim?: unknown;
   ttsSettings?: {
@@ -1983,15 +1984,18 @@ export async function POST(request: NextRequest) {
       ? resolveDType(matchedReferencePreset?.dtype)
       : configuredDType;
 
-    const numStep = usePresetNumStep
-      ? Math.max(
-          8,
-          Math.min(
-            64,
-            toPositiveInt(matchedReferencePreset?.numStep, configuredNumStep),
-          ),
-        )
-      : configuredNumStep;
+    const hasNumStepOverride = Number.isFinite(Number(body.numStepOverride));
+    const numStep = hasNumStepOverride
+      ? Math.max(8, Math.min(64, toPositiveInt(body.numStepOverride, 32)))
+      : usePresetNumStep
+        ? Math.max(
+            8,
+            Math.min(
+              64,
+              toPositiveInt(matchedReferencePreset?.numStep, configuredNumStep),
+            ),
+          )
+        : configuredNumStep;
 
     const speed = usePresetSpeed
       ? Math.max(

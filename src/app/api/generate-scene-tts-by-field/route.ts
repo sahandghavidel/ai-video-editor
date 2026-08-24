@@ -82,6 +82,10 @@ type SceneTtsFailure = {
 
 const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_TRANSIENT_RETRY_ATTEMPTS = 3;
+const INTRO_SCENE_STEP_LIMIT = 10;
+const INTRO_SCENE_STEP_MULTIPLIER = 1.5;
+const MIN_OMNIVOICE_STEPS = 8;
+const MAX_OMNIVOICE_STEPS = 64;
 const RETRY_BASE_DELAY_MS = 300;
 const RETRY_MAX_DELAY_MS = 3000;
 const TTS_REQUEST_TIMEOUT_MS = 120_000;
@@ -183,6 +187,28 @@ function parsePositiveNumber(value: unknown): number | null {
   }
 
   return parsed;
+}
+
+function getIntroQualityNumStep(
+  baseNumStep: unknown,
+  nonEmptySceneOrdinal: number,
+): number {
+  const base = Math.max(
+    MIN_OMNIVOICE_STEPS,
+    Math.min(MAX_OMNIVOICE_STEPS, parsePositiveInt(baseNumStep) ?? 32),
+  );
+
+  if (
+    nonEmptySceneOrdinal > 0 &&
+    nonEmptySceneOrdinal <= INTRO_SCENE_STEP_LIMIT
+  ) {
+    return Math.min(
+      MAX_OMNIVOICE_STEPS,
+      Math.round(base * INTRO_SCENE_STEP_MULTIPLIER),
+    );
+  }
+
+  return base;
 }
 
 function parseNumberish(value: unknown): number {
@@ -1916,6 +1942,7 @@ async function generateSceneTts(options: {
   sceneId: number;
   videoId: number;
   referenceAudioFilename?: string;
+  numStepOverride?: number;
   ttsSettings?: Record<string, unknown>;
 }): Promise<string> {
   const {
@@ -1925,6 +1952,7 @@ async function generateSceneTts(options: {
     sceneId,
     videoId,
     referenceAudioFilename,
+    numStepOverride,
     ttsSettings,
   } = options;
 
@@ -1945,6 +1973,10 @@ async function generateSceneTts(options: {
 
   if (referenceAudioFilename) {
     payload.referenceAudioFilename = referenceAudioFilename;
+  }
+
+  if (typeof numStepOverride === 'number') {
+    payload.numStepOverride = numStepOverride;
   }
 
   if (ttsSettings && typeof ttsSettings === 'object') {
@@ -2070,6 +2102,7 @@ export async function POST(request: NextRequest) {
       provider?: unknown;
       referenceAudioFilename?: unknown;
       ttsSettings?: unknown;
+      boostIntroSteps?: unknown;
       skipIfDestinationExists?: unknown;
       failFastOnSaveError?: unknown;
       fitAudioToSceneDuration?: unknown;
@@ -2214,6 +2247,8 @@ export async function POST(request: NextRequest) {
         ? (body.ttsSettings as Record<string, unknown>)
         : undefined;
 
+    const boostIntroSteps = parseBoolean(body?.boostIntroSteps, false);
+
     const language =
       (typeof body?.language === 'string' && body.language.trim()) ||
       (ttsSettings?.omniVoice &&
@@ -2324,6 +2359,8 @@ export async function POST(request: NextRequest) {
     let abortedOnSaveFailure = false;
     let abortedSceneId: number | null = null;
 
+    let nonEmptySceneOrdinal = 0;
+
     for (const scene of orderedScenes) {
       const sceneId = parsePositiveInt(scene.id);
       if (!sceneId) {
@@ -2384,6 +2421,7 @@ export async function POST(request: NextRequest) {
       }
 
       const text = String(scene[sourceTextFieldKey] ?? '').trim();
+      if (text) nonEmptySceneOrdinal += 1;
       const emptySentenceText = emptySentenceFieldKey
         ? String(scene[emptySentenceFieldKey] ?? '').trim()
         : '';
@@ -2524,6 +2562,25 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        const sceneTtsSettings =
+          boostIntroSteps &&
+          ttsSettings &&
+          typeof ttsSettings === 'object' &&
+          provider === 'omnivoice' &&
+          ttsSettings.omniVoice &&
+          typeof ttsSettings.omniVoice === 'object'
+            ? {
+                ...ttsSettings,
+                omniVoice: {
+                  ...(ttsSettings.omniVoice as Record<string, unknown>),
+                  numStep: getIntroQualityNumStep(
+                    (ttsSettings.omniVoice as Record<string, unknown>).numStep,
+                    nonEmptySceneOrdinal,
+                  ),
+                },
+              }
+            : ttsSettings;
+
         const generatedAudioUrl = await generateSceneTts({
           origin: request.nextUrl.origin,
           providerPath,
@@ -2531,7 +2588,29 @@ export async function POST(request: NextRequest) {
           sceneId,
           videoId,
           referenceAudioFilename: referenceAudioFilename || undefined,
-          ttsSettings,
+          numStepOverride:
+            boostIntroSteps &&
+            provider === 'omnivoice' &&
+            sceneTtsSettings &&
+            typeof sceneTtsSettings.omniVoice === 'object'
+              ? parsePositiveInt(
+                  (sceneTtsSettings.omniVoice as Record<string, unknown>)
+                    .numStep,
+                ) ?? undefined
+              : undefined,
+          ttsSettings: sceneTtsSettings,
+        });
+
+        logFitInfo('post:scene-tts-steps', {
+          fitDebugRunId,
+          sceneId,
+          nonEmptySceneOrdinal,
+          boostIntroSteps,
+          numStep:
+            sceneTtsSettings && typeof sceneTtsSettings === 'object'
+              ? ((sceneTtsSettings.omniVoice as Record<string, unknown> | undefined)
+                  ?.numStep ?? null)
+              : null,
         });
 
         let audioUrl = generatedAudioUrl;
