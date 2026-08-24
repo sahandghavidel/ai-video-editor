@@ -893,6 +893,20 @@ const OMNIVOICE_ANGLE_BRACKET_CHAR_REGEX = /[<>]/g;
 const OMNIVOICE_ARROW_CHAR_REGEX = /→/g;
 const OMNIVOICE_SQUARE_BRACKET_CHAR_REGEX = /[\[\]［］]/g;
 const OMNIVOICE_PARENTHESIS_CHAR_REGEX = /[()（）]/g;
+const OMNIVOICE_EXCLAMATION_CHAR_REGEX = /[!！]/g;
+
+function replaceOmniVoiceExclamationChars(text: string): {
+  normalizedText: string;
+  replacedExclamationCount: number;
+} {
+  const matches = text.match(OMNIVOICE_EXCLAMATION_CHAR_REGEX);
+  const replacedExclamationCount = matches ? matches.length : 0;
+
+  return {
+    normalizedText: text.replace(OMNIVOICE_EXCLAMATION_CHAR_REGEX, '.'),
+    replacedExclamationCount,
+  };
+}
 
 function stripOmniVoiceQuoteChars(text: string): {
   sanitizedText: string;
@@ -1843,8 +1857,13 @@ export async function POST(request: NextRequest) {
       noSplitProtection.placeholderMap,
     );
 
+    const {
+      normalizedText: textWithPeriods,
+      replacedExclamationCount,
+    } = replaceOmniVoiceExclamationChars(textWithProtectedWordsRestored);
+
     const { sanitizedText: textWithoutQuotes, removedQuoteCount } =
-      stripOmniVoiceQuoteChars(textWithProtectedWordsRestored);
+      stripOmniVoiceQuoteChars(textWithPeriods);
 
     const {
       sanitizedText: textWithoutStandaloneSingleQuotes,
@@ -1881,7 +1900,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} arabicNumbersConverted=${arabicNumbersConverted} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} arabicNumbersConverted=${arabicNumbersConverted} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} replacedExclamations=${replacedExclamationCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
     );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
