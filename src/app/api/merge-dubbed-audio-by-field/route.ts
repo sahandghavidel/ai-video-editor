@@ -4,10 +4,15 @@ import path from 'path';
 import { access, unlink } from 'fs/promises';
 import { uploadToMinio } from '@/utils/ffmpeg-direct';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
+import {
+  concatenateDubbedAudioM4aBatches,
+  createDubbedAudioM4aBatch,
+  DUBBED_AUDIO_SCENE_BATCH_SIZE,
+} from '@/utils/dubbed-audio-m4a';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 900;
+export const maxDuration = 3600;
 
 const VIDEOS_TABLE_ID = '713';
 const SCENES_TABLE_ID = '714';
@@ -19,7 +24,6 @@ const AUDIO_CHANNELS = 2;
 const TIME_DECIMALS = 9;
 const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_FFPROBE_TIMEOUT_MS = 2 * 60 * 1000;
-const MERGE_ALIGNMENT_MAX_PASSES = 4;
 
 type BaserowRow = Record<string, unknown>;
 
@@ -154,6 +158,13 @@ function getSceneOrderValue(scene: BaserowRow): number {
   return 0;
 }
 
+function compareScenesByOrder(a: BaserowRow, b: BaserowRow): number {
+  const orderDelta = getSceneOrderValue(a) - getSceneOrderValue(b);
+  if (orderDelta !== 0) return orderDelta;
+
+  return (parsePositiveInt(a.id) ?? 0) - (parsePositiveInt(b.id) ?? 0);
+}
+
 function extractUrl(raw: unknown): string {
   if (typeof raw === 'string') {
     return raw.trim();
@@ -194,10 +205,6 @@ function extractUrl(raw: unknown): string {
   }
 
   return '';
-}
-
-function formatSeconds(value: number): string {
-  return value.toFixed(TIME_DECIMALS);
 }
 
 function roundDurationSeconds(value: number): number {
@@ -420,267 +427,44 @@ async function normalizeAudioToWavLocal(options: {
     'wav',
   );
 
-  await runCommand(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputAudioUrl,
-      '-vn',
-      '-map_metadata',
-      '-1',
-      '-map_chapters',
-      '-1',
-      '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'pcm_s16le',
-      '-ar',
-      String(AUDIO_SAMPLE_RATE),
-      '-ac',
-      String(AUDIO_CHANNELS),
-      outputPath,
-    ],
-    DEFAULT_FFMPEG_TIMEOUT_MS,
-  );
+  try {
+    await runCommand(
+      'ffmpeg',
+      [
+        '-y',
+        '-i',
+        inputAudioUrl,
+        '-vn',
+        '-map_metadata',
+        '-1',
+        '-map_chapters',
+        '-1',
+        '-filter_complex',
+        `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[aout]`,
+        '-map',
+        '[aout]',
+        '-c:a',
+        'pcm_s16le',
+        '-ar',
+        String(AUDIO_SAMPLE_RATE),
+        '-ac',
+        String(AUDIO_CHANNELS),
+        outputPath,
+      ],
+      DEFAULT_FFMPEG_TIMEOUT_MS,
+    );
 
-  await access(outputPath);
-  const metrics = await probeAudioMetrics(outputPath);
+    await access(outputPath);
+    const metrics = await probeAudioMetrics(outputPath);
 
-  return {
-    localPath: outputPath,
-    metrics,
-  };
-}
-
-async function concatenateAudiosLocal(
-  inputPaths: string[],
-  videoId: number,
-): Promise<string> {
-  if (inputPaths.length === 0) {
-    throw new Error('No scene dubbed audios to merge');
+    return {
+      localPath: outputPath,
+      metrics,
+    };
+  } catch (error) {
+    await safeUnlink(outputPath);
+    throw error;
   }
-
-  if (inputPaths.length === 1) {
-    return inputPaths[0];
-  }
-
-  const outputPath = makeTempPath(
-    `video_${videoId}_dubbed_audio_merged`,
-    'wav',
-  );
-
-  const inputArgs = inputPaths.flatMap((filePath) => ['-i', filePath]);
-  const concatInputPads = inputPaths.map((_, index) => `[${index}:a]`).join('');
-  const filterComplex = `${concatInputPads}concat=n=${inputPaths.length}:v=0:a=1,aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo[aout]`;
-
-  await runCommand(
-    'ffmpeg',
-    [
-      '-y',
-      ...inputArgs,
-      '-vn',
-      '-map_metadata',
-      '-1',
-      '-map_chapters',
-      '-1',
-      '-filter_complex',
-      filterComplex,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'pcm_s16le',
-      '-ar',
-      String(AUDIO_SAMPLE_RATE),
-      '-ac',
-      String(AUDIO_CHANNELS),
-      outputPath,
-    ],
-    DEFAULT_FFMPEG_TIMEOUT_MS,
-  );
-
-  await access(outputPath);
-  return outputPath;
-}
-
-async function appendSilenceSamplesToAudioLocal(options: {
-  videoId: number;
-  inputPath: string;
-  silenceSamples: number;
-  passIndex: number;
-}): Promise<string> {
-  const { videoId, inputPath, silenceSamples, passIndex } = options;
-
-  if (!Number.isInteger(silenceSamples) || silenceSamples <= 0) {
-    throw new Error(`Invalid silence sample count: ${silenceSamples}`);
-  }
-
-  const silenceDurationSec = samplesToSeconds(
-    silenceSamples,
-    AUDIO_SAMPLE_RATE,
-  );
-
-  const outputPath = makeTempPath(
-    `video_${videoId}_dubbed_audio_merged_align_pad_${passIndex}`,
-    'wav',
-  );
-
-  await runCommand(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputPath,
-      '-f',
-      'lavfi',
-      '-t',
-      formatSeconds(silenceDurationSec),
-      '-i',
-      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
-      '-vn',
-      '-map_metadata',
-      '-1',
-      '-map_chapters',
-      '-1',
-      '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]`,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'pcm_s16le',
-      '-ar',
-      String(AUDIO_SAMPLE_RATE),
-      '-ac',
-      String(AUDIO_CHANNELS),
-      outputPath,
-    ],
-    DEFAULT_FFMPEG_TIMEOUT_MS,
-  );
-
-  await access(outputPath);
-  return outputPath;
-}
-
-async function trimAudioToSampleCountLocal(options: {
-  videoId: number;
-  inputPath: string;
-  targetSamples: number;
-  passIndex: number;
-}): Promise<string> {
-  const { videoId, inputPath, targetSamples, passIndex } = options;
-
-  if (!Number.isInteger(targetSamples) || targetSamples <= 0) {
-    throw new Error(`Invalid target sample count: ${targetSamples}`);
-  }
-
-  const targetDurationSec = samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE);
-
-  const outputPath = makeTempPath(
-    `video_${videoId}_dubbed_audio_merged_align_trim_${passIndex}`,
-    'wav',
-  );
-
-  await runCommand(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputPath,
-      '-vn',
-      '-map_metadata',
-      '-1',
-      '-map_chapters',
-      '-1',
-      '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=0:${formatSeconds(targetDurationSec)},asetpts=N/SR/TB[aout]`,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'pcm_s16le',
-      '-ar',
-      String(AUDIO_SAMPLE_RATE),
-      '-ac',
-      String(AUDIO_CHANNELS),
-      outputPath,
-    ],
-    DEFAULT_FFMPEG_TIMEOUT_MS,
-  );
-
-  await access(outputPath);
-  return outputPath;
-}
-
-async function alignMergedAudioToExpectedSamplesLocal(options: {
-  videoId: number;
-  inputPath: string;
-  expectedSamples: number;
-}): Promise<{
-  localPath: string;
-  finalMetrics: AudioProbeMetrics;
-  finalDeltaSamples: number;
-  correctionPasses: number;
-}> {
-  const { videoId, inputPath, expectedSamples } = options;
-
-  if (!Number.isInteger(expectedSamples) || expectedSamples <= 0) {
-    throw new Error(`Invalid expected sample count: ${expectedSamples}`);
-  }
-
-  let currentPath = inputPath;
-  let correctionPasses = 0;
-
-  for (
-    let passIndex = 1;
-    passIndex <= MERGE_ALIGNMENT_MAX_PASSES;
-    passIndex += 1
-  ) {
-    const metrics = await probeAudioMetrics(currentPath);
-    const deltaSamples = metrics.sampleCount - expectedSamples;
-
-    if (deltaSamples === 0) {
-      return {
-        localPath: currentPath,
-        finalMetrics: metrics,
-        finalDeltaSamples: 0,
-        correctionPasses,
-      };
-    }
-
-    const nextPath =
-      deltaSamples < 0
-        ? await appendSilenceSamplesToAudioLocal({
-            videoId,
-            inputPath: currentPath,
-            silenceSamples: Math.abs(deltaSamples),
-            passIndex,
-          })
-        : await trimAudioToSampleCountLocal({
-            videoId,
-            inputPath: currentPath,
-            targetSamples: expectedSamples,
-            passIndex,
-          });
-
-    correctionPasses += 1;
-
-    if (currentPath !== inputPath) {
-      await safeUnlink(currentPath);
-    }
-
-    currentPath = nextPath;
-  }
-
-  const finalMetrics = await probeAudioMetrics(currentPath);
-  const finalDeltaSamples = finalMetrics.sampleCount - expectedSamples;
-
-  return {
-    localPath: currentPath,
-    finalMetrics,
-    finalDeltaSamples,
-    correctionPasses,
-  };
 }
 
 async function baserowGetJson<T>(
@@ -963,9 +747,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const orderedScenes = [...scenes].sort(
-      (a, b) => getSceneOrderValue(a) - getSceneOrderValue(b),
-    );
+    const orderedScenes = [...scenes].sort(compareScenesByOrder);
 
     const mergeJobs: SceneMergeJob[] = [];
     const missingAudioSceneIds: number[] = [];
@@ -1033,63 +815,79 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let expectedMergedSamples = 0;
-    const normalizedSceneInfos: Array<{
-      sceneId: number;
-      orderValue: number;
-      sampleCount: number;
-      durationSec: number;
-      localPath: string;
-    }> = [];
-
-    for (const job of mergeJobs) {
-      const normalized = await normalizeAudioToWavLocal({
-        sceneId: job.sceneId,
-        videoId,
-        inputAudioUrl: job.audioUrl,
-      });
-
-      tempFiles.push(normalized.localPath);
-      expectedMergedSamples += normalized.metrics.sampleCount;
-      normalizedSceneInfos.push({
-        sceneId: job.sceneId,
-        orderValue: job.orderValue,
-        sampleCount: normalized.metrics.sampleCount,
-        durationSec: normalized.metrics.durationSec,
-        localPath: normalized.localPath,
-      });
-    }
-
-    const mergedLocalPath = await concatenateAudiosLocal(
-      normalizedSceneInfos
-        .sort((a, b) => a.orderValue - b.orderValue)
-        .map((item) => item.localPath),
-      videoId,
-    );
-
-    if (!tempFiles.includes(mergedLocalPath)) {
-      tempFiles.push(mergedLocalPath);
-    }
-
-    const alignedMerged = await alignMergedAudioToExpectedSamplesLocal({
-      videoId,
-      inputPath: mergedLocalPath,
-      expectedSamples: expectedMergedSamples,
+    const orderedMergeJobs = [...mergeJobs].sort((a, b) => {
+      const orderDelta = a.orderValue - b.orderValue;
+      return orderDelta !== 0 ? orderDelta : a.sceneId - b.sceneId;
     });
+    const m4aBatchPaths: string[] = [];
+    let expectedMergedSamples = 0;
+    let batchedSceneCount = 0;
 
-    if (!tempFiles.includes(alignedMerged.localPath)) {
-      tempFiles.push(alignedMerged.localPath);
+    for (
+      let offset = 0;
+      offset < orderedMergeJobs.length;
+      offset += DUBBED_AUDIO_SCENE_BATCH_SIZE
+    ) {
+      const batchJobs = orderedMergeJobs.slice(
+        offset,
+        offset + DUBBED_AUDIO_SCENE_BATCH_SIZE,
+      );
+      const batchIndex = m4aBatchPaths.length + 1;
+      const localScenePaths: string[] = [];
+
+      try {
+        for (const job of batchJobs) {
+          const normalized = await normalizeAudioToWavLocal({
+            sceneId: job.sceneId,
+            videoId,
+            inputAudioUrl: job.audioUrl,
+          });
+
+          tempFiles.push(normalized.localPath);
+          localScenePaths.push(normalized.localPath);
+          expectedMergedSamples += normalized.metrics.sampleCount;
+        }
+
+        const m4aBatchPath = await createDubbedAudioM4aBatch({
+          inputPaths: localScenePaths,
+          videoId,
+          batchIndex,
+        });
+        tempFiles.push(m4aBatchPath);
+        m4aBatchPaths.push(m4aBatchPath);
+        batchedSceneCount += batchJobs.length;
+      } finally {
+        for (const localScenePath of localScenePaths) {
+          await safeUnlink(localScenePath);
+        }
+      }
     }
+
+    if (batchedSceneCount !== orderedMergeJobs.length) {
+      throw new Error(
+        `Dubbed-audio batching count mismatch: expected ${orderedMergeJobs.length}, processed ${batchedSceneCount}`,
+      );
+    }
+
+    const finalM4aPath = await concatenateDubbedAudioM4aBatches({
+      batchPaths: m4aBatchPaths,
+      videoId,
+    });
+    if (!tempFiles.includes(finalM4aPath)) {
+      tempFiles.push(finalM4aPath);
+    }
+
+    const mergedMetrics = await probeAudioMetrics(finalM4aPath);
 
     const languageSuffix =
       typeof body?.language === 'string' && body.language.trim()
         ? `${body.language.trim()}_`
         : '';
-    const finalFilename = `video_${videoId}_merged_${languageSuffix}${sourceSceneAudioFieldKey}_${Date.now()}.wav`;
+    const finalFilename = `video_${videoId}_merged_${languageSuffix}${sourceSceneAudioFieldKey}_${Date.now()}.m4a`;
     const finalDubbedAudioUrl = await uploadToMinio(
-      alignedMerged.localPath,
+      finalM4aPath,
       finalFilename,
-      'audio/wav',
+      'audio/mp4',
     );
 
     token = await patchVideoAudioWithAuthRetry({
@@ -1116,10 +914,14 @@ export async function POST(request: NextRequest) {
       skippedNoAudioCount,
       expectedMergedSamples,
       expectedMergedDurationSec,
-      mergedOutputSamples: alignedMerged.finalMetrics.sampleCount,
-      mergedOutputDurationSec: alignedMerged.finalMetrics.durationSec,
-      mergedOutputDeltaSamples: alignedMerged.finalDeltaSamples,
-      mergeCorrectionPasses: alignedMerged.correctionPasses,
+      mergedOutputSamples: mergedMetrics.sampleCount,
+      mergedOutputDurationSec: mergedMetrics.durationSec,
+      mergedOutputDeltaSamples:
+        mergedMetrics.sampleCount - expectedMergedSamples,
+      mergeCorrectionPasses: 0,
+      m4aBatchCount: m4aBatchPaths.length,
+      m4aCodec: 'aac',
+      m4aBitrate: '192k',
       finalDubbedAudioUrl,
     });
   } catch (error) {

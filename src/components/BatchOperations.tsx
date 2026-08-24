@@ -5798,7 +5798,7 @@ export default function BatchOperations({
                         ? 'Select an original video first'
                         : creatingDubbedEn
                           ? 'Creating scene Dubbed En, merging, and saving Final Dubbed Audio...'
-                          : 'Convert EN TTS (6891) to exact scene Duration (6884), save Dubbed En (7108), merge all, fit to Uploaded Video Duration (6909), and save Final Dubbed Audio (7109)'
+                          : 'Convert EN TTS (6891) to exact scene Duration (6884), save Dubbed En (7108), merge ordered scenes in batches of up to 3000, and save Final Dubbed Audio (7109) as M4A'
                     }
                   >
                     {creatingDubbedEn && (
