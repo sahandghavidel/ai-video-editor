@@ -91,7 +91,14 @@ export default function PipelineConfig({
     loadingDubbedLanguagesForPipeline,
     setLoadingDubbedLanguagesForPipeline,
   ] = useState(false);
+  const [draggingDubbedLanguage, setDraggingDubbedLanguage] = useState<
+    string | null
+  >(null);
+  const [dragOverDubbedLanguage, setDragOverDubbedLanguage] = useState<
+    string | null
+  >(null);
   const templateReorderEnabled = isExpanded && isTemplateReorderMode;
+  const dubbedLanguageReorderEnabled = !isRunningFullPipeline;
 
   const selectedDubbedLanguagesForPipeline = useMemo(
     () =>
@@ -182,6 +189,13 @@ export default function PipelineConfig({
   }, [templateReorderEnabled]);
 
   useEffect(() => {
+    if (!dubbedLanguageReorderEnabled) {
+      setDraggingDubbedLanguage(null);
+      setDragOverDubbedLanguage(null);
+    }
+  }, [dubbedLanguageReorderEnabled]);
+
+  useEffect(() => {
     if (!isExpanded || !pipelineConfig.createDubbedLanguage) return;
     void loadAvailableDubbedLanguagesForPipeline();
   }, [
@@ -212,6 +226,64 @@ export default function PipelineConfig({
     },
     [selectedDubbedLanguagesForPipeline, updatePipelineConfig],
   );
+
+  const clearDubbedLanguageDragState = () => {
+    setDraggingDubbedLanguage(null);
+    setDragOverDubbedLanguage(null);
+  };
+
+  const handleDubbedLanguageDragOver = (
+    event: React.DragEvent<HTMLSpanElement>,
+    languageCode: string,
+  ) => {
+    if (!dubbedLanguageReorderEnabled) return;
+    if (!draggingDubbedLanguage || draggingDubbedLanguage === languageCode) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    if (dragOverDubbedLanguage !== languageCode) {
+      setDragOverDubbedLanguage(languageCode);
+    }
+  };
+
+  const handleDubbedLanguageDrop = (
+    event: React.DragEvent<HTMLSpanElement>,
+    targetLanguageCode: string,
+  ) => {
+    if (!dubbedLanguageReorderEnabled) return;
+    event.preventDefault();
+
+    const draggedLanguageCode = draggingDubbedLanguage;
+    if (
+      draggedLanguageCode &&
+      draggedLanguageCode !== targetLanguageCode
+    ) {
+      const fromIndex = selectedDubbedLanguagesForPipeline.indexOf(
+        draggedLanguageCode,
+      );
+      const toIndex = selectedDubbedLanguagesForPipeline.indexOf(
+        targetLanguageCode,
+      );
+
+      if (fromIndex >= 0 && toIndex >= 0) {
+        const nextSelection = [...selectedDubbedLanguagesForPipeline];
+        const [movedLanguage] = nextSelection.splice(fromIndex, 1);
+
+        if (movedLanguage) {
+          const destinationIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+          nextSelection.splice(destinationIndex, 0, movedLanguage);
+          updatePipelineConfig({
+            selectedDubbedLanguagesForPipeline: nextSelection,
+          });
+        }
+      }
+    }
+
+    clearDubbedLanguageDragState();
+  };
 
   const handleTemplateContextDelete = (
     event: React.MouseEvent<HTMLButtonElement>,
@@ -1072,8 +1144,9 @@ export default function PipelineConfig({
                     </p>
                     <p className='text-[11px] text-teal-700'>
                       Select one or more languages for pipeline execution. Order
-                      follows your selection clicks. When empty, pipeline falls
-                      back to the batch-panel language selection.
+                      follows your selection clicks; drag selected languages to
+                      reorder them. When empty, pipeline falls back to the
+                      batch-panel language selection.
                     </p>
                   </div>
                   <button
@@ -1097,8 +1170,39 @@ export default function PipelineConfig({
                       (languageCode, index) => (
                         <span
                           key={languageCode}
-                          className='inline-flex items-center rounded-full border border-teal-300 bg-white px-2 py-0.5 text-[11px] font-medium text-teal-900'
-                          title={`Execution order ${index + 1}`}
+                          draggable={dubbedLanguageReorderEnabled}
+                          onDragStart={(event) => {
+                            if (!dubbedLanguageReorderEnabled) return;
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData(
+                              'text/plain',
+                              languageCode,
+                            );
+                            setDraggingDubbedLanguage(languageCode);
+                            setDragOverDubbedLanguage(null);
+                          }}
+                          onDragOver={(event) =>
+                            handleDubbedLanguageDragOver(event, languageCode)
+                          }
+                          onDrop={(event) =>
+                            handleDubbedLanguageDrop(event, languageCode)
+                          }
+                          onDragEnd={clearDubbedLanguageDragState}
+                          className={`inline-flex items-center rounded-full border border-teal-300 bg-white px-2 py-0.5 text-[11px] font-medium text-teal-900 transition-colors ${
+                            dubbedLanguageReorderEnabled
+                              ? 'cursor-grab active:cursor-grabbing'
+                              : 'cursor-default'
+                          } ${
+                            dragOverDubbedLanguage === languageCode &&
+                            draggingDubbedLanguage !== languageCode
+                              ? 'ring-2 ring-teal-400 ring-offset-1'
+                              : ''
+                          }`}
+                          title={`Execution order ${index + 1}.${
+                            dubbedLanguageReorderEnabled
+                              ? ' Drag to reorder.'
+                              : ''
+                          }`}
                         >
                           {index + 1}. {getLanguageDisplayName(languageCode)} (
                           {languageCode.toUpperCase()})
