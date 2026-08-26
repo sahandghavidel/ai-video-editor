@@ -69,6 +69,7 @@ import {
   type FixTtsAutoFixOptions,
   getFixTtsEligibleScenes,
   hasSceneTtsAudioForFixTts,
+  isSceneWithinFirstFiveMinutes,
   isSceneFlaggedForFixTts,
   parseFixTtsStatus,
   type TtsComparisonAliasEntry,
@@ -555,7 +556,6 @@ const VIDEO_TABLE_VIEWPORT_HALF_HEIGHT_PX = VIDEO_TABLE_VIEWPORT_HEIGHT_PX / 2;
 const VIDEO_TABLE_VIRTUALIZATION_THRESHOLD = 120;
 const VIDEO_TABLE_ROW_HEIGHT_PX = 56;
 const VIDEO_TABLE_OVERSCAN_ROWS = 8;
-const INTRO_QA_SCENE_LIMIT = 10;
 const INTRO_QA_MAX_AUDIO_ATTEMPTS = 3;
 
 const SKIP_WITH_UPLOADED_URL_OPERATION_WHITELIST = [
@@ -6892,17 +6892,11 @@ export default function OriginalVideosList({
         const videoScenes = scenesByVideoId.get(video.id) || [];
         if (videoScenes.length === 0) continue;
 
-        const orderedNonEmptyScenes = [...videoScenes]
-          .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
-          .filter(
-            (scene) => String(scene['field_6890'] ?? '').trim().length > 0,
-          );
+        const scenesInScope = processAllScenes
+          ? videoScenes
+          : videoScenes.filter(isSceneWithinFirstFiveMinutes);
 
-        const introScenes = processAllScenes
-          ? orderedNonEmptyScenes
-          : orderedNonEmptyScenes.slice(0, INTRO_QA_SCENE_LIMIT);
-
-        const eligibleIntroScenes = getFixTtsEligibleScenes(introScenes);
+        const eligibleIntroScenes = getFixTtsEligibleScenes(scenesInScope);
         for (const scene of eligibleIntroScenes) {
           introTargets.push({
             scene,
@@ -6915,7 +6909,7 @@ export default function OriginalVideosList({
       if (introTargets.length === 0) {
         const sceneScope = processAllScenes
           ? 'eligible non-empty scenes'
-          : `intro scenes (first ${INTRO_QA_SCENE_LIMIT} non-empty sentence scenes per ${allVideosTargetStatusLabel} video)`;
+          : `eligible scenes in the first five minutes per ${allVideosTargetStatusLabel} video`;
         console.log(
           `No ${sceneScope} with final video + text found to fix.`,
         );
@@ -15082,7 +15076,7 @@ export default function OriginalVideosList({
                               !sceneHandlers?.handleVideoGenerate ||
                               !sceneHandlers?.handleTranscribeScene
                             ? 'Select a video first so Intro QA handlers initialize'
-                            : `Fix intro QA on first ${INTRO_QA_SCENE_LIMIT} non-empty scenes per ${allVideosTargetStatusLabel} video`
+                            : `Fix intro QA on eligible scenes in the first five minutes per ${allVideosTargetStatusLabel} video`
                       }
                     >
                       <Wand2

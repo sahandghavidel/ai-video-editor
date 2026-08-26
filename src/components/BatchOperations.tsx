@@ -15,6 +15,7 @@ import {
   type FixTtsAutoFixOptions,
   getFixTtsEligibleScenes,
   hasSceneTtsAudioForFixTts,
+  isSceneWithinFirstFiveMinutes,
   isSceneFlaggedForFixTts,
   parseFixTtsStatus,
   withSceneVoiceOverride,
@@ -89,7 +90,6 @@ interface BatchOperationsProps {
   ) => Promise<void>;
 }
 
-const INTRO_QA_SCENE_LIMIT = 10;
 const INTRO_QA_MAX_AUDIO_ATTEMPTS = 3;
 
 type AudioReferenceLanguageEntry = {
@@ -243,8 +243,6 @@ export default function BatchOperations({
   const [fixingIntroQaSceneId, setFixingIntroQaSceneId] = useState<
     number | null
   >(null);
-  const [introQaSceneCount, setIntroQaSceneCount] =
-    useState(INTRO_QA_SCENE_LIMIT);
   const [introQaGeneratedAudioCount, setIntroQaGeneratedAudioCount] = useState(
     INTRO_QA_MAX_AUDIO_ATTEMPTS,
   );
@@ -2156,12 +2154,6 @@ export default function BatchOperations({
 
     const freshData = useAppStore.getState().getFilteredData();
 
-    const configuredIntroQaSceneCount = Math.max(
-      1,
-      Number.isFinite(introQaSceneCount)
-        ? Math.floor(introQaSceneCount)
-        : INTRO_QA_SCENE_LIMIT,
-    );
     const configuredIntroQaGeneratedAudioCount = Math.max(
       1,
       Number.isFinite(introQaGeneratedAudioCount)
@@ -2195,16 +2187,13 @@ export default function BatchOperations({
       maxAllowedInternalPauseSecWithoutFilter: number | null;
     };
 
-    const introScenes = [...freshData]
-      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
-      .filter((scene) => String(scene['field_6890'] ?? '').trim().length > 0)
-      .slice(0, configuredIntroQaSceneCount);
+    const introScenes = freshData.filter(isSceneWithinFirstFiveMinutes);
 
     const scenesToFix = getFixTtsEligibleScenes(introScenes);
 
     if (scenesToFix.length === 0) {
       console.log(
-        `No intro scenes (first ${configuredIntroQaSceneCount} non-empty sentence scenes) with final video + text found to fix.`,
+        'No scenes in the first five minutes with final video + text found to fix.',
       );
       return;
     }
@@ -5339,30 +5328,7 @@ export default function BatchOperations({
                         className='mt-0'
                       />
 
-                      <div className='col-span-2 grid grid-cols-2 gap-2'>
-                        <label className='flex flex-col gap-1'>
-                          <span className='text-[11px] font-medium text-emerald-800'>
-                            Intro scenes count
-                          </span>
-                          <input
-                            type='number'
-                            min={1}
-                            step={1}
-                            value={introQaSceneCount}
-                            onChange={(e) => {
-                              const parsed = parseInt(e.target.value, 10);
-                              setIntroQaSceneCount(
-                                Number.isFinite(parsed)
-                                  ? Math.max(1, parsed)
-                                  : INTRO_QA_SCENE_LIMIT,
-                              );
-                            }}
-                            disabled={fixingIntroQaScenes}
-                            className='h-9 px-2 text-sm rounded-lg border border-emerald-300 bg-white text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-emerald-100 disabled:text-emerald-500'
-                            title='How many intro scenes to process for this button only'
-                          />
-                        </label>
-
+                      <div className='col-span-2 grid grid-cols-1 gap-2'>
                         <label className='flex flex-col gap-1'>
                           <span className='text-[11px] font-medium text-emerald-800'>
                             Generated audios
@@ -5399,7 +5365,6 @@ export default function BatchOperations({
                         hasSelectedVideo={Boolean(selectedOriginalVideo.id)}
                         isRunning={fixingIntroQaScenes}
                         currentSceneId={fixingIntroQaSceneId}
-                        introLimit={introQaSceneCount}
                         maxAudioAttempts={introQaGeneratedAudioCount}
                         className='col-span-2 mt-0'
                       />

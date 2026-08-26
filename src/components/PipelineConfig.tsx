@@ -1026,7 +1026,7 @@ export default function PipelineConfig({
                       className={`flex items-center gap-1 text-[10px] font-medium ${
                         isEnabled ? 'text-cyan-700' : 'text-gray-400'
                       }`}
-                      title='Process every eligible non-empty scene instead of only the first 10 scenes per Processing video'
+                      title='Process every eligible scene instead of only the eligible scenes in the first five minutes per Processing video'
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
                     >

@@ -137,6 +137,30 @@ export const isFixTtsEligibleScene = (scene: BaserowRow): boolean => {
   return hasFinalVideo && hasText;
 };
 
+const FIX_TTS_INTRO_WINDOW_SECONDS = 5 * 60;
+
+export const isSceneWithinFirstFiveMinutes = (scene: BaserowRow): boolean => {
+  const rawStartTime = scene['field_6896'];
+  if (rawStartTime === null || rawStartTime === undefined) {
+    return false;
+  }
+
+  if (typeof rawStartTime === 'string' && rawStartTime.trim().length === 0) {
+    return false;
+  }
+
+  if (typeof rawStartTime !== 'number' && typeof rawStartTime !== 'string') {
+    return false;
+  }
+
+  const startTime = Number(rawStartTime);
+  return (
+    Number.isFinite(startTime) &&
+    startTime >= 0 &&
+    startTime < FIX_TTS_INTRO_WINDOW_SECONDS
+  );
+};
+
 export const getFixTtsEligibleScenes = (scenes: BaserowRow[]): BaserowRow[] => {
   return [...scenes]
     .filter(
