@@ -823,7 +823,7 @@ export async function POST(request: NextRequest) {
         skipIfDestinationExists: true,
         failFastOnSaveError: false,
         fitAudioToSceneDuration: true,
-        boostIntroSteps: true,
+        boostFirstFiveMinutesSteps: true,
         ttsSettings: {
           provider: 'omnivoice',
           reference_audio_filename: selectedLanguageReference.filename,

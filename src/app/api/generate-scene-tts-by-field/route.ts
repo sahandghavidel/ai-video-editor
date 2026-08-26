@@ -82,8 +82,8 @@ type SceneTtsFailure = {
 
 const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_TRANSIENT_RETRY_ATTEMPTS = 3;
-const INTRO_SCENE_STEP_LIMIT = 10;
-const INTRO_SCENE_STEP_MULTIPLIER = 1.5;
+const INTRO_QUALITY_DURATION_SECONDS = 5 * 60;
+const INTRO_STEP_MULTIPLIER = 1.5;
 const MIN_OMNIVOICE_STEPS = 8;
 const MAX_OMNIVOICE_STEPS = 64;
 const RETRY_BASE_DELAY_MS = 300;
@@ -189,22 +189,27 @@ function parsePositiveNumber(value: unknown): number | null {
   return parsed;
 }
 
-function getIntroQualityNumStep(
-  baseNumStep: unknown,
-  nonEmptySceneOrdinal: number,
-): number {
-  const base = Math.max(
+function getBaseOmniVoiceNumStep(baseNumStep: unknown): number {
+  return Math.max(
     MIN_OMNIVOICE_STEPS,
     Math.min(MAX_OMNIVOICE_STEPS, parsePositiveInt(baseNumStep) ?? 32),
   );
+}
+
+function getFirstFiveMinutesQualityNumStep(
+  baseNumStep: unknown,
+  sceneStartTimeSeconds: number,
+): number {
+  const base = getBaseOmniVoiceNumStep(baseNumStep);
 
   if (
-    nonEmptySceneOrdinal > 0 &&
-    nonEmptySceneOrdinal <= INTRO_SCENE_STEP_LIMIT
+    Number.isFinite(sceneStartTimeSeconds) &&
+    sceneStartTimeSeconds >= 0 &&
+    sceneStartTimeSeconds < INTRO_QUALITY_DURATION_SECONDS
   ) {
     return Math.min(
       MAX_OMNIVOICE_STEPS,
-      Math.round(base * INTRO_SCENE_STEP_MULTIPLIER),
+      Math.round(base * INTRO_STEP_MULTIPLIER),
     );
   }
 
@@ -2102,7 +2107,7 @@ export async function POST(request: NextRequest) {
       provider?: unknown;
       referenceAudioFilename?: unknown;
       ttsSettings?: unknown;
-      boostIntroSteps?: unknown;
+      boostFirstFiveMinutesSteps?: unknown;
       skipIfDestinationExists?: unknown;
       failFastOnSaveError?: unknown;
       fitAudioToSceneDuration?: unknown;
@@ -2247,7 +2252,10 @@ export async function POST(request: NextRequest) {
         ? (body.ttsSettings as Record<string, unknown>)
         : undefined;
 
-    const boostIntroSteps = parseBoolean(body?.boostIntroSteps, false);
+    const boostFirstFiveMinutesSteps = parseBoolean(
+      body?.boostFirstFiveMinutesSteps,
+      false,
+    );
 
     const language =
       (typeof body?.language === 'string' && body.language.trim()) ||
@@ -2359,8 +2367,6 @@ export async function POST(request: NextRequest) {
     let abortedOnSaveFailure = false;
     let abortedSceneId: number | null = null;
 
-    let nonEmptySceneOrdinal = 0;
-
     for (const scene of orderedScenes) {
       const sceneId = parsePositiveInt(scene.id);
       if (!sceneId) {
@@ -2421,7 +2427,6 @@ export async function POST(request: NextRequest) {
       }
 
       const text = String(scene[sourceTextFieldKey] ?? '').trim();
-      if (text) nonEmptySceneOrdinal += 1;
       const emptySentenceText = emptySentenceFieldKey
         ? String(scene[emptySentenceFieldKey] ?? '').trim()
         : '';
@@ -2562,8 +2567,19 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        const sceneStartTimeSeconds = parseNumberish(scene.field_6896);
+        const isInsideFirstFiveMinutes =
+          Number.isFinite(sceneStartTimeSeconds) &&
+          sceneStartTimeSeconds >= 0 &&
+          sceneStartTimeSeconds < INTRO_QUALITY_DURATION_SECONDS;
+        const configuredNumStep =
+          ttsSettings?.omniVoice &&
+          typeof ttsSettings.omniVoice === 'object'
+            ? (ttsSettings.omniVoice as Record<string, unknown>).numStep
+            : undefined;
+        const baseNumStep = getBaseOmniVoiceNumStep(configuredNumStep);
         const sceneTtsSettings =
-          boostIntroSteps &&
+          boostFirstFiveMinutesSteps &&
           ttsSettings &&
           typeof ttsSettings === 'object' &&
           provider === 'omnivoice' &&
@@ -2573,9 +2589,9 @@ export async function POST(request: NextRequest) {
                 ...ttsSettings,
                 omniVoice: {
                   ...(ttsSettings.omniVoice as Record<string, unknown>),
-                  numStep: getIntroQualityNumStep(
-                    (ttsSettings.omniVoice as Record<string, unknown>).numStep,
-                    nonEmptySceneOrdinal,
+                  numStep: getFirstFiveMinutesQualityNumStep(
+                    configuredNumStep,
+                    sceneStartTimeSeconds,
                   ),
                 },
               }
@@ -2589,7 +2605,7 @@ export async function POST(request: NextRequest) {
           videoId,
           referenceAudioFilename: referenceAudioFilename || undefined,
           numStepOverride:
-            boostIntroSteps &&
+            boostFirstFiveMinutesSteps &&
             provider === 'omnivoice' &&
             sceneTtsSettings &&
             typeof sceneTtsSettings.omniVoice === 'object'
@@ -2604,9 +2620,13 @@ export async function POST(request: NextRequest) {
         logFitInfo('post:scene-tts-steps', {
           fitDebugRunId,
           sceneId,
-          nonEmptySceneOrdinal,
-          boostIntroSteps,
-          numStep:
+          sceneStartTimeSeconds: Number.isFinite(sceneStartTimeSeconds)
+            ? sceneStartTimeSeconds
+            : null,
+          boostFirstFiveMinutesSteps,
+          isInsideFirstFiveMinutes,
+          baseNumStep,
+          effectiveNumStep:
             sceneTtsSettings && typeof sceneTtsSettings === 'object'
               ? ((sceneTtsSettings.omniVoice as Record<string, unknown> | undefined)
                   ?.numStep ?? null)
