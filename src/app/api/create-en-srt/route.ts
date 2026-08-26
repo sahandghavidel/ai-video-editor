@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -6,6 +7,12 @@ export const dynamic = 'force-dynamic';
 // Toggle: when true, build EN SRT using scene Duration (field_6884)
 // instead of calculating/using Final Video Duration (field_7107).
 const USE_ORIGINAL_VIDEO_DURATION = false;
+
+const DURATION_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
+const durationRequestDispatcher = new Agent({
+  headersTimeout: DURATION_REQUEST_TIMEOUT_MS,
+  bodyTimeout: DURATION_REQUEST_TIMEOUT_MS,
+});
 
 const ORIGINAL_DURATION_FIELD_KEY = 'field_6884';
 
@@ -29,7 +36,10 @@ function normalizeSceneIds(raw: unknown): number[] {
   return Array.from(new Set(ids));
 }
 
-async function readErrorMessage(response: Response): Promise<string> {
+async function readErrorMessage(response: {
+  status: number;
+  text(): Promise<string>;
+}): Promise<string> {
   const text = await response.text().catch(() => '');
 
   if (!text) return `Request failed with status ${response.status}`;
@@ -76,13 +86,14 @@ export async function POST(request: NextRequest) {
     let durationResult: Record<string, unknown> | null = null;
 
     if (!USE_ORIGINAL_VIDEO_DURATION) {
-      const durationResponse = await fetch(
+      const durationResponse = await undiciFetch(
         `${baseUrl}/api/calculate-final-video-durations`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sceneIds }),
           cache: 'no-store',
+          dispatcher: durationRequestDispatcher,
         },
       );
 

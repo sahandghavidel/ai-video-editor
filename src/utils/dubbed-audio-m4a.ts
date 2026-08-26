@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { access, unlink, writeFile } from 'fs/promises';
 
-export const DUBBED_AUDIO_SCENE_BATCH_SIZE = 300;
+export const DUBBED_AUDIO_SCENE_BATCH_SIZE = 30000;
 
 const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_CHANNELS = 2;
@@ -139,6 +139,8 @@ export async function createDubbedAudioM4aBatch(options: {
       String(AUDIO_SAMPLE_RATE),
       '-ac',
       String(AUDIO_CHANNELS),
+      '-rf64',
+      'auto',
       batchWavPath,
     ]);
     await access(batchWavPath);
