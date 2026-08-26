@@ -29,7 +29,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "en-default",
@@ -50,7 +50,7 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "Example English reference entry for future multilingual pipelines.",
       "tags": [
@@ -60,7 +60,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -86,7 +86,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
@@ -112,7 +112,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
@@ -138,7 +138,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
@@ -164,7 +164,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
@@ -190,7 +190,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
@@ -211,13 +211,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780723908215-kn74nfnb",
@@ -238,13 +238,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780803012962-je49hy9s",
@@ -265,13 +265,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780884860880-hzmu5wcr",
@@ -292,13 +292,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780978346902-mwx5yjxh",
@@ -319,13 +319,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1780988034098-yy9342ub",
@@ -346,13 +346,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781064644767-pqedhfks",
@@ -373,13 +373,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781065130922-ldsb45we",
@@ -400,13 +400,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 20,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781144218035-eyc5tvdz",
@@ -427,13 +427,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781152128771-crn2xbf8",
@@ -454,13 +454,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781153930719-huah0y0g",
@@ -481,13 +481,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781156102363-b6shelmd",
@@ -514,7 +514,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781160451053-me6vuufm",
@@ -541,7 +541,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781234780021-o6tpyrsw",
@@ -562,13 +562,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781236780182-nmelbsdb",
@@ -589,13 +589,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781240849711-d847gllu",
@@ -616,17 +616,17 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781246187580-cytr9876",
-      "name": "pl-mine-5.mp3",
+      "name": "Polish",
       "filename": "pl-mine-5.mp3",
       "language": "pl",
       "youtubeLangCode": "pl-en-GB",
@@ -643,17 +643,17 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781246997812-sjiyrume",
-      "name": "ta-mine.mp3",
+      "name": "Tamil",
       "filename": "ta-mine.mp3",
       "language": "ta",
       "youtubeLangCode": "ta-en-GB",
@@ -670,13 +670,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781327093132-f4c3imaz",
@@ -697,13 +697,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781328133907-s5dvmonf",
@@ -724,13 +724,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781330127647-2tuhlsqq",
@@ -751,13 +751,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781331491876-qg91ugqj",
@@ -784,7 +784,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781332858843-irq4epkw",
@@ -811,7 +811,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781409089366-3oxr7ipd",
@@ -838,7 +838,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781411785664-3fa5ao3j",
@@ -865,7 +865,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781413462044-60noxeqq",
@@ -892,7 +892,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781414282222-2nup9b7d",
@@ -913,13 +913,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781415903239-3df9svpm",
@@ -946,7 +946,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781500405774-qx7zt78v",
@@ -967,13 +967,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781501487260-7obleoet",
@@ -1000,7 +1000,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781502387868-34ft0kva",
@@ -1021,13 +1021,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781503075838-w68o2ze5",
@@ -1054,7 +1054,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781503851763-pcko9i0s",
@@ -1081,7 +1081,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781504434727-y8kuwkna",
@@ -1108,7 +1108,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781504895973-zjdfj07e",
@@ -1135,7 +1135,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781505361146-lc9ua33q",
@@ -1162,7 +1162,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781506264954-wlaycc3i",
@@ -1189,7 +1189,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781506880605-jhxnqsur",
@@ -1216,7 +1216,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781592164051-ejvqahl8",
@@ -1243,7 +1243,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781593715997-suguqm2p",
@@ -1270,7 +1270,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781594590128-kfchedou",
@@ -1297,7 +1297,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781596205784-52m7jyuw",
@@ -1324,7 +1324,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781597057481-o3nalzo9",
@@ -1351,7 +1351,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781598573850-bk9r2900",
@@ -1372,13 +1372,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 30,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781599097389-rsvu1fwg",
@@ -1405,7 +1405,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781664542968-htfzi9jo",
@@ -1432,7 +1432,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781665436336-ibry9sms",
@@ -1453,13 +1453,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     },
     {
       "id": "audio-ref-local-1781666281406-hv3lrnr0",
@@ -1480,13 +1480,13 @@
       },
       "deviceMap": "mps",
       "dtype": "float32",
-      "numStep": 22,
+      "numStep": 25,
       "speed": 1,
       "description": "",
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-08-24T08:17:35.710Z"
+      "updatedAt": "2026-08-26T08:00:27.457Z"
     }
   ]
 }
