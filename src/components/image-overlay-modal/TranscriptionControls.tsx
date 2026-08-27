@@ -22,12 +22,18 @@ type Props = {
   transcriptionWords: TranscriptionWord[] | null;
   customText: string;
   selectedWordText: string | null;
+  selectedAssetWord: TranscriptionWord | null;
+  wordAssetImageUrl: string;
+  wordAssetStatus: string | null;
+  isSavingWordAsset: boolean;
   macWindowTitle: string;
   macWindowTheme: MacWindowTheme;
 
   onWordClick: (word: TranscriptionWord) => void;
   onWordRightClick: (word: TranscriptionWord) => void;
   onWordDoubleClick: (word: TranscriptionWord) => void;
+  onWordAssetImageUrlChange: (value: string) => void;
+  onAddWordAsset: () => Promise<void>;
   onCustomTextChange: (v: string) => void;
   onMacWindowTitleChange: (v: string) => void;
   onMacWindowThemeChange: (v: MacWindowTheme) => void;
@@ -56,11 +62,17 @@ export function TranscriptionControls({
   transcriptionWords,
   customText,
   selectedWordText,
+  selectedAssetWord,
+  wordAssetImageUrl,
+  wordAssetStatus,
+  isSavingWordAsset,
   macWindowTitle,
   macWindowTheme,
   onWordClick,
   onWordRightClick,
   onWordDoubleClick,
+  onWordAssetImageUrlChange,
+  onAddWordAsset,
   onCustomTextChange,
   onMacWindowTitleChange,
   onMacWindowThemeChange,
@@ -167,13 +179,67 @@ export function TranscriptionControls({
                 e.stopPropagation();
                 onWordRightClick(wordData);
               }}
-              className='px-3 py-1.5 text-sm font-medium rounded transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-blue-50 hover:border-blue-300'
+              className={`px-3 py-1.5 text-sm font-medium rounded transition-colors border hover:bg-blue-50 hover:border-blue-300 ${
+                selectedAssetWord?.start === wordData.start &&
+                selectedAssetWord?.end === wordData.end &&
+                selectedAssetWord?.word === wordData.word
+                  ? 'bg-blue-100 text-blue-800 border-blue-400'
+                  : 'bg-white text-gray-700 border-gray-300'
+              }`}
               title={`Click to set start time to ${wordData.start}s. Double-click to add as overlay. Right-click to set end time to ${wordData.end}s.`}
             >
               {wordData.word}
             </button>
           ))}
         </div>
+      </div>
+
+      <div className='mt-3 space-y-2 rounded border border-blue-100 bg-blue-50/40 p-2'>
+        <div className='text-xs text-gray-600'>
+          {selectedAssetWord ? (
+            <>
+              Image for{' '}
+              <span className='font-semibold text-gray-800'>
+                {selectedAssetWord.word}
+              </span>
+            </>
+          ) : (
+            'Select a word to attach an image'
+          )}
+        </div>
+        <div className='flex gap-2 items-center w-full'>
+          <input
+            type='url'
+            value={wordAssetImageUrl}
+            onChange={(e) => onWordAssetImageUrlChange(e.target.value)}
+            placeholder='Image URL'
+            aria-label='Image URL for selected caption word'
+            disabled={!selectedAssetWord || isSavingWordAsset}
+            className='min-w-0 flex-1 h-10 px-3 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100'
+          />
+          <button
+            type='button'
+            onClick={onAddWordAsset}
+            disabled={
+              !selectedAssetWord ||
+              !wordAssetImageUrl.trim() ||
+              isSavingWordAsset
+            }
+            className='h-10 px-3 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2'
+            aria-label='Add image for selected caption word'
+            title='Save image URL for the selected caption word'
+          >
+            {isSavingWordAsset ? (
+              <Loader2 className='h-4 w-4 animate-spin' />
+            ) : (
+              <Plus className='h-4 w-4' />
+            )}
+            <span>{isSavingWordAsset ? 'Saving...' : 'Add'}</span>
+          </button>
+        </div>
+        {wordAssetStatus ? (
+          <div className='text-xs text-gray-600'>{wordAssetStatus}</div>
+        ) : null}
       </div>
 
       {/* Custom Text Input */}

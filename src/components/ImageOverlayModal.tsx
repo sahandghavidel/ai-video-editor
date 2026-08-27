@@ -89,6 +89,53 @@ type CropShape = 'rectangle' | 'circle';
 
 type SceneImageProvider = 'openai-image-2' | 'nano-banana-2-lite';
 
+type HyperFramesWordAsset = {
+  word: string;
+  imageUrl: string;
+};
+
+function parseHyperFramesWordAssets(value: unknown): HyperFramesWordAsset[] {
+  if (value === null || value === undefined) return [];
+
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    parsed = JSON.parse(trimmed);
+  }
+
+  const entries = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === 'object' && 'assets' in parsed
+      ? (parsed as { assets?: unknown }).assets
+      : null;
+
+  if (!Array.isArray(entries)) {
+    throw new Error('HyperFrames Word Assets must be a JSON array');
+  }
+
+  return entries.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`Invalid HyperFrames Word Assets entry ${index + 1}`);
+    }
+
+    const record = entry as Record<string, unknown>;
+    const word = typeof record.word === 'string' ? record.word.trim() : '';
+    const imageUrl =
+      typeof record.imageUrl === 'string' ? record.imageUrl.trim() : '';
+
+    if (!word) {
+      throw new Error(`HyperFrames Word Assets entry ${index + 1} has no word`);
+    }
+
+    return { word, imageUrl };
+  });
+}
+
+function wordsMatchForHyperFramesAsset(left: string, right: string): boolean {
+  return left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase();
+}
+
 const SCENE_IMAGE_PROVIDER_STORAGE_KEY = 'scene-image-provider';
 const SCENE_IMAGE_PROVIDER_LABELS: Record<SceneImageProvider, string> = {
   'openai-image-2': 'OpenAI Image 2',
@@ -724,6 +771,12 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsOriginalVideoEditModalOpen,
   ] = useState(false);
   const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
+  const [selectedAssetWord, setSelectedAssetWord] =
+    useState<TranscriptionWord | null>(null);
+  const [wordAssetImageUrl, setWordAssetImageUrl] = useState('');
+  const [wordAssets, setWordAssets] = useState<HyperFramesWordAsset[]>([]);
+  const [isSavingWordAsset, setIsSavingWordAsset] = useState(false);
+  const [wordAssetStatus, setWordAssetStatus] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string>('');
   const [brandedTextTemplate, setBrandedTextTemplate] = useState<string | null>(
     null,
@@ -795,6 +848,58 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
     return latestSceneData;
   }, [sceneId]);
+
+  useEffect(() => {
+    if (!isOpen || !sceneId) {
+      setSelectedAssetWord(null);
+      setWordAssetImageUrl('');
+      setWordAssets([]);
+      setWordAssetStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedAssetWord(null);
+    setWordAssetImageUrl('');
+    setWordAssetStatus(null);
+
+    const loadWordAssets = async () => {
+      const localValue = getLocalSceneSnapshot()?.['field_7366'];
+
+      try {
+        setWordAssets(parseHyperFramesWordAssets(localValue));
+      } catch (error) {
+        setWordAssets([]);
+        setWordAssetStatus(
+          error instanceof Error
+            ? error.message
+            : 'Invalid HyperFrames Word Assets JSON',
+        );
+      }
+
+      try {
+        const latestSceneData = await fetchLatestSceneData();
+        if (cancelled || !latestSceneData) return;
+
+        setWordAssets(
+          parseHyperFramesWordAssets(latestSceneData['field_7366']),
+        );
+        setWordAssetStatus(null);
+      } catch (error) {
+        if (cancelled) return;
+        setWordAssetStatus(
+          error instanceof Error
+            ? error.message
+            : 'Failed to load HyperFrames Word Assets',
+        );
+      }
+    };
+
+    void loadWordAssets();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchLatestSceneData, getLocalSceneSnapshot, isOpen, sceneId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -3951,6 +4056,92 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     mergeLocalSceneSnapshot,
   ]);
 
+  const handleAddWordAsset = useCallback(async () => {
+    if (!sceneId || !selectedAssetWord || isSavingWordAsset) return;
+
+    const imageUrl = wordAssetImageUrl.trim();
+    if (!imageUrl) return;
+
+    try {
+      const parsedUrl = new URL(imageUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        setWordAssetStatus('Image URL must use http or https');
+        return;
+      }
+    } catch {
+      setWordAssetStatus('Enter a valid image URL');
+      return;
+    }
+
+    setIsSavingWordAsset(true);
+    setWordAssetStatus(null);
+
+    try {
+      // Always merge against the latest Baserow value so another saved word
+      // is never removed by a later add operation.
+      const latestSceneData = await fetchLatestSceneData();
+      if (!latestSceneData) {
+        throw new Error('Scene could not be found');
+      }
+
+      const latestAssets = parseHyperFramesWordAssets(
+        latestSceneData['field_7366'],
+      );
+      const matchingIndex = latestAssets.findIndex((asset) =>
+        wordsMatchForHyperFramesAsset(asset.word, selectedAssetWord.word),
+      );
+      const nextAssets = [...latestAssets];
+
+      if (matchingIndex >= 0) {
+        nextAssets[matchingIndex] = {
+          ...nextAssets[matchingIndex],
+          imageUrl,
+        };
+      } else {
+        nextAssets.push({
+          word: selectedAssetWord.word.trim(),
+          imageUrl,
+        });
+      }
+
+      const serializedAssets = JSON.stringify(nextAssets);
+      const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ field_7366: serializedAssets }),
+      });
+
+      if (!patchRes.ok) {
+        const t = await patchRes.text().catch(() => '');
+        throw new Error(`Failed to save word image: ${patchRes.status} ${t}`);
+      }
+
+      setWordAssets(nextAssets);
+      setWordAssetImageUrl(imageUrl);
+      mergeLocalSceneSnapshot({ field_7366: serializedAssets });
+      setWordAssetStatus(
+        matchingIndex >= 0 ? 'Image URL replaced' : 'Image URL added',
+      );
+      window.setTimeout(() => setWordAssetStatus(null), 2500);
+    } catch (error) {
+      console.error('Failed to save HyperFrames word image:', error);
+      setWordAssetStatus(
+        error instanceof Error ? error.message : 'Failed to save image URL',
+      );
+    } finally {
+      setIsSavingWordAsset(false);
+    }
+  }, [
+    fetchLatestSceneData,
+    isSavingWordAsset,
+    mergeLocalSceneSnapshot,
+    sceneId,
+    selectedAssetWord,
+    wordAssetImageUrl,
+  ]);
+
   const handleApplySubtitleHighlight = useCallback(async () => {
     if (isApplying || isSubtitleHighlightLoading) return;
     if (!sceneId) return;
@@ -4991,6 +5182,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setTranscriptionWords(null);
     setIsOriginalVideoEditModalOpen(false);
     setSelectedWordText(null);
+    setSelectedAssetWord(null);
+    setWordAssetImageUrl('');
+    setWordAssets([]);
+    setIsSavingWordAsset(false);
+    setWordAssetStatus(null);
     setCustomText('');
     setSelectedWordText(null);
   }, [
@@ -6423,9 +6619,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               transcriptionWords={transcriptionWords}
               customText={customText}
               selectedWordText={selectedWordText}
+              selectedAssetWord={selectedAssetWord}
+              wordAssetImageUrl={wordAssetImageUrl}
+              wordAssetStatus={wordAssetStatus}
+              isSavingWordAsset={isSavingWordAsset}
               macWindowTitle={macWindowTitle}
               macWindowTheme={macWindowTheme}
               onWordClick={(wordData) => {
+                setSelectedAssetWord(wordData);
+                const matchingAsset = wordAssets.find((asset) =>
+                  wordsMatchForHyperFramesAsset(asset.word, wordData.word),
+                );
+                setWordAssetImageUrl(matchingAsset?.imageUrl ?? '');
+                setWordAssetStatus(null);
                 setStartTime(wordData.start);
                 const raw = (wordData.word || '').trim();
                 const cleaned = raw.replace(/[，,]+$/g, '').trim();
@@ -6434,6 +6640,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   videoRef.current.currentTime = wordData.start;
                 }
               }}
+              onWordAssetImageUrlChange={setWordAssetImageUrl}
+              onAddWordAsset={handleAddWordAsset}
               onWordRightClick={(wordData) => {
                 const t = Number.isFinite(wordData.end)
                   ? Math.max(0, wordData.end)
