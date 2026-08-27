@@ -13,6 +13,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import {
   type FixTtsAutoFixOptions,
+  type FixTtsStatus,
   parseFixTtsStatus,
   type TtsComparisonAliasEntry,
 } from '@/utils/fixTtsBatch';
@@ -42,6 +43,33 @@ import {
   ImageIcon,
   Wand2,
 } from 'lucide-react';
+
+const getFixTtsButtonClasses = (
+  status: FixTtsStatus,
+  isRunning: boolean,
+): string => {
+  if (status === 'true') {
+    return isRunning
+      ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300/80'
+      : 'bg-orange-100 text-orange-700 hover:bg-orange-200';
+  }
+
+  if (status === 'confirmed') {
+    return isRunning
+      ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-300/80'
+      : 'bg-blue-100 text-blue-700 hover:bg-blue-200';
+  }
+
+  return isRunning
+    ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80'
+    : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200';
+};
+
+const getFixTtsStatusLabel = (status: FixTtsStatus): string => {
+  if (status === 'true') return 'flagged — needs attention';
+  if (status === 'confirmed') return 'confirmed';
+  return 'no flag';
+};
 
 // Helper: get original sentence from field_6901
 
@@ -7981,13 +8009,14 @@ export default function SceneCard({
                           aria-label={
                             autoFixingMismatchSceneId === scene.id
                               ? 'Fix mismatch (running)'
-                              : 'Fix mismatch'
+                              : `Fix mismatch (${getFixTtsStatusLabel(
+                                  parseFixTtsStatus(scene['field_7096']),
+                                )})`
                           }
-                          className={`inline-flex items-center justify-center w-9 h-7 rounded-full text-xs font-medium transition-colors ${
-                            autoFixingMismatchSceneId === scene.id
-                              ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80'
-                              : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                          } ${
+                          className={`inline-flex items-center justify-center w-9 h-7 rounded-full text-xs font-medium transition-colors ${getFixTtsButtonClasses(
+                            parseFixTtsStatus(scene['field_7096']),
+                            autoFixingMismatchSceneId === scene.id,
+                          )} ${
                             addingImageOverlay === scene.id ||
                             autoFixingMismatchSceneId !== null
                               ? 'opacity-50 cursor-not-allowed'
