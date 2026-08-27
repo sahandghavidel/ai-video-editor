@@ -215,6 +215,30 @@ const extractFieldValueAsText = (field: unknown): string => {
   return '';
 };
 
+const isSceneVisualRequired = (scene: BaserowRow): boolean =>
+  extractFieldValueAsText(scene['field_7364']).trim().toLowerCase() ===
+  'needs visual';
+
+const getVisualRequirementButtonClasses = (
+  needsVisual: boolean,
+  isUpdating: boolean,
+  isAddingImageOverlay: boolean,
+): string => {
+  if (isAddingImageOverlay) {
+    return 'bg-gray-100 text-gray-500';
+  }
+
+  if (needsVisual) {
+    return isUpdating
+      ? 'bg-violet-100 text-violet-700 ring-1 ring-violet-300/80'
+      : 'bg-violet-100 text-violet-700 hover:bg-violet-200';
+  }
+
+  return isUpdating
+    ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-300/80'
+    : 'bg-rose-100 text-rose-700 hover:bg-rose-200';
+};
+
 export default function SceneCard({
   data: selectedVideoData,
   refreshData,
@@ -401,6 +425,12 @@ export default function SceneCard({
   const [addingImageOverlay, setAddingImageOverlay] = useState<number | null>(
     null,
   );
+  const [visualRequirementUpdatingSceneId, setVisualRequirementUpdatingSceneId] =
+    useState<number | null>(null);
+  const visualRequirementUpdateLockRef = useRef(false);
+  const [visualRequirementStatus, setVisualRequirementStatus] = useState<
+    Record<number, string | null>
+  >({});
 
   const [autoFixingMismatchSceneId, setAutoFixingMismatchSceneId] = useState<
     number | null
@@ -682,6 +712,73 @@ export default function SceneCard({
     }
   }, []);
 
+  const toggleSceneVisualRequirement = useCallback(async (sceneId: number) => {
+    if (visualRequirementUpdateLockRef.current) return;
+
+    const currentScene = dataRef.current.find((scene) => scene.id === sceneId);
+    const needsVisual = currentScene
+      ? isSceneVisualRequired(currentScene)
+      : false;
+    const nextValue = needsVisual ? null : 'Needs Visual';
+    const isClearingRequirement = nextValue === null;
+
+    visualRequirementUpdateLockRef.current = true;
+    setVisualRequirementUpdatingSceneId(sceneId);
+    setVisualRequirementStatus((prev) => ({
+      ...prev,
+      [sceneId]: isClearingRequirement
+        ? 'Clearing visual requirement...'
+        : 'Saving visual requirement...',
+    }));
+
+    try {
+      const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_7364: nextValue }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`${res.status} ${t}`.trim());
+      }
+
+      const updatedData = dataRef.current.map((scene) =>
+        scene.id === sceneId
+          ? { ...scene, field_7364: nextValue }
+          : scene,
+      );
+      dataRef.current = updatedData;
+      onDataUpdateRef.current?.(updatedData);
+
+      setVisualRequirementStatus((prev) => ({
+        ...prev,
+        [sceneId]: isClearingRequirement
+          ? 'Visual requirement cleared.'
+          : 'Needs Visual saved.',
+      }));
+
+      if (!onDataUpdateRef.current) {
+        refreshDataRef.current?.();
+      }
+    } catch (error) {
+      console.error(
+        `Failed to ${isClearingRequirement ? 'clear' : 'set'} visual requirement for scene ${sceneId}:`,
+        error,
+      );
+      setVisualRequirementStatus((prev) => ({
+        ...prev,
+        [sceneId]:
+          error instanceof Error
+            ? `Failed to ${isClearingRequirement ? 'clear' : 'save'} visual requirement: ${error.message}`
+            : `Failed to ${isClearingRequirement ? 'clear' : 'save'} visual requirement`,
+      }));
+    } finally {
+      visualRequirementUpdateLockRef.current = false;
+      setVisualRequirementUpdatingSceneId(null);
+    }
+  }, []);
+
   // Keyboard shortcuts for player speed
   useEffect(() => {
     const handleKeyDown = async (event: KeyboardEvent) => {
@@ -916,6 +1013,26 @@ export default function SceneCard({
         return;
       }
 
+      // While a Final video is playing, number 3 toggles this scene's visual
+      // requirement instead of changing playback behavior.
+      if (
+        event.key === '3' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        mediaPlayer.playingProducedVideoId !== null
+      ) {
+        event.preventDefault();
+
+        if (!event.repeat) {
+          void toggleSceneVisualRequirement(
+            mediaPlayer.playingProducedVideoId,
+          );
+        }
+
+        return;
+      }
+
       let newSpeed: number | null = null;
 
       // Handle player speed shortcuts
@@ -1013,6 +1130,7 @@ export default function SceneCard({
     imageOverlayModal.isOpen,
     handleProducedVideoPlay,
     toggleSceneFixTtsConfirmation,
+    toggleSceneVisualRequirement,
     refreshSceneInLocalCache,
     data,
     showOnlyFlagged,
@@ -8125,15 +8243,48 @@ export default function SceneCard({
                               scene['field_6886'] as string,
                             )
                           }
-                          disabled={addingImageOverlay === scene.id}
-                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-colors ${
-                            addingImageOverlay === scene.id
-                              ? 'bg-gray-100 text-gray-500'
-                              : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title='Add image overlay to final video'
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            if (
+                              addingImageOverlay === scene.id ||
+                              visualRequirementUpdatingSceneId === scene.id ||
+                              visualRequirementUpdateLockRef.current
+                            ) {
+                              return;
+                            }
+
+                            void toggleSceneVisualRequirement(scene.id);
+                          }}
+                          aria-label={
+                            visualRequirementUpdatingSceneId === scene.id
+                              ? 'Image (saving visual requirement)'
+                              : `Image (${isSceneVisualRequired(scene as BaserowRow) ? 'Needs Visual' : 'no visual requirement'})`
+                          }
+                          disabled={
+                            addingImageOverlay === scene.id ||
+                            visualRequirementUpdatingSceneId === scene.id
+                          }
+                          className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-colors ${getVisualRequirementButtonClasses(
+                            isSceneVisualRequired(scene as BaserowRow),
+                            visualRequirementUpdatingSceneId === scene.id,
+                            addingImageOverlay === scene.id,
+                          )} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={
+                            visualRequirementUpdatingSceneId === scene.id
+                              ? isSceneVisualRequired(scene as BaserowRow)
+                                ? 'Clearing visual requirement...'
+                                : 'Saving visual requirement...'
+                              : visualRequirementStatus[scene.id]
+                                ? visualRequirementStatus[scene.id]
+                                : isSceneVisualRequired(scene as BaserowRow)
+                                  ? 'Add image overlay to final video. Right-click or press 3 while Final is playing to clear Needs Visual.'
+                                  : 'Add image overlay to final video. Right-click or press 3 while Final is playing to mark Needs Visual.'
+                          }
                         >
-                          {addingImageOverlay === scene.id ? (
+                          {addingImageOverlay === scene.id ||
+                          visualRequirementUpdatingSceneId === scene.id ? (
                             <Loader2 className='animate-spin h-3 w-3' />
                           ) : (
                             <ImageIcon className='h-3 w-3' />
