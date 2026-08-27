@@ -221,6 +221,7 @@ REAL-Video-Enhancer/     Optional third-party enhancement backend
 - [Pipeline Batch Operations Playbook](./docs/Pipeline-Batch-Operations-Playbook.md)
 - [Dubbed Audio Pipeline Procedure](./docs/Dubbed-Audio-Pipeline-Procedure.md)
 - [FFmpeg Fonts on macOS](./docs/FFMPEG-Fonts.md)
+- [HyperFrames Scene Drafts](./docs/HyperFrames-Scene-Drafts.md)
 
 ## Contributing
 

@@ -136,6 +136,70 @@ function wordsMatchForHyperFramesAsset(left: string, right: string): boolean {
   return left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase();
 }
 
+function parseHyperFramesCaptionWords(value: unknown): TranscriptionWord[] {
+  const entries = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && 'words' in value
+      ? (value as { words?: unknown }).words
+      : null;
+
+  if (!Array.isArray(entries)) return [];
+
+  return entries.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+
+    const record = entry as Record<string, unknown>;
+    const word =
+      typeof record.word === 'string'
+        ? record.word.trim()
+        : typeof record.text === 'string'
+          ? record.text.trim()
+          : '';
+    const start = Number(record.start);
+    const end = Number(record.end);
+
+    return word && Number.isFinite(start) && Number.isFinite(end)
+      ? [{ word, start, end }]
+      : [];
+  });
+}
+
+function buildHyperFramesPrompt(input: {
+  sentence: string;
+  captionWords: TranscriptionWord[];
+  wordAssets: HyperFramesWordAsset[];
+}): string {
+  const captionData = input.captionWords.map(({ word, start, end }) => ({
+    word,
+    start,
+    end,
+  }));
+
+  return `Create a single HyperFrames HTML animation for this narrated scene.
+
+This is a prompt for an editable first draft. Do not render the video yet.
+
+Scene sentence:
+${input.sentence}
+
+Exact caption word timings:
+${JSON.stringify(captionData, null, 2)}
+
+Word image assets:
+${JSON.stringify(input.wordAssets, null, 2)}
+
+Requirements:
+- Match word assets to caption words case-insensitively and ignore surrounding punctuation.
+- Show each image only from that word's exact start time through its exact end time.
+- Use the provided image URLs exactly; do not invent replacement assets.
+- Use simple, readable fade-in and fade-out motion.
+- Keep the composition deterministic and seek-safe in HyperFrames.
+- If an image URL is empty or a word cannot be matched, list it as a missing asset instead of guessing.
+- Keep the visual focused on the meaning of the sentence and do not add unrelated elements.
+
+Return the editable HyperFrames HTML code for this scene. Do not render the video yet.`;
+}
+
 const SCENE_IMAGE_PROVIDER_STORAGE_KEY = 'scene-image-provider';
 const SCENE_IMAGE_PROVIDER_LABELS: Record<SceneImageProvider, string> = {
   'openai-image-2': 'OpenAI Image 2',
@@ -723,6 +787,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [scenePromptStatus, setScenePromptStatus] = useState<string | null>(
     null,
   );
+  const [isGeneratingHyperFramesPrompt, setIsGeneratingHyperFramesPrompt] =
+    useState(false);
+  const [hyperFramesPromptStatus, setHyperFramesPromptStatus] = useState<
+    string | null
+  >(null);
   const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
   const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
   const [sceneImageProvider, setSceneImageProvider] =
@@ -4142,6 +4211,90 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     wordAssetImageUrl,
   ]);
 
+  const handleGenerateHyperFramesPrompt = useCallback(async () => {
+    if (!sceneId || isGeneratingHyperFramesPrompt) return;
+
+    setIsGeneratingHyperFramesPrompt(true);
+    setHyperFramesPromptStatus(null);
+
+    try {
+      const latestSceneData = await fetchLatestSceneData();
+      if (!latestSceneData) {
+        throw new Error('Scene could not be found');
+      }
+
+      const sentence =
+        getSceneStringField(latestSceneData, 'field_6890') ||
+        getSceneStringField(latestSceneData, 'field_6901');
+      const captionsUrl = getSceneStringField(
+        latestSceneData,
+        'field_6910',
+      );
+      const latestAssets = parseHyperFramesWordAssets(
+        latestSceneData['field_7366'],
+      );
+
+      let captionWords = transcriptionWords ?? [];
+      if (captionWords.length === 0 && captionsUrl) {
+        const captionsResponse = await fetch(captionsUrl, {
+          cache: 'no-store',
+        });
+        if (captionsResponse.ok) {
+          const captionsData = await captionsResponse.json();
+          captionWords = parseHyperFramesCaptionWords(captionsData);
+        }
+      }
+
+      if (captionWords.length === 0) {
+        throw new Error(
+          'No caption word timings found. Load or create captions first.',
+        );
+      }
+
+      const prompt = buildHyperFramesPrompt({
+        sentence: sentence || '(scene sentence not available)',
+        captionWords,
+        wordAssets: latestAssets,
+      });
+
+      const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ field_7365: prompt }),
+      });
+
+      if (!patchRes.ok) {
+        const t = await patchRes.text().catch(() => '');
+        throw new Error(
+          `Failed to save HyperFrames prompt: ${patchRes.status} ${t}`,
+        );
+      }
+
+      setWordAssets(latestAssets);
+      mergeLocalSceneSnapshot({ field_7365: prompt });
+      setHyperFramesPromptStatus('Prompt saved to HyperFrames Prompt');
+      window.setTimeout(() => setHyperFramesPromptStatus(null), 3500);
+    } catch (error) {
+      console.error('Failed to generate/save HyperFrames prompt:', error);
+      setHyperFramesPromptStatus(
+        error instanceof Error
+          ? error.message
+          : 'Failed to generate HyperFrames prompt',
+      );
+    } finally {
+      setIsGeneratingHyperFramesPrompt(false);
+    }
+  }, [
+    fetchLatestSceneData,
+    getSceneStringField,
+    isGeneratingHyperFramesPrompt,
+    mergeLocalSceneSnapshot,
+    sceneId,
+    transcriptionWords,
+  ]);
+
   const handleApplySubtitleHighlight = useCallback(async () => {
     if (isApplying || isSubtitleHighlightLoading) return;
     if (!sceneId) return;
@@ -5178,6 +5331,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setIsSubtitleHighlightLoading(false);
     setIsGeneratingScenePrompt(false);
     setScenePromptStatus(null);
+    setIsGeneratingHyperFramesPrompt(false);
+    setHyperFramesPromptStatus(null);
     setSceneImageStatus(null);
     setTranscriptionWords(null);
     setIsOriginalVideoEditModalOpen(false);
@@ -5754,6 +5909,22 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   'Prompt'
                 )}
               </button>
+              <button
+                type='button'
+                onClick={handleGenerateHyperFramesPrompt}
+                disabled={isApplying || isGeneratingHyperFramesPrompt}
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Create and save an editable HyperFrames prompt for this scene'
+              >
+                {isGeneratingHyperFramesPrompt ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    HF Prompt
+                  </span>
+                ) : (
+                  'HF Prompt'
+                )}
+              </button>
               <select
                 value={sceneImageProvider}
                 onChange={(event) => {
@@ -5897,6 +6068,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               {scenePromptStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {scenePromptStatus}
+                </span>
+              ) : null}
+              {hyperFramesPromptStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {hyperFramesPromptStatus}
                 </span>
               ) : null}
               {sceneImageStatus ? (
