@@ -409,6 +409,10 @@ export default function SceneCard({
     Record<number, string | null>
   >({});
   const autoFixingMismatchLockRef = useRef(false);
+  const [confirmingFixTtsSceneId, setConfirmingFixTtsSceneId] = useState<
+    number | null
+  >(null);
+  const confirmingFixTtsLockRef = useRef(false);
 
   type CaptionsWord = { word: string; start: number; end: number };
   type AliasCanonicalRule = {
@@ -607,6 +611,76 @@ export default function SceneCard({
       scrollCardToTop,
     ],
   );
+
+  const toggleSceneFixTtsConfirmation = useCallback(async (sceneId: number) => {
+    if (confirmingFixTtsLockRef.current) return;
+
+    const currentScene = dataRef.current.find((scene) => scene.id === sceneId);
+    const currentStatus = currentScene
+      ? parseFixTtsStatus(currentScene['field_7096'])
+      : null;
+    const nextStatus = currentStatus === 'confirmed' ? null : 'confirmed';
+    const isClearingConfirmation = nextStatus === null;
+
+    confirmingFixTtsLockRef.current = true;
+    setConfirmingFixTtsSceneId(sceneId);
+    setAutoFixMismatchStatus((prev) => ({
+      ...prev,
+      [sceneId]: isClearingConfirmation
+        ? 'Clearing confirmation...'
+        : 'Saving confirmation...',
+    }));
+
+    try {
+      const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          field_7096: nextStatus,
+          field_7106: '',
+        }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`${res.status} ${t}`.trim());
+      }
+
+      const updatedData = dataRef.current.map((scene) =>
+        scene.id === sceneId
+          ? { ...scene, field_7096: nextStatus, field_7106: '' }
+          : scene,
+      );
+      dataRef.current = updatedData;
+      onDataUpdateRef.current?.(updatedData);
+
+      setAutoFixMismatchStatus((prev) => ({
+        ...prev,
+        [sceneId]: isClearingConfirmation
+          ? 'Confirmation cleared. Fix TTS can process this scene again.'
+          : 'Marked as confirmed. Fix TTS batch will skip this scene.',
+      }));
+
+      if (!onDataUpdateRef.current) {
+        refreshDataRef.current?.();
+      }
+    } catch (error) {
+      console.error(
+        `Failed to ${isClearingConfirmation ? 'clear confirmation' : 'set confirmation'} for scene ${sceneId}:`,
+        error,
+      );
+      setAutoFixMismatchStatus((prev) => ({
+        ...prev,
+        [sceneId]:
+          error instanceof Error
+            ? `Failed to ${isClearingConfirmation ? 'clear confirmation' : 'mark confirmed'}: ${error.message}`
+            : `Failed to ${isClearingConfirmation ? 'clear confirmation' : 'mark confirmed'}`,
+      }));
+    } finally {
+      confirmingFixTtsLockRef.current = false;
+      setConfirmingFixTtsSceneId(null);
+    }
+  }, []);
 
   // Keyboard shortcuts for player speed
   useEffect(() => {
@@ -822,6 +896,26 @@ export default function SceneCard({
         return;
       }
 
+      // While a Final video is playing, number 2 toggles this scene's
+      // confirmation instead of restarting playback at 2x.
+      if (
+        event.key === '2' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        mediaPlayer.playingProducedVideoId !== null
+      ) {
+        event.preventDefault();
+
+        if (!event.repeat) {
+          void toggleSceneFixTtsConfirmation(
+            mediaPlayer.playingProducedVideoId,
+          );
+        }
+
+        return;
+      }
+
       let newSpeed: number | null = null;
 
       // Handle player speed shortcuts
@@ -918,6 +1012,7 @@ export default function SceneCard({
     mediaPlayer.playingProducedVideoId,
     imageOverlayModal.isOpen,
     handleProducedVideoPlay,
+    toggleSceneFixTtsConfirmation,
     refreshSceneInLocalCache,
     data,
     showOnlyFlagged,
@@ -4257,48 +4352,6 @@ export default function SceneCard({
     },
     [fetchCaptionsWordsFromUrl, sleep],
   );
-
-  const markSceneFixTtsConfirmed = useCallback(async (sceneId: number) => {
-    try {
-      const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field_7096: 'confirmed', field_7106: '' }),
-      });
-
-      if (!res.ok) {
-        const t = await res.text().catch(() => '');
-        throw new Error(`${res.status} ${t}`.trim());
-      }
-
-      const updatedData = dataRef.current.map((scene) =>
-        scene.id === sceneId
-          ? { ...scene, field_7096: 'confirmed', field_7106: '' }
-          : scene,
-      );
-      dataRef.current = updatedData;
-      onDataUpdateRef.current?.(updatedData);
-
-      setAutoFixMismatchStatus((prev) => ({
-        ...prev,
-        [sceneId]: 'Marked as confirmed. Fix TTS batch will skip this scene.',
-      }));
-
-      // Fallback for usages that don't provide local update callback.
-      if (!onDataUpdateRef.current) {
-        refreshDataRef.current?.();
-      }
-    } catch (error) {
-      console.error(`Failed to set confirmed for scene ${sceneId}:`, error);
-      setAutoFixMismatchStatus((prev) => ({
-        ...prev,
-        [sceneId]:
-          error instanceof Error
-            ? `Failed to mark confirmed: ${error.message}`
-            : 'Failed to mark confirmed',
-      }));
-    }
-  }, []);
 
   const handleAutoFixMismatch = useCallback(
     async (
@@ -7980,11 +8033,12 @@ export default function SceneCard({
                       <>
                         <button
                           onClick={() => {
-                            // Keep auto-fix blocked while busy, but do not use
-                            // native `disabled` so right-click confirm can still run.
+                            // Keep auto-fix blocked while a confirmation update
+                            // or another auto-fix workflow is in progress.
                             if (
                               addingImageOverlay === scene.id ||
-                              autoFixingMismatchSceneId !== null
+                              autoFixingMismatchSceneId !== null ||
+                              confirmingFixTtsSceneId !== null
                             ) {
                               return;
                             }
@@ -8000,14 +8054,20 @@ export default function SceneCard({
 
                             // Avoid racing with the same scene while its auto-fix
                             // workflow is currently executing.
-                            if (autoFixingMismatchSceneId === scene.id) {
+                            if (
+                              autoFixingMismatchSceneId === scene.id ||
+                              confirmingFixTtsSceneId === scene.id ||
+                              confirmingFixTtsLockRef.current
+                            ) {
                               return;
                             }
 
-                            void markSceneFixTtsConfirmed(scene.id);
+                            void toggleSceneFixTtsConfirmation(scene.id);
                           }}
                           aria-label={
-                            autoFixingMismatchSceneId === scene.id
+                            confirmingFixTtsSceneId === scene.id
+                              ? 'Updating confirmation (saving)'
+                              : autoFixingMismatchSceneId === scene.id
                               ? 'Fix mismatch (running)'
                               : `Fix mismatch (${getFixTtsStatusLabel(
                                   parseFixTtsStatus(scene['field_7096']),
@@ -8015,15 +8075,27 @@ export default function SceneCard({
                           }
                           className={`inline-flex items-center justify-center w-9 h-7 rounded-full text-xs font-medium transition-colors ${getFixTtsButtonClasses(
                             parseFixTtsStatus(scene['field_7096']),
-                            autoFixingMismatchSceneId === scene.id,
+                            autoFixingMismatchSceneId === scene.id ||
+                              confirmingFixTtsSceneId === scene.id,
                           )} ${
                             addingImageOverlay === scene.id ||
-                            autoFixingMismatchSceneId !== null
+                            autoFixingMismatchSceneId !== null ||
+                            confirmingFixTtsSceneId === scene.id
                               ? 'opacity-50 cursor-not-allowed'
                               : ''
                           }`}
+                          disabled={
+                            addingImageOverlay === scene.id ||
+                            autoFixingMismatchSceneId === scene.id ||
+                            confirmingFixTtsSceneId === scene.id
+                          }
                           title={
-                            autoFixMismatchStatus[scene.id]
+                            confirmingFixTtsSceneId === scene.id
+                              ? parseFixTtsStatus(scene['field_7096']) ===
+                                  'confirmed'
+                                ? 'Clearing confirmation...'
+                                : 'Saving confirmation...'
+                              : autoFixMismatchStatus[scene.id]
                               ? `Fix mismatch: ${autoFixMismatchStatus[scene.id]}`
                               : (() => {
                                   const storedReason = getStoredMismatchReason(
@@ -8033,11 +8105,13 @@ export default function SceneCard({
                                     return `Fix mismatch (saved reason): ${storedReason}`;
                                   }
 
-                                  return 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries). Right-click to mark scene as confirmed (batch Fix TTS will skip it).';
+                                  return 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries). Right-click or press 2 while Final is playing to toggle confirmation.';
                                 })()
                           }
                         >
-                          {autoFixingMismatchSceneId === scene.id ? (
+                          {confirmingFixTtsSceneId === scene.id ? (
+                            <Loader2 className='h-3 w-3 animate-spin' />
+                          ) : autoFixingMismatchSceneId === scene.id ? (
                             <Wand2 className='h-3 w-3 animate-pulse' />
                           ) : (
                             <Wand2 className='h-3 w-3' />
