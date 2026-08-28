@@ -166,6 +166,8 @@ function parseHyperFramesCaptionWords(value: unknown): TranscriptionWord[] {
 
 function buildHyperFramesPrompt(input: {
   sentence: string;
+  previousSceneSentence?: string;
+  nextSceneSentence?: string;
   sceneDuration: number;
   captionWords: TranscriptionWord[];
 }): string {
@@ -178,8 +180,18 @@ function buildHyperFramesPrompt(input: {
 
   return `Create a single HyperFrames HTML animation for this narrated scene.
 
-Scene sentence:
+Narrative context:
+
+Previous scene:
+${input.previousSceneSentence || 'None'}
+
+Current scene:
 ${input.sentence}
+
+Next scene:
+${input.nextSceneSentence || 'None'}
+
+Use the previous and next scenes only to understand narrative continuity. Animate only the current scene. Do not copy their wording or create additional scenes.
 
 Required composition duration: ${requiredDuration} seconds.
 Set the root data-duration="${requiredDuration}" exactly and hold the final visual state until ${requiredDuration} seconds.
@@ -201,7 +213,19 @@ Requirements:
 - Use as little visible text as possible; communicate the sentence through visual objects, symbols, layout changes, and interaction.
 - Do not use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, or external CSS frameworks/other CDN scripts.
 - Keep the composition deterministic and seek-safe in HyperFrames.
-- Keep the visual focused on the meaning of the sentence and do not add unrelated elements.`;
+- Keep the visual focused on the meaning of the sentence and do not add unrelated elements.
+
+Creative direction:
+- Infer one clear, language-neutral visual metaphor for the sentence before coding. Do not output the plan.
+- Organize the animation into three semantic beats: establish the idea, demonstrate the change, and show the resolved result.
+- Use caption timings only as anchors for meaningful visual events. Do not animate every spoken word separately.
+- Avoid subtitles, large English text, webpage layouts, dashboards, card grids, and presentation-style slides.
+- Communicate through recognizable objects, symbols, cause-and-effect interactions, and spatial movement.
+- Create depth using a subtle background, one dominant subject, and restrained foreground accents.
+- Use 2-4 consistent motion patterns throughout the scene.
+- Keep purposeful motion visible throughout, but avoid flashing images, abrupt full-screen appearances, oversized objects, and unnecessary decoration.
+- Make every visual action explain the narration rather than merely decorate it.
+- Finish with a clear resolved composition and hold that state until the required duration.`;
 }
 
 const SCENE_IMAGE_PROVIDER_STORAGE_KEY = 'scene-image-provider';
@@ -639,6 +663,8 @@ interface ImageOverlayModalProps {
   videoUrl: string;
   sceneId: number;
   sceneData?: Record<string, unknown> | null;
+  previousSceneSentence?: string;
+  nextSceneSentence?: string;
   onApply: (
     sceneId: number,
     overlayImage: File | null,
@@ -683,6 +709,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   videoUrl,
   sceneId,
   sceneData,
+  previousSceneSentence,
+  nextSceneSentence,
   onApply,
   isApplying = false,
   handleTranscribeScene,
@@ -4317,6 +4345,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       const requiredDuration = Math.max(captionDuration, finalVideoDuration);
       const prompt = buildHyperFramesPrompt({
         sentence: sentence || '(scene sentence not available)',
+        previousSceneSentence,
+        nextSceneSentence,
         sceneDuration: requiredDuration,
         captionWords,
       });
@@ -4355,6 +4385,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     getSceneStringField,
     isGeneratingHyperFramesPrompt,
     mergeLocalSceneSnapshot,
+    nextSceneSentence,
+    previousSceneSentence,
     sceneId,
     transcriptionWords,
   ]);

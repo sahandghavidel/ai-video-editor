@@ -6422,6 +6422,41 @@ export default function SceneCard({
     sortByLastModified,
   ]);
 
+  const imageOverlayNarrativeContext = (() => {
+    const activeSceneId = imageOverlayModal.sceneId;
+    if (!activeSceneId) {
+      return { previousSceneSentence: '', nextSceneSentence: '' };
+    }
+
+    const activeScene = data.find((scene) => scene.id === activeSceneId);
+    if (!activeScene) {
+      return { previousSceneSentence: '', nextSceneSentence: '' };
+    }
+
+    const videoId = getVideoIdFromScene(activeScene);
+    if (videoId === null) {
+      return { previousSceneSentence: '', nextSceneSentence: '' };
+    }
+
+    const orderedScenes = getScenesInRealVideoOrder(videoId);
+    const activeIndex = orderedScenes.findIndex(
+      (scene) => scene.id === activeSceneId,
+    );
+    const getSentence = (scene?: BaserowRow): string =>
+      scene
+        ? extractFieldValueAsText(scene.field_6890 || scene.field_6901).trim()
+        : '';
+
+    return {
+      previousSceneSentence:
+        activeIndex > 0 ? getSentence(orderedScenes[activeIndex - 1]) : '',
+      nextSceneSentence:
+        activeIndex >= 0
+          ? getSentence(orderedScenes[activeIndex + 1])
+          : '',
+    };
+  })();
+
   if (showProcessingScenesAllVideos && loadingProcessingScenesData) {
     return (
       <div className='flex flex-col items-center justify-center min-h-[300px] text-gray-500'>
@@ -8566,6 +8601,10 @@ export default function SceneCard({
               (scene) => scene.id === (imageOverlayModal.sceneId || -1),
             ) || null
           }
+          previousSceneSentence={
+            imageOverlayNarrativeContext.previousSceneSentence
+          }
+          nextSceneSentence={imageOverlayNarrativeContext.nextSceneSentence}
           onApply={handleApplyImageOverlay}
           onUpdateModalVideoUrl={(newUrl) =>
             setImageOverlayModal((prev) => ({

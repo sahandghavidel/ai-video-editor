@@ -7,7 +7,6 @@ import { promisify } from 'util';
 import { NextResponse } from 'next/server';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 import { ensureMinioRunning } from '@/lib/minio-runtime';
-import { probeVideoDurationSeconds } from '@/lib/ffprobe-video-duration';
 import { validateHyperFramesHtml } from '@/lib/hyperframes-html-validation';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
 
@@ -20,7 +19,6 @@ type BaserowRow = {
 
 const execFileAsync = promisify(execFile);
 const SCENES_TABLE_ID = 714;
-const FINAL_VIDEO_FIELD_KEY = 'field_6886';
 const HYPERFRAMES_HTML_FIELD_KEY = 'field_7367';
 const HYPERFRAMES_VIDEO_FIELD_KEY = 'field_7368';
 const HYPERFRAMES_VERSION = '0.7.63';
@@ -31,18 +29,6 @@ const GSAP_SCRIPT_TAG =
 function getStringField(source: Record<string, unknown>, key: string): string {
   const value = source[key];
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function extractUrl(raw: unknown): string {
-  if (typeof raw === 'string') return raw.trim();
-  if (!raw) return '';
-  if (Array.isArray(raw) && raw.length > 0) return extractUrl(raw[0]);
-  if (typeof raw === 'object') {
-    const value = raw as Record<string, unknown>;
-    const url = value.url ?? (value.file as { url?: unknown } | undefined)?.url;
-    return typeof url === 'string' ? url.trim() : '';
-  }
-  return '';
 }
 
 function ensureGsapScript(html: string): string {
@@ -182,24 +168,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const finalVideoUrl = extractUrl(scene[FINAL_VIDEO_FIELD_KEY]);
-    if (!finalVideoUrl) {
-      return NextResponse.json(
-        {
-          error:
-            'Final video URL is empty. HyperFrames rendering requires an FFprobe duration check first.',
-        },
-        { status: 400 },
-      );
-    }
-    const finalVideoDuration = await probeVideoDurationSeconds(finalVideoUrl);
-
     // Keep the saved draft unchanged while making older drafts renderable when
     // they already use GSAP but forgot to load the library.
     const renderHtml = ensureGsapScript(sourceHtml);
-    const validationIssues = validateHyperFramesHtml(renderHtml, {
-      minimumDuration: finalVideoDuration,
-    });
+    const validationIssues = validateHyperFramesHtml(renderHtml);
     if (validationIssues.length > 0) {
       return NextResponse.json(
         {
