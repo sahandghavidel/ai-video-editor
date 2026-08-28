@@ -204,6 +204,9 @@ Requirements:
 - Include <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before the animation script.
 - Drive all motion through that paused timeline so arbitrary seeking renders the same frame every time.
 - Never overlap GSAP tweens that change the same property on the same target; combine those properties into one tween or sequence the tweens instead.
+- Never use CSS transform on an element animated by GSAP. Use GSAP x, y, scale, rotation, xPercent, and yPercent properties instead.
+- Preserve CSS centering in GSAP with xPercent and yPercent; do not use CSS translate() for an element whose transform is animated.
+- Never use tl.set() at timeline position 0 for an initial hidden state. Define that state in CSS or use immediate gsap.set() before creating the paused timeline.
 - Keep the standalone HTML composition under 300 lines by using reusable CSS classes and concise markup; do not add unnecessary text or decorative elements.
 - Do not use supplied image assets or external image URLs. Build the visuals with HTML, CSS, inline SVG, and the allowed GSAP script only.
 - Treat the caption timings as timing metadata, not visible subtitles. Do not render the caption words, the full sentence, or word-by-word text on screen.
@@ -726,7 +729,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     null,
   );
   const [overlayAnimation, setOverlayAnimation] =
-    useState<OverlayAnimation>('miniZoom');
+    useState<OverlayAnimation>('none');
   const [overlayImage, setOverlayImage] = useState<File | null>(null);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
   const didAutoLoadSceneOverlayRef = useRef(false);
@@ -4106,7 +4109,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setTintInvert(false);
       setIsEditingTintArea(false);
       setSelectedSoundName(null);
-      setOverlayAnimation('miniZoom');
+      setOverlayAnimation('none');
       setIsTintSectionOpen(false);
       setIsTextStylingSectionOpen(false);
       setIsSoundSectionOpen(false);
@@ -5560,7 +5563,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setTintInvert(false);
     setIsEditingTintArea(false);
     setSelectedSoundName(null);
-    setOverlayAnimation('miniZoom');
+    setOverlayAnimation('none');
     setIsTintSectionOpen(false);
     setIsTextStylingSectionOpen(false);
     setIsSoundSectionOpen(false);
