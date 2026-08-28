@@ -48,6 +48,7 @@ _Generate and compare thumbnail variants, select or export the final artwork, an
 - Normalize or enhance audio, optimize silence, adjust playback speed, and fit final duration.
 - Convert footage to constant frame rate, concatenate scenes, and merge final videos with FFmpeg.
 - Split long scenes, generate individual clips, and combine eligible scene pairs.
+- Scene separation can use either the original scene video or the final scene video. Final-mode clips use final-video-local transcription ranges, while the existing original Start/End interval is evenly divided across the new output scenes.
 - Add image and text overlays, highlighted subtitles, typing effects, and GIF assets.
 - Optionally upscale or interpolate scene video through the bundled REAL Video Enhancer backend.
 

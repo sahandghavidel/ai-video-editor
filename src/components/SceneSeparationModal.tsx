@@ -6,8 +6,11 @@ import { Loader2, X } from 'lucide-react';
 interface SceneSeparationModalProps {
   isOpen: boolean;
   sceneId: number | null;
+  sourceType: 'original' | 'final';
   videoUrl: string | null;
   captionsUrl: string | null;
+  finalVideoUrl: string | null;
+  onSourceTypeChange: (sourceType: 'original' | 'final') => void;
   onClose: () => void;
   onApplySeparation?: (editedWords: CaptionWord[]) => Promise<void> | void;
   onApplySeparationAndGenerateClips?: (
@@ -17,7 +20,8 @@ interface SceneSeparationModalProps {
   isApplyingSeparation?: boolean;
   isApplySeparationAndGenerateClipsRunning?: boolean;
   isTranscribeApplyAndGenerateClipsRunning?: boolean;
-  onRetranscribeOriginal?: () => Promise<void> | void;
+  onRetranscribeSource?: () => Promise<void> | void;
+  allowApplyWithoutClips?: boolean;
   isRetranscribing?: boolean;
   isTranscribeBusy?: boolean;
 }
@@ -65,8 +69,11 @@ const normalizeCaptionWords = (payload: unknown): CaptionWord[] => {
 export default function SceneSeparationModal({
   isOpen,
   sceneId,
+  sourceType,
   videoUrl,
   captionsUrl,
+  finalVideoUrl,
+  onSourceTypeChange,
   onClose,
   onApplySeparation,
   onApplySeparationAndGenerateClips,
@@ -74,7 +81,8 @@ export default function SceneSeparationModal({
   isApplyingSeparation = false,
   isApplySeparationAndGenerateClipsRunning = false,
   isTranscribeApplyAndGenerateClipsRunning = false,
-  onRetranscribeOriginal,
+  onRetranscribeSource,
+  allowApplyWithoutClips = true,
   isRetranscribing = false,
   isTranscribeBusy = false,
 }: SceneSeparationModalProps) {
@@ -85,6 +93,8 @@ export default function SceneSeparationModal({
   const [applyError, setApplyError] = useState<string | null>(null);
   const [editingWordIndex, setEditingWordIndex] = useState<number | null>(null);
   const [editingWordValue, setEditingWordValue] = useState('');
+  const sourceLabel = sourceType === 'final' ? 'final' : 'original';
+  const captionFieldLabel = sourceType === 'final' ? '6910' : '7120';
 
   const commitWordEdit = () => {
     if (editingWordIndex === null) return;
@@ -118,7 +128,7 @@ export default function SceneSeparationModal({
 
     if (!captionWords.length) {
       setApplyError(
-        'No caption words available to split. Re-transcribe original first.',
+        `No caption words available to split. Re-transcribe the ${sourceLabel} video first.`,
       );
       return;
     }
@@ -173,7 +183,7 @@ export default function SceneSeparationModal({
 
     if (!captionWords.length) {
       setApplyError(
-        'No caption words available to split. Re-transcribe original first.',
+        `No caption words available to split. Re-transcribe the ${sourceLabel} video first.`,
       );
       return;
     }
@@ -321,15 +331,40 @@ export default function SceneSeparationModal({
         className='w-full max-w-6xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden'
         onClick={(e) => e.stopPropagation()}
       >
-        <div className='px-4 sm:px-5 py-3 border-b border-gray-200 flex items-center justify-between'>
+        <div className='px-4 sm:px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3'>
           <div>
             <h3 className='text-sm sm:text-base font-semibold text-gray-900'>
               Separate Scene {sceneId ?? ''}
             </h3>
             <p className='text-xs text-gray-500 mt-0.5'>
-              Step 1: Preview the original scene video (field 6888).
+              Step 1: Preview the {sourceLabel} scene video (field{' '}
+              {sourceType === 'final' ? '6886' : '6888'}).
             </p>
           </div>
+          <label className='flex items-center gap-2 text-xs text-gray-600'>
+            <span className='whitespace-nowrap'>Separate using</span>
+            <select
+              value={sourceType}
+              onChange={(event) =>
+                onSourceTypeChange(
+                  event.target.value === 'final' ? 'final' : 'original',
+                )
+              }
+              disabled={
+                isRetranscribing ||
+                isApplyingSeparation ||
+                isApplySeparationAndGenerateClipsRunning ||
+                isTranscribeApplyAndGenerateClipsRunning
+              }
+              className='rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-fuchsia-500'
+              aria-label='Choose the video source for separation'
+            >
+              <option value='original'>Original video</option>
+              {finalVideoUrl ? (
+                <option value='final'>Final video</option>
+              ) : null}
+            </select>
+          </label>
           <button
             onClick={onClose}
             className='inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors'
@@ -341,6 +376,13 @@ export default function SceneSeparationModal({
         </div>
 
         <div className='p-4 sm:p-5'>
+          {sourceType === 'final' ? (
+            <div className='mb-3 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800'>
+              Final mode transcribes and cuts this scene&apos;s final video.
+              The existing original Start/End fields are divided evenly across
+              the new scenes, so use one of the clip-generation actions below.
+            </div>
+          ) : null}
           {videoUrl ? (
             <video
               ref={sceneSeparationVideoRef}
@@ -352,14 +394,16 @@ export default function SceneSeparationModal({
             </video>
           ) : (
             <div className='rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2'>
-              Original video URL is missing for this scene.
+              {sourceLabel[0].toUpperCase() + sourceLabel.slice(1)} video URL is
+              missing for this scene.
             </div>
           )}
 
           <div className='mt-4 rounded-lg border border-gray-200 overflow-hidden'>
             <div className='px-3 py-2 bg-gray-50 border-b border-gray-200'>
               <h4 className='text-xs sm:text-sm font-semibold text-gray-800'>
-                Original Video Caption for Scene (7120)
+                {sourceLabel[0].toUpperCase() + sourceLabel.slice(1)} Video
+                Caption for Scene ({captionFieldLabel})
               </h4>
               <p className='text-[11px] sm:text-xs text-gray-500 mt-0.5'>
                 Click a word to edit it (for punctuation/dot adjustments).
@@ -378,8 +422,8 @@ export default function SceneSeparationModal({
                 </div>
               ) : captionWords.length === 0 ? (
                 <div className='text-sm text-gray-500'>
-                  No caption words loaded yet. Re-transcribe original to load
-                  words.
+                  No caption words loaded yet. Re-transcribe the {sourceLabel}{' '}
+                  video to load words.
                 </div>
               ) : (
                 <div className='flex flex-wrap gap-2'>
@@ -430,7 +474,7 @@ export default function SceneSeparationModal({
           <div className='flex items-center justify-between gap-3'>
             <button
               onClick={() => {
-                void onRetranscribeOriginal?.();
+                void onRetranscribeSource?.();
               }}
               disabled={
                 !sceneId ||
@@ -446,10 +490,12 @@ export default function SceneSeparationModal({
               }`}
               title={
                 isRetranscribing
-                  ? 'Re-transcribing original scene video...'
+                  ? `Re-transcribing ${sourceLabel} scene video...`
                   : isTranscribeBusy
                     ? 'Another scene transcription is already in progress'
-                    : 'Re-transcribe the original scene video (field 6888)'
+                    : `Re-transcribe the ${sourceLabel} scene video (field ${
+                        sourceType === 'final' ? '6886' : '6888'
+                      })`
               }
             >
               {isRetranscribing ? (
@@ -460,7 +506,9 @@ export default function SceneSeparationModal({
               <span>
                 {isRetranscribing
                   ? 'Transcribing...'
-                  : 'Re-Transcribe Original'}
+                  : `Re-Transcribe ${
+                      sourceLabel[0].toUpperCase() + sourceLabel.slice(1)
+                    }`}
               </span>
             </button>
 
@@ -477,14 +525,19 @@ export default function SceneSeparationModal({
                   isApplyingSeparation ||
                   isApplySeparationAndGenerateClipsRunning ||
                   isTranscribeApplyAndGenerateClipsRunning ||
-                  !onApplySeparation
+                  !onApplySeparation ||
+                  !allowApplyWithoutClips
                 }
                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   isApplyingSeparation
                     ? 'bg-fuchsia-100 text-fuchsia-700'
                     : 'bg-fuchsia-600 text-white hover:bg-fuchsia-700'
                 }`}
-                title='Apply split using edited words and create separated scenes'
+                title={
+                  allowApplyWithoutClips
+                    ? 'Apply split using edited words and create separated scenes'
+                    : 'Final separation must generate Final clips in the same action'
+                }
               >
                 {isApplyingSeparation ? (
                   <Loader2 className='h-3.5 w-3.5 animate-spin' />
@@ -492,7 +545,11 @@ export default function SceneSeparationModal({
                   <span className='text-[11px] leading-none'>✂️</span>
                 )}
                 <span>
-                  {isApplyingSeparation ? 'Applying...' : 'Apply Separation'}
+                  {isApplyingSeparation
+                    ? 'Applying...'
+                    : allowApplyWithoutClips
+                      ? 'Apply Separation'
+                      : 'Final: use Apply + Gen Clips'}
                 </span>
               </button>
 
@@ -515,7 +572,7 @@ export default function SceneSeparationModal({
                     ? 'bg-violet-100 text-violet-700'
                     : 'bg-violet-600 text-white hover:bg-violet-700'
                 }`}
-                title='Apply separation using current edited words, then generate clips for resulting scenes'
+                title={`Apply separation using current edited words, then generate clips from the ${sourceLabel} video`}
               >
                 {isApplySeparationAndGenerateClipsRunning ? (
                   <Loader2 className='h-3.5 w-3.5 animate-spin' />
@@ -547,7 +604,7 @@ export default function SceneSeparationModal({
                     ? 'bg-indigo-100 text-indigo-700'
                     : 'bg-indigo-600 text-white hover:bg-indigo-700'
                 }`}
-                title='Transcribe original, apply separation, then generate clips for newly created scenes'
+                title={`Transcribe ${sourceLabel}, apply separation, then generate clips from the ${sourceLabel} video`}
               >
                 {isTranscribeApplyAndGenerateClipsRunning ? (
                   <Loader2 className='h-3.5 w-3.5 animate-spin' />
@@ -557,7 +614,9 @@ export default function SceneSeparationModal({
                 <span>
                   {isTranscribeApplyAndGenerateClipsRunning
                     ? 'Running...'
-                    : 'Transcribe + Apply + Gen Clips'}
+                    : `Transcribe ${
+                        sourceLabel[0].toUpperCase() + sourceLabel.slice(1)
+                      } + Apply + Gen Clips`}
                 </span>
               </button>
 

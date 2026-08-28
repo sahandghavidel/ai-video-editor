@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
+import { probeVideoDurationSeconds } from '@/lib/ffprobe-video-duration';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +26,8 @@ type TranscriptionData =
   | { Segments: WordSegment[] }
   | { segments: WordSegment[] }
   | { words: WordSegment[] };
+
+type SeparationSourceType = 'original' | 'final';
 
 const SCENES_TABLE_ID = '714';
 const VIDEOS_TABLE_ID = '713';
@@ -99,6 +102,27 @@ function hasPopulatedCaptionUrl(value: unknown): boolean {
   }
 
   return false;
+}
+
+function extractUrlFromField(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const url = extractUrlFromField(entry);
+      if (url) return url;
+    }
+    return '';
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return extractUrlFromField(
+      record.url ?? record.value ?? record.file ?? record.name,
+    );
+  }
+
+  return '';
 }
 
 function extractLinkedVideoId(videoIdField: unknown): number | null {
@@ -1101,6 +1125,9 @@ export async function POST(request: NextRequest) {
       unknown
     >;
 
+    const sourceType: SeparationSourceType =
+      body.sourceType === 'final' ? 'final' : 'original';
+
     const sceneId = parsePositiveInt(body.sceneId);
     if (!sceneId) {
       return NextResponse.json(
@@ -1160,7 +1187,7 @@ export async function POST(request: NextRequest) {
         ? existingSceneIds[sourceSceneIndexInVideo + 1]
         : undefined;
 
-    const sourceStart = parseFiniteNumber(sourceScene.field_6896) ?? 0;
+    const originalStart = parseFiniteNumber(sourceScene.field_6896) ?? 0;
     const sourceEndField = parseFiniteNumber(sourceScene.field_6897);
     const sourceDurationField = parseFiniteNumber(sourceScene.field_6884);
     const maxWordEnd = editedWords.reduce(
@@ -1168,15 +1195,58 @@ export async function POST(request: NextRequest) {
       0,
     );
 
-    const spanFromBounds =
-      sourceEndField !== null ? Math.max(0, sourceEndField - sourceStart) : 0;
+    let sourceStart = originalStart;
+    let sourceEnd = sourceEndField ?? originalStart;
+    let sourceDuration: number;
+    let finalSourceUrl = '';
 
-    const sourceDuration =
-      spanFromBounds > TIMING_EPSILON
-        ? spanFromBounds
-        : sourceDurationField !== null && sourceDurationField > TIMING_EPSILON
-          ? sourceDurationField
-          : maxWordEnd;
+    if (sourceType === 'final') {
+      finalSourceUrl = extractUrlFromField(sourceScene.field_6886);
+      if (!finalSourceUrl) {
+        return NextResponse.json(
+          {
+            error:
+              'Final video is required in field_6886 before using Final separation',
+          },
+          { status: 400 },
+        );
+      }
+
+      let probedFinalDuration: number | null = null;
+      try {
+        probedFinalDuration = await probeVideoDurationSeconds(finalSourceUrl);
+      } catch (probeError) {
+        console.warn(
+          `Could not probe final video duration for scene ${sceneId}; using stored duration fallback:`,
+          probeError,
+        );
+      }
+
+      const storedFinalDuration = parseFiniteNumber(sourceScene.field_7107);
+      sourceStart = 0;
+      sourceDuration =
+        probedFinalDuration !== null
+          ? probedFinalDuration
+          : Math.max(storedFinalDuration ?? 0, maxWordEnd);
+      sourceEnd = sourceDuration;
+    } else {
+      const spanFromBounds =
+        sourceEndField !== null
+          ? Math.max(0, sourceEndField - originalStart)
+          : 0;
+
+      sourceDuration =
+        spanFromBounds > TIMING_EPSILON
+          ? spanFromBounds
+          : sourceDurationField !== null && sourceDurationField > TIMING_EPSILON
+            ? sourceDurationField
+            : maxWordEnd;
+
+      sourceEnd =
+        sourceEndField !== null && sourceEndField > originalStart
+          ? sourceEndField
+          : originalStart + sourceDuration;
+    }
 
     if (!Number.isFinite(sourceDuration) || sourceDuration <= TIMING_EPSILON) {
       return NextResponse.json(
@@ -1188,11 +1258,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sourceEnd =
-      sourceEndField !== null && sourceEndField > sourceStart
-        ? sourceEndField
-        : sourceStart + sourceDuration;
-
     const generatedSegments = generateScenesFromTranscription(
       editedWords,
       String(videoId),
@@ -1202,42 +1267,93 @@ export async function POST(request: NextRequest) {
     const postProcessedSegments =
       mergeTinyEmptyScenesIntoPrevious(generatedSegments);
 
-    const absoluteSegments = convertRelativeSegmentsToAbsoluteTimeline(
+    const sourceTimelineSegments = convertRelativeSegmentsToAbsoluteTimeline(
       postProcessedSegments,
       sourceStart,
       sourceEnd,
     );
 
-    // Duration reconciliation: pin the first segment's start and the last
-    // segment's end to the original scene boundaries, then recompute all
-    // durations sequentially. This guarantees:
-    //   sum(durations) === sourceDuration  (exactly)
-    // regardless of rounding drift from gap adjustments, extensions,
-    // or overlap resolution in the pipeline above.
-    if (absoluteSegments.length > 1) {
+    let outputSegments = sourceTimelineSegments;
+    let finalSegments: SceneSegment[] = [];
+
+    if (sourceType === 'final') {
+      // Final captions are local to the final scene video, so keep these
+      // ranges for FFmpeg clip generation instead of treating them as
+      // original-video timestamps.
+      finalSegments = sourceTimelineSegments;
+
+      const originalEnd =
+        sourceEndField !== null && sourceEndField > originalStart
+          ? sourceEndField
+          : sourceDurationField !== null && sourceDurationField > TIMING_EPSILON
+            ? originalStart + sourceDurationField
+            : originalStart;
+      const originalDuration = originalEnd - originalStart;
+
+      if (!Number.isFinite(originalDuration) || originalDuration <= TIMING_EPSILON) {
+        return NextResponse.json(
+          {
+            error:
+              'Original scene Start Time and End Time are required to distribute Final separation outputs',
+          },
+          { status: 400 },
+        );
+      }
+
+      const outputCount = finalSegments.length;
+      const evenlyDistributedSegments = finalSegments.map((segment, index) => {
+        // Existing original timing fields remain a bookkeeping timeline. The
+        // actual Final cuts are returned separately in finalSegmentCuts.
+        const segmentStart = roundTiming(
+          originalStart + (originalDuration * index) / outputCount,
+        );
+        const segmentEnd =
+          index === outputCount - 1
+            ? roundTiming(originalEnd)
+            : roundTiming(
+                originalStart + (originalDuration * (index + 1)) / outputCount,
+              );
+
+        return {
+          ...segment,
+          startTime: segmentStart,
+          endTime: segmentEnd,
+          duration: roundTiming(segmentEnd - segmentStart),
+          preEndTime: index === 0 ? roundTiming(originalStart) : segmentStart,
+        };
+      });
+
+      outputSegments = evenlyDistributedSegments;
+    }
+
+    // Original-mode duration reconciliation: pin the first segment's start
+    // and the last segment's end to the original scene boundaries, then
+    // recompute all durations sequentially. Final mode intentionally uses
+    // the separate evenly distributed original timeline above.
+    if (sourceType === 'original' && outputSegments.length > 1) {
       const targetStartTime = roundTiming(sourceStart);
       const targetEndTime = roundTiming(sourceStart + sourceDuration);
 
-      absoluteSegments[0].startTime = targetStartTime;
-      absoluteSegments[0].duration = roundTiming(
-        Math.max(0, absoluteSegments[0].endTime - targetStartTime),
+      outputSegments[0].startTime = targetStartTime;
+      outputSegments[0].duration = roundTiming(
+        Math.max(0, outputSegments[0].endTime - targetStartTime),
       );
 
-      const lastSegment = absoluteSegments[absoluteSegments.length - 1];
+      const lastSegment = outputSegments[outputSegments.length - 1];
       lastSegment.endTime = targetEndTime;
       lastSegment.duration = roundTiming(
         Math.max(0, targetEndTime - lastSegment.startTime),
       );
 
       // Recompute preEndTime values sequentially after the adjustment.
-      for (let i = 1; i < absoluteSegments.length; i++) {
-        absoluteSegments[i].preEndTime = roundTiming(
-          absoluteSegments[i - 1].endTime,
+      for (let i = 1; i < outputSegments.length; i++) {
+        outputSegments[i].preEndTime = roundTiming(
+          outputSegments[i - 1].endTime,
         );
       }
     }
 
-    if (!absoluteSegments.length) {
+    if (!outputSegments.length) {
       return NextResponse.json(
         { error: 'Separation produced zero output segments' },
         { status: 400 },
@@ -1247,13 +1363,14 @@ export async function POST(request: NextRequest) {
     // No-op guard: if separation results in only one scene, keep source scene
     // exactly as-is. Do not clear fields, update timings, create rows, or
     // relink scene IDs.
-    if (absoluteSegments.length <= 1) {
+    if (outputSegments.length <= 1) {
       return NextResponse.json({
         success: true,
         skippedNoSplit: true,
         sceneId,
         videoId,
-        segmentCount: absoluteSegments.length,
+        sourceType,
+        segmentCount: outputSegments.length,
         createdSceneIds: [],
         linkedScenesUpdated: false,
         linkedSceneIds: existingSceneIds,
@@ -1265,13 +1382,16 @@ export async function POST(request: NextRequest) {
     const baseSceneOrder =
       currentSceneOrder !== null ? currentSceneOrder : fallbackSceneOrder;
 
-    const segmentPayloads = absoluteSegments.map((segment, index) => ({
+    const segmentPayloads = outputSegments.map((segment, index) => ({
       field_6890: segment.words,
       field_6901: segment.words,
       field_6896: segment.startTime,
       field_6897: segment.endTime,
       field_6898: segment.preEndTime,
       field_6884: segment.duration,
+      ...(sourceType === 'final'
+        ? { field_7107: finalSegments[index]?.duration ?? 0 }
+        : {}),
       field_7104: Number(
         (baseSceneOrder + index * SPLIT_ORDER_STEP).toFixed(3),
       ),
@@ -1307,6 +1427,16 @@ export async function POST(request: NextRequest) {
     const createdSceneIds = normalizeSceneIdList(
       createdRows.map((row) => row.id),
     );
+
+    const finalSegmentCuts =
+      sourceType === 'final'
+        ? finalSegments.map((segment, index) => ({
+            sceneId: [sceneId, ...createdSceneIds][index],
+            startTime: segment.startTime,
+            endTime: segment.endTime,
+            duration: segment.duration,
+          }))
+        : [];
 
     const sceneIdsNeedingCaptionClear = new Set<number>();
 
@@ -1382,8 +1512,11 @@ export async function POST(request: NextRequest) {
       skippedNoSplit: false,
       sceneId,
       videoId,
+      sourceType,
       segmentCount: segmentPayloads.length,
       createdSceneIds,
+      finalSourceUrl: sourceType === 'final' ? finalSourceUrl : null,
+      finalSegmentCuts,
       canonicalBeforeSceneId: canonicalBeforeSceneId ?? null,
       linkedScenesUpdated,
       linkedSceneIds,

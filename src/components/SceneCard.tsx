@@ -208,11 +208,33 @@ const extractFieldValueAsText = (field: unknown): string => {
   if (typeof field === 'object') {
     const record = field as Record<string, unknown>;
     return extractFieldValueAsText(
-      record.value ?? record.name ?? record.text ?? record.title,
+      record.url ??
+        record.file ??
+        record.value ??
+        record.name ??
+        record.text ??
+        record.title,
     );
   }
 
   return '';
+};
+
+type SceneSeparationSourceType = 'original' | 'final';
+
+type FinalSceneCut = {
+  sceneId: number;
+  startTime: number;
+  endTime: number;
+  duration: number;
+};
+
+type SceneSeparationExecutionResult = {
+  createdSceneIds: number[];
+  skippedNoSplit: boolean;
+  sourceType: SceneSeparationSourceType;
+  finalSourceUrl: string | null;
+  finalSegmentCuts: FinalSceneCut[];
 };
 
 const isSceneVisualRequired = (scene: BaserowRow): boolean =>
@@ -412,13 +434,23 @@ export default function SceneCard({
   const [sceneSeparationModal, setSceneSeparationModal] = useState<{
     isOpen: boolean;
     sceneId: number | null;
+    sourceType: SceneSeparationSourceType;
     videoUrl: string | null;
     captionsUrl: string | null;
+    originalVideoUrl: string | null;
+    originalCaptionsUrl: string | null;
+    finalVideoUrl: string | null;
+    finalCaptionsUrl: string | null;
   }>({
     isOpen: false,
     sceneId: null,
+    sourceType: 'original',
     videoUrl: null,
     captionsUrl: null,
+    originalVideoUrl: null,
+    originalCaptionsUrl: null,
+    finalVideoUrl: null,
+    finalCaptionsUrl: null,
   });
   const [ttsWordReplacementsModalOpen, setTtsWordReplacementsModalOpen] =
     useState(false);
@@ -1809,8 +1841,18 @@ export default function SceneCard({
       sceneData || data.find((scene) => scene.id === sceneId);
     if (!currentScene) return;
 
-    let originalVideoUrl = String(currentScene.field_6888 || '').trim();
-    const originalCaptionsUrl = String(currentScene.field_7120 || '').trim();
+    let originalVideoUrl = extractFieldValueAsText(
+      currentScene.field_6888,
+    ).trim();
+    const originalCaptionsUrl = extractFieldValueAsText(
+      currentScene.field_7120,
+    ).trim();
+    const finalVideoUrl = extractFieldValueAsText(
+      currentScene.field_6886,
+    ).trim();
+    const finalCaptionsUrl = extractFieldValueAsText(
+      currentScene.field_6910,
+    ).trim();
 
     // Auto-generate the video clip if field_6888 is empty.
     if (!originalVideoUrl) {
@@ -1880,8 +1922,33 @@ export default function SceneCard({
     setSceneSeparationModal({
       isOpen: true,
       sceneId,
+      sourceType: 'original',
       videoUrl: originalVideoUrl,
       captionsUrl: originalCaptionsUrl || null,
+      originalVideoUrl: originalVideoUrl || null,
+      originalCaptionsUrl: originalCaptionsUrl || null,
+      finalVideoUrl: finalVideoUrl || null,
+      finalCaptionsUrl: finalCaptionsUrl || null,
+    });
+  };
+
+  const handleSceneSeparationSourceTypeChange = (
+    sourceType: SceneSeparationSourceType,
+  ) => {
+    setSceneSeparationModal((prev) => {
+      const videoUrl =
+        sourceType === 'final' ? prev.finalVideoUrl : prev.originalVideoUrl;
+      const captionsUrl =
+        sourceType === 'final'
+          ? prev.finalCaptionsUrl
+          : prev.originalCaptionsUrl;
+
+      return {
+        ...prev,
+        sourceType,
+        videoUrl,
+        captionsUrl,
+      };
     });
   };
 
@@ -1889,8 +1956,13 @@ export default function SceneCard({
     setSceneSeparationModal({
       isOpen: false,
       sceneId: null,
+      sourceType: 'original',
       videoUrl: null,
       captionsUrl: null,
+      originalVideoUrl: null,
+      originalCaptionsUrl: null,
+      finalVideoUrl: null,
+      finalCaptionsUrl: null,
     });
   };
 
@@ -1964,8 +2036,9 @@ export default function SceneCard({
       refreshOnSuccess?: boolean;
       playErrorSoundOnFailure?: boolean;
     },
-  ): Promise<{ createdSceneIds: number[]; skippedNoSplit: boolean }> => {
+  ): Promise<SceneSeparationExecutionResult> => {
     const activeSceneId = sceneSeparationModal.sceneId;
+    const sourceType = sceneSeparationModal.sourceType;
     if (activeSceneId === null) {
       throw new Error('No active scene selected for separation.');
     }
@@ -2006,6 +2079,7 @@ export default function SceneCard({
         },
         body: JSON.stringify({
           sceneId: activeSceneId,
+          sourceType,
           ...(typeof beforeSceneId === 'number' ? { beforeSceneId } : {}),
           editedWords,
         }),
@@ -2015,6 +2089,9 @@ export default function SceneCard({
         error?: unknown;
         createdSceneIds?: unknown;
         skippedNoSplit?: unknown;
+        sourceType?: unknown;
+        finalSourceUrl?: unknown;
+        finalSegmentCuts?: unknown;
       } | null;
 
       if (!response.ok) {
@@ -2027,6 +2104,40 @@ export default function SceneCard({
 
       const createdSceneIds = parsePositiveSceneIds(payload?.createdSceneIds);
       const skippedNoSplit = payload?.skippedNoSplit === true;
+      const responseSourceType: SceneSeparationSourceType =
+        payload?.sourceType === 'final' ? 'final' : sourceType;
+      const finalSourceUrl =
+        typeof payload?.finalSourceUrl === 'string' &&
+        payload.finalSourceUrl.trim()
+          ? payload.finalSourceUrl.trim()
+          : null;
+      const finalSegmentCuts = Array.isArray(payload?.finalSegmentCuts)
+        ? payload.finalSegmentCuts
+            .map((entry): FinalSceneCut | null => {
+              if (!entry || typeof entry !== 'object') return null;
+              const record = entry as Record<string, unknown>;
+              const sceneId = Number(record.sceneId);
+              const startTime = Number(record.startTime);
+              const endTime = Number(record.endTime);
+              const duration = Number(record.duration);
+
+              if (
+                !Number.isInteger(sceneId) ||
+                sceneId <= 0 ||
+                !Number.isFinite(startTime) ||
+                !Number.isFinite(endTime) ||
+                !Number.isFinite(duration) ||
+                startTime < 0 ||
+                endTime <= startTime ||
+                duration <= 0
+              ) {
+                return null;
+              }
+
+              return { sceneId, startTime, endTime, duration };
+            })
+            .filter((entry): entry is FinalSceneCut => entry !== null)
+        : [];
 
       if (skippedNoSplit) {
         if (options?.closeModalOnSuccess !== false) {
@@ -2036,6 +2147,9 @@ export default function SceneCard({
         return {
           createdSceneIds: [],
           skippedNoSplit: true,
+          sourceType: responseSourceType,
+          finalSourceUrl,
+          finalSegmentCuts,
         };
       }
 
@@ -2052,6 +2166,9 @@ export default function SceneCard({
       return {
         createdSceneIds,
         skippedNoSplit: false,
+        sourceType: responseSourceType,
+        finalSourceUrl,
+        finalSegmentCuts,
       };
     } catch (error) {
       if (options?.playErrorSoundOnFailure !== false) {
@@ -2069,6 +2186,82 @@ export default function SceneCard({
     editedWords: Array<{ word: string; start: number; end: number }>,
   ) => {
     await executeSceneSeparation(editedWords);
+  };
+
+  const generateFinalSceneClips = async (
+    separation: SceneSeparationExecutionResult,
+  ) => {
+    if (separation.sourceType !== 'final') return;
+
+    if (!separation.finalSourceUrl) {
+      throw new Error(
+        'Final source video URL was not returned after separation.',
+      );
+    }
+
+    if (!separation.finalSegmentCuts.length) {
+      throw new Error('Final separation returned no clip ranges.');
+    }
+
+    for (const cut of separation.finalSegmentCuts) {
+      const clipScene =
+        dataRef.current.find((scene) => scene.id === cut.sceneId) ||
+        (await getSceneById(cut.sceneId));
+      if (!clipScene) {
+        throw new Error(
+          `Scene ${cut.sceneId} was not found for Final clip generation.`,
+        );
+      }
+
+      setGeneratingSingleClip(cut.sceneId);
+
+      try {
+        const response = await fetch('/api/generate-single-clip', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sceneId: cut.sceneId,
+            videoId: getVideoIdFromScene(clipScene) || undefined,
+            sourceType: 'final',
+            sourceUrl: separation.finalSourceUrl,
+            startTime: cut.startTime,
+            endTime: cut.endTime,
+          }),
+        });
+
+        const result = (await response.json().catch(() => null)) as {
+          clipUrl?: unknown;
+          error?: unknown;
+        } | null;
+
+        if (!response.ok || typeof result?.clipUrl !== 'string') {
+          const message =
+            typeof result?.error === 'string'
+              ? result.error
+              : `Final clip generation failed (${response.status})`;
+          throw new Error(message);
+        }
+
+        const updatedData = dataRef.current.map((scene) =>
+          scene.id === cut.sceneId
+            ? {
+                ...scene,
+                field_6886: result.clipUrl,
+                field_6888: result.clipUrl,
+              }
+            : scene,
+        );
+        dataRef.current = updatedData;
+        onDataUpdateRef.current?.(updatedData);
+        setData(updatedData);
+
+        await refreshSceneInLocalCache(cut.sceneId);
+      } finally {
+        setGeneratingSingleClip(null);
+      }
+    }
   };
 
   const handleApplySeparationAndGenerateClips = async (
@@ -2090,35 +2283,39 @@ export default function SceneCard({
     setApplyAndGenerateSceneId(activeSceneId);
 
     try {
-      const createdSceneIds = await executeSceneSeparation(editedWords, {
+      const separation = await executeSceneSeparation(editedWords, {
         closeModalOnSuccess: false,
         playSuccessSoundOnSuccess: false,
         refreshOnSuccess: false,
         playErrorSoundOnFailure: false,
       });
 
-      if (createdSceneIds.skippedNoSplit) {
+      if (separation.skippedNoSplit) {
         handleCloseSceneSeparationModal();
         return;
       }
 
-      const clipSceneIds = parsePositiveSceneIds([
-        activeSceneId,
-        ...createdSceneIds.createdSceneIds,
-      ]);
+      if (separation.sourceType === 'final') {
+        await generateFinalSceneClips(separation);
+      } else {
+        const clipSceneIds = parsePositiveSceneIds([
+          activeSceneId,
+          ...separation.createdSceneIds,
+        ]);
 
-      for (const clipSceneId of clipSceneIds) {
-        const clipScene = await getSceneById(clipSceneId);
-        if (!clipScene) {
-          console.warn(
-            `Skipping clip generation for scene ${clipSceneId}: scene not found`,
-          );
-          continue;
+        for (const clipSceneId of clipSceneIds) {
+          const clipScene = await getSceneById(clipSceneId);
+          if (!clipScene) {
+            console.warn(
+              `Skipping clip generation for scene ${clipSceneId}: scene not found`,
+            );
+            continue;
+          }
+
+          await handleGenerateSingleClip(clipSceneId, clipScene, {
+            throwOnError: true,
+          });
         }
-
-        await handleGenerateSingleClip(clipSceneId, clipScene, {
-          throwOnError: true,
-        });
       }
 
       playSuccessSound();
@@ -2163,19 +2360,31 @@ export default function SceneCard({
       await handleTranscribeScene(
         activeSceneId,
         targetScene,
-        'original',
+        sceneSeparationModal.sourceType,
         false,
         true,
         false,
-        { captionsFieldKey: 'field_7120', throwOnError: true },
+        {
+          captionsFieldKey:
+            sceneSeparationModal.sourceType === 'final'
+              ? 'field_6910'
+              : 'field_7120',
+          throwOnError: true,
+        },
       );
 
       const refreshedScene = await getSceneById(activeSceneId);
-      const nextCaptionsUrl = String(refreshedScene?.field_7120 || '').trim();
+      const captionsFieldKey =
+        sceneSeparationModal.sourceType === 'final'
+          ? 'field_6910'
+          : 'field_7120';
+      const nextCaptionsUrl = extractFieldValueAsText(
+        refreshedScene?.[captionsFieldKey],
+      ).trim();
 
       if (!nextCaptionsUrl) {
         throw new Error(
-          'Original transcription captions (field_7120) are missing after transcription.',
+          `${sceneSeparationModal.sourceType === 'final' ? 'Final' : 'Original'} transcription captions (${sceneSeparationModal.sourceType === 'final' ? '6910' : '7120'}) are missing after transcription.`,
         );
       }
 
@@ -2189,7 +2398,7 @@ export default function SceneCard({
 
       if (!captionsResponse.ok) {
         throw new Error(
-          `Failed to load original captions (${captionsResponse.status})`,
+          `Failed to load ${sceneSeparationModal.sourceType} captions (${captionsResponse.status})`,
         );
       }
 
@@ -2207,39 +2416,49 @@ export default function SceneCard({
 
       setSceneSeparationModal((prev) =>
         prev.sceneId === activeSceneId
-          ? { ...prev, captionsUrl: nextCaptionsUrl }
+          ? {
+              ...prev,
+              captionsUrl: nextCaptionsUrl,
+              ...(prev.sourceType === 'final'
+                ? { finalCaptionsUrl: nextCaptionsUrl }
+                : { originalCaptionsUrl: nextCaptionsUrl }),
+            }
           : prev,
       );
 
-      const createdSceneIds = await executeSceneSeparation(transcribedWords, {
+      const separation = await executeSceneSeparation(transcribedWords, {
         closeModalOnSuccess: false,
         playSuccessSoundOnSuccess: false,
         refreshOnSuccess: false,
         playErrorSoundOnFailure: false,
       });
 
-      if (createdSceneIds.skippedNoSplit) {
+      if (separation.skippedNoSplit) {
         handleCloseSceneSeparationModal();
         return;
       }
 
-      const clipSceneIds = parsePositiveSceneIds([
-        activeSceneId,
-        ...createdSceneIds.createdSceneIds,
-      ]);
+      if (separation.sourceType === 'final') {
+        await generateFinalSceneClips(separation);
+      } else {
+        const clipSceneIds = parsePositiveSceneIds([
+          activeSceneId,
+          ...separation.createdSceneIds,
+        ]);
 
-      for (const clipSceneId of clipSceneIds) {
-        const clipScene = await getSceneById(clipSceneId);
-        if (!clipScene) {
-          console.warn(
-            `Skipping clip generation for scene ${clipSceneId}: scene not found`,
-          );
-          continue;
+        for (const clipSceneId of clipSceneIds) {
+          const clipScene = await getSceneById(clipSceneId);
+          if (!clipScene) {
+            console.warn(
+              `Skipping clip generation for scene ${clipSceneId}: scene not found`,
+            );
+            continue;
+          }
+
+          await handleGenerateSingleClip(clipSceneId, clipScene, {
+            throwOnError: true,
+          });
         }
-
-        await handleGenerateSingleClip(clipSceneId, clipScene, {
-          throwOnError: true,
-        });
       }
 
       playSuccessSound();
@@ -2724,8 +2943,8 @@ export default function SceneCard({
       // Determine which video URL to use
       let videoUrl =
         videoType === 'final'
-          ? (currentScene.field_6886 as string)
-          : (currentScene.field_6888 as string);
+          ? extractFieldValueAsText(currentScene.field_6886).trim()
+          : extractFieldValueAsText(currentScene.field_6888).trim();
 
       // Auto-generate the video clip if the original video is missing.
       if (
@@ -8631,8 +8850,11 @@ export default function SceneCard({
         <LazySceneSeparationModal
           isOpen={sceneSeparationModal.isOpen}
           sceneId={sceneSeparationModal.sceneId}
+          sourceType={sceneSeparationModal.sourceType}
           videoUrl={sceneSeparationModal.videoUrl}
           captionsUrl={sceneSeparationModal.captionsUrl}
+          finalVideoUrl={sceneSeparationModal.finalVideoUrl}
+          onSourceTypeChange={handleSceneSeparationSourceTypeChange}
           onClose={handleCloseSceneSeparationModal}
           onApplySeparation={handleApplySceneSeparation}
           onApplySeparationAndGenerateClips={
@@ -8653,7 +8875,10 @@ export default function SceneCard({
             sceneSeparationModal.sceneId !== null &&
             transcribeApplyAndGenerateSceneId === sceneSeparationModal.sceneId
           }
-          onRetranscribeOriginal={async () => {
+          allowApplyWithoutClips={
+            sceneSeparationModal.sourceType === 'original'
+          }
+          onRetranscribeSource={async () => {
             const activeSceneId = sceneSeparationModal.sceneId;
             if (activeSceneId === null) return;
 
@@ -8664,25 +8889,40 @@ export default function SceneCard({
             await handleTranscribeScene(
               activeSceneId,
               targetScene,
-              'original',
+              sceneSeparationModal.sourceType,
               false,
               false,
-              true,
-              { captionsFieldKey: 'field_7120' },
+              sceneSeparationModal.sourceType === 'original',
+              {
+                captionsFieldKey:
+                  sceneSeparationModal.sourceType === 'final'
+                    ? 'field_6910'
+                    : 'field_7120',
+              },
             );
 
             const refreshedScene = useAppStore
               .getState()
               .data.find((scene) => scene.id === activeSceneId);
 
-            const nextCaptionsUrl = String(
-              refreshedScene?.field_7120 || '',
+            const captionsFieldKey =
+              sceneSeparationModal.sourceType === 'final'
+                ? 'field_6910'
+                : 'field_7120';
+            const nextCaptionsUrl = extractFieldValueAsText(
+              refreshedScene?.[captionsFieldKey],
             ).trim();
 
             if (nextCaptionsUrl) {
               setSceneSeparationModal((prev) =>
                 prev.sceneId === activeSceneId
-                  ? { ...prev, captionsUrl: nextCaptionsUrl }
+                  ? {
+                      ...prev,
+                      captionsUrl: nextCaptionsUrl,
+                      ...(prev.sourceType === 'final'
+                        ? { finalCaptionsUrl: nextCaptionsUrl }
+                        : { originalCaptionsUrl: nextCaptionsUrl }),
+                    }
                   : prev,
               );
             }

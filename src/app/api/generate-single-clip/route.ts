@@ -8,27 +8,10 @@ import {
 import { BaserowRow } from '@/lib/baserow-actions';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
-type BaserowFileField =
-  | string
-  | {
-      url?: string;
-      file?: {
-        url?: string;
-      };
-    }
-  | Array<{
-      url?: string;
-      file?: {
-        url?: string;
-      };
-    }>
-  | null
-  | undefined;
-
 // Import the working authentication from baserow-actions
 
 // Function to get original video data
-async function getOriginalVideoData(videoId: string) {
+async function getOriginalVideoData(videoId: string | number) {
   const baserowUrl = process.env.BASEROW_API_URL;
   const token = await getBaserowToken();
 
@@ -52,7 +35,7 @@ async function getOriginalVideoData(videoId: string) {
 }
 
 // Function to get scene data
-async function getSceneData(sceneId: string) {
+async function getSceneData(sceneId: string | number) {
   const baserowUrl = process.env.BASEROW_API_URL;
   const token = await getBaserowToken();
 
@@ -159,7 +142,7 @@ async function uploadStockVideoForScriptScenes(
 }
 
 // Helper function to extract video URL
-function extractVideoUrl(field: BaserowFileField): string | null {
+function extractVideoUrl(field: unknown): string | null {
   if (!field) return null;
 
   if (typeof field === 'string' && field.startsWith('http')) {
@@ -179,6 +162,28 @@ function extractVideoUrl(field: BaserowFileField): string | null {
       if (obj.url) return obj.url;
       if (obj.file && obj.file.url) return obj.file.url;
     }
+  }
+
+  return null;
+}
+
+function extractNumericId(field: unknown): number | null {
+  if (typeof field === 'number' && Number.isInteger(field) && field > 0) {
+    return field;
+  }
+
+  if (typeof field === 'string') {
+    const parsed = Number.parseInt(field, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  if (Array.isArray(field)) {
+    return extractNumericId(field[0]);
+  }
+
+  if (field && typeof field === 'object') {
+    const record = field as Record<string, unknown>;
+    return extractNumericId(record.id ?? record.value);
   }
 
   return null;
@@ -282,7 +287,16 @@ async function updateSceneWithClipUrl(sceneId: number, clipUrl: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { sceneId, videoId: requestVideoId } = await request.json();
+    const body = (await request.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    const sceneId =
+      typeof body.sceneId === 'number' || typeof body.sceneId === 'string'
+        ? body.sceneId
+        : '';
+    const requestVideoId = body.videoId;
+    const sourceType = body.sourceType === 'final' ? 'final' : 'original';
 
     if (!sceneId) {
       return NextResponse.json(
@@ -301,8 +315,53 @@ export async function POST(request: NextRequest) {
     // Step 1: Get the scene data
     const scene = await getSceneData(sceneId);
 
+    if (sourceType === 'final') {
+      const finalVideoUrl =
+        extractVideoUrl(body.sourceUrl) || extractVideoUrl(scene.field_6886);
+      const startTime = Number(body.startTime);
+      const endTime = Number(body.endTime);
+
+      if (!finalVideoUrl) {
+        throw new Error(
+          'Final source video URL is required for Final clip generation',
+        );
+      }
+
+      if (
+        !Number.isFinite(startTime) ||
+        !Number.isFinite(endTime) ||
+        startTime < 0 ||
+        endTime <= startTime
+      ) {
+        throw new Error(
+          `Invalid Final clip range: start=${body.startTime}, end=${body.endTime}`,
+        );
+      }
+
+      const sceneVideoId = extractNumericId(scene.field_6889);
+      const clipUrl = await createVideoClip(
+        finalVideoUrl,
+        scene,
+        Number.isFinite(sceneVideoId) ? sceneVideoId : undefined,
+        startTime,
+        endTime,
+      );
+
+      await updateSceneWithClipUrl(scene.id, clipUrl);
+
+      return NextResponse.json({
+        success: true,
+        message: `Successfully generated Final clip for scene ${sceneId}`,
+        sceneId: scene.id,
+        clipUrl,
+        sourceType,
+        startTime,
+        endTime,
+      });
+    }
+
     // Step 2: Get the original video data to get the video URL
-    const videoId = scene.field_6889; // Video ID field
+    const videoId = extractNumericId(scene.field_6889); // Video ID field
     if (!videoId) {
       throw new Error('No video ID found for this scene');
     }
@@ -339,7 +398,11 @@ export async function POST(request: NextRequest) {
     // Otherwise, generate a trimmed clip from the original uploaded video.
     const clipUrl = usingFallbackStockVideo
       ? videoUrl
-      : await createVideoClip(videoUrl, scene, requestVideoId);
+      : await createVideoClip(
+          videoUrl,
+          scene,
+          extractNumericId(requestVideoId) ?? videoId,
+        );
 
     // Step 4: Update the scene with the clip URL
     await updateSceneWithClipUrl(scene.id, clipUrl);
