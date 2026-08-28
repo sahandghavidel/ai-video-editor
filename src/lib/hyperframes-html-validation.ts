@@ -1,6 +1,9 @@
 type HyperFramesHtmlValidationOptions = {
   maxLines?: number;
   require4KCanvas?: boolean;
+  expectedDuration?: number;
+  minimumDuration?: number;
+  durationTolerance?: number;
 };
 
 export function validateHyperFramesHtml(
@@ -15,8 +18,31 @@ export function validateHyperFramesHtml(
   if (!/data-start\s*=\s*["']/i.test(html)) {
     issues.push('missing data-start timing attribute');
   }
+  const duration = Number(
+    html.match(/data-duration\s*=\s*["']([^"']+)["']/i)?.[1],
+  );
   if (!/data-duration\s*=\s*["']/i.test(html)) {
     issues.push('missing data-duration timing attribute');
+  } else if (!Number.isFinite(duration) || duration <= 0) {
+    issues.push('root data-duration must be a positive number');
+  } else {
+    const tolerance = options.durationTolerance ?? 0.01;
+    if (
+      Number.isFinite(options.expectedDuration) &&
+      Math.abs(duration - Number(options.expectedDuration)) > tolerance
+    ) {
+      issues.push(
+        `root data-duration must match ${Number(options.expectedDuration).toFixed(3)} seconds`,
+      );
+    }
+    if (
+      Number.isFinite(options.minimumDuration) &&
+      duration + tolerance < Number(options.minimumDuration)
+    ) {
+      issues.push(
+        `root data-duration must be at least ${Number(options.minimumDuration).toFixed(3)} seconds`,
+      );
+    }
   }
   const width = html.match(/data-width\s*=\s*["']([^"']+)["']/i)?.[1];
   const height = html.match(/data-height\s*=\s*["']([^"']+)["']/i)?.[1];

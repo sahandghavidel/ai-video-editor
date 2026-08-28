@@ -5,6 +5,7 @@ import {
 } from '@/lib/ai-provider';
 import { buildAuthHeader, getBaserowToken } from '@/lib/baserow-auth';
 import { validateHyperFramesHtml } from '@/lib/hyperframes-html-validation';
+import { probeVideoDurationSeconds } from '@/lib/ffprobe-video-duration';
 
 type BaserowRow = {
   id: number;
@@ -17,10 +18,39 @@ type GenerateHyperFramesHtmlBody = AIProviderRequestBody & {
 };
 
 const SCENES_TABLE_ID = 714;
+const FINAL_VIDEO_FIELD_KEY = 'field_6886';
 const HYPERFRAMES_PROMPT_FIELD_KEY = 'field_7365';
 const HYPERFRAMES_HTML_FIELD_KEY = 'field_7367';
 const HYPERFRAMES_HTML_SYSTEM_PROMPT =
-  'You are an expert HyperFrames HTML composition author. Return ONLY one complete editable standalone HyperFrames HTML source. Do not use Markdown code fences, explanations, headings, plans, or commentary. The root MUST be a 16:9 landscape 4K composition with data-composition-id, data-start, data-duration, data-width="3840", and data-height="2160". Never return a square or portrait composition. Set the root data-duration to exactly the caption-derived scene duration specified in the user prompt; do not use any external scene-duration field or invent a shorter duration. Every timed visible unit must be a direct-child class="clip" with a unique stable id, data-start, data-duration, and data-track-index. Register exactly one synchronously-created gsap.timeline({ paused: true }) at window.__timelines["<root composition id>"]. Include <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before the animation script; this is the only allowed external script. Drive motion through that paused timeline. Never create overlapping GSAP tweens that change the same property on the same target; combine them into one tween or sequence them. Keep the standalone HTML under 300 lines with concise reusable CSS and markup. Never use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, external CSS frameworks, other CDN scripts, or render-time fetches. Follow the exact timings from the user prompt and do not use supplied image assets or external image URLs. Do not render or describe a video.';
+  'You are an expert HyperFrames HTML composition author. Return ONLY one complete editable standalone HyperFrames HTML source. Do not use Markdown code fences, explanations, headings, plans, or commentary. The root MUST be a 16:9 landscape 4K composition with data-composition-id, data-start, data-duration, data-width="3840", and data-height="2160". Never return a square or portrait composition. Set the root data-duration to the exact numeric duration supplied in this system message. Do not use any external scene-duration field or invent a shorter duration. Every timed visible unit must be a direct-child class="clip" with a unique stable id, data-start, data-duration, and data-track-index. Register exactly one synchronously-created gsap.timeline({ paused: true }) at window.__timelines["<root composition id>"]. Include <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before the animation script; this is the only allowed external script. Drive motion through that paused timeline. Never create overlapping GSAP tweens that change the same property on the same target; combine them into one tween or sequence them. Keep the standalone HTML under 300 lines with concise reusable CSS and markup. Never use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, external CSS frameworks, other CDN scripts, or render-time fetches. Follow the exact timings from the user prompt and do not use supplied image assets or external image URLs. Do not render or describe a video.';
+
+function extractUrl(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim();
+  if (!raw) return '';
+  if (Array.isArray(raw) && raw.length > 0) return extractUrl(raw[0]);
+  if (typeof raw === 'object') {
+    const value = raw as Record<string, unknown>;
+    const url = value.url ?? (value.file as { url?: unknown } | undefined)?.url;
+    return typeof url === 'string' ? url.trim() : '';
+  }
+  return '';
+}
+
+function parsePromptDuration(prompt: string): number {
+  const patterns = [
+    /Required composition duration:\s*([0-9]+(?:\.[0-9]+)?)\s*seconds/i,
+    /Required HyperFrames duration in seconds:\s*([0-9]+(?:\.[0-9]+)?)/i,
+    /Caption timing coverage in seconds:\s*([0-9]+(?:\.[0-9]+)?)/i,
+    /Scene duration in seconds:\s*([0-9]+(?:\.[0-9]+)?)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const duration = Number(prompt.match(pattern)?.[1]);
+    if (Number.isFinite(duration) && duration > 0) return duration;
+  }
+
+  return 0;
+}
 
 async function getScene(sceneId: number): Promise<BaserowRow> {
   const baserowUrl = process.env.BASEROW_API_URL?.replace(/\/+$/, '');
@@ -101,7 +131,26 @@ export async function POST(request: Request) {
       );
     }
 
+    const finalVideoUrl = extractUrl(scene[FINAL_VIDEO_FIELD_KEY]);
+    if (!finalVideoUrl) {
+      return NextResponse.json(
+        {
+          error:
+            'Final video URL is empty. HyperFrames duration must be measured with FFprobe before generating HTML.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const finalVideoDuration = Number(
+      (await probeVideoDurationSeconds(finalVideoUrl)).toFixed(6),
+    );
+    const requiredDuration = Math.max(
+      finalVideoDuration,
+      parsePromptDuration(hyperFramesPrompt),
+    );
     const promptForModel = hyperFramesPrompt;
+    const systemPromptForModel = `${HYPERFRAMES_HTML_SYSTEM_PROMPT} For this scene, set the root data-duration="${requiredDuration.toFixed(3)}" exactly and hold the final visual state until ${requiredDuration.toFixed(3)} seconds.`;
 
     const model =
       typeof body?.model === 'string' && body.model.trim()
@@ -113,7 +162,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: 'system',
-          content: HYPERFRAMES_HTML_SYSTEM_PROMPT,
+          content: systemPromptForModel,
         },
         { role: 'user', content: promptForModel },
       ],
@@ -134,6 +183,7 @@ export async function POST(request: Request) {
     let validationIssues = validateHyperFramesHtml(html, {
       maxLines: 300,
       require4KCanvas: true,
+      expectedDuration: requiredDuration,
     });
     if (validationIssues.length > 0) {
       const repairCompletion = await openaiClient.chat.completions.create({
@@ -141,7 +191,7 @@ export async function POST(request: Request) {
         messages: [
           {
             role: 'system',
-            content: HYPERFRAMES_HTML_SYSTEM_PROMPT,
+            content: systemPromptForModel,
           },
           { role: 'user', content: promptForModel },
           { role: 'assistant', content: html },
@@ -162,6 +212,7 @@ export async function POST(request: Request) {
         validationIssues = validateHyperFramesHtml(html, {
           maxLines: 300,
           require4KCanvas: true,
+          expectedDuration: requiredDuration,
         });
       }
     }

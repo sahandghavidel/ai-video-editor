@@ -174,28 +174,25 @@ function buildHyperFramesPrompt(input: {
     start,
     end,
   }));
+  const requiredDuration = input.sceneDuration.toFixed(3);
 
   return `Create a single HyperFrames HTML animation for this narrated scene.
-
-This is a prompt for an editable first draft. Do not render the video yet.
 
 Scene sentence:
 ${input.sentence}
 
-Scene duration in seconds:
-${input.sceneDuration.toFixed(3)}
-
-Target canvas:
-16:9 landscape 4K, exactly 3840x2160 pixels.
+Required composition duration: ${requiredDuration} seconds.
+Set the root data-duration="${requiredDuration}" exactly and hold the final visual state until ${requiredDuration} seconds.
 
 Exact caption word timings:
 ${JSON.stringify(captionData, null, 2)}
 
 Requirements:
-- Return one complete standalone HyperFrames HTML composition, not a plan, explanation, or browser-only prototype.
-- Use a 16:9 landscape 4K root element with data-composition-id, data-start="0", data-duration, data-width="3840", and data-height="2160" attributes. Never use a square or portrait canvas.
+- Return only one complete standalone editable HyperFrames HTML composition.
+- Use a 16:9 landscape 4K root element with data-composition-id, data-start="0", data-duration="${requiredDuration}", data-width="3840", and data-height="2160". Never use a square or portrait canvas.
 - Put every timed visible unit in a direct-child element with class="clip", data-start, data-duration, and data-track-index attributes.
 - Register exactly one synchronously-created paused GSAP timeline as window.__timelines["<root composition id>"].
+- Include <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before the animation script.
 - Drive all motion through that paused timeline so arbitrary seeking renders the same frame every time.
 - Never overlap GSAP tweens that change the same property on the same target; combine those properties into one tween or sequence the tweens instead.
 - Keep the standalone HTML composition under 300 lines by using reusable CSS classes and concise markup; do not add unnecessary text or decorative elements.
@@ -204,9 +201,7 @@ Requirements:
 - Use as little visible text as possible; communicate the sentence through visual objects, symbols, layout changes, and interaction.
 - Do not use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, or external CSS frameworks/other CDN scripts.
 - Keep the composition deterministic and seek-safe in HyperFrames.
-- Keep the visual focused on the meaning of the sentence and do not add unrelated elements.
-
-Return only the editable HyperFrames HTML code for this scene. Do not render the video yet.`;
+- Keep the visual focused on the meaning of the sentence and do not add unrelated elements.`;
 }
 
 const SCENE_IMAGE_PROVIDER_STORAGE_KEY = 'scene-image-provider';
@@ -4289,9 +4284,40 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         0,
         ...captionWords.map((word) => word.end),
       );
+      const durationResponse = await fetch(
+        '/api/calculate-final-video-durations',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneIds: [sceneId] }),
+          cache: 'no-store',
+        },
+      );
+      const durationData = (await durationResponse.json().catch(() => null)) as {
+        durationsByScene?: Record<string, unknown>;
+        error?: unknown;
+      } | null;
+      if (!durationResponse.ok) {
+        throw new Error(
+          typeof durationData?.error === 'string'
+            ? durationData.error
+            : `Final video duration calculation failed: ${durationResponse.status}`,
+        );
+      }
+
+      const finalVideoDuration = Number(
+        durationData?.durationsByScene?.[String(sceneId)],
+      );
+      if (!Number.isFinite(finalVideoDuration) || finalVideoDuration <= 0) {
+        throw new Error(
+          'Final video duration could not be measured with FFprobe. Make sure the scene has a final video.',
+        );
+      }
+
+      const requiredDuration = Math.max(captionDuration, finalVideoDuration);
       const prompt = buildHyperFramesPrompt({
         sentence: sentence || '(scene sentence not available)',
-        sceneDuration: captionDuration,
+        sceneDuration: requiredDuration,
         captionWords,
       });
 

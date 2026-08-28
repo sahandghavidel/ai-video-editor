@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { spawn } from 'child_process';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
+import { probeVideoDurationSeconds } from '@/lib/ffprobe-video-duration';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,76 +11,13 @@ const FINAL_VIDEO_DURATION_FIELD_KEY = 'field_7107';
 
 type BaserowRow = Record<string, unknown>;
 
-type FFprobeStream = {
-  duration?: string | number;
-};
-
-type FFprobeOutput = {
-  format?: { duration?: string | number };
-  streams?: FFprobeStream[];
-};
-
-function runSpawnCapture(
-  command: string,
-  args: string[],
-): Promise<{ stdout: string; stderr: string; code: number }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (d) => (stdout += String(d)));
-    child.stderr.on('data', (d) => (stderr += String(d)));
-    child.on('error', reject);
-    child.on('close', (code) => resolve({ stdout, stderr, code: code ?? -1 }));
-  });
-}
-
-function parseNumberish(value?: string | number): number {
+function parseNumberish(value?: unknown): number {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : Number.NaN;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : Number.NaN;
   }
   return Number.NaN;
-}
-
-async function probeVideoDurationSeconds(videoUrl: string): Promise<number> {
-  const { stdout, stderr, code } = await runSpawnCapture('ffprobe', [
-    '-v',
-    'quiet',
-    '-print_format',
-    'json',
-    '-show_format',
-    '-show_streams',
-    videoUrl,
-  ]);
-
-  if (code !== 0) {
-    throw new Error(`ffprobe failed (${code}): ${stderr.slice(0, 2000)}`);
-  }
-
-  const probe = (JSON.parse(stdout) ?? {}) as FFprobeOutput;
-
-  const candidates: number[] = [];
-  const formatDuration = parseNumberish(probe.format?.duration);
-  if (Number.isFinite(formatDuration) && formatDuration > 0) {
-    candidates.push(formatDuration);
-  }
-
-  for (const stream of probe.streams ?? []) {
-    const streamDuration = parseNumberish(stream.duration);
-    if (Number.isFinite(streamDuration) && streamDuration > 0) {
-      candidates.push(streamDuration);
-    }
-  }
-
-  const duration = candidates.length > 0 ? Math.max(...candidates) : Number.NaN;
-  if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error('Unable to determine video duration');
-  }
-
-  return duration;
 }
 
 function extractUrl(raw: unknown): string {
@@ -184,6 +121,7 @@ export async function POST(request: NextRequest) {
 
     let updatedCount = 0;
     let skippedMissingFinalVideoUrlCount = 0;
+    const durationsByScene: Record<string, number> = {};
     const failures: Array<{ sceneId: number; error: string }> = [];
     const scenesWithoutAnyDuration: number[] = [];
 
@@ -208,6 +146,7 @@ export async function POST(request: NextRequest) {
 
         const durationSeconds = await probeVideoDurationSeconds(finalVideoUrl);
         const roundedDuration = Number(durationSeconds.toFixed(6));
+        durationsByScene[String(sceneId)] = roundedDuration;
 
         await baserowPatchSceneRow(baserowUrl, token, sceneId, {
           [FINAL_VIDEO_DURATION_FIELD_KEY]: roundedDuration,
@@ -227,6 +166,7 @@ export async function POST(request: NextRequest) {
       requestedCount: sceneIds.length,
       updatedCount,
       skippedMissingFinalVideoUrlCount,
+      durationsByScene,
       failedCount: failures.length,
       scenesWithoutAnyDuration,
       failures,
