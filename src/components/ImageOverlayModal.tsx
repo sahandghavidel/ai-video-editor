@@ -166,8 +166,7 @@ function parseHyperFramesCaptionWords(value: unknown): TranscriptionWord[] {
 
 function buildHyperFramesPrompt(input: {
   sentence: string;
-  previousSceneSentence?: string;
-  nextSceneSentence?: string;
+  previousSceneSentences?: string[];
   sceneDuration: number;
   captionWords: TranscriptionWord[];
 }): string {
@@ -177,21 +176,19 @@ function buildHyperFramesPrompt(input: {
     end,
   }));
   const requiredDuration = input.sceneDuration.toFixed(3);
+  const previousScenes = input.previousSceneSentences?.length
+    ? input.previousSceneSentences.map((scene) => `- ${scene}`).join('\n')
+    : 'None';
 
   return `Create a single HyperFrames HTML animation for this narrated scene.
 
-Narrative context:
-
-Previous scene:
-${input.previousSceneSentence || 'None'}
+Previous scenes (oldest to most recent):
+${previousScenes}
 
 Current scene:
 ${input.sentence}
 
-Next scene:
-${input.nextSceneSentence || 'None'}
-
-Use the previous and next scenes only to understand narrative continuity. Animate only the current scene. Do not copy their wording or create additional scenes.
+Use the previous scenes only to understand narrative continuity. Animate only the current scene. Do not copy their wording or create additional scenes.
 
 Required composition duration: ${requiredDuration} seconds.
 Set the root data-duration="${requiredDuration}" exactly and hold the final visual state until ${requiredDuration} seconds.
@@ -663,8 +660,7 @@ interface ImageOverlayModalProps {
   videoUrl: string;
   sceneId: number;
   sceneData?: Record<string, unknown> | null;
-  previousSceneSentence?: string;
-  nextSceneSentence?: string;
+  previousSceneSentences?: string[];
   onApply: (
     sceneId: number,
     overlayImage: File | null,
@@ -709,8 +705,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   videoUrl,
   sceneId,
   sceneData,
-  previousSceneSentence,
-  nextSceneSentence,
+  previousSceneSentences,
   onApply,
   isApplying = false,
   handleTranscribeScene,
@@ -4345,8 +4340,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       const requiredDuration = Math.max(captionDuration, finalVideoDuration);
       const prompt = buildHyperFramesPrompt({
         sentence: sentence || '(scene sentence not available)',
-        previousSceneSentence,
-        nextSceneSentence,
+        previousSceneSentences,
         sceneDuration: requiredDuration,
         captionWords,
       });
@@ -4385,8 +4379,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     getSceneStringField,
     isGeneratingHyperFramesPrompt,
     mergeLocalSceneSnapshot,
-    nextSceneSentence,
-    previousSceneSentence,
+    previousSceneSentences,
     sceneId,
     transcriptionWords,
   ]);

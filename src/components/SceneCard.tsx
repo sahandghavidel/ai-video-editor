@@ -6425,17 +6425,17 @@ export default function SceneCard({
   const imageOverlayNarrativeContext = (() => {
     const activeSceneId = imageOverlayModal.sceneId;
     if (!activeSceneId) {
-      return { previousSceneSentence: '', nextSceneSentence: '' };
+      return { previousSceneSentences: [] as string[] };
     }
 
     const activeScene = data.find((scene) => scene.id === activeSceneId);
     if (!activeScene) {
-      return { previousSceneSentence: '', nextSceneSentence: '' };
+      return { previousSceneSentences: [] as string[] };
     }
 
     const videoId = getVideoIdFromScene(activeScene);
     if (videoId === null) {
-      return { previousSceneSentence: '', nextSceneSentence: '' };
+      return { previousSceneSentences: [] as string[] };
     }
 
     const orderedScenes = getScenesInRealVideoOrder(videoId);
@@ -6448,12 +6448,13 @@ export default function SceneCard({
         : '';
 
     return {
-      previousSceneSentence:
-        activeIndex > 0 ? getSentence(orderedScenes[activeIndex - 1]) : '',
-      nextSceneSentence:
-        activeIndex >= 0
-          ? getSentence(orderedScenes[activeIndex + 1])
-          : '',
+      previousSceneSentences:
+        activeIndex > 0
+          ? orderedScenes
+              .slice(Math.max(0, activeIndex - 10), activeIndex)
+              .map(getSentence)
+              .filter(Boolean)
+          : [],
     };
   })();
 
@@ -8601,10 +8602,9 @@ export default function SceneCard({
               (scene) => scene.id === (imageOverlayModal.sceneId || -1),
             ) || null
           }
-          previousSceneSentence={
-            imageOverlayNarrativeContext.previousSceneSentence
+          previousSceneSentences={
+            imageOverlayNarrativeContext.previousSceneSentences
           }
-          nextSceneSentence={imageOverlayNarrativeContext.nextSceneSentence}
           onApply={handleApplyImageOverlay}
           onUpdateModalVideoUrl={(newUrl) =>
             setImageOverlayModal((prev) => ({
