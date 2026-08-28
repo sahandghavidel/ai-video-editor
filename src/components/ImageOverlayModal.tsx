@@ -166,8 +166,8 @@ function parseHyperFramesCaptionWords(value: unknown): TranscriptionWord[] {
 
 function buildHyperFramesPrompt(input: {
   sentence: string;
+  sceneDuration: number;
   captionWords: TranscriptionWord[];
-  wordAssets: HyperFramesWordAsset[];
 }): string {
   const captionData = input.captionWords.map(({ word, start, end }) => ({
     word,
@@ -182,22 +182,31 @@ This is a prompt for an editable first draft. Do not render the video yet.
 Scene sentence:
 ${input.sentence}
 
+Scene duration in seconds:
+${input.sceneDuration.toFixed(3)}
+
+Target canvas:
+16:9 landscape 4K, exactly 3840x2160 pixels.
+
 Exact caption word timings:
 ${JSON.stringify(captionData, null, 2)}
 
-Word image assets:
-${JSON.stringify(input.wordAssets, null, 2)}
-
 Requirements:
-- Match word assets to caption words case-insensitively and ignore surrounding punctuation.
-- Show each image only from that word's exact start time through its exact end time.
-- Use the provided image URLs exactly; do not invent replacement assets.
-- Use simple, readable fade-in and fade-out motion.
+- Return one complete standalone HyperFrames HTML composition, not a plan, explanation, or browser-only prototype.
+- Use a 16:9 landscape 4K root element with data-composition-id, data-start="0", data-duration, data-width="3840", and data-height="2160" attributes. Never use a square or portrait canvas.
+- Put every timed visible unit in a direct-child element with class="clip", data-start, data-duration, and data-track-index attributes.
+- Register exactly one synchronously-created paused GSAP timeline as window.__timelines["<root composition id>"].
+- Drive all motion through that paused timeline so arbitrary seeking renders the same frame every time.
+- Never overlap GSAP tweens that change the same property on the same target; combine those properties into one tween or sequence the tweens instead.
+- Keep the standalone HTML composition under 300 lines by using reusable CSS classes and concise markup; do not add unnecessary text or decorative elements.
+- Do not use supplied image assets or external image URLs. Build the visuals with HTML, CSS, inline SVG, and the allowed GSAP script only.
+- Treat the caption timings as timing metadata, not visible subtitles. Do not render the caption words, the full sentence, or word-by-word text on screen.
+- Use as little visible text as possible; communicate the sentence through visual objects, symbols, layout changes, and interaction.
+- Do not use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, or external CSS frameworks/other CDN scripts.
 - Keep the composition deterministic and seek-safe in HyperFrames.
-- If an image URL is empty or a word cannot be matched, list it as a missing asset instead of guessing.
 - Keep the visual focused on the meaning of the sentence and do not add unrelated elements.
 
-Return the editable HyperFrames HTML code for this scene. Do not render the video yet.`;
+Return only the editable HyperFrames HTML code for this scene. Do not render the video yet.`;
 }
 
 const SCENE_IMAGE_PROVIDER_STORAGE_KEY = 'scene-image-provider';
@@ -792,6 +801,17 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   const [hyperFramesPromptStatus, setHyperFramesPromptStatus] = useState<
     string | null
   >(null);
+  const [isGeneratingHyperFramesHtml, setIsGeneratingHyperFramesHtml] =
+    useState(false);
+  const [hyperFramesHtmlStatus, setHyperFramesHtmlStatus] = useState<
+    string | null
+  >(null);
+  const [isRenderingHyperFramesVideo, setIsRenderingHyperFramesVideo] =
+    useState(false);
+  const [hyperFramesVideoStatus, setHyperFramesVideoStatus] = useState<
+    string | null
+  >(null);
+  const [hyperFramesVideoUrl, setHyperFramesVideoUrl] = useState('');
   const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
   const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
   const [sceneImageProvider, setSceneImageProvider] =
@@ -924,6 +944,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       setWordAssetImageUrl('');
       setWordAssets([]);
       setWordAssetStatus(null);
+      setHyperFramesVideoUrl('');
+      setHyperFramesVideoStatus(null);
       return;
     }
 
@@ -931,6 +953,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setSelectedAssetWord(null);
     setWordAssetImageUrl('');
     setWordAssetStatus(null);
+    setHyperFramesVideoUrl(
+      getSceneStringField(getLocalSceneSnapshot(), 'field_7368'),
+    );
 
     const loadWordAssets = async () => {
       const localValue = getLocalSceneSnapshot()?.['field_7366'];
@@ -953,6 +978,9 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         setWordAssets(
           parseHyperFramesWordAssets(latestSceneData['field_7366']),
         );
+        setHyperFramesVideoUrl(
+          getSceneStringField(latestSceneData, 'field_7368'),
+        );
         setWordAssetStatus(null);
       } catch (error) {
         if (cancelled) return;
@@ -968,7 +996,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [fetchLatestSceneData, getLocalSceneSnapshot, isOpen, sceneId]);
+  }, [
+    fetchLatestSceneData,
+    getLocalSceneSnapshot,
+    getSceneStringField,
+    isOpen,
+    sceneId,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -4251,10 +4285,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         );
       }
 
+      const captionDuration = Math.max(
+        0,
+        ...captionWords.map((word) => word.end),
+      );
       const prompt = buildHyperFramesPrompt({
         sentence: sentence || '(scene sentence not available)',
+        sceneDuration: captionDuration,
         captionWords,
-        wordAssets: latestAssets,
       });
 
       const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
@@ -4293,6 +4331,157 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     mergeLocalSceneSnapshot,
     sceneId,
     transcriptionWords,
+  ]);
+
+  const handleGenerateHyperFramesHtml = useCallback(async () => {
+    if (!sceneId || isGeneratingHyperFramesHtml) return;
+    if (!selectedOpenRouterModel) {
+      setHyperFramesHtmlStatus('No AI model selected');
+      return;
+    }
+
+    setIsGeneratingHyperFramesHtml(true);
+    setHyperFramesHtmlStatus(null);
+
+    try {
+      const latestSceneData = await fetchLatestSceneData();
+      const hyperFramesPrompt = getSceneStringField(
+        latestSceneData,
+        'field_7365',
+      );
+      if (!hyperFramesPrompt) {
+        throw new Error(
+          'HyperFrames Prompt is empty. Generate or refine the prompt first.',
+        );
+      }
+
+      const genRes = await fetch('/api/generate-hyperframes-html', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sceneId,
+          model: selectedOpenRouterModel,
+        }),
+      });
+
+      if (!genRes.ok) {
+        const t = await genRes.text().catch(() => '');
+        throw new Error(
+          `HyperFrames HTML generation failed: ${genRes.status} ${t}`,
+        );
+      }
+
+      const genData = (await genRes.json().catch(() => null)) as {
+        html?: unknown;
+        htmlFieldKey?: unknown;
+      } | null;
+      const html = typeof genData?.html === 'string' ? genData.html.trim() : '';
+      if (!html) {
+        throw new Error('HyperFrames HTML generation returned empty HTML');
+      }
+
+      const htmlFieldKey =
+        genData?.htmlFieldKey === 'field_7367'
+          ? genData.htmlFieldKey
+          : 'field_7367';
+      const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ [htmlFieldKey]: html }),
+      });
+
+      if (!patchRes.ok) {
+        const t = await patchRes.text().catch(() => '');
+        throw new Error(
+          `Failed to save HyperFrames HTML: ${patchRes.status} ${t}`,
+        );
+      }
+
+      mergeLocalSceneSnapshot({ field_7367: html });
+      setHyperFramesHtmlStatus('HTML saved to HyperFrames HTML');
+      window.setTimeout(() => setHyperFramesHtmlStatus(null), 3500);
+    } catch (error) {
+      console.error('Failed to generate/save HyperFrames HTML:', error);
+      setHyperFramesHtmlStatus(
+        error instanceof Error
+          ? error.message
+          : 'Failed to generate HyperFrames HTML',
+      );
+    } finally {
+      setIsGeneratingHyperFramesHtml(false);
+    }
+  }, [
+    fetchLatestSceneData,
+    getSceneStringField,
+    isGeneratingHyperFramesHtml,
+    mergeLocalSceneSnapshot,
+    sceneId,
+    selectedOpenRouterModel,
+  ]);
+
+  const handleRenderHyperFramesVideo = useCallback(async () => {
+    if (!sceneId || isRenderingHyperFramesVideo) return;
+
+    setIsRenderingHyperFramesVideo(true);
+    setHyperFramesVideoStatus('Rendering 4K HyperFrames video…');
+
+    try {
+      const renderRes = await fetch('/api/render-hyperframes-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sceneId }),
+      });
+
+      const renderData = (await renderRes.json().catch(() => null)) as {
+        videoUrl?: unknown;
+        videoFieldKey?: unknown;
+        error?: unknown;
+      } | null;
+
+      if (!renderRes.ok) {
+        throw new Error(
+          typeof renderData?.error === 'string' && renderData.error.trim()
+            ? renderData.error
+            : `HyperFrames render failed: ${renderRes.status}`,
+        );
+      }
+
+      const videoUrl =
+        typeof renderData?.videoUrl === 'string'
+          ? renderData.videoUrl.trim()
+          : '';
+      if (!videoUrl) {
+        throw new Error('HyperFrames render returned an empty video URL');
+      }
+
+      const videoFieldKey =
+        renderData?.videoFieldKey === 'field_7368'
+          ? renderData.videoFieldKey
+          : 'field_7368';
+      setHyperFramesVideoUrl(videoUrl);
+      mergeLocalSceneSnapshot({ [videoFieldKey]: videoUrl });
+      setHyperFramesVideoStatus('Video uploaded to MinIO');
+      window.setTimeout(() => setHyperFramesVideoStatus(null), 3500);
+    } catch (error) {
+      console.error('Failed to render/upload HyperFrames video:', error);
+      setHyperFramesVideoStatus(
+        error instanceof Error
+          ? error.message
+          : 'Failed to render HyperFrames video',
+      );
+    } finally {
+      setIsRenderingHyperFramesVideo(false);
+    }
+  }, [
+    isRenderingHyperFramesVideo,
+    mergeLocalSceneSnapshot,
+    sceneId,
   ]);
 
   const handleApplySubtitleHighlight = useCallback(async () => {
@@ -5333,6 +5522,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setScenePromptStatus(null);
     setIsGeneratingHyperFramesPrompt(false);
     setHyperFramesPromptStatus(null);
+    setIsGeneratingHyperFramesHtml(false);
+    setHyperFramesHtmlStatus(null);
+    setIsRenderingHyperFramesVideo(false);
+    setHyperFramesVideoStatus(null);
+    setHyperFramesVideoUrl('');
     setSceneImageStatus(null);
     setTranscriptionWords(null);
     setIsOriginalVideoEditModalOpen(false);
@@ -5896,7 +6090,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               <button
                 type='button'
                 onClick={handleGenerateScenePrompt}
-                disabled={isApplying || isGeneratingScenePrompt}
+                disabled={
+                  isApplying ||
+                  isGeneratingScenePrompt ||
+                  isGeneratingHyperFramesPrompt ||
+                  isGeneratingHyperFramesHtml ||
+                  isRenderingHyperFramesVideo
+                }
                 className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
                 title='Generate and save storyboard prompt for this scene'
               >
@@ -5912,7 +6112,13 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               <button
                 type='button'
                 onClick={handleGenerateHyperFramesPrompt}
-                disabled={isApplying || isGeneratingHyperFramesPrompt}
+                disabled={
+                  isApplying ||
+                  isGeneratingScenePrompt ||
+                  isGeneratingHyperFramesPrompt ||
+                  isGeneratingHyperFramesHtml ||
+                  isRenderingHyperFramesVideo
+                }
                 className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
                 title='Create and save an editable HyperFrames prompt for this scene'
               >
@@ -5923,6 +6129,50 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   </span>
                 ) : (
                   'HF Prompt'
+                )}
+              </button>
+              <button
+                type='button'
+                onClick={handleGenerateHyperFramesHtml}
+                disabled={
+                  isApplying ||
+                  isGeneratingScenePrompt ||
+                  isGeneratingHyperFramesPrompt ||
+                  isGeneratingHyperFramesHtml ||
+                  isRenderingHyperFramesVideo
+                }
+                className='px-3 py-1 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Generate and save editable HyperFrames HTML from the saved HyperFrames Prompt'
+              >
+                {isGeneratingHyperFramesHtml ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    HF HTML
+                  </span>
+                ) : (
+                  'HF HTML'
+                )}
+              </button>
+              <button
+                type='button'
+                onClick={handleRenderHyperFramesVideo}
+                disabled={
+                  isApplying ||
+                  isGeneratingScenePrompt ||
+                  isGeneratingHyperFramesPrompt ||
+                  isGeneratingHyperFramesHtml ||
+                  isRenderingHyperFramesVideo
+                }
+                className='px-3 py-1 text-sm font-medium bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Render the saved HyperFrames HTML in landscape 4K, upload the MP4 to MinIO, and save its URL to HyperFrames Video'
+              >
+                {isRenderingHyperFramesVideo ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    Render HF
+                  </span>
+                ) : (
+                  'Render HF'
                 )}
               </button>
               <select
@@ -6073,6 +6323,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
               {hyperFramesPromptStatus ? (
                 <span className='text-xs text-gray-600 max-w-[280px] truncate'>
                   {hyperFramesPromptStatus}
+                </span>
+              ) : null}
+              {hyperFramesHtmlStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {hyperFramesHtmlStatus}
+                </span>
+              ) : null}
+              {hyperFramesVideoStatus ? (
+                <span className='text-xs text-gray-600 max-w-[280px] truncate'>
+                  {hyperFramesVideoStatus}
                 </span>
               ) : null}
               {sceneImageStatus ? (
@@ -6517,6 +6777,32 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
 
           {/* Controls */}
           <div className='space-y-4 overflow-y-auto min-h-0 self-stretch h-full pr-1'>
+            {hyperFramesVideoUrl ? (
+              <div className='rounded-lg border border-indigo-200 bg-indigo-50 p-2'>
+                <div className='mb-2 flex items-center justify-between gap-2'>
+                  <span className='text-sm font-medium text-indigo-900'>
+                    HyperFrames Video
+                  </span>
+                  <a
+                    href={hyperFramesVideoUrl}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='text-xs text-indigo-700 underline'
+                  >
+                    Open
+                  </a>
+                </div>
+                <video
+                  key={hyperFramesVideoUrl}
+                  src={hyperFramesVideoUrl}
+                  controls
+                  playsInline
+                  preload='metadata'
+                  className='w-full rounded border border-indigo-100 bg-black'
+                />
+              </div>
+            ) : null}
+
             {/* Hidden paste sink for Ctrl+1 programmatic paste */}
             <textarea
               ref={pasteSinkRef}
