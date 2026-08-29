@@ -1,4 +1,4 @@
-import type { BaserowRow } from '@/lib/baserow-actions';
+import { getSceneById, type BaserowRow } from '@/lib/baserow-actions';
 
 export type HyperFramesCaptionWord = {
   word: string;
@@ -223,4 +223,99 @@ Creative direction:
 - Keep purposeful motion visible throughout, but avoid flashing images, abrupt full-screen appearances, oversized objects, and unnecessary decoration.
 - Make every visual action explain the narration rather than merely decorate it.
 - Finish with a clear resolved composition and hold that state until the required duration.`;
+}
+
+export async function generateAndSaveHyperFramesPrompt(input: {
+  sceneId: number;
+  previousSceneSentences?: string[];
+  captionWords?: HyperFramesCaptionWord[];
+  overwrite?: boolean;
+}): Promise<{ prompt: string; skippedExisting: boolean }> {
+  const latestScene = await getSceneById(input.sceneId);
+  if (!latestScene) {
+    throw new Error('Scene could not be found');
+  }
+
+  const existingPrompt = getSceneTextField(
+    latestScene,
+    HYPERFRAMES_PROMPT_FIELD_KEY,
+  );
+  if (existingPrompt && input.overwrite !== true) {
+    return { prompt: existingPrompt, skippedExisting: true };
+  }
+
+  let captionWords = input.captionWords ?? [];
+  if (captionWords.length === 0) {
+    const captionsUrl = getSceneTextField(latestScene, 'field_6910');
+    if (!captionsUrl) {
+      throw new Error('Final caption timings are empty');
+    }
+
+    const captionsResponse = await fetch(captionsUrl, { cache: 'no-store' });
+    if (!captionsResponse.ok) {
+      throw new Error(
+        `Caption timing fetch failed (${captionsResponse.status})`,
+      );
+    }
+    captionWords = parseHyperFramesCaptionWords(
+      await captionsResponse.json(),
+    );
+  }
+
+  if (captionWords.length === 0) {
+    throw new Error('No caption word timings found');
+  }
+
+  const durationResponse = await fetch('/api/calculate-final-video-durations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sceneIds: [input.sceneId] }),
+    cache: 'no-store',
+  });
+  const durationData = (await durationResponse.json().catch(() => null)) as {
+    durationsByScene?: Record<string, unknown>;
+    error?: unknown;
+  } | null;
+  if (!durationResponse.ok) {
+    throw new Error(
+      typeof durationData?.error === 'string'
+        ? durationData.error
+        : `Final video duration failed (${durationResponse.status})`,
+    );
+  }
+
+  const finalVideoDuration = Number(
+    durationData?.durationsByScene?.[String(input.sceneId)],
+  );
+  if (!Number.isFinite(finalVideoDuration) || finalVideoDuration <= 0) {
+    throw new Error('Final video duration could not be measured');
+  }
+
+  const captionDuration = Math.max(
+    0,
+    ...captionWords.map((word) => word.end),
+  );
+  const prompt = buildHyperFramesPrompt({
+    sentence:
+      getSceneTextField(latestScene, 'field_6890') ||
+      getSceneTextField(latestScene, 'field_6901') ||
+      '(scene sentence not available)',
+    previousSceneSentences: input.previousSceneSentences,
+    sceneDuration: Math.max(captionDuration, finalVideoDuration),
+    captionWords,
+  });
+
+  const patchResponse = await fetch(`/api/baserow/scenes/${input.sceneId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [HYPERFRAMES_PROMPT_FIELD_KEY]: prompt }),
+  });
+  if (!patchResponse.ok) {
+    const text = await patchResponse.text().catch(() => '');
+    throw new Error(
+      `Failed to save HyperFrames prompt (${patchResponse.status}) ${text}`.trim(),
+    );
+  }
+
+  return { prompt, skippedExisting: false };
 }

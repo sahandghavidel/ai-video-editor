@@ -21,6 +21,13 @@ import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
 import {
+  compareHyperFramesScenesByRealOrder,
+  generateAndSaveHyperFramesPrompt,
+  getHyperFramesSceneVideoId,
+  getPreviousHyperFramesSceneSentences,
+  HYPERFRAMES_PROMPT_FIELD_KEY,
+} from '@/utils/hyperframes-scenes';
+import {
   Loader2,
   Sparkles,
   X,
@@ -723,9 +730,6 @@ export default function SceneCard({
           : 'Marked as confirmed. Fix TTS batch will skip this scene.',
       }));
 
-      if (!onDataUpdateRef.current) {
-        refreshDataRef.current?.();
-      }
     } catch (error) {
       console.error(
         `Failed to ${isClearingConfirmation ? 'clear confirmation' : 'set confirmation'} for scene ${sceneId}:`,
@@ -760,9 +764,10 @@ export default function SceneCard({
       ...prev,
       [sceneId]: isClearingRequirement
         ? 'Clearing visual requirement...'
-        : 'Saving visual requirement...',
+        : 'Saving Needs Visual and creating HF prompt...',
     }));
 
+    let visualRequirementSaved = false;
     try {
       const res = await fetch(`/api/baserow/scenes/${sceneId}`, {
         method: 'PATCH',
@@ -774,6 +779,7 @@ export default function SceneCard({
         const t = await res.text().catch(() => '');
         throw new Error(`${res.status} ${t}`.trim());
       }
+      visualRequirementSaved = true;
 
       const updatedData = dataRef.current.map((scene) =>
         scene.id === sceneId
@@ -787,12 +793,46 @@ export default function SceneCard({
         ...prev,
         [sceneId]: isClearingRequirement
           ? 'Visual requirement cleared.'
-          : 'Needs Visual saved.',
+          : 'Needs Visual saved. Creating HF prompt...',
       }));
 
-      if (!onDataUpdateRef.current) {
-        refreshDataRef.current?.();
+      if (!isClearingRequirement) {
+        const videoId = currentScene
+          ? getHyperFramesSceneVideoId(currentScene)
+          : null;
+        const videoScenes =
+          videoId === null
+            ? dataRef.current
+            : dataRef.current
+                .filter(
+                  (scene) => getHyperFramesSceneVideoId(scene) === videoId,
+                )
+                .sort(compareHyperFramesScenesByRealOrder);
+        const { prompt, skippedExisting } =
+          await generateAndSaveHyperFramesPrompt({
+            sceneId,
+            previousSceneSentences: getPreviousHyperFramesSceneSentences(
+              videoScenes,
+              sceneId,
+            ),
+          });
+
+        const dataWithPrompt = dataRef.current.map((scene) =>
+          scene.id === sceneId
+            ? { ...scene, [HYPERFRAMES_PROMPT_FIELD_KEY]: prompt }
+            : scene,
+        );
+        dataRef.current = dataWithPrompt;
+        onDataUpdateRef.current?.(dataWithPrompt);
+
+        setVisualRequirementStatus((prev) => ({
+          ...prev,
+          [sceneId]: skippedExisting
+            ? 'Needs Visual saved. Existing HF prompt kept.'
+            : 'Needs Visual and HF prompt saved.',
+        }));
       }
+
     } catch (error) {
       console.error(
         `Failed to ${isClearingRequirement ? 'clear' : 'set'} visual requirement for scene ${sceneId}:`,
@@ -802,10 +842,21 @@ export default function SceneCard({
         ...prev,
         [sceneId]:
           error instanceof Error
-            ? `Failed to ${isClearingRequirement ? 'clear' : 'save'} visual requirement: ${error.message}`
-            : `Failed to ${isClearingRequirement ? 'clear' : 'save'} visual requirement`,
+            ? isClearingRequirement
+              ? `Failed to clear visual requirement: ${error.message}`
+              : !visualRequirementSaved
+                ? `Failed to save visual requirement: ${error.message}`
+                : `Needs Visual saved, but HF prompt failed: ${error.message}`
+            : isClearingRequirement
+              ? 'Failed to clear visual requirement'
+              : !visualRequirementSaved
+                ? 'Failed to save visual requirement'
+                : 'Needs Visual saved, but HF prompt failed',
       }));
     } finally {
+      if (visualRequirementSaved && !onDataUpdateRef.current) {
+        refreshDataRef.current?.();
+      }
       visualRequirementUpdateLockRef.current = false;
       setVisualRequirementUpdatingSceneId(null);
     }
@@ -8530,12 +8581,12 @@ export default function SceneCard({
                             visualRequirementUpdatingSceneId === scene.id
                               ? isSceneVisualRequired(scene as BaserowRow)
                                 ? 'Clearing visual requirement...'
-                                : 'Saving visual requirement...'
+                                : 'Saving Needs Visual and creating HF prompt...'
                               : visualRequirementStatus[scene.id]
                                 ? visualRequirementStatus[scene.id]
                                 : isSceneVisualRequired(scene as BaserowRow)
                                   ? 'Add image overlay to final video. Right-click or press 3 while Final is playing to clear Needs Visual.'
-                                  : 'Add image overlay to final video. Right-click or press 3 while Final is playing to mark Needs Visual.'
+                                  : 'Add image overlay to final video. Right-click or press 3 while Final is playing to mark Needs Visual and create its HF prompt.'
                           }
                         >
                           {addingImageOverlay === scene.id ||
