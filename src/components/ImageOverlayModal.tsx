@@ -207,13 +207,30 @@ Requirements:
 - Never use CSS transform on an element animated by GSAP. Use GSAP x, y, scale, rotation, xPercent, and yPercent properties instead.
 - Preserve CSS centering in GSAP with xPercent and yPercent; do not use CSS translate() for an element whose transform is animated.
 - Never use tl.set() at timeline position 0 for an initial hidden state. Define that state in CSS or use immediate gsap.set() before creating the paused timeline.
-- Keep the standalone HTML composition under 300 lines by using reusable CSS classes and concise markup; do not add unnecessary text or decorative elements.
-- Do not use supplied image assets or external image URLs. Build the visuals with HTML, CSS, inline SVG, and the allowed GSAP script only.
+- Do not add unnecessary text or decorative elements.
+- Build the visuals with HTML, CSS, inline SVG, and the allowed GSAP script only.
 - Treat the caption timings as timing metadata, not visible subtitles. Do not render the caption words, the full sentence, or word-by-word text on screen.
 - Use as little visible text as possible; communicate the sentence through visual objects, symbols, layout changes, and interaction.
 - Do not use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, or external CSS frameworks/other CDN scripts.
 - Keep the composition deterministic and seek-safe in HyperFrames.
 - Keep the visual focused on the meaning of the sentence and do not add unrelated elements.
+
+Visual identity:
+- Use a warm, polished editorial-explainer illustration style.
+- Background: warm porcelain #EEEAE1 with a subtle radial highlight.
+- Primary outlines and dark details: deep teal #293B3B.
+- Main accent color: mustard yellow #EDC557.
+- Supporting and positive elements: sage green #9FC1AD.
+- Warnings, rejection, or damaged states: muted red #B95D47.
+- Use rounded geometric shapes, smooth thick outlines, soft shadows, and restrained depth.
+- Create clean flat-vector illustrations with a subtle hand-drawn character.
+- Adapt all objects, symbols, and visual metaphors to the current topic. Do not reuse objects from previous topics unless they are relevant.
+- Use one dominant subject with a few supporting elements.
+- Maintain clear visual hierarchy, generous spacing, and balanced proportions.
+- Keep visible text to a minimum. Communicate primarily through recognizable objects, symbols, movement, and cause-and-effect interactions.
+- Keep the palette, line weights, corner rounding, shadow style, and motion language consistent across every scene.
+- Use gentle entrances, smooth object movement, subtle scaling, and purposeful state changes.
+- Avoid photorealism, neon colors, blue-purple gradients, glassmorphism, generic dashboards, presentation slides, card grids, clutter, and unrelated decoration.
 
 Creative direction:
 - Infer one clear, language-neutral visual metaphor for the sentence before coding. Do not output the plan.
