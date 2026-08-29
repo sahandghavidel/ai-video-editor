@@ -244,6 +244,7 @@ export async function POST(request: Request) {
     const finalDuration = parseDurationSeconds(finalProbe);
     const hyperFramesDuration = parseDurationSeconds(hyperFramesProbe);
     const { width, height } = getVideoDimensions(finalProbe);
+    const hyperFramesDimensions = getVideoDimensions(hyperFramesProbe);
     const finalFrameRate = getVideoFrameRate(finalProbe);
     const hyperFramesFrameRate = getVideoFrameRate(hyperFramesProbe);
     const finalHasAudio = hasAudioStream(finalProbe);
@@ -255,16 +256,23 @@ export async function POST(request: Request) {
 
     // Match the Image Overlay modal's uploaded-video path: the Final Video is
     // input 0 and remains the base timeline/stream contract. The HF render is
-    // retimed, scaled, cropped, and applied as a full-frame overlay.
+    // retimed and applied as a full-frame overlay. Scaling and cropping are
+    // only needed when the HF render does not already match the Final Video.
     const outputFrameDuration = 1 / Math.max(1, finalFrameRate);
     const stretchedOverlayFrameDuration =
       stretchFactor / Math.max(1, hyperFramesFrameRate);
     const overlayTailPadDuration =
       Math.max(outputFrameDuration, stretchedOverlayFrameDuration) +
       outputFrameDuration;
+    const dimensionsMatch =
+      hyperFramesDimensions.width === width &&
+      hyperFramesDimensions.height === height;
+    const overlayPreparation = dimensionsMatch
+      ? 'format=rgba'
+      : `scale=w=${width}:h=${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba`;
     const filterComplex = [
       `[1:v]trim=start=0:end=${hyperFramesDuration.toFixed(6)},setpts=PTS-STARTPTS[source]`,
-      `[source]setpts=(PTS-STARTPTS)*${stretchFactor.toFixed(8)},tpad=stop_mode=clone:stop_duration=${overlayTailPadDuration.toFixed(8)},scale=w=${width}:h=${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba[overlay]`,
+      `[source]setpts=(PTS-STARTPTS)*${stretchFactor.toFixed(8)},tpad=stop_mode=clone:stop_duration=${overlayTailPadDuration.toFixed(8)},${overlayPreparation}[overlay]`,
       `[0:v][overlay]overlay=x=0:y=0:enable='gte(t\\,0)*lte(t\\,${finalDuration.toFixed(6)})':eof_action=repeat:repeatlast=1[composited]`,
       `[composited]trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[vout]`,
     ].join(';');
