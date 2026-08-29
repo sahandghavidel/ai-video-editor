@@ -24,6 +24,8 @@ type FFprobeStream = {
   width?: number;
   height?: number;
   duration?: string | number;
+  avg_frame_rate?: string;
+  r_frame_rate?: string;
 };
 
 type FFprobeOutput = {
@@ -93,6 +95,40 @@ function getVideoDimensions(probe: FFprobeOutput) {
   return { width, height };
 }
 
+function parseFrameRate(value?: string): number | null {
+  if (!value) return null;
+  const [numeratorRaw, denominatorRaw] = value.split('/');
+  const numerator = Number(numeratorRaw);
+  const denominator = Number(denominatorRaw ?? 1);
+  if (
+    !Number.isFinite(numerator) ||
+    !Number.isFinite(denominator) ||
+    numerator <= 0 ||
+    denominator <= 0
+  ) {
+    return null;
+  }
+  return numerator / denominator;
+}
+
+function getVideoFrameRate(probe: FFprobeOutput): number {
+  const video = probe.streams?.find((stream) => stream.codec_type === 'video');
+  // Exact-duration trimming changes avg_frame_rate because FFprobe derives it
+  // from frame count / container duration. r_frame_rate is the nominal stream
+  // rate used for overlay compatibility and remains stable after the trim.
+  const frameRate =
+    parseFrameRate(video?.r_frame_rate) ??
+    parseFrameRate(video?.avg_frame_rate);
+  if (!frameRate || !Number.isFinite(frameRate) || frameRate <= 0) {
+    throw new Error('Unable to determine video frame rate');
+  }
+  return frameRate;
+}
+
+function hasAudioStream(probe: FFprobeOutput): boolean {
+  return Boolean(probe.streams?.some((stream) => stream.codec_type === 'audio'));
+}
+
 function getUrlField(scene: BaserowRow, fieldKey: string): string {
   const value = scene[fieldKey];
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
@@ -100,15 +136,6 @@ function getUrlField(scene: BaserowRow, fieldKey: string): string {
 
 function isHttpUrl(value: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://');
-}
-
-function isAlreadyApplied(finalVideoUrl: string, sceneId: number): boolean {
-  try {
-    const filename = new URL(finalVideoUrl).pathname.split('/').pop() ?? '';
-    return new RegExp(`(^|_)scene_${sceneId}_hf_applied_`, 'i').test(filename);
-  } catch {
-    return false;
-  }
 }
 
 async function downloadToFile(url: string, outputPath: string) {
@@ -187,17 +214,6 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (isAlreadyApplied(finalVideoUrl, sceneId)) {
-      return Response.json(
-        {
-          alreadyApplied: true,
-          sceneId,
-          videoUrl: finalVideoUrl,
-          message: 'HyperFrames video is already applied for this scene',
-        },
-        { status: 409 },
-      );
-    }
     if (!isHttpUrl(hyperFramesVideoUrl)) {
       return Response.json(
         {
@@ -228,18 +244,32 @@ export async function POST(request: Request) {
     const finalDuration = parseDurationSeconds(finalProbe);
     const hyperFramesDuration = parseDurationSeconds(hyperFramesProbe);
     const { width, height } = getVideoDimensions(finalProbe);
-    const speed = hyperFramesDuration / finalDuration;
-    if (!Number.isFinite(speed) || speed <= 0) {
+    const finalFrameRate = getVideoFrameRate(finalProbe);
+    const hyperFramesFrameRate = getVideoFrameRate(hyperFramesProbe);
+    const finalHasAudio = hasAudioStream(finalProbe);
+    const frameTolerance = 1 / finalFrameRate + 0.005;
+    const stretchFactor = finalDuration / hyperFramesDuration;
+    if (!Number.isFinite(stretchFactor) || stretchFactor <= 0) {
       throw new Error('Invalid HyperFrames duration ratio');
     }
 
+    // Match the Image Overlay modal's uploaded-video path: the Final Video is
+    // input 0 and remains the base timeline/stream contract. The HF render is
+    // retimed, scaled, cropped, and applied as a full-frame overlay.
+    const outputFrameDuration = 1 / Math.max(1, finalFrameRate);
+    const stretchedOverlayFrameDuration =
+      stretchFactor / Math.max(1, hyperFramesFrameRate);
+    const overlayTailPadDuration =
+      Math.max(outputFrameDuration, stretchedOverlayFrameDuration) +
+      outputFrameDuration;
     const filterComplex = [
-      '[0:v]setpts=PTS-STARTPTS[base]',
-      `[1:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/${speed.toFixed(8)},trim=0:${finalDuration.toFixed(6)},tpad=stop_mode=clone:stop_duration=0.25,setpts=PTS-STARTPTS[hf]`,
-      `[base][hf]overlay=0:0:repeatlast=1,trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[vout]`,
+      `[1:v]trim=start=0:end=${hyperFramesDuration.toFixed(6)},setpts=PTS-STARTPTS[source]`,
+      `[source]setpts=(PTS-STARTPTS)*${stretchFactor.toFixed(8)},tpad=stop_mode=clone:stop_duration=${overlayTailPadDuration.toFixed(8)},scale=w=${width}:h=${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba[overlay]`,
+      `[0:v][overlay]overlay=x=0:y=0:enable='gte(t\\,0)*lte(t\\,${finalDuration.toFixed(6)})':eof_action=repeat:repeatlast=1[composited]`,
+      `[composited]trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[vout]`,
     ].join(';');
 
-    const { stderr, code } = await runSpawnCapture('ffmpeg', [
+    const ffmpegArgs = [
       '-hide_banner',
       '-loglevel',
       'error',
@@ -255,6 +285,8 @@ export async function POST(request: Request) {
       '0:a?',
       '-t',
       finalDuration.toFixed(6),
+      '-c:a',
+      'copy',
       '-c:v',
       'libx264',
       '-preset',
@@ -263,14 +295,35 @@ export async function POST(request: Request) {
       '20',
       '-pix_fmt',
       'yuv420p',
-      '-c:a',
-      'copy',
       '-movflags',
       '+faststart',
+      '-avoid_negative_ts',
+      'make_zero',
       outputPath,
-    ]);
+    ];
+
+    const { stderr, code } = await runSpawnCapture('ffmpeg', ffmpegArgs);
     if (code !== 0) {
       throw new Error(`ffmpeg failed (exit ${code}): ${stderr.slice(0, 4000)}`);
+    }
+
+    const outputProbe = await probeVideo(outputPath);
+    const outputDuration = parseDurationSeconds(outputProbe);
+    const outputDimensions = getVideoDimensions(outputProbe);
+    const outputFrameRate = getVideoFrameRate(outputProbe);
+    if (Math.abs(outputDuration - finalDuration) > frameTolerance) {
+      throw new Error(
+        `Output duration ${outputDuration.toFixed(6)} does not match final duration ${finalDuration.toFixed(6)}`,
+      );
+    }
+    if (outputDimensions.width !== width || outputDimensions.height !== height) {
+      throw new Error('Output dimensions do not match the final video');
+    }
+    if (Math.abs(outputFrameRate - finalFrameRate) > 0.02) {
+      throw new Error('Output frame rate does not match the final video');
+    }
+    if (finalHasAudio && !hasAudioStream(outputProbe)) {
+      throw new Error('Output is missing the final video audio');
     }
 
     const filename = `scene_${sceneId}_hf_applied_${Date.now()}.mp4`;
@@ -284,7 +337,8 @@ export async function POST(request: Request) {
       hyperFramesVideoUrl,
       finalDuration,
       hyperFramesDuration,
-      speed,
+      stretchFactor,
+      outputMode: 'image-overlay-compatible',
       filename,
     });
   } catch (error) {
