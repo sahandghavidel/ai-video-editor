@@ -15,6 +15,7 @@ type BaserowRow = {
 type GenerateHyperFramesHtmlBody = AIProviderRequestBody & {
   sceneId?: unknown;
   model?: unknown;
+  skipIfDestinationExists?: unknown;
 };
 
 const SCENES_TABLE_ID = 714;
@@ -117,6 +118,15 @@ export async function POST(request: Request) {
     }
 
     const scene = await getScene(sceneId);
+    if (
+      body?.skipIfDestinationExists === true &&
+      String(scene[HYPERFRAMES_HTML_FIELD_KEY] ?? '').trim()
+    ) {
+      return NextResponse.json({
+        skipped: true,
+        htmlFieldKey: HYPERFRAMES_HTML_FIELD_KEY,
+      });
+    }
     const hyperFramesPrompt = String(
       scene[HYPERFRAMES_PROMPT_FIELD_KEY] ?? '',
     ).trim();

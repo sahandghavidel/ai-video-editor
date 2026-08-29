@@ -146,6 +146,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => null)) as {
       sceneId?: unknown;
+      skipIfDestinationExists?: unknown;
     } | null;
     const sceneId = Number(body?.sceneId);
 
@@ -157,6 +158,15 @@ export async function POST(request: Request) {
     }
 
     const scene = await getScene(sceneId);
+    if (
+      body?.skipIfDestinationExists === true &&
+      getStringField(scene, HYPERFRAMES_VIDEO_FIELD_KEY)
+    ) {
+      return NextResponse.json({
+        skipped: true,
+        videoFieldKey: HYPERFRAMES_VIDEO_FIELD_KEY,
+      });
+    }
     const sourceHtml = getStringField(scene, HYPERFRAMES_HTML_FIELD_KEY);
     if (!sourceHtml) {
       return NextResponse.json(
