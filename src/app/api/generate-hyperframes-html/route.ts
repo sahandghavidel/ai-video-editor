@@ -1,3 +1,8 @@
+import { execFile } from 'child_process';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { promisify } from 'util';
 import { NextResponse } from 'next/server';
 import {
   resolveOpenAIClient,
@@ -6,6 +11,8 @@ import {
 import { buildAuthHeader, getBaserowToken } from '@/lib/baserow-auth';
 import { validateHyperFramesHtml } from '@/lib/hyperframes-html-validation';
 import { probeVideoDurationSeconds } from '@/lib/ffprobe-video-duration';
+
+export const runtime = 'nodejs';
 
 type BaserowRow = {
   id: number;
@@ -18,10 +25,13 @@ type GenerateHyperFramesHtmlBody = AIProviderRequestBody & {
   skipIfDestinationExists?: unknown;
 };
 
+const execFileAsync = promisify(execFile);
 const SCENES_TABLE_ID = 714;
 const FINAL_VIDEO_FIELD_KEY = 'field_6886';
 const HYPERFRAMES_PROMPT_FIELD_KEY = 'field_7365';
 const HYPERFRAMES_HTML_FIELD_KEY = 'field_7367';
+const HYPERFRAMES_VERSION = '0.7.63';
+const HYPERFRAMES_LINT_TIMEOUT_MS = 60 * 1000;
 const HYPERFRAMES_HTML_SYSTEM_PROMPT = `You are an expert HyperFrames HTML composition author. Return ONLY one complete editable standalone HyperFrames HTML source. Do not use Markdown code fences, explanations, headings, plans, or commentary.
 
 The output MUST be a complete standards-mode document, never an HTML fragment. It must contain <!DOCTYPE html>, <html>, <head>, <meta charset="UTF-8">, and <body>. Do not wrap the standalone composition root in <template>.
@@ -52,6 +62,8 @@ The root data-composition-id and window.__timelines registry key MUST match exac
 The root MUST be a 16:9 landscape 4K composition with data-composition-id, data-start, data-duration, data-width="3840", and data-height="2160". Never return a square or portrait composition. Set the root data-duration to the exact numeric duration supplied in this system message. Do not use any external scene-duration field or invent a shorter duration. Every timed visible unit must be a direct-child class="clip" with a unique stable id, data-start, data-duration, and data-track-index. The GSAP CDN script shown above is the only allowed external script. Drive motion through the paused timeline.
 
 Never create overlapping GSAP tweens that change the same property on the same target. When properties share timing, combine them into one tween. Otherwise sequence them with distinct non-overlapping time ranges or use overwrite: "auto". Do not start a later tween at a boundary that the linter treats as overlapping with the earlier tween. Before returning the HTML, audit every target/property pair for overlapping time ranges.
+
+Every GSAP exit tween that fades a non-clip element or inner wrapper to opacity 0 and ends at a positive clip or beat boundary MUST be followed by a zero-duration hard kill at that exact ending time. Example: tl.to(".card", { opacity: 0, duration: 0.3 }, 7.0); tl.set(".card", { opacity: 0 }, 7.3);. If visibility is also controlled, the boundary set may use { opacity: 0, visibility: "hidden" }. Never apply this hard-kill pattern to a .clip element because HyperFrames owns clip visibility. The prohibition on tl.set() for an initial hidden state applies only at timeline position 0; a hard-kill tl.set() at a positive exit boundary is required. Before returning HTML, audit every opacity or autoAlpha exit and add its matching boundary hard kill.
 
 Keep the standalone HTML under 300 lines with concise reusable CSS and markup. Never use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, external CSS frameworks, other CDN scripts, or render-time fetches. Follow the exact timings from the user prompt and do not use supplied image assets or external image URLs. Do not render or describe a video.`;
 
@@ -113,6 +125,64 @@ function normalizeHyperFramesHtml(raw: string): string {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/^```(?:html)?\s*\n?([\s\S]*?)\n?```$/i);
   return (fenced ? fenced[1] : trimmed).trim();
+}
+
+function cleanHyperFramesOutput(raw: string): string {
+  return raw
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .trim();
+}
+
+async function getHyperFramesStrictLintIssues(html: string): Promise<string[]> {
+  const temporaryProjectRoot = await mkdtemp(
+    path.join(os.tmpdir(), 'ultimate-video-editr-hyperframes-lint-'),
+  );
+
+  try {
+    await writeFile(
+      path.join(temporaryProjectRoot, 'index.html'),
+      html,
+      'utf8',
+    );
+
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        'npx',
+        [
+          '--yes',
+          `hyperframes@${HYPERFRAMES_VERSION}`,
+          'lint',
+          temporaryProjectRoot,
+        ],
+        {
+          cwd: temporaryProjectRoot,
+          timeout: HYPERFRAMES_LINT_TIMEOUT_MS,
+          maxBuffer: 5 * 1024 * 1024,
+        },
+      );
+      const output = cleanHyperFramesOutput(`${stdout}\n${stderr}`);
+      return /(^|\n)\s*[✗⚠]/u.test(output) ? [output] : [];
+    } catch (error) {
+      const lintError = error as {
+        message?: unknown;
+        stdout?: unknown;
+        stderr?: unknown;
+      };
+      const output = cleanHyperFramesOutput(
+        [lintError.stdout, lintError.stderr]
+          .filter((value): value is string => typeof value === 'string')
+          .join('\n'),
+      );
+      return [
+        output ||
+          (typeof lintError.message === 'string'
+            ? lintError.message
+            : 'HyperFrames lint failed'),
+      ];
+    }
+  } finally {
+    await rm(temporaryProjectRoot, { recursive: true, force: true });
+  }
 }
 
 export async function POST(request: Request) {
@@ -237,7 +307,7 @@ export async function POST(request: Request) {
           { role: 'assistant', content: html },
           {
             role: 'user',
-            content: `Repair the previous HTML so it satisfies every HyperFrames requirement. Validation findings: ${validationIssues.join('; ')}. Return the complete corrected HTML only. It must remain a complete document beginning with <!DOCTYPE html> and containing <html>, <head>, <meta charset="UTF-8">, and <body>. Do not use <template>. Make the root data-composition-id exactly match the window.__timelines registry key. Preserve this synchronous sequence: window.__timelines = window.__timelines || {}; const tl = gsap.timeline({ paused: true }); window.__timelines["<root composition id>"] = tl;.`,
+            content: `Repair the previous HTML so it satisfies every HyperFrames requirement. Validation findings: ${validationIssues.join('; ')}. Return the complete corrected HTML only. It must remain a complete document beginning with <!DOCTYPE html> and containing <html>, <head>, <meta charset="UTF-8">, and <body>. Do not use <template>. Make the root data-composition-id exactly match the window.__timelines registry key. Preserve this synchronous sequence: window.__timelines = window.__timelines || {}; const tl = gsap.timeline({ paused: true }); window.__timelines["<root composition id>"] = tl;. For gsap_exit_missing_hard_kill, add a zero-duration tl.set() for the reported non-clip selector at the exact positive-time exit boundary after its fade; do not target .clip elements and do not add an initial-hidden tl.set() at position 0.`,
           },
         ],
         temperature: 0.1,
@@ -262,6 +332,57 @@ export async function POST(request: Request) {
         {
           error: `The LLM returned non-renderable HyperFrames HTML: ${validationIssues.join('; ')}. Generate it again using the HyperFrames rules.`,
           validationIssues,
+        },
+        { status: 502 },
+      );
+    }
+
+    let lintIssues = await getHyperFramesStrictLintIssues(html);
+    if (lintIssues.length > 0) {
+      const lintRepairCompletion = await openaiClient.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: systemPromptForModel,
+          },
+          { role: 'user', content: promptForModel },
+          { role: 'assistant', content: html },
+          {
+            role: 'user',
+            content: `Repair every issue from the pinned HyperFrames strict lint preflight while preserving the composition's design, timings, duration, and complete document structure. For gsap_exit_missing_hard_kill, add a zero-duration tl.set() for the reported non-clip selector at the exact positive-time end of its exit tween, for example tl.set(".card", { opacity: 0 }, 7.3);. Never target a .clip element, and do not add an initial-hidden tl.set() at timeline position 0. HyperFrames lint findings:\n${lintIssues.join('\n\n')}\nReturn the complete corrected HTML only.`,
+          },
+        ],
+        temperature: 0.1,
+      });
+      const lintRepairedRawHtml =
+        lintRepairCompletion.choices?.[0]?.message?.content;
+      const lintRepairedHtml =
+        typeof lintRepairedRawHtml === 'string'
+          ? normalizeHyperFramesHtml(lintRepairedRawHtml)
+          : '';
+
+      if (lintRepairedHtml) {
+        html = lintRepairedHtml;
+      }
+
+      validationIssues = validateHyperFramesHtml(html, {
+        maxLines: 300,
+        require4KCanvas: true,
+        expectedDuration: requiredDuration,
+      });
+      lintIssues =
+        validationIssues.length === 0
+          ? await getHyperFramesStrictLintIssues(html)
+          : [];
+    }
+
+    if (validationIssues.length > 0 || lintIssues.length > 0) {
+      const finalIssues = [...validationIssues, ...lintIssues];
+      return NextResponse.json(
+        {
+          error: `The LLM returned HyperFrames HTML that still fails the generation preflight: ${finalIssues.join('; ')}. Generate it again using the HyperFrames rules.`,
+          validationIssues: finalIssues,
         },
         { status: 502 },
       );

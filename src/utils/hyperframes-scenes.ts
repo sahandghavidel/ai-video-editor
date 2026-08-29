@@ -189,6 +189,7 @@ Requirements:
 - Never use CSS transform on an element animated by GSAP. Use GSAP x, y, scale, rotation, xPercent, and yPercent properties instead.
 - Preserve CSS centering in GSAP with xPercent and yPercent; do not use CSS translate() for an element whose transform is animated.
 - Never use tl.set() at timeline position 0 for an initial hidden state. Define that state in CSS or use immediate gsap.set() before creating the paused timeline.
+- Every exit tween that fades a non-clip element or inner wrapper to opacity 0 and ends at a positive clip or beat boundary must be followed by a zero-duration hard kill at that exact ending time, for example: tl.to(".card", { opacity: 0, duration: 0.3 }, 7.0); tl.set(".card", { opacity: 0 }, 7.3);. If visibility is controlled, the boundary set may use { opacity: 0, visibility: "hidden" }. Never target a .clip element because HyperFrames owns clip visibility. The position-0 restriction above does not prohibit these required positive-time exit hard kills. Audit every opacity or autoAlpha exit before returning the HTML.
 - Do not add unnecessary text or decorative elements.
 - Build the visuals with HTML, CSS, inline SVG, and the allowed GSAP script only.
 - Treat the caption timings as timing metadata, not visible subtitles. Do not render the caption words, the full sentence, or word-by-word text on screen.
