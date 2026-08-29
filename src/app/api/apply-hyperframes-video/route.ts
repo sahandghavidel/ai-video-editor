@@ -292,7 +292,7 @@ export async function POST(request: Request) {
       '-preset',
       'medium',
       '-crf',
-      '20',
+      '14',
       '-pix_fmt',
       'yuv420p',
       '-movflags',
