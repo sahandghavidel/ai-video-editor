@@ -178,12 +178,14 @@ ${JSON.stringify(captionData, null, 2)}
 
 Requirements:
 - Return only one complete standalone editable HyperFrames HTML composition.
+- Return a complete standards-mode HTML document beginning with <!DOCTYPE html> and containing <html>, <head>, <meta charset="UTF-8">, and <body>. Never return a fragment and never wrap the standalone composition in <template>.
 - Use a 16:9 landscape 4K root element with data-composition-id, data-start="0", data-duration="${requiredDuration}", data-width="3840", and data-height="2160". Never use a square or portrait canvas.
 - Put every timed visible unit in a direct-child element with class="clip", data-start, data-duration, and data-track-index attributes.
-- Register exactly one synchronously-created paused GSAP timeline as window.__timelines["<root composition id>"].
+- Use one stable root composition id such as "scene". That id and the window.__timelines registry key must match exactly.
+- Register exactly one synchronously-created paused GSAP timeline using this exact sequence immediately after the GSAP script loads: window.__timelines = window.__timelines || {}; const tl = gsap.timeline({ paused: true }); window.__timelines["scene"] = tl;. Merely creating tl is not registration. Never create or register it inside a callback, event listener, promise, async function, timeout, or conditional.
 - Include <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before the animation script.
 - Drive all motion through that paused timeline so arbitrary seeking renders the same frame every time.
-- Never overlap GSAP tweens that change the same property on the same target; combine those properties into one tween or sequence the tweens instead.
+- Never overlap GSAP tweens that change the same property on the same target. Combine properties that share timing into one tween; otherwise use distinct non-overlapping time ranges or overwrite: "auto". Do not place a later tween at a boundary the linter can treat as overlap. Audit every target/property pair before returning the HTML.
 - Never use CSS transform on an element animated by GSAP. Use GSAP x, y, scale, rotation, xPercent, and yPercent properties instead.
 - Preserve CSS centering in GSAP with xPercent and yPercent; do not use CSS translate() for an element whose transform is animated.
 - Never use tl.set() at timeline position 0 for an initial hidden state. Define that state in CSS or use immediate gsap.set() before creating the paused timeline.

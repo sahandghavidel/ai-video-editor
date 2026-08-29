@@ -64,6 +64,8 @@ import {
   Trash2,
 } from 'lucide-react';
 
+const HYPERFRAMES_HTML_CONCURRENCY = 3;
+
 interface BatchOperationsProps {
   data: BaserowRow[];
   onRefresh?: () => void | Promise<void>;
@@ -247,6 +249,11 @@ export default function BatchOperations({
   const [hyperFramesBatchSceneId, setHyperFramesBatchSceneId] = useState<
     number | null
   >(null);
+  const [hyperFramesHtmlProgress, setHyperFramesHtmlProgress] = useState<{
+    finished: number;
+    total: number;
+    running: number;
+  } | null>(null);
   const [hyperFramesBatchStatus, setHyperFramesBatchStatus] = useState('');
   const [fixingLanguageTenScenes, setFixingLanguageTenScenes] = useState(false);
   const [fixingLanguageSceneId, setFixingLanguageSceneId] = useState<
@@ -1832,21 +1839,35 @@ export default function BatchOperations({
       const onlineModel =
         modelSelection.selectedOnlineModel || 'deepseek/deepseek-v3.2-exp';
 
-      for (const scene of videoScenes) {
-        setHyperFramesBatchSceneId(scene.id);
+      let nextSceneIndex = 0;
+      let finished = 0;
+      let running = 0;
+      const updateProgress = () => {
+        setHyperFramesHtmlProgress({
+          finished,
+          total: videoScenes.length,
+          running,
+        });
+        setHyperFramesBatchStatus(
+          `HF HTML: ${finished} / ${videoScenes.length} finished, ${running} running.`,
+        );
+      };
+      updateProgress();
+
+      const processScene = async (scene: BaserowRow) => {
         try {
           const latestScene = await getSceneById(scene.id);
           if (!latestScene || !isHyperFramesVisualRequired(latestScene)) {
             skipped += 1;
-            continue;
+            return;
           }
           if (getSceneTextField(latestScene, HYPERFRAMES_HTML_FIELD_KEY)) {
             skipped += 1;
-            continue;
+            return;
           }
           if (!getSceneTextField(latestScene, HYPERFRAMES_PROMPT_FIELD_KEY)) {
             skipped += 1;
-            continue;
+            return;
           }
 
           const response = await fetch('/api/generate-hyperframes-html', {
@@ -1874,7 +1895,7 @@ export default function BatchOperations({
           }
           if (payload?.skipped === true) {
             skipped += 1;
-            continue;
+            return;
           }
           const html =
             typeof payload?.html === 'string' ? payload.html.trim() : '';
@@ -1887,7 +1908,7 @@ export default function BatchOperations({
             getSceneTextField(destinationCheck, HYPERFRAMES_HTML_FIELD_KEY)
           ) {
             skipped += 1;
-            continue;
+            return;
           }
           const patchResponse = await fetch(`/api/baserow/scenes/${scene.id}`, {
             method: 'PATCH',
@@ -1905,12 +1926,41 @@ export default function BatchOperations({
             error: error instanceof Error ? error.message : String(error),
           });
         }
-      }
+      };
+
+      const worker = async () => {
+        while (nextSceneIndex < videoScenes.length) {
+          const scene = videoScenes[nextSceneIndex];
+          nextSceneIndex += 1;
+          running += 1;
+          updateProgress();
+          try {
+            await processScene(scene);
+          } finally {
+            running -= 1;
+            finished += 1;
+            updateProgress();
+          }
+        }
+      };
+
+      await Promise.all(
+        Array.from(
+          {
+            length: Math.min(
+              HYPERFRAMES_HTML_CONCURRENCY,
+              videoScenes.length,
+            ),
+          },
+          () => worker(),
+        ),
+      );
       finishHyperFramesBatch('HF HTML', completed, skipped, failures);
       await onRefresh?.();
     } finally {
       setGeneratingHyperFramesHtml(false);
       setHyperFramesBatchSceneId(null);
+      setHyperFramesHtmlProgress(null);
     }
   };
 
@@ -5317,8 +5367,8 @@ export default function BatchOperations({
                         <Loader2 className='w-4 h-4 animate-spin' />
                       )}
                       <span>
-                        {generatingHyperFramesHtml && hyperFramesBatchSceneId
-                          ? `HF HTML #${hyperFramesBatchSceneId}`
+                        {generatingHyperFramesHtml && hyperFramesHtmlProgress
+                          ? `HF HTML ${hyperFramesHtmlProgress.finished}/${hyperFramesHtmlProgress.total} · ${hyperFramesHtmlProgress.running} running`
                           : 'HF HTML'}
                       </span>
                     </button>

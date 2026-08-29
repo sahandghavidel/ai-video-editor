@@ -12,6 +12,29 @@ export function validateHyperFramesHtml(
 ): string[] {
   const issues: string[] = [];
 
+  if (!/^\s*<!doctype\s+html\s*>/i.test(html)) {
+    issues.push('standalone composition must begin with <!DOCTYPE html>');
+  }
+  if (!/<html(?:\s[^>]*)?>[\s\S]*<\/html\s*>/i.test(html)) {
+    issues.push('standalone composition must contain an <html> document wrapper');
+  }
+  if (!/<head(?:\s[^>]*)?>[\s\S]*<\/head\s*>/i.test(html)) {
+    issues.push('standalone composition must contain a <head> wrapper');
+  }
+  if (!/<meta\s+[^>]*charset\s*=\s*["']?utf-8["']?[^>]*>/i.test(html)) {
+    issues.push('standalone composition must declare <meta charset="UTF-8">');
+  }
+  if (!/<body(?:\s[^>]*)?>[\s\S]*<\/body\s*>/i.test(html)) {
+    issues.push('standalone composition must contain a <body> wrapper');
+  }
+  if (/<template(?:\s|>)/i.test(html)) {
+    issues.push('standalone composition root must not be wrapped in <template>');
+  }
+
+  const compositionId = html
+    .match(/data-composition-id\s*=\s*["']([^"']+)["']/i)?.[1]
+    ?.trim();
+
   if (!/data-composition-id\s*=\s*["']/i.test(html)) {
     issues.push('missing root data-composition-id');
   }
@@ -63,8 +86,40 @@ export function validateHyperFramesHtml(
   if (!/window\.__timelines\s*\[/i.test(html)) {
     issues.push('missing window.__timelines registration');
   }
+  if (
+    !/window\.__timelines\s*=\s*window\.__timelines\s*\|\|\s*\{\s*\}\s*;/i.test(
+      html,
+    )
+  ) {
+    issues.push('missing synchronous window.__timelines initialization');
+  }
   if (!/gsap\.timeline\s*\(\s*\{\s*paused\s*:\s*true/i.test(html)) {
     issues.push('missing synchronously-created paused GSAP timeline');
+  }
+  const timelineAssignment = html.match(
+    /window\.__timelines\s*\[\s*["']([^"']+)["']\s*\]\s*=\s*([A-Za-z_$][\w$]*)\s*;/i,
+  );
+  if (!timelineAssignment) {
+    issues.push('missing paused GSAP timeline assignment to window.__timelines');
+  } else if (compositionId && timelineAssignment[1] !== compositionId) {
+    issues.push(
+      'root data-composition-id must exactly match the window.__timelines registry key',
+    );
+  }
+  if (timelineAssignment) {
+    const timelineVariable = timelineAssignment[2].replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&',
+    );
+    const pausedTimelineDeclaration = new RegExp(
+      `(?:const|let|var)\\s+${timelineVariable}\\s*=\\s*gsap\\.timeline\\s*\\(\\s*\\{\\s*paused\\s*:\\s*true`,
+      'i',
+    );
+    if (!pausedTimelineDeclaration.test(html)) {
+      issues.push(
+        'window.__timelines must receive the synchronously-created paused GSAP timeline',
+      );
+    }
   }
   if (!/<script[^>]+src=["'][^"']*gsap[^"']*["'][^>]*>/i.test(html)) {
     issues.push('missing GSAP script tag before the animation script');

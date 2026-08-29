@@ -22,8 +22,38 @@ const SCENES_TABLE_ID = 714;
 const FINAL_VIDEO_FIELD_KEY = 'field_6886';
 const HYPERFRAMES_PROMPT_FIELD_KEY = 'field_7365';
 const HYPERFRAMES_HTML_FIELD_KEY = 'field_7367';
-const HYPERFRAMES_HTML_SYSTEM_PROMPT =
-  'You are an expert HyperFrames HTML composition author. Return ONLY one complete editable standalone HyperFrames HTML source. Do not use Markdown code fences, explanations, headings, plans, or commentary. The root MUST be a 16:9 landscape 4K composition with data-composition-id, data-start, data-duration, data-width="3840", and data-height="2160". Never return a square or portrait composition. Set the root data-duration to the exact numeric duration supplied in this system message. Do not use any external scene-duration field or invent a shorter duration. Every timed visible unit must be a direct-child class="clip" with a unique stable id, data-start, data-duration, and data-track-index. Register exactly one synchronously-created gsap.timeline({ paused: true }) at window.__timelines["<root composition id>"]. Include <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before the animation script; this is the only allowed external script. Drive motion through that paused timeline. Never create overlapping GSAP tweens that change the same property on the same target; combine them into one tween or sequence them. Keep the standalone HTML under 300 lines with concise reusable CSS and markup. Never use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, external CSS frameworks, other CDN scripts, or render-time fetches. Follow the exact timings from the user prompt and do not use supplied image assets or external image URLs. Do not render or describe a video.';
+const HYPERFRAMES_HTML_SYSTEM_PROMPT = `You are an expert HyperFrames HTML composition author. Return ONLY one complete editable standalone HyperFrames HTML source. Do not use Markdown code fences, explanations, headings, plans, or commentary.
+
+The output MUST be a complete standards-mode document, never an HTML fragment. It must contain <!DOCTYPE html>, <html>, <head>, <meta charset="UTF-8">, and <body>. Do not wrap the standalone composition root in <template>.
+
+Use this required outer structure and preserve its registration sequence:
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>/* composition styles */</style>
+</head>
+<body>
+  <div id="root" data-composition-id="scene" data-start="0" data-duration="DURATION" data-width="3840" data-height="2160">
+    <!-- direct-child timed clips -->
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    window.__timelines["scene"] = tl;
+    // timeline tweens
+  </script>
+</body>
+</html>
+
+The root data-composition-id and window.__timelines registry key MUST match exactly. Initialize window.__timelines, create exactly one paused GSAP timeline synchronously, and assign that exact timeline to the registry immediately after creation. Merely creating the timeline is not registration. Never put timeline creation or registration inside a callback, event listener, promise, async function, timeout, or conditional.
+
+The root MUST be a 16:9 landscape 4K composition with data-composition-id, data-start, data-duration, data-width="3840", and data-height="2160". Never return a square or portrait composition. Set the root data-duration to the exact numeric duration supplied in this system message. Do not use any external scene-duration field or invent a shorter duration. Every timed visible unit must be a direct-child class="clip" with a unique stable id, data-start, data-duration, and data-track-index. The GSAP CDN script shown above is the only allowed external script. Drive motion through the paused timeline.
+
+Never create overlapping GSAP tweens that change the same property on the same target. When properties share timing, combine them into one tween. Otherwise sequence them with distinct non-overlapping time ranges or use overwrite: "auto". Do not start a later tween at a boundary that the linter treats as overlapping with the earlier tween. Before returning the HTML, audit every target/property pair for overlapping time ranges.
+
+Keep the standalone HTML under 300 lines with concise reusable CSS and markup. Never use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, external CSS frameworks, other CDN scripts, or render-time fetches. Follow the exact timings from the user prompt and do not use supplied image assets or external image URLs. Do not render or describe a video.`;
 
 function extractUrl(raw: unknown): string {
   if (typeof raw === 'string') return raw.trim();
@@ -207,7 +237,7 @@ export async function POST(request: Request) {
           { role: 'assistant', content: html },
           {
             role: 'user',
-            content: `Repair the previous HTML so it satisfies every HyperFrames requirement. Validation findings: ${validationIssues.join('; ')}. Return the complete corrected HTML only.`,
+            content: `Repair the previous HTML so it satisfies every HyperFrames requirement. Validation findings: ${validationIssues.join('; ')}. Return the complete corrected HTML only. It must remain a complete document beginning with <!DOCTYPE html> and containing <html>, <head>, <meta charset="UTF-8">, and <body>. Do not use <template>. Make the root data-composition-id exactly match the window.__timelines registry key. Preserve this synchronous sequence: window.__timelines = window.__timelines || {}; const tl = gsap.timeline({ paused: true }); window.__timelines["<root composition id>"] = tl;.`,
           },
         ],
         temperature: 0.1,
