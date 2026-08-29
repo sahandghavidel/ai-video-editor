@@ -246,6 +246,8 @@ export default function BatchOperations({
     useState(false);
   const [renderingHyperFramesVideos, setRenderingHyperFramesVideos] =
     useState(false);
+  const [applyingHyperFramesVideos, setApplyingHyperFramesVideos] =
+    useState(false);
   const [hyperFramesBatchSceneId, setHyperFramesBatchSceneId] = useState<
     number | null
   >(null);
@@ -2040,6 +2042,83 @@ export default function BatchOperations({
       await onRefresh?.();
     } finally {
       setRenderingHyperFramesVideos(false);
+      setHyperFramesBatchSceneId(null);
+    }
+  };
+
+  const onApplyHyperFramesVideos = async () => {
+    if (applyingHyperFramesVideos || !selectedOriginalVideo.id) return;
+
+    setApplyingHyperFramesVideos(true);
+    setHyperFramesBatchStatus('Preparing Apply HF batch…');
+    let completed = 0;
+    let skipped = 0;
+    const failures: Array<{ sceneId: number; error: string }> = [];
+
+    try {
+      await onRefresh?.();
+      const videoScenes = useAppStore
+        .getState()
+        .getFilteredData()
+        .filter(isHyperFramesVisualRequired)
+        .sort(compareHyperFramesScenesByRealOrder);
+
+      for (const scene of videoScenes) {
+        setHyperFramesBatchSceneId(scene.id);
+        try {
+          const latestScene = await getSceneById(scene.id);
+          if (!latestScene || !isHyperFramesVisualRequired(latestScene)) {
+            skipped += 1;
+            continue;
+          }
+          const finalVideoUrl = getSceneTextField(latestScene, 'field_6886');
+          const hyperFramesVideoUrl = getSceneTextField(
+            latestScene,
+            HYPERFRAMES_VIDEO_FIELD_KEY,
+          );
+          if (!finalVideoUrl || !hyperFramesVideoUrl) {
+            skipped += 1;
+            continue;
+          }
+
+          const response = await fetch('/api/apply-hyperframes-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sceneId: scene.id }),
+          });
+          if (response.status === 409) {
+            skipped += 1;
+            continue;
+          }
+          const payload = (await response.json().catch(() => null)) as {
+            videoUrl?: unknown;
+            error?: unknown;
+          } | null;
+          if (!response.ok) {
+            throw new Error(
+              typeof payload?.error === 'string'
+                ? payload.error
+                : `Apply HF failed (${response.status})`,
+            );
+          }
+          if (
+            typeof payload?.videoUrl !== 'string' ||
+            !payload.videoUrl.trim()
+          ) {
+            throw new Error('Apply HF returned an empty video URL');
+          }
+          completed += 1;
+        } catch (error) {
+          failures.push({
+            sceneId: scene.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      finishHyperFramesBatch('Apply HF', completed, skipped, failures);
+      await onRefresh?.();
+    } finally {
+      setApplyingHyperFramesVideos(false);
       setHyperFramesBatchSceneId(null);
     }
   };
@@ -5294,7 +5373,8 @@ export default function BatchOperations({
                       sceneLoading.producingTTS !== null ||
                       generatingHyperFramesPrompts ||
                       generatingHyperFramesHtml ||
-                      renderingHyperFramesVideos
+                      renderingHyperFramesVideos ||
+                      applyingHyperFramesVideos
                     }
                     className='w-full h-10 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                     title={
@@ -5328,7 +5408,8 @@ export default function BatchOperations({
                         sceneLoading.producingTTS !== null ||
                         generatingHyperFramesPrompts ||
                         generatingHyperFramesHtml ||
-                        renderingHyperFramesVideos
+                        renderingHyperFramesVideos ||
+                        applyingHyperFramesVideos
                       }
                       className='w-full min-h-10 px-2 py-2 bg-fuchsia-500 hover:bg-fuchsia-600 disabled:bg-fuchsia-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                       title={
@@ -5354,7 +5435,8 @@ export default function BatchOperations({
                         sceneLoading.producingTTS !== null ||
                         generatingHyperFramesPrompts ||
                         generatingHyperFramesHtml ||
-                        renderingHyperFramesVideos
+                        renderingHyperFramesVideos ||
+                        applyingHyperFramesVideos
                       }
                       className='w-full min-h-10 px-2 py-2 bg-violet-500 hover:bg-violet-600 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                       title={
@@ -5380,7 +5462,8 @@ export default function BatchOperations({
                         sceneLoading.producingTTS !== null ||
                         generatingHyperFramesPrompts ||
                         generatingHyperFramesHtml ||
-                        renderingHyperFramesVideos
+                        renderingHyperFramesVideos ||
+                        applyingHyperFramesVideos
                       }
                       className='w-full min-h-10 px-2 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
                       title={
@@ -5396,6 +5479,33 @@ export default function BatchOperations({
                         {renderingHyperFramesVideos && hyperFramesBatchSceneId
                           ? `Render HF #${hyperFramesBatchSceneId}`
                           : 'Render HF'}
+                      </span>
+                    </button>
+                    <button
+                      onClick={onApplyHyperFramesVideos}
+                      disabled={
+                        !selectedOriginalVideo.id ||
+                        batchOperations.generatingAllTTS ||
+                        sceneLoading.producingTTS !== null ||
+                        generatingHyperFramesPrompts ||
+                        generatingHyperFramesHtml ||
+                        renderingHyperFramesVideos ||
+                        applyingHyperFramesVideos
+                      }
+                      className='w-full min-h-10 px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      title={
+                        !selectedOriginalVideo.id
+                          ? 'Select an original video first'
+                          : 'Duration-match each rendered HyperFrames video and overlay it full-frame onto its final video'
+                      }
+                    >
+                      {applyingHyperFramesVideos && (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      )}
+                      <span>
+                        {applyingHyperFramesVideos && hyperFramesBatchSceneId
+                          ? `Apply HF #${hyperFramesBatchSceneId}`
+                          : 'Apply HF'}
                       </span>
                     </button>
                   </div>
