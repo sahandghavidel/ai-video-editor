@@ -4297,9 +4297,31 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     setHyperFramesPromptStatus(null);
 
     try {
-      const latestSceneData = await fetchLatestSceneData();
+      let latestSceneData = await fetchLatestSceneData();
       if (!latestSceneData) {
         throw new Error('Scene could not be found');
+      }
+
+      if (!handleTranscribeScene) {
+        throw new Error('Final video transcription is unavailable');
+      }
+
+      await handleTranscribeScene(
+        sceneId,
+        latestSceneData,
+        'final',
+        true,
+        true,
+        false,
+        {
+          throwOnError: true,
+          skipIfFinalVideoAlreadyTranscribed: true,
+        },
+      );
+
+      latestSceneData = await fetchLatestSceneData();
+      if (!latestSceneData) {
+        throw new Error('Scene could not be refreshed after transcription');
       }
 
       const sentence =
@@ -4313,8 +4335,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         latestSceneData['field_7366'],
       );
 
-      let captionWords = transcriptionWords ?? [];
-      if (captionWords.length === 0 && captionsUrl) {
+      let captionWords: TranscriptionWord[] = [];
+      if (captionsUrl) {
         const captionsResponse = await fetch(captionsUrl, {
           cache: 'no-store',
         });
@@ -4404,11 +4426,11 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
   }, [
     fetchLatestSceneData,
     getSceneStringField,
+    handleTranscribeScene,
     isGeneratingHyperFramesPrompt,
     mergeLocalSceneSnapshot,
     previousSceneSentences,
     sceneId,
-    transcriptionWords,
   ]);
 
   const handleGenerateHyperFramesHtml = useCallback(async () => {

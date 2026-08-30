@@ -100,6 +100,11 @@ interface BatchOperationsProps {
     videoType?: 'original' | 'final',
     skipRefresh?: boolean,
     skipSound?: boolean,
+    updateSentence?: boolean,
+    opts?: {
+      throwOnError?: boolean;
+      skipIfFinalVideoAlreadyTranscribed?: boolean;
+    },
   ) => Promise<void>;
 }
 
@@ -1715,14 +1720,34 @@ export default function BatchOperations({
           const latestScene = await getSceneById(scene.id);
           if (
             !latestScene ||
-            !isHyperFramesVisualRequired(latestScene) ||
-            getSceneTextField(latestScene, HYPERFRAMES_PROMPT_FIELD_KEY)
+            !isHyperFramesVisualRequired(latestScene)
           ) {
             skipped += 1;
             continue;
           }
 
-          const captionsUrl = getSceneTextField(latestScene, 'field_6910');
+          await handleTranscribeScene(
+            scene.id,
+            latestScene,
+            'final',
+            true,
+            true,
+            false,
+            {
+              throwOnError: true,
+              skipIfFinalVideoAlreadyTranscribed: true,
+            },
+          );
+
+          const sceneWithCaptions = await getSceneById(scene.id);
+          if (!sceneWithCaptions) {
+            throw new Error('Scene could not be refreshed after transcription');
+          }
+
+          const captionsUrl = getSceneTextField(
+            sceneWithCaptions,
+            'field_6910',
+          );
           if (!captionsUrl) {
             throw new Error('Final caption timings are empty');
           }
@@ -1790,8 +1815,7 @@ export default function BatchOperations({
           const destinationCheck = await getSceneById(scene.id);
           if (
             !destinationCheck ||
-            !isHyperFramesVisualRequired(destinationCheck) ||
-            getSceneTextField(destinationCheck, HYPERFRAMES_PROMPT_FIELD_KEY)
+            !isHyperFramesVisualRequired(destinationCheck)
           ) {
             skipped += 1;
             continue;
@@ -5415,7 +5439,7 @@ export default function BatchOperations({
                       title={
                         !selectedOriginalVideo.id
                           ? 'Select an original video first'
-                          : 'Generate prompts only for Needs Visual scenes whose HyperFrames Prompt is empty'
+                          : 'Generate or replace prompts for all Needs Visual scenes'
                       }
                     >
                       {generatingHyperFramesPrompts && (
