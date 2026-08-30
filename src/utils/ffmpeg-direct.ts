@@ -666,12 +666,14 @@ export async function speedUpVideoWithUpload(
     // Step 2: Generate filename for upload
     const timestamp = Date.now();
     const speedSuffix = `${speedUpOptions.speed}x`;
+    const audioSuffix =
+      speedUpOptions.muteAudio === true ? 'muted' : 'unmuted';
     const filename =
       videoId && sceneId
-        ? `video_${videoId}_scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
+        ? `video_${videoId}_scene_${sceneId}_${speedSuffix}_${audioSuffix}_${timestamp}.mp4`
         : sceneId
-          ? `scene_${sceneId}_${speedSuffix}_${timestamp}.mp4`
-          : `spedup_${speedSuffix}_${timestamp}.mp4`;
+          ? `scene_${sceneId}_${speedSuffix}_${audioSuffix}_${timestamp}.mp4`
+          : `spedup_${speedSuffix}_${audioSuffix}_${timestamp}.mp4`;
 
     // Step 3: Upload to MinIO
     const uploadStart = Date.now();

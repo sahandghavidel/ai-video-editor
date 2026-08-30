@@ -151,6 +151,7 @@ Persistence:
   - `resetPipelineConfig`
 - `speedUpSpeed` is a pipeline-only speed override for the Full Pipeline Speed Up step. It supports `1x`, `1.125x`, `1.5x`, `2x`, `4x`, and `8x`, and defaults to `4x`.
 - `speedUpMuteAudio` is a pipeline-only audio override for the Full Pipeline Speed Up step. It defaults to `true` (muted); standalone speed-up actions continue using the global audio setting.
+- Uploaded speed-up filenames include both settings, for example `video_123_scene_456_4x_muted_<timestamp>.mp4` or `video_123_scene_456_4x_unmuted_<timestamp>.mp4`. This shared naming applies to pipeline, batch, and individual scene speed-up calls.
 
 ---
 
