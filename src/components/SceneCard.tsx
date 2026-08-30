@@ -30,6 +30,8 @@ import {
 import {
   Loader2,
   Sparkles,
+  ListPlus,
+  ListMinus,
   X,
   Play,
   Pause,
@@ -280,6 +282,9 @@ export default function SceneCard({
   const [editingText, setEditingText] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isCanceling, setIsCanceling] = useState<boolean>(false);
+  const [activeRewriteMode, setActiveRewriteMode] = useState<
+    'improve' | 'lengthen' | 'shorten' | null
+  >(null);
   // NOTE: no clearing ref needed now — clearing is triggered from non-edit view
   const [loadingAudio, setLoadingAudio] = useState<number | null>(null);
   const [loadingVideo, setLoadingVideo] = useState<number | null>(null);
@@ -5345,6 +5350,11 @@ export default function SceneCard({
       const shouldSetBusyState = opts?.suppressBusyStateUpdates !== true;
       if (shouldSetBusyState) {
         setImprovingSentence(sceneId);
+        setActiveRewriteMode(
+          enforceLongerSentences ?? modelSelection.enforceLongerSentences
+            ? 'lengthen'
+            : 'improve',
+        );
       }
 
       console.log(
@@ -5377,6 +5387,7 @@ export default function SceneCard({
         console.error(`API Error for scene ${sceneId}:`, errorMessage);
         // Don't throw error - just log it and continue
         setImprovingSentence(null);
+        setActiveRewriteMode(null);
         return;
       }
 
@@ -5397,6 +5408,7 @@ export default function SceneCard({
         );
         // Don't throw error - just log it and continue
         setImprovingSentence(null);
+        setActiveRewriteMode(null);
         return;
       }
 
@@ -5441,6 +5453,7 @@ export default function SceneCard({
 
       if (shouldSetBusyState) {
         setImprovingSentence(null);
+        setActiveRewriteMode(null);
       }
     },
     [
@@ -5448,6 +5461,77 @@ export default function SceneCard({
       modelSelection.selectedModel,
       modelSelection.enforceLongerSentences,
       refreshSceneInLocalCache,
+      videoSettings.autoGenerateTTS,
+    ],
+  );
+
+  const handleSentenceShortening = useCallback(
+    async (
+      sceneId: number,
+      currentSentence: string,
+      modelOverride?: string,
+      sceneData?: BaserowRow,
+    ) => {
+      setImprovingSentence(sceneId);
+      setActiveRewriteMode('shorten');
+
+      try {
+        const response = await fetch('/api/shorten-sentence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            currentSentence,
+            sceneId,
+            model: modelOverride || modelSelection.selectedModel,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          throw new Error(
+            errorData?.error || `Sentence shortening error: ${response.status}`,
+          );
+        }
+
+        const result = await response.json();
+        const shortenedSentence = String(result.shortenedSentence || '').trim();
+        if (!shortenedSentence) {
+          throw new Error('The shortening route returned empty text.');
+        }
+
+        await updateSceneRow(sceneId, { field_6890: shortenedSentence });
+
+        const updatedData = dataRef.current.map((scene) =>
+          scene.id === sceneId
+            ? { ...scene, field_6890: shortenedSentence, field_6891: '' }
+            : scene,
+        );
+        onDataUpdateRef.current?.(updatedData);
+
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
+
+        if (videoSettings.autoGenerateTTS) {
+          const sceneForTts =
+            sceneData || dataRef.current.find((scene) => scene.id === sceneId);
+          setTimeout(() => {
+            handleTTSProduce(sceneId, shortenedSentence, sceneForTts);
+          }, 1000);
+        }
+      } catch (error) {
+        console.error(`Failed to shorten sentence for scene ${sceneId}:`, error);
+      } finally {
+        setImprovingSentence(null);
+        setActiveRewriteMode(null);
+      }
+    },
+    [
+      handleTTSProduce,
+      modelSelection.selectedModel,
+      refreshSceneInLocalCache,
+      setImprovingSentence,
       videoSettings.autoGenerateTTS,
     ],
   );
@@ -8065,72 +8149,78 @@ export default function SceneCard({
                     </span>
                   </button>
 
-                  {/* AI Improvement Button */}
-                  <button
-                    onClick={() =>
-                      handleSentenceImprovement(
-                        scene.id,
-                        String(scene['field_6890'] || scene.field_6890 || ''),
-                        modelSelection.selectedModel || undefined,
-                      )
-                    }
-                    disabled={
-                      sceneLoading.improvingSentence !== null ||
-                      !String(
-                        scene['field_6890'] || scene.field_6890 || '',
-                      ).trim()
-                    }
-                    className={`flex items-center justify-center space-x-1 px-1 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
-                      sceneLoading.improvingSentence === scene.id
+                  {/* AI rewrite controls */}
+                  <div
+                    className={`flex h-7 min-w-[96px] items-center rounded-full px-1 text-xs font-medium transition-colors ${
+                      sceneLoading.improvingSentence !== null
                         ? 'bg-gray-100 text-gray-500'
-                        : sceneLoading.improvingSentence !== null
-                          ? 'bg-gray-50 text-gray-400'
-                          : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    title={
-                      sceneLoading.improvingSentence === scene.id
-                        ? 'Improving this sentence...'
-                        : sceneLoading.improvingSentence !== null
-                          ? `AI is improving sentence for scene ${sceneLoading.improvingSentence}`
-                          : modelSelection.selectedModel
-                            ? `Improve sentence with AI using: ${modelSelection.selectedModel}`
-                            : 'Improve sentence with AI (no model selected)'
-                    }
+                        : 'bg-indigo-100 text-indigo-700'
+                    }`}
+                    aria-label='AI text rewrite controls'
                   >
-                    {sceneLoading.improvingSentence === scene.id ? (
-                      <Loader2 className='animate-spin h-3 w-3' />
-                    ) : (
-                      <div className='flex items-center space-x-1'>
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
+                    {(
+                      [
+                        ['improve', Sparkles, 'Improve text'],
+                        ['lengthen', ListPlus, 'Make text longer'],
+                        ['shorten', ListMinus, 'Make text shorter'],
+                      ] as const
+                    ).map(([mode, Icon, title]) => {
+                      const isLoading =
+                        sceneLoading.improvingSentence === scene.id &&
+                        activeRewriteMode === mode;
+                      const disabled =
+                        sceneLoading.improvingSentence !== null ||
+                        !String(
+                          scene['field_6890'] || scene.field_6890 || '',
+                        ).trim();
+
+                      return (
+                        <button
+                          key={mode}
+                          type='button'
+                          onClick={() => {
+                            const currentSentence = String(
+                              scene['field_6890'] || scene.field_6890 || '',
+                            );
+                            if (mode === 'shorten') {
+                              handleSentenceShortening(
+                                scene.id,
+                                currentSentence,
+                                modelSelection.selectedModel || undefined,
+                                scene,
+                              );
+                              return;
+                            }
                             handleSentenceImprovement(
                               scene.id,
-                              String(
-                                scene['field_6890'] || scene.field_6890 || '',
-                              ),
+                              currentSentence,
                               modelSelection.selectedModel || undefined,
                               scene,
                               false,
-                              true, // enforce longer sentences
+                              mode === 'lengthen',
                             );
                           }}
-                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
-                          title='Detailed AI improvement with longer sentences'
+                          disabled={disabled}
+                          className='flex h-5 w-5 items-center justify-center rounded-full hover:bg-indigo-200 disabled:cursor-not-allowed disabled:opacity-50'
+                          title={`${title}${
+                            modelSelection.selectedModel
+                              ? ` using ${modelSelection.selectedModel}`
+                              : ''
+                          }`}
+                          aria-label={title}
                         >
-                          <Sparkles className='h-3 w-3 text-purple-600' />
-                        </div>
-                        <Sparkles className='h-3 w-3' />
-                      </div>
-                    )}
-                    <span>
-                      {sceneLoading.improvingSentence === scene.id
-                        ? 'Imp...'
-                        : sceneLoading.improvingSentence !== null
-                          ? 'Busy'
-                          : 'AI'}
+                          {isLoading ? (
+                            <Loader2 className='h-3 w-3 animate-spin' />
+                          ) : (
+                            <Icon className='h-3 w-3' />
+                          )}
+                        </button>
+                      );
+                    })}
+                    <span className='ml-1 select-none border-l border-indigo-200 pl-1'>
+                      {sceneLoading.improvingSentence !== null ? 'Busy' : 'AI'}
                     </span>
-                  </button>
+                  </div>
 
                   {/* Video Play Button */}
                   {typeof scene['field_6888'] === 'string' &&
