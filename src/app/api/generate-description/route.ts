@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,7 +66,7 @@ Transcript: ${transcriptionText}
 Return only the final description text.`;
 
     const completion = await openaiClient.chat.completions.create({
-      model: model,
+      model: withOpenRouterNitro(model, provider),
       messages: [
         {
           role: 'system',

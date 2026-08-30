@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import OpenAI from 'openai';
+import { withOpenRouterNitro } from '@/lib/ai-provider';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -153,7 +154,7 @@ async function detectTextWithVisionLLM(imageBytes: Buffer): Promise<{
     'No extra words, no markdown.';
 
   const completion = await openai.chat.completions.create({
-    model,
+    model: withOpenRouterNitro(model, 'online'),
     messages: [
       {
         role: 'user',

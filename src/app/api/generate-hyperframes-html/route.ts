@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import {
   resolveOpenAIClient,
   type AIProviderRequestBody,
+  withOpenRouterNitro,
 } from '@/lib/ai-provider';
 import { buildAuthHeader, getBaserowToken } from '@/lib/baserow-auth';
 import { validateHyperFramesHtml } from '@/lib/hyperframes-html-validation';
@@ -266,9 +267,10 @@ export async function POST(request: Request) {
       typeof body?.model === 'string' && body.model.trim()
         ? body.model.trim()
         : 'deepseek/deepseek-v3.2-exp';
+    const effectiveModel = withOpenRouterNitro(model, provider);
 
     const completion = await openaiClient.chat.completions.create({
-      model,
+      model: effectiveModel,
       messages: [
         {
           role: 'system',
@@ -297,7 +299,7 @@ export async function POST(request: Request) {
     });
     if (validationIssues.length > 0) {
       const repairCompletion = await openaiClient.chat.completions.create({
-        model,
+        model: effectiveModel,
         messages: [
           {
             role: 'system',
@@ -340,7 +342,7 @@ export async function POST(request: Request) {
     let lintIssues = await getHyperFramesStrictLintIssues(html);
     if (lintIssues.length > 0) {
       const lintRepairCompletion = await openaiClient.chat.completions.create({
-        model,
+        model: effectiveModel,
         messages: [
           {
             role: 'system',

@@ -1,4 +1,4 @@
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 type BaserowField = {
@@ -294,7 +294,10 @@ export async function POST(request: Request) {
     console.log(prompt);
 
     const completion = await openaiClient.chat.completions.create({
-      model: model || 'deepseek/deepseek-v3.2-exp',
+      model: withOpenRouterNitro(
+        model || 'deepseek/deepseek-v3.2-exp',
+        provider,
+      ),
       messages: [
         {
           role: 'system',

@@ -1,4 +1,4 @@
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 import {
   BaserowRow,
   getBaserowDataForOriginalVideo,
@@ -123,9 +123,11 @@ Requirements:
       console.log(`Shorten sentence prompt attempt ${attempt}/3:\n${prompt}`);
 
       const completion = await openaiClient.chat.completions.create({
-        model:
+        model: withOpenRouterNitro(
           model ||
-          'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+            'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+          provider,
+        ),
         messages: [{ role: 'user', content: prompt }],
       });
       const shortenedSentence = completion.choices[0]?.message?.content

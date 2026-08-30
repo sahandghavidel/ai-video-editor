@@ -3,6 +3,7 @@ import {
   resolveAIProviderConfig,
   resolveOpenAIClient,
   unloadLocalModel,
+  withOpenRouterNitro,
 } from '@/lib/ai-provider';
 
 // Next.js route-level hard timeout (seconds). Prevents Vercel/server from
@@ -419,13 +420,9 @@ export async function POST(request: Request) {
     const unloadModelAfter = isTruthyFlag(body?.unloadModelAfter);
     const preferFastProvider = isTruthyFlag(body?.preferFastProvider);
 
-    // For OpenRouter online requests, append :nitro to the model slug to
-    // route to the highest-throughput provider. The :nitro shortcut is
-    // ignored by local providers so we only apply it for online mode.
-    const effectiveModel =
-      preferFastProvider && provider === 'online' && !model.includes(':nitro')
-        ? `${model}:nitro`
-        : model;
+    // All OpenRouter requests use Nitro. Local providers keep their original
+    // model identifiers because OpenRouter routing suffixes do not apply.
+    const effectiveModel = withOpenRouterNitro(model, provider);
 
     const sceneIds = scenes.map((scene) => scene.sceneId);
     const sceneIndexes = scenes.map((_, index) => index + 1);

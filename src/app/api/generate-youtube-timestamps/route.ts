@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseCaptionFileTimedData } from '@/utils/captions-parser';
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 
 interface WordSegment {
   word: string;
@@ -166,7 +166,7 @@ Timed transcript:
 ${transcriptForPrompt}`;
 
     const completion = await openaiClient.chat.completions.create({
-      model,
+      model: withOpenRouterNitro(model, provider),
       messages: [
         {
           role: 'user',

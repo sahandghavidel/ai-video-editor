@@ -1,4 +1,4 @@
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 import {
   fetchTimedWords,
   loadAiIntroContext,
@@ -321,10 +321,12 @@ Rules:
 {"suggestions":[{"candidateId":"C1","startTime":12.3,"endTime":16.7,"reason":"short reason"}]}`;
 
     const completion = await client.chat.completions.create({
-      model:
+      model: withOpenRouterNitro(
         typeof body?.model === 'string' && body.model.trim()
           ? body.model.trim()
           : 'deepseek/deepseek-v3.2-exp',
+        provider,
+      ),
       messages: [
         {
           role: 'system',

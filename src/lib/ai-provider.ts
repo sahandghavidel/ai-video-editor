@@ -200,6 +200,18 @@ export const resolveRequestedModel = (
   return normalized || fallback;
 };
 
+export const withOpenRouterNitro = (
+  model: string,
+  provider: AIProvider,
+): string => {
+  const normalizedModel = model.trim();
+  if (provider !== 'online' || normalizedModel.includes(':nitro')) {
+    return normalizedModel;
+  }
+
+  return `${normalizedModel.replace(/:(?:free|floor)$/i, '')}:nitro`;
+};
+
 export interface LocalModelUnloadInput {
   modelId: string;
   localBaseUrl?: string;

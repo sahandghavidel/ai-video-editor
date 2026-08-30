@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 
 const MAX_TAG_CHARACTERS = 500;
 
@@ -93,7 +93,7 @@ Transcription: ${transcriptionText}
 Return only the tags separated by commas, nothing else.`;
 
     const completion = await openaiClient.chat.completions.create({
-      model: model,
+      model: withOpenRouterNitro(model, provider),
       messages: [
         {
           role: 'user',

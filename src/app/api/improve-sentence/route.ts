@@ -4,7 +4,7 @@ import {
   getSceneById,
   BaserowRow,
 } from '@/lib/baserow-actions';
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 
 interface ExtendedChatCompletionMessage
   extends OpenAI.Chat.Completions.ChatCompletionMessage {
@@ -299,9 +299,11 @@ Return only the improved sentence, nothing else.`;
 
       // Use the original DeepSeek model that was working
       const completion = await openaiClient.chat.completions.create({
-        model:
+        model: withOpenRouterNitro(
           model ||
-          'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+            'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+          provider,
+        ),
         messages: [
           {
             role: 'user',

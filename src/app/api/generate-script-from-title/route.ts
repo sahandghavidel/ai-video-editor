@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 
 type Body = {
   title?: unknown;
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const prompt = `Write a complete video narration script from this title:\n\n"${title}"\n\nRequirements:\n- Target spoken duration: about ${expectedDuration} minutes.\n- Return a clean, production-ready narration script in plain text easy for TTS reader to read.\n- Keep it coherent, engaging, and focused on the title.\n- Do NOT return markdown, bullets, headings, explanations, or any other formatting like dashes, asterisks, or numbers.\n- Return ONLY the script text.`;
 
     const completion = await openaiClient.chat.completions.create({
-      model,
+      model: withOpenRouterNitro(model, provider),
       messages: [
         {
           role: 'system',

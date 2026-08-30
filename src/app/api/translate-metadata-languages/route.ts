@@ -2,7 +2,7 @@ import { access } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { resolveOpenAIClient } from '@/lib/ai-provider';
+import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 import {
   resolveNamedVideoExportDir,
   sanitizeExportFileName,
@@ -181,10 +181,7 @@ export async function POST(request: NextRequest) {
       body?.preferFastProvider === 'true' ||
       body?.preferFastProvider === 1 ||
       body?.preferFastProvider === '1';
-    const effectiveModel =
-      preferFastProvider && provider === 'online' && !model.includes(':nitro')
-        ? `${model}:nitro`
-        : model;
+    const effectiveModel = withOpenRouterNitro(model, provider);
 
     const normalizedVideoId = Math.floor(videoId);
     const currentTitle =
