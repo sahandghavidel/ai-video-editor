@@ -249,6 +249,24 @@ type SceneSpeedUpControlState = {
   muteAudioKnown: boolean;
 };
 
+type SpeedUpVideoRequestOptions = {
+  speed?: SpeedUpMultiplier;
+  muteAudio?: boolean;
+  throwOnError?: boolean;
+};
+
+type SceneSpeedUpVideoHandler = (
+  sceneId: number,
+  sceneData?: BaserowRow,
+  skipRefresh?: boolean,
+  options?: SpeedUpVideoRequestOptions,
+) => Promise<void>;
+
+type ClearSentenceFieldHandler = (
+  sceneId: number,
+  skipRefresh?: boolean,
+) => Promise<void>;
+
 const getSceneSpeedUpControlState = (
   finalVideoUrl: string,
 ): SceneSpeedUpControlState => {
@@ -418,6 +436,12 @@ export default function SceneCard({
     Record<number, SceneSpeedUpControlState>
   >({});
   const sceneSpeedUpControlsRef = useRef(sceneSpeedUpControls);
+  const handleSpeedUpVideoRef = useRef<SceneSpeedUpVideoHandler | null>(null);
+  const handleClearSentenceFieldRef =
+    useRef<ClearSentenceFieldHandler | null>(null);
+  const speedUpAndClearSentenceRef = useRef<
+    ((sceneId: number) => Promise<void>) | null
+  >(null);
 
   // Update refs when props change
   useEffect(() => {
@@ -1224,6 +1248,29 @@ export default function SceneCard({
           void toggleSceneVisualRequirement(
             mediaPlayer.playingProducedVideoId,
           );
+        }
+
+        return;
+      }
+
+      // While a Final video is playing, number 4 speeds up the active scene
+      // at 4x with muted audio and clears only its editable sentence.
+      if (
+        event.key === '4' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        mediaPlayer.playingProducedVideoId !== null
+      ) {
+        event.preventDefault();
+
+        if (!event.repeat) {
+          const activeSceneId = mediaPlayer.playingProducedVideoId;
+          const speedUpAndClearSentence = speedUpAndClearSentenceRef.current;
+
+          if (speedUpAndClearSentence) {
+            void speedUpAndClearSentence(activeSceneId);
+          }
         }
 
         return;
@@ -2971,9 +3018,14 @@ export default function SceneCard({
 
   // Speed up video handler
   const handleSpeedUpVideo = useCallback(
-    async (sceneId: number, sceneData?: BaserowRow, skipRefresh?: boolean) => {
+    async (
+      sceneId: number,
+      sceneData?: BaserowRow,
+      skipRefresh?: boolean,
+      speedUpOptions?: SpeedUpVideoRequestOptions,
+    ) => {
       const currentScene =
-        sceneData || data.find((scene) => scene.id === sceneId);
+        sceneData || dataRef.current.find((scene) => scene.id === sceneId);
       if (!currentScene) return;
 
       const finalVideoUrl = extractFieldValueAsText(
@@ -2982,6 +3034,10 @@ export default function SceneCard({
       const selectedSpeedUpSettings =
         sceneSpeedUpControlsRef.current[sceneId] ||
         getSceneSpeedUpControlState(finalVideoUrl);
+      const requestedSpeed =
+        speedUpOptions?.speed ?? selectedSpeedUpSettings.speed;
+      const requestedMuteAudio =
+        speedUpOptions?.muteAudio ?? selectedSpeedUpSettings.muteAudio;
 
       const videoUrl = currentScene.field_6888 as string;
       if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
@@ -3014,8 +3070,8 @@ export default function SceneCard({
           'videoId:',
           videoId,
           'at',
-          `${selectedSpeedUpSettings.speed}x`,
-          selectedSpeedUpSettings.muteAudio ? '(muted)' : '(audio kept)',
+          `${requestedSpeed}x`,
+          requestedMuteAudio ? '(muted)' : '(audio kept)',
           'with video:',
           videoUrl,
         );
@@ -3028,8 +3084,8 @@ export default function SceneCard({
           body: JSON.stringify({
             sceneId,
             videoUrl,
-            speed: selectedSpeedUpSettings.speed,
-            muteAudio: selectedSpeedUpSettings.muteAudio,
+            speed: requestedSpeed,
+            muteAudio: requestedMuteAudio,
             videoId: videoId || undefined,
           }),
         });
@@ -3059,12 +3115,13 @@ export default function SceneCard({
         }
 
         // Optimistic update - update field_6886 with the processed video
-        const optimisticData = data.map((scene) =>
+        const optimisticData = dataRef.current.map((scene) =>
           scene.id === sceneId
             ? { ...scene, field_6886: result.videoUrl }
             : scene,
         );
-        onDataUpdate?.(optimisticData);
+        dataRef.current = optimisticData;
+        onDataUpdateRef.current?.(optimisticData);
 
         // Refresh data from server to ensure consistency (skip in batch mode)
         if (!skipRefresh) {
@@ -3080,18 +3137,23 @@ export default function SceneCard({
           errorMessage = error.message;
         }
         console.log(`Error: ${errorMessage}`);
+        if (speedUpOptions?.throwOnError) {
+          throw error;
+        }
       } finally {
         setSpeedingUpVideo(null);
       }
     },
     [
-      data,
       setSpeedingUpVideo,
-      onDataUpdate,
       refreshSceneInLocalCache,
       refreshData,
     ],
   );
+
+  useEffect(() => {
+    handleSpeedUpVideoRef.current = handleSpeedUpVideo;
+  }, [handleSpeedUpVideo]);
 
   // Transcribe scene handler
   const handleTranscribeScene = useCallback(
@@ -3638,19 +3700,21 @@ export default function SceneCard({
   };
 
   const handleClearSentenceField = useCallback(
-    async (sceneId: number) => {
+    async (sceneId: number, skipRefresh: boolean = false) => {
       if (isUpdating) return;
       setIsUpdating(true);
+      const previousData = dataRef.current;
 
       try {
         // Optimistic update: clear only field_6890 (the editable sentence)
-        const optimisticData = data.map((scene) => {
+        const optimisticData = previousData.map((scene) => {
           if (scene.id === sceneId) {
             return { ...scene, field_6890: '', field_6891: '' };
           }
           return scene;
         });
-        onDataUpdate?.(optimisticData);
+        dataRef.current = optimisticData;
+        onDataUpdateRef.current?.(optimisticData);
 
         // Persist change to Baserow (only field_6890)
         await updateSceneRow(sceneId, { field_6890: '' });
@@ -3659,20 +3723,69 @@ export default function SceneCard({
         setEditingId(null);
         setEditingText('');
 
-        const refreshedScene = await refreshSceneInLocalCache(sceneId);
-        if (!onDataUpdateRef.current || !refreshedScene) {
-          refreshData?.();
+        if (!skipRefresh) {
+          const refreshedScene = await refreshSceneInLocalCache(sceneId);
+          if (!onDataUpdateRef.current || !refreshedScene) {
+            refreshData?.();
+          }
         }
       } catch (error) {
         console.error('Failed to clear sentence field:', error);
         // Revert optimistic update on error
-        onDataUpdate?.(data);
+        dataRef.current = previousData;
+        onDataUpdateRef.current?.(previousData);
       } finally {
         setIsUpdating(false);
       }
     },
-    [data, onDataUpdate, refreshData, isUpdating, refreshSceneInLocalCache],
+    [refreshData, isUpdating, refreshSceneInLocalCache],
   );
+
+  useEffect(() => {
+    handleClearSentenceFieldRef.current = handleClearSentenceField;
+  }, [handleClearSentenceField]);
+
+  const handleSpeedUpAndClearSentence = useCallback(
+    async (sceneId: number) => {
+      if (sceneLoading.speedingUpVideo !== null || isUpdating) return;
+
+      const currentScene = dataRef.current.find(
+        (scene) => scene.id === sceneId,
+      );
+      const speedUpVideo = handleSpeedUpVideoRef.current;
+      const clearSentence = handleClearSentenceFieldRef.current;
+
+      if (!currentScene || !speedUpVideo || !clearSentence) return;
+
+      try {
+        await speedUpVideo(sceneId, currentScene, true, {
+          speed: 4,
+          muteAudio: true,
+          throwOnError: true,
+        });
+        await clearSentence(sceneId, true);
+
+        const refreshedScene = await refreshSceneInLocalCache(sceneId);
+        if (!onDataUpdateRef.current || !refreshedScene) {
+          refreshDataRef.current?.();
+        }
+      } catch (error) {
+        console.error(
+          `Shortcut 4 failed for scene ${sceneId}:`,
+          error,
+        );
+      }
+    },
+    [
+      isUpdating,
+      refreshSceneInLocalCache,
+      sceneLoading.speedingUpVideo,
+    ],
+  );
+
+  useEffect(() => {
+    speedUpAndClearSentenceRef.current = handleSpeedUpAndClearSentence;
+  }, [handleSpeedUpAndClearSentence]);
 
   const handleKeyDown = (e: React.KeyboardEvent, sceneId: number) => {
     if (e.key === 'Enter' && !e.shiftKey) {
