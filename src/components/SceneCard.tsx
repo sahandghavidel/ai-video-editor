@@ -476,6 +476,21 @@ export default function SceneCard({
   const [visualRequirementUpdatingSceneId, setVisualRequirementUpdatingSceneId] =
     useState<number | null>(null);
   const visualRequirementUpdateLockRef = useRef(false);
+  const hyperFramesTranscribeSceneRef = useRef<
+    | ((
+        sceneId: number,
+        sceneData?: unknown,
+        videoType?: 'original' | 'final',
+        skipRefresh?: boolean,
+        skipSound?: boolean,
+        updateSentence?: boolean,
+        opts?: {
+          throwOnError?: boolean;
+          skipIfFinalVideoAlreadyTranscribed?: boolean;
+        },
+      ) => Promise<void>)
+    | null
+  >(null);
   const [visualRequirementStatus, setVisualRequirementStatus] = useState<
     Record<number, string | null>
   >({});
@@ -806,6 +821,29 @@ export default function SceneCard({
       }));
 
       if (!isClearingRequirement) {
+        const latestSceneForPrompt = await getSceneById(sceneId);
+        if (!latestSceneForPrompt) {
+          throw new Error('Scene could not be found before HF prompt creation.');
+        }
+
+        const transcribeFinalVideo = hyperFramesTranscribeSceneRef.current;
+        if (!transcribeFinalVideo) {
+          throw new Error('Final video transcription is not ready.');
+        }
+
+        await transcribeFinalVideo(
+          sceneId,
+          latestSceneForPrompt,
+          'final',
+          true,
+          true,
+          false,
+          {
+            throwOnError: true,
+            skipIfFinalVideoAlreadyTranscribed: true,
+          },
+        );
+
         const videoId = currentScene
           ? getHyperFramesSceneVideoId(currentScene)
           : null;
@@ -824,6 +862,7 @@ export default function SceneCard({
               videoScenes,
               sceneId,
             ),
+            overwrite: true,
           });
 
         const dataWithPrompt = dataRef.current.map((scene) =>
@@ -3300,6 +3339,8 @@ export default function SceneCard({
       playErrorSound,
     ],
   );
+
+  hyperFramesTranscribeSceneRef.current = handleTranscribeScene;
 
   // Generate single clip handler
   const handleGenerateSingleClip = async (
