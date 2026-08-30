@@ -2,8 +2,17 @@
 
 import { useAppStore } from '@/store/useAppStore';
 import { getLanguageDisplayName } from '@/utils/languageNames';
-import { CheckCircle2, Circle, Settings2, Workflow } from 'lucide-react';
+import {
+  CheckCircle2,
+  Circle,
+  Settings2,
+  Volume2,
+  VolumeX,
+  Workflow,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
+const pipelineSpeedOptions = [1, 1.125, 1.5, 2, 4, 8];
 
 interface PipelineConfigProps {
   onRunFullPipeline?: () => void;
@@ -1048,6 +1057,7 @@ export default function PipelineConfig({
             {/* Remaining steps: speedUp onwards */}
             {stepsAfterTranscribeApply.map((step, index) => {
               const isEnabled = pipelineConfig[step.key];
+              const isSpeedUp = step.key === 'speedUp';
               const isFixIntroQa =
                 step.key === 'fixIntroQaAfterFixFlagged';
 
@@ -1092,6 +1102,62 @@ export default function PipelineConfig({
                   >
                     {step.label}
                   </span>
+
+                  {isSpeedUp && (
+                    <div
+                      className={`flex w-full items-center gap-1 text-[10px] font-medium ${
+                        isEnabled ? 'text-yellow-700' : 'text-gray-400'
+                      }`}
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        type='button'
+                        aria-label={
+                          pipelineConfig.speedUpMuteAudio
+                            ? 'Pipeline speed-up audio muted'
+                            : 'Pipeline speed-up audio enabled'
+                        }
+                        disabled={!isEnabled || isRunningFullPipeline}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          updatePipelineConfig({
+                            speedUpMuteAudio: !pipelineConfig.speedUpMuteAudio,
+                          });
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        className='flex h-6 w-6 shrink-0 items-center justify-center rounded border border-yellow-300 bg-white text-yellow-800 hover:bg-yellow-50 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400'
+                        title={
+                          pipelineConfig.speedUpMuteAudio
+                            ? 'Pipeline Speed Up: audio muted'
+                            : 'Pipeline Speed Up: keep audio'
+                        }
+                      >
+                        {pipelineConfig.speedUpMuteAudio ? (
+                          <VolumeX className='h-3 w-3' />
+                        ) : (
+                          <Volume2 className='h-3 w-3' />
+                        )}
+                      </button>
+                      <select
+                        aria-label='Pipeline speed-up multiplier'
+                        value={pipelineConfig.speedUpSpeed}
+                        disabled={!isEnabled || isRunningFullPipeline}
+                        onChange={(event) =>
+                          updatePipelineConfig({
+                            speedUpSpeed: Number(event.target.value),
+                          })
+                        }
+                        className='min-w-0 flex-1 h-6 rounded border border-yellow-300 bg-white px-1 text-[11px] font-semibold text-yellow-800 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:bg-gray-100 disabled:text-gray-400'
+                      >
+                        {pipelineSpeedOptions.map((speed) => (
+                          <option key={speed} value={speed}>
+                            {speed}x
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {isFixIntroQa && (
                     <label

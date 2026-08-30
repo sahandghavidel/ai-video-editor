@@ -300,6 +300,8 @@ export interface PipelineConfig {
   transcribeApplyGenClipsMinCharsC: number;
   transcribeApplyGenClipsMinCharsD: number;
   speedUp: boolean;
+  speedUpSpeed: number;
+  speedUpMuteAudio: boolean;
   fixLanguageAll: boolean;
   improve: boolean;
   generateTTS: boolean;
@@ -782,6 +784,8 @@ const defaultPipelineConfig: PipelineConfig = {
   transcribeApplyGenClipsMinCharsC: 150,
   transcribeApplyGenClipsMinCharsD: 150,
   speedUp: true,
+  speedUpSpeed: 4,
+  speedUpMuteAudio: true,
   fixLanguageAll: true,
   improve: true,
   generateTTS: true,
@@ -842,6 +846,15 @@ function normalizePipelineConfig(
   config: Partial<PipelineConfig> | undefined,
   selectedDubbedLanguagesOverride?: string[],
 ): PipelineConfig {
+  const pipelineSpeedUpSpeed =
+    typeof config?.speedUpSpeed === 'number' &&
+    [1, 1.125, 1.5, 2, 4, 8].includes(config.speedUpSpeed)
+      ? config.speedUpSpeed
+      : defaultPipelineConfig.speedUpSpeed;
+  const pipelineSpeedUpMuteAudio =
+    typeof config?.speedUpMuteAudio === 'boolean'
+      ? config.speedUpMuteAudio
+      : defaultPipelineConfig.speedUpMuteAudio;
   const selectedDubbedLanguagesForPipeline =
     selectedDubbedLanguagesOverride !== undefined
       ? toUniqueNormalizedLanguageList(selectedDubbedLanguagesOverride)
@@ -852,6 +865,8 @@ function normalizePipelineConfig(
   return {
     ...defaultPipelineConfig,
     ...config,
+    speedUpSpeed: pipelineSpeedUpSpeed,
+    speedUpMuteAudio: pipelineSpeedUpMuteAudio,
     selectedDubbedLanguagesForPipeline,
   };
 }

@@ -6347,9 +6347,19 @@ export default function OriginalVideosList({
   };
 
   // Speed Up All Videos for All Scenes
-  const handleSpeedUpAllVideos = async (playSound = true) => {
+  const handleSpeedUpAllVideos = async (
+    playSound = true,
+    pipelineSpeedOverride?: number,
+    pipelineMuteOverride?: boolean,
+  ) => {
     try {
       setSpeedingUpAllVideos(true);
+
+      const speedUpVideoSettings = {
+        ...videoSettings,
+        selectedSpeed: pipelineSpeedOverride ?? videoSettings.selectedSpeed,
+        muteAudio: pipelineMuteOverride ?? videoSettings.muteAudio,
+      };
 
       const { processingVideos: videosToProcess, scenesForProcessingVideos } =
         await fetchProcessingScenes();
@@ -6369,12 +6379,12 @@ export default function OriginalVideosList({
       }
 
       console.log(
-        `Starting speed up for ${videosToProcess.length} videos (status: ${allVideosTargetStatusLabel}) with ${scenesToProcess.length} scenes...`,
+        `Starting speed up for ${videosToProcess.length} videos (status: ${allVideosTargetStatusLabel}) with ${scenesToProcess.length} scenes at ${speedUpVideoSettings.selectedSpeed}x (${speedUpVideoSettings.muteAudio ? 'muted' : 'audio kept'})...`,
       );
 
       await handleSpeedUpAllVideosForAllScenes(
         scenesToProcess,
-        videoSettings,
+        speedUpVideoSettings,
         setSpeedingUpAllVideos,
         setCurrentProcessingVideoId,
         () => {},
@@ -11737,10 +11747,18 @@ export default function OriginalVideosList({
       // Step 4: Speed Up All
       if (pipelineConfig.speedUp) {
         stepNumber++;
-        setPipelineStep(`Step ${stepNumber}: Speeding up all videos...`);
-        console.log(`Step ${stepNumber}: Speeding up all videos`);
+        setPipelineStep(
+          `Step ${stepNumber}: Speeding up all videos at ${pipelineConfig.speedUpSpeed}x...`,
+        );
+        console.log(
+          `Step ${stepNumber}: Speeding up all videos at ${pipelineConfig.speedUpSpeed}x (${pipelineConfig.speedUpMuteAudio ? 'muted' : 'audio kept'})`,
+        );
         try {
-          await handleSpeedUpAllVideos(false);
+          await handleSpeedUpAllVideos(
+            false,
+            pipelineConfig.speedUpSpeed,
+            pipelineConfig.speedUpMuteAudio,
+          );
           console.log(`✓ Step ${stepNumber} Complete: Speed up finished`);
 
           await maybeRunPostStepRefresh('speed-up-all', true);

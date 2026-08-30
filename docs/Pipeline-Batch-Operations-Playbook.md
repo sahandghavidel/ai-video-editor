@@ -68,7 +68,7 @@ The order below is the actual execution order in code.
 10. `deleteEmpty` → `handleDeleteEmptyScenesAllVideos(false)`
 11. `generateClips` → `handleGenerateClipsAll(false)`
 12. `transcribeApplyGenClips` passes A/B/C/D (optional) → `handleTranscribeApplyGenClipsForProcessingVideos(false, minChars)`
-13. `speedUp` → `handleSpeedUpAllVideos(false)`
+13. `speedUp` → `handleSpeedUpAllVideos(false, pipelineConfig.speedUpSpeed, pipelineConfig.speedUpMuteAudio)` using the pipeline-specific speed and mute overrides (defaults `4x` and muted); standalone speed-up actions continue using global `videoSettings.selectedSpeed` and `videoSettings.muteAudio`
 14. `fixLanguageAll` → `handleFixLanguageProcessingScenesAllVideos(false)`
 15. `improve` → `handleImproveAllVideosScenes(false)`
 16. `generateTTS` → `handleGenerateAllTTSForAllVideos(false)`
@@ -149,6 +149,8 @@ Persistence:
   - `updatePipelineConfig`
   - `togglePipelineStep`
   - `resetPipelineConfig`
+- `speedUpSpeed` is a pipeline-only speed override for the Full Pipeline Speed Up step. It supports `1x`, `1.125x`, `1.5x`, `2x`, `4x`, and `8x`, and defaults to `4x`.
+- `speedUpMuteAudio` is a pipeline-only audio override for the Full Pipeline Speed Up step. It defaults to `true` (muted); standalone speed-up actions continue using the global audio setting.
 
 ---
 
