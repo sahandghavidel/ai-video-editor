@@ -21,6 +21,10 @@ import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
 import {
+  getFinalVideoCaptionFilename,
+  getFinalVideoCaptionStatus,
+} from '@/utils/finalVideoCaptions';
+import {
   compareHyperFramesScenesByRealOrder,
   generateAndSaveHyperFramesPrompt,
   getHyperFramesSceneVideoId,
@@ -2987,12 +2991,28 @@ export default function SceneCard({
         captionsFieldKey?: string;
         suppressLocalDataUpdates?: boolean;
         suppressBusyStateUpdates?: boolean;
+        skipIfFinalVideoAlreadyTranscribed?: boolean;
       },
     ) => {
-      const currentScene =
+      let currentScene =
         (sceneData as BaserowRow | undefined) ||
         data.find((scene) => scene.id === sceneId);
       if (!currentScene) return;
+
+      if (
+        videoType === 'final' &&
+        opts?.skipIfFinalVideoAlreadyTranscribed
+      ) {
+        try {
+          const latestScene = await getSceneById(sceneId);
+          if (latestScene) currentScene = latestScene;
+        } catch (error) {
+          console.warn(
+            `[SCENE_TRANSCRIBE] Could not refresh scene ${sceneId} before caption identity check; using current data.`,
+            error,
+          );
+        }
+      }
 
       const shouldSetBusyState = opts?.suppressBusyStateUpdates !== true;
 
@@ -3076,6 +3096,27 @@ export default function SceneCard({
         return;
       }
 
+      if (
+        videoType === 'final' &&
+        opts?.skipIfFinalVideoAlreadyTranscribed
+      ) {
+        const captionsUrl = extractFieldValueAsText(
+          currentScene.field_6910,
+        ).trim();
+        const captionIdentity = getFinalVideoCaptionStatus({
+          sceneId,
+          finalVideoUrl: videoUrl,
+          captionsUrl,
+        });
+
+        if (captionIdentity.status === 'matched') {
+          console.log(
+            `[SCENE_TRANSCRIBE] Skipping scene ${sceneId}: captions already match final video (${captionIdentity.expectedFilename}).`,
+          );
+          return;
+        }
+      }
+
       if (shouldSetBusyState) {
         setTranscribingScene(sceneId);
       }
@@ -3128,12 +3169,16 @@ export default function SceneCard({
 
         // Step 3: Upload the captions file to MinIO
         const captionsData = JSON.stringify(cleanedWordTimestamps);
-        const timestamp = Date.now();
-        const filename = `scene_${sceneId}_captions_${timestamp}.json`;
+        const filename =
+          videoType === 'final'
+            ? getFinalVideoCaptionFilename(sceneId, videoUrl)
+            : null;
+        const resolvedFilename =
+          filename || `scene_${sceneId}_captions_${Date.now()}.json`;
 
         const formData = new FormData();
         const blob = new Blob([captionsData], { type: 'application/json' });
-        formData.append('file', blob, filename);
+        formData.append('file', blob, resolvedFilename);
 
         const uploadResponse = await fetch('/api/upload-captions', {
           method: 'POST',
@@ -5021,10 +5066,6 @@ export default function SceneCard({
               { maxRetries: 10, delayMs: 250 },
             )) || afterSyncScene;
 
-          const prevCaptionsUrl = getStringField(
-            sceneForTranscribe,
-            'field_6910',
-          );
           await handleTranscribeScene(
             sceneId,
             (sceneForTranscribe as unknown) ?? initialScene,
@@ -5036,6 +5077,7 @@ export default function SceneCard({
               throwOnError: true,
               suppressLocalDataUpdates: suppressLiveSceneUpdates,
               suppressBusyStateUpdates: suppressLiveSceneUpdates,
+              skipIfFinalVideoAlreadyTranscribed: true,
             },
           );
 
@@ -5043,7 +5085,13 @@ export default function SceneCard({
             sceneId,
             (s) => {
               const next = getStringField(s, 'field_6910');
-              return Boolean(next) && next !== prevCaptionsUrl;
+              return (
+                getFinalVideoCaptionStatus({
+                  sceneId,
+                  finalVideoUrl: finalUrlNow,
+                  captionsUrl: next,
+                }).status === 'matched'
+              );
             },
             { maxRetries: 30, delayMs: 350 },
           );
@@ -5066,7 +5114,12 @@ export default function SceneCard({
         if (!words) {
           setStatus('Checking transcription...');
           let captionsUrl = getStringField(initialFromApi, 'field_6910');
-          if (captionsUrl) {
+          const initialCaptionStatus = getFinalVideoCaptionStatus({
+            sceneId,
+            finalVideoUrl: startingFinalUrl,
+            captionsUrl,
+          });
+          if (initialCaptionStatus.status === 'matched') {
             words = await waitForCaptionsWordsFromUrl(captionsUrl, {
               maxRetries: 6,
               delayMs: 350,
@@ -5092,12 +5145,18 @@ export default function SceneCard({
                 throwOnError: true,
                 suppressLocalDataUpdates: suppressLiveSceneUpdates,
                 suppressBusyStateUpdates: suppressLiveSceneUpdates,
+                skipIfFinalVideoAlreadyTranscribed: true,
               },
             );
 
             const sceneWithCaptions = await waitForSceneWhere(
               sceneId,
-              (s) => Boolean(getStringField(s, 'field_6910')),
+              (s) =>
+                getFinalVideoCaptionStatus({
+                  sceneId,
+                  finalVideoUrl: getStringField(s, 'field_6886'),
+                  captionsUrl: getStringField(s, 'field_6910'),
+                }).status === 'matched',
               { maxRetries: 20, delayMs: 400 },
             );
             captionsUrl = getStringField(sceneWithCaptions, 'field_6910');
@@ -5233,10 +5292,6 @@ export default function SceneCard({
               { maxRetries: 10, delayMs: 250 },
             )) || afterSyncScene;
 
-          const prevCaptionsUrl = getStringField(
-            sceneForTranscribe,
-            'field_6910',
-          );
           await handleTranscribeScene(
             sceneId,
             (sceneForTranscribe as unknown) ?? undefined,
@@ -5248,15 +5303,23 @@ export default function SceneCard({
               throwOnError: true,
               suppressLocalDataUpdates: suppressLiveSceneUpdates,
               suppressBusyStateUpdates: suppressLiveSceneUpdates,
+              skipIfFinalVideoAlreadyTranscribed: true,
             },
           );
 
-          // Wait until captions URL is replaced in Baserow, then fetch from that URL.
+          // Wait until captions match the current final video. A matching URL may
+          // already exist, in which case transcription is intentionally skipped.
           const sceneWithNewCaptions = await waitForSceneWhere(
             sceneId,
             (s) => {
               const next = getStringField(s, 'field_6910');
-              return Boolean(next) && next !== prevCaptionsUrl;
+              return (
+                getFinalVideoCaptionStatus({
+                  sceneId,
+                  finalVideoUrl: finalUrlNow,
+                  captionsUrl: next,
+                }).status === 'matched'
+              );
             },
             { maxRetries: 30, delayMs: 350 },
           );
