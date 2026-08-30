@@ -9,6 +9,10 @@ import type { ReadableStream as WebReadableStream } from 'stream/web';
 
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 import { uploadToMinio } from '@/utils/ffmpeg-direct';
+import {
+  getAppliedHyperFramesFilename,
+  isHyperFramesAlreadyApplied,
+} from '@/utils/finalVideoIdentity';
 
 export const runtime = 'nodejs';
 export const maxDuration = 3600;
@@ -223,6 +227,35 @@ export async function POST(request: Request) {
       );
     }
 
+    if (
+      isHyperFramesAlreadyApplied({
+        sceneId,
+        finalVideoUrl,
+        hyperFramesVideoUrl,
+      })
+    ) {
+      return Response.json({
+        sceneId,
+        videoUrl: finalVideoUrl,
+        finalVideoUrl,
+        hyperFramesVideoUrl,
+        skipped: true,
+        method: 'identity_match',
+      });
+    }
+
+    const appliedFilename = getAppliedHyperFramesFilename({
+      sceneId,
+      finalVideoUrl,
+      hyperFramesVideoUrl,
+    });
+    if (!appliedFilename) {
+      return Response.json(
+        { error: 'Could not derive final video or HyperFrames identity' },
+        { status: 400 },
+      );
+    }
+
     temporaryDirectory = path.join(
       os.tmpdir(),
       `apply-hyperframes-${sceneId}-${Date.now()}`,
@@ -334,7 +367,7 @@ export async function POST(request: Request) {
       throw new Error('Output is missing the final video audio');
     }
 
-    const filename = `scene_${sceneId}_hf_applied_${Date.now()}.mp4`;
+    const filename = appliedFilename;
     const videoUrl = await uploadToMinio(outputPath, filename, 'video/mp4');
     await saveFinalVideo(sceneId, videoUrl);
 
@@ -348,6 +381,7 @@ export async function POST(request: Request) {
       stretchFactor,
       outputMode: 'image-overlay-compatible',
       filename,
+      skipped: false,
     });
   } catch (error) {
     console.error('apply-hyperframes-video failed:', error);

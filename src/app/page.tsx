@@ -125,6 +125,11 @@ export default function Home() {
       videoType?: 'original' | 'final',
       skipRefresh?: boolean,
       skipSound?: boolean,
+      updateSentence?: boolean,
+      opts?: {
+        throwOnError?: boolean;
+        skipIfFinalVideoAlreadyTranscribed?: boolean;
+      },
     ) => Promise<void>;
   } | null>(null);
 
@@ -347,6 +352,11 @@ export default function Home() {
         videoType?: 'original' | 'final',
         skipRefresh?: boolean,
         skipSound?: boolean,
+        updateSentence?: boolean,
+        opts?: {
+          throwOnError?: boolean;
+          skipIfFinalVideoAlreadyTranscribed?: boolean;
+        },
       ) => Promise<void>;
     }) => {
       setSceneHandlers(handlers);

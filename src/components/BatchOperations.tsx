@@ -2116,6 +2116,7 @@ export default function BatchOperations({
           }
           const payload = (await response.json().catch(() => null)) as {
             videoUrl?: unknown;
+            skipped?: unknown;
             error?: unknown;
           } | null;
           if (!response.ok) {
@@ -2124,6 +2125,10 @@ export default function BatchOperations({
                 ? payload.error
                 : `Apply HF failed (${response.status})`,
             );
+          }
+          if (payload?.skipped === true) {
+            skipped += 1;
+            continue;
           }
           if (
             typeof payload?.videoUrl !== 'string' ||

@@ -127,6 +127,11 @@ interface SceneCardProps {
       videoType?: 'original' | 'final',
       skipRefresh?: boolean,
       skipSound?: boolean,
+      updateSentence?: boolean,
+      opts?: {
+        throwOnError?: boolean;
+        skipIfFinalVideoAlreadyTranscribed?: boolean;
+      },
     ) => Promise<void>;
     handleTypingEffect: (
       sceneId: number,
@@ -6657,10 +6662,15 @@ export default function SceneCard({
 
   // Keep auto-fix handler reference live without forcing parent state churn.
   const handleAutoFixMismatchRef = useRef(handleAutoFixMismatch);
+  const exposedHandleTranscribeSceneRef = useRef(handleTranscribeScene);
 
   useEffect(() => {
     handleAutoFixMismatchRef.current = handleAutoFixMismatch;
   }, [handleAutoFixMismatch]);
+
+  useEffect(() => {
+    exposedHandleTranscribeSceneRef.current = handleTranscribeScene;
+  }, [handleTranscribeScene]);
 
   const handleAutoFixMismatchFromRef = useCallback(
     (
@@ -6670,6 +6680,31 @@ export default function SceneCard({
     ) => {
       return handleAutoFixMismatchRef.current(sceneId, sceneData, options);
     },
+    [],
+  );
+
+  const handleTranscribeSceneFromRef = useCallback(
+    (
+      sceneId: number,
+      sceneData?: unknown,
+      videoType?: 'original' | 'final',
+      skipRefresh?: boolean,
+      skipSound?: boolean,
+      updateSentence?: boolean,
+      opts?: {
+        throwOnError?: boolean;
+        skipIfFinalVideoAlreadyTranscribed?: boolean;
+      },
+    ) =>
+      exposedHandleTranscribeSceneRef.current(
+        sceneId,
+        sceneData,
+        videoType,
+        skipRefresh,
+        skipSound,
+        updateSentence,
+        opts,
+      ),
     [],
   );
 
@@ -6684,7 +6719,7 @@ export default function SceneCard({
         handleTTSProduce,
         handleVideoGenerate,
         handleSpeedUpVideo,
-        handleTranscribeScene,
+        handleTranscribeScene: handleTranscribeSceneFromRef,
         handleTypingEffect,
         handleConvertToCFR,
         handleConvertOriginalToCFR,
