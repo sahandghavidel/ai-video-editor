@@ -10,7 +10,6 @@ import {
   getSceneById,
 } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
-import { cycleSpeed as cycleThroughSpeeds } from '@/utils/batchOperations';
 import {
   type FixTtsAutoFixOptions,
   type FixTtsStatus,
@@ -31,6 +30,11 @@ import {
   getPreviousHyperFramesSceneSentences,
   HYPERFRAMES_PROMPT_FIELD_KEY,
 } from '@/utils/hyperframes-scenes';
+import {
+  parseSpeedUpVideoMetadata,
+  SPEED_UP_MULTIPLIERS,
+  type SpeedUpMultiplier,
+} from '@/utils/speedUpVideoMetadata';
 import {
   Loader2,
   Sparkles,
@@ -238,6 +242,27 @@ const extractFieldValueAsText = (field: unknown): string => {
   return '';
 };
 
+type SceneSpeedUpControlState = {
+  finalVideoUrl: string;
+  speed: SpeedUpMultiplier;
+  muteAudio: boolean;
+  muteAudioKnown: boolean;
+};
+
+const getSceneSpeedUpControlState = (
+  finalVideoUrl: string,
+): SceneSpeedUpControlState => {
+  const metadata = parseSpeedUpVideoMetadata(finalVideoUrl);
+  const hasFinalVideo = Boolean(finalVideoUrl);
+
+  return {
+    finalVideoUrl,
+    speed: metadata?.speed ?? (hasFinalVideo ? 1 : 4),
+    muteAudio: metadata?.muteAudio ?? (hasFinalVideo ? false : true),
+    muteAudioKnown: typeof metadata?.muteAudio === 'boolean',
+  };
+};
+
 type SceneSeparationSourceType = 'original' | 'final';
 
 type FinalSceneCut = {
@@ -389,6 +414,10 @@ export default function SceneCard({
   const onDataUpdateRef = useRef(onDataUpdate);
   const refreshDataRef = useRef(refreshData);
   const refreshSelectedVideoDataRef = useRef(refreshSelectedVideoData);
+  const [sceneSpeedUpControls, setSceneSpeedUpControls] = useState<
+    Record<number, SceneSpeedUpControlState>
+  >({});
+  const sceneSpeedUpControlsRef = useRef(sceneSpeedUpControls);
 
   // Update refs when props change
   useEffect(() => {
@@ -397,6 +426,38 @@ export default function SceneCard({
     refreshDataRef.current = refreshData;
     refreshSelectedVideoDataRef.current = refreshSelectedVideoData;
   }, [data, onDataUpdate, refreshData, refreshSelectedVideoData]);
+
+  // Re-read speed-up metadata only when the already-loaded final-video URL changes.
+  useEffect(() => {
+    setSceneSpeedUpControls((currentControls) => {
+      let nextControls = currentControls;
+
+      for (const scene of data) {
+        const finalVideoUrl = extractFieldValueAsText(
+          scene.field_6886,
+        ).trim();
+        const currentControl = currentControls[scene.id];
+
+        if (
+          currentControl &&
+          currentControl.finalVideoUrl === finalVideoUrl
+        ) {
+          continue;
+        }
+
+        if (nextControls === currentControls) {
+          nextControls = { ...currentControls };
+        }
+        nextControls[scene.id] = getSceneSpeedUpControlState(finalVideoUrl);
+      }
+
+      return nextControls;
+    });
+  }, [data]);
+
+  useEffect(() => {
+    sceneSpeedUpControlsRef.current = sceneSpeedUpControls;
+  }, [sceneSpeedUpControls]);
   const sceneCardRefs = useRef<Record<number, HTMLDivElement>>({});
 
   // Filter and sort states
@@ -527,7 +588,6 @@ export default function SceneCard({
     videoSettings,
     transcriptionSettings,
     updateTTSSettings,
-    updateVideoSettings,
     updateTranscriptionSettings,
     startBatchOperation,
     completeBatchOperation,
@@ -1260,7 +1320,6 @@ export default function SceneCard({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [
-    updateVideoSettings,
     mediaPlayer.playingVideoId,
     mediaPlayer.playingProducedVideoId,
     imageOverlayModal.isOpen,
@@ -1284,11 +1343,6 @@ export default function SceneCard({
     ttsWordReplacementsModalOpen,
     sceneSeparationModal.isOpen,
   ]);
-
-  // Local wrapper for cycling through speeds
-  const cycleSpeed = () => {
-    cycleThroughSpeeds(videoSettings.selectedSpeed, updateVideoSettings);
-  };
 
   // State for revert loading
   const [revertingId, setRevertingId] = useState<number | null>(null);
@@ -2922,6 +2976,13 @@ export default function SceneCard({
         sceneData || data.find((scene) => scene.id === sceneId);
       if (!currentScene) return;
 
+      const finalVideoUrl = extractFieldValueAsText(
+        currentScene.field_6886,
+      ).trim();
+      const selectedSpeedUpSettings =
+        sceneSpeedUpControlsRef.current[sceneId] ||
+        getSceneSpeedUpControlState(finalVideoUrl);
+
       const videoUrl = currentScene.field_6888 as string;
       if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.trim()) {
         console.log('No video found in field 6888 to speed up');
@@ -2952,6 +3013,9 @@ export default function SceneCard({
           sceneId,
           'videoId:',
           videoId,
+          'at',
+          `${selectedSpeedUpSettings.speed}x`,
+          selectedSpeedUpSettings.muteAudio ? '(muted)' : '(audio kept)',
           'with video:',
           videoUrl,
         );
@@ -2964,8 +3028,8 @@ export default function SceneCard({
           body: JSON.stringify({
             sceneId,
             videoUrl,
-            speed: videoSettings.selectedSpeed,
-            muteAudio: videoSettings.muteAudio,
+            speed: selectedSpeedUpSettings.speed,
+            muteAudio: selectedSpeedUpSettings.muteAudio,
             videoId: videoId || undefined,
           }),
         });
@@ -2983,6 +3047,16 @@ export default function SceneCard({
 
         const result = await response.json();
         console.log('Speed-up result:', result);
+
+        const processedVideoUrl = extractFieldValueAsText(
+          result.videoUrl,
+        ).trim();
+        if (processedVideoUrl) {
+          setSceneSpeedUpControls((currentControls) => ({
+            ...currentControls,
+            [sceneId]: getSceneSpeedUpControlState(processedVideoUrl),
+          }));
+        }
 
         // Optimistic update - update field_6886 with the processed video
         const optimisticData = data.map((scene) =>
@@ -3012,8 +3086,6 @@ export default function SceneCard({
     },
     [
       data,
-      videoSettings.selectedSpeed,
-      videoSettings.muteAudio,
       setSpeedingUpVideo,
       onDataUpdate,
       refreshSceneInLocalCache,
@@ -7281,8 +7353,16 @@ export default function SceneCard({
       </div>
 
       <div className='w-full flex flex-col space-y-6'>
-        {filteredAndSortedData.map((scene) => (
-          <div
+        {filteredAndSortedData.map((scene) => {
+          const finalVideoUrl = extractFieldValueAsText(
+            scene.field_6886,
+          ).trim();
+          const sceneSpeedUpControl =
+            sceneSpeedUpControls[scene.id] ||
+            getSceneSpeedUpControlState(finalVideoUrl);
+
+          return (
+            <div
             key={scene.id}
             ref={(el) => {
               if (el) sceneCardRefs.current[scene.id] = el;
@@ -8416,10 +8496,10 @@ export default function SceneCard({
                             ? 'Speed up video processing for this scene...'
                             : sceneLoading.speedingUpVideo !== null
                               ? `Video is being sped up for scene ${sceneLoading.speedingUpVideo}`
-                              : `Speed up video ${
-                                  videoSettings.selectedSpeed
-                                }x and ${
-                                  videoSettings.muteAudio ? 'mute' : 'keep'
+                              : `Speed up video ${sceneSpeedUpControl.speed}x and ${
+                                  sceneSpeedUpControl.muteAudio
+                                    ? 'mute'
+                                    : 'keep'
                                 } audio (saves to field 6886)`
                         }
                       >
@@ -8430,30 +8510,82 @@ export default function SceneCard({
                             <div
                               onClick={(e) => {
                                 e.stopPropagation();
-                                updateVideoSettings({
-                                  muteAudio: !videoSettings.muteAudio,
+                                if (sceneLoading.speedingUpVideo !== null) {
+                                  return;
+                                }
+                                setSceneSpeedUpControls((currentControls) => {
+                                  const currentControl =
+                                    currentControls[scene.id] ||
+                                    sceneSpeedUpControl;
+                                  return {
+                                    ...currentControls,
+                                    [scene.id]: {
+                                      ...currentControl,
+                                      muteAudio: !currentControl.muteAudio,
+                                      muteAudioKnown: true,
+                                    },
+                                  };
                                 });
                               }}
-                              className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
-                              title={`Click to ${
-                                videoSettings.muteAudio ? 'enable' : 'mute'
-                              } audio`}
+                              className={`p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer ${
+                                sceneSpeedUpControl.muteAudioKnown
+                                  ? 'text-blue-700'
+                                  : 'text-gray-400'
+                              }`}
+                              role='button'
+                              aria-label={`Scene ${scene.id} audio ${
+                                sceneSpeedUpControl.muteAudio
+                                  ? 'muted'
+                                  : 'enabled'
+                              }`}
+                              title={
+                                sceneSpeedUpControl.muteAudioKnown
+                                  ? `Final video audio is ${
+                                      sceneSpeedUpControl.muteAudio
+                                        ? 'muted'
+                                        : 'enabled'
+                                    }; click to change this scene's setting`
+                                  : "Audio state isn't encoded in the final video URL; click to set this scene's audio setting"
+                              }
                             >
-                              {videoSettings.muteAudio ? (
-                                <VolumeX className='h-3 w-3 text-blue-700' />
+                              {sceneSpeedUpControl.muteAudio ? (
+                                <VolumeX className='h-3 w-3' />
                               ) : (
-                                <Volume2 className='h-3 w-3 text-blue-700' />
+                                <Volume2 className='h-3 w-3' />
                               )}
                             </div>
                             <div
                               onClick={(e) => {
                                 e.stopPropagation();
-                                cycleSpeed();
+                                if (sceneLoading.speedingUpVideo !== null) {
+                                  return;
+                                }
+                                const currentIndex =
+                                  SPEED_UP_MULTIPLIERS.indexOf(
+                                    sceneSpeedUpControl.speed,
+                                  );
+                                const nextSpeed =
+                                  SPEED_UP_MULTIPLIERS[
+                                    (currentIndex + 1) %
+                                      SPEED_UP_MULTIPLIERS.length
+                                  ];
+                                setSceneSpeedUpControls((currentControls) => {
+                                  const currentControl =
+                                    currentControls[scene.id] ||
+                                    sceneSpeedUpControl;
+                                  return {
+                                    ...currentControls,
+                                    [scene.id]: {
+                                      ...currentControl,
+                                      speed: nextSpeed,
+                                    },
+                                  };
+                                });
                               }}
                               className='px-1 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-600/20 rounded transition-colors duration-200 cursor-pointer'
                               title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
                             >
-                              {videoSettings.selectedSpeed}x
+                              {sceneSpeedUpControl.speed}x
                             </div>
                           </div>
                         )}
@@ -9014,8 +9146,9 @@ export default function SceneCard({
                 )}
               </div>
             )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
       {/* Hidden audio elements for playback */}
       {data.map((scene) => (
