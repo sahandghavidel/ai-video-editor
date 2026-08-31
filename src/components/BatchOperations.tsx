@@ -65,6 +65,22 @@ import {
 } from 'lucide-react';
 
 const HYPERFRAMES_HTML_CONCURRENCY = 3;
+const HYPERFRAMES_HTML_MAX_ATTEMPTS = 3;
+const HYPERFRAMES_HTML_RETRYABLE_STATUS_CODES = new Set([
+  408, 425, 429, 500, 502, 503, 504, 529,
+]);
+
+type HyperFramesHtmlResponsePayload = {
+  html?: unknown;
+  htmlFieldKey?: unknown;
+  skipped?: unknown;
+  error?: unknown;
+};
+
+const waitForHyperFramesHtmlRetry = (failedAttempt: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, failedAttempt * 750);
+  });
 
 interface BatchOperationsProps {
   data: BaserowRow[];
@@ -1896,29 +1912,94 @@ export default function BatchOperations({
             return;
           }
 
-          const response = await fetch('/api/generate-hyperframes-html', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sceneId: scene.id,
-              provider: 'online',
-              model: onlineModel,
-              skipIfDestinationExists: true,
-            }),
-          });
-          const payload = (await response.json().catch(() => null)) as {
-            html?: unknown;
-            htmlFieldKey?: unknown;
-            skipped?: unknown;
-            error?: unknown;
-          } | null;
-          if (!response.ok) {
-            throw new Error(
-              typeof payload?.error === 'string'
-                ? payload.error
-                : `HTML generation failed (${response.status})`,
+          let payload: HyperFramesHtmlResponsePayload | null = null;
+          let lastRequestError = 'HyperFrames HTML generation failed';
+
+          for (
+            let attempt = 1;
+            attempt <= HYPERFRAMES_HTML_MAX_ATTEMPTS;
+            attempt += 1
+          ) {
+            let response: Response;
+            try {
+              response = await fetch('/api/generate-hyperframes-html', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sceneId: scene.id,
+                  provider: 'online',
+                  model: onlineModel,
+                  skipIfDestinationExists: true,
+                }),
+              });
+            } catch (requestError) {
+              lastRequestError =
+                requestError instanceof Error
+                  ? requestError.message
+                  : String(requestError);
+
+              if (attempt === HYPERFRAMES_HTML_MAX_ATTEMPTS) {
+                throw new Error(
+                  `${lastRequestError} (failed after ${attempt} attempts)`,
+                );
+              }
+
+              console.warn(
+                `[HyperFrames Batch] HF HTML scene ${scene.id} attempt ${attempt}/${HYPERFRAMES_HTML_MAX_ATTEMPTS} failed: ${lastRequestError}. Retrying...`,
+              );
+              setHyperFramesBatchStatus(
+                `HF HTML #${scene.id}: retrying ${attempt + 1}/${HYPERFRAMES_HTML_MAX_ATTEMPTS}…`,
+              );
+              await waitForHyperFramesHtmlRetry(attempt);
+              continue;
+            }
+
+            const nextPayload = (await response
+              .json()
+              .catch(() => null)) as HyperFramesHtmlResponsePayload | null;
+            const returnedHtml =
+              typeof nextPayload?.html === 'string'
+                ? nextPayload.html.trim()
+                : '';
+            const responseError = !response.ok
+              ? typeof nextPayload?.error === 'string'
+                ? nextPayload.error
+                : `HTML generation failed (${response.status})`
+              : nextPayload?.skipped === true || returnedHtml
+                ? null
+                : 'HyperFrames HTML generation returned empty HTML';
+
+            if (!responseError) {
+              payload = nextPayload;
+              break;
+            }
+
+            lastRequestError = responseError;
+            const retryable =
+              response.ok ||
+              HYPERFRAMES_HTML_RETRYABLE_STATUS_CODES.has(response.status);
+
+            if (!retryable || attempt === HYPERFRAMES_HTML_MAX_ATTEMPTS) {
+              throw new Error(
+                attempt > 1
+                  ? `${responseError} (failed after ${attempt} attempts)`
+                  : responseError,
+              );
+            }
+
+            console.warn(
+              `[HyperFrames Batch] HF HTML scene ${scene.id} attempt ${attempt}/${HYPERFRAMES_HTML_MAX_ATTEMPTS} failed: ${responseError}. Retrying...`,
             );
+            setHyperFramesBatchStatus(
+              `HF HTML #${scene.id}: retrying ${attempt + 1}/${HYPERFRAMES_HTML_MAX_ATTEMPTS}…`,
+            );
+            await waitForHyperFramesHtmlRetry(attempt);
           }
+
+          if (!payload) {
+            throw new Error(lastRequestError);
+          }
+
           if (payload?.skipped === true) {
             skipped += 1;
             return;
