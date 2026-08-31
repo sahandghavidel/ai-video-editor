@@ -263,8 +263,13 @@ type SpeedUpVideoRequestOptions = {
   throwOnError?: boolean;
 };
 
+type VideoPlayOptions = {
+  playbackRate?: number;
+};
+
 type ProducedVideoPlayOptions = {
   recordHistory?: boolean;
+  playbackRate?: number;
 };
 
 type SceneSpeedUpVideoHandler = (
@@ -436,6 +441,15 @@ export default function SceneCard({
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
+  const visibleSceneDataRef = useRef<BaserowRow[]>([]);
+  const handleVideoPlayRef = useRef<
+    | ((
+        sceneId: number,
+        videoUrl: string,
+        options?: VideoPlayOptions,
+      ) => Promise<void>)
+    | null
+  >(null);
   const producedPlaybackHistoryRef = useRef<number[]>([]);
   const dropdownRefs = useRef<Record<number, HTMLDivElement>>({});
   const scrollToFirstSceneButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -800,11 +814,8 @@ export default function SceneCard({
         }
 
         // Stop any currently playing original video
-        if (
-          mediaPlayer.playingVideoId &&
-          videoRefs.current[mediaPlayer.playingVideoId]
-        ) {
-          videoRefs.current[mediaPlayer.playingVideoId].pause();
+        if (mediaPlayer.playingVideoId) {
+          videoRefs.current[mediaPlayer.playingVideoId]?.pause();
           setPlayingVideo(null);
         }
 
@@ -825,7 +836,8 @@ export default function SceneCard({
           const video = producedVideoRefs.current[sceneId];
           if (video) {
             video.src = videoUrl;
-            video.playbackRate = videoSettings.playerSpeed;
+            video.playbackRate =
+              options?.playbackRate ?? videoSettings.playerSpeed;
             video
               .play()
               .then(() => {
@@ -1463,6 +1475,82 @@ export default function SceneCard({
       }
 
       if (newSpeed !== null) {
+        const activeOriginalVideoId = mediaPlayer.playingVideoId;
+        const activeProducedVideoId = mediaPlayer.playingProducedVideoId;
+        const activeSceneId = activeOriginalVideoId ?? activeProducedVideoId;
+        const activeSceneIsVisible =
+          activeSceneId !== null &&
+          visibleSceneDataRef.current.some((scene) => scene.id === activeSceneId);
+	        const preferredPlaybackType =
+	          activeOriginalVideoId !== null
+	            ? 'original'
+	            : activeProducedVideoId !== null
+	              ? 'produced'
+	              : 'produced';
+
+        // Number 1 starts the first visible video when there is no active
+        // scene or the active scene was hidden by the current filters/N page.
+        if (newSpeed === 1 && !activeSceneIsVisible) {
+          let fallbackVideo: {
+            sceneId: number;
+            videoUrl: string;
+            playbackType: 'original' | 'produced';
+          } | null = null;
+
+          for (const scene of visibleSceneDataRef.current) {
+            const preferredUrl =
+              preferredPlaybackType === 'produced'
+                ? extractFieldValueAsText(scene.field_6886).trim()
+                : extractFieldValueAsText(scene.field_6888).trim();
+            const alternateUrl =
+              preferredPlaybackType === 'produced'
+                ? extractFieldValueAsText(scene.field_6888).trim()
+                : extractFieldValueAsText(scene.field_6886).trim();
+
+            if (preferredUrl) {
+              fallbackVideo = {
+                sceneId: scene.id,
+                videoUrl: preferredUrl,
+                playbackType: preferredPlaybackType,
+              };
+              break;
+            }
+
+            if (alternateUrl) {
+              fallbackVideo = {
+                sceneId: scene.id,
+                videoUrl: alternateUrl,
+                playbackType:
+                  preferredPlaybackType === 'produced'
+                    ? 'original'
+                    : 'produced',
+              };
+              break;
+            }
+          }
+
+          if (!fallbackVideo) return;
+
+          if (fallbackVideo.playbackType === 'produced') {
+            void handleProducedVideoPlay(
+              fallbackVideo.sceneId,
+              fallbackVideo.videoUrl,
+              { playbackRate: newSpeed },
+            );
+          } else {
+            const handleVideoPlay = handleVideoPlayRef.current;
+            if (handleVideoPlay) {
+              void handleVideoPlay(
+                fallbackVideo.sceneId,
+                fallbackVideo.videoUrl,
+                { playbackRate: newSpeed },
+              );
+            }
+          }
+
+          return;
+        }
+
         let refreshedSceneForReplay: BaserowRow | null = null;
 
         // For speed 1x, refresh only the active scene to get the newest created content.
@@ -4024,7 +4112,11 @@ export default function SceneCard({
     }
   };
 
-  const handleVideoPlay = async (sceneId: number, videoUrl: string) => {
+  const handleVideoPlay = async (
+    sceneId: number,
+    videoUrl: string,
+    options?: VideoPlayOptions,
+  ) => {
     try {
       // Stop any currently playing original video
       if (
@@ -4035,11 +4127,8 @@ export default function SceneCard({
       }
 
       // Stop any currently playing produced video
-      if (
-        mediaPlayer.playingProducedVideoId &&
-        producedVideoRefs.current[mediaPlayer.playingProducedVideoId]
-      ) {
-        producedVideoRefs.current[mediaPlayer.playingProducedVideoId].pause();
+      if (mediaPlayer.playingProducedVideoId) {
+        producedVideoRefs.current[mediaPlayer.playingProducedVideoId]?.pause();
         setPlayingProducedVideo(null);
       }
 
@@ -4060,7 +4149,8 @@ export default function SceneCard({
         const video = videoRefs.current[sceneId];
         if (video) {
           video.src = videoUrl;
-          video.playbackRate = videoSettings.playerSpeed;
+          video.playbackRate =
+            options?.playbackRate ?? videoSettings.playerSpeed;
           video
             .play()
             .then(() => {
@@ -4079,6 +4169,8 @@ export default function SceneCard({
       setPlayingVideo(null);
     }
   };
+
+  handleVideoPlayRef.current = handleVideoPlay;
 
   const handleVideoStop = (sceneId: number) => {
     const video = videoRefs.current[sceneId];
@@ -7297,6 +7389,10 @@ export default function SceneCard({
         (safeFirstNPage + 1) * firstNPageSize,
       )
     : filteredAndSortedData;
+
+  useEffect(() => {
+    visibleSceneDataRef.current = visibleSceneData;
+  }, [visibleSceneData]);
 
   // Keep the current batch valid when the result count or page size changes.
   useEffect(() => {
