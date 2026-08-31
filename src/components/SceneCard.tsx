@@ -242,6 +242,14 @@ const extractFieldValueAsText = (field: unknown): string => {
   return '';
 };
 
+const getSceneStartTime = (scene: Record<string, unknown>): number | null => {
+  const rawStartTime = extractFieldValueAsText(scene.field_6896).trim();
+  if (!rawStartTime) return null;
+
+  const startTime = Number(rawStartTime);
+  return Number.isFinite(startTime) ? startTime : null;
+};
+
 type SceneSpeedUpControlState = {
   finalVideoUrl: string;
   speed: SpeedUpMultiplier;
@@ -513,6 +521,9 @@ export default function SceneCard({
   const [showFirstNScenes, setShowFirstNScenes] = useState<boolean>(true);
   const [firstNScenesInput, setFirstNScenesInput] = useState<string>('20');
   const [firstNPage, setFirstNPage] = useState<number>(0);
+  const [showTimeFilter, setShowTimeFilter] = useState<boolean>(false);
+  const [timeFilterSecondsInput, setTimeFilterSecondsInput] =
+    useState<string>('300');
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null,
   );
@@ -1151,6 +1162,20 @@ export default function SceneCard({
           filtered = filtered.filter((scene) => isSceneFlagged(scene));
         }
 
+        // Filter by scene start time in seconds.
+        if (showTimeFilter) {
+          const parsedSeconds = parseFloat(timeFilterSecondsInput);
+          const maxStartTime =
+            Number.isFinite(parsedSeconds) && parsedSeconds >= 0
+              ? parsedSeconds
+              : 300;
+
+          filtered = filtered.filter((scene) => {
+            const startTime = getSceneStartTime(scene);
+            return startTime !== null && startTime < maxStartTime;
+          });
+        }
+
         // Filter by empty text
         if (showOnlyEmptyText) {
           filtered = filtered.filter((scene) => {
@@ -1517,6 +1542,8 @@ export default function SceneCard({
     refreshSceneInLocalCache,
     data,
     showOnlyFlagged,
+    showTimeFilter,
+    timeFilterSecondsInput,
     showOnlyEmptyText,
     showOnlyNotEmptyText,
     sortByDuration,
@@ -7080,6 +7107,20 @@ export default function SceneCard({
       filtered = filtered.filter((scene) => isSceneFlagged(scene));
     }
 
+    // Filter by scene start time in seconds.
+    if (showTimeFilter) {
+      const parsedSeconds = parseFloat(timeFilterSecondsInput);
+      const maxStartTime =
+        Number.isFinite(parsedSeconds) && parsedSeconds >= 0
+          ? parsedSeconds
+          : 300;
+
+      filtered = filtered.filter((scene) => {
+        const startTime = getSceneStartTime(scene);
+        return startTime !== null && startTime < maxStartTime;
+      });
+    }
+
     // Filter by empty text
     if (showOnlyEmptyText) {
       filtered = filtered.filter((scene) => {
@@ -7164,6 +7205,8 @@ export default function SceneCard({
   }, [
     data,
     showOnlyFlagged,
+    showTimeFilter,
+    timeFilterSecondsInput,
     showOnlyEmptyText,
     showOnlyNotEmptyText,
     showLongTextOnly,
@@ -7269,6 +7312,8 @@ export default function SceneCard({
     selectedOriginalVideo.id,
     showProcessingScenesAllVideos,
     showOnlyFlagged,
+    showTimeFilter,
+    timeFilterSecondsInput,
     showOnlyEmptyText,
     showOnlyNotEmptyText,
     showRecentlyModifiedTTS,
@@ -7477,7 +7522,7 @@ export default function SceneCard({
                     }`}
                     title='Show scenes with sentence length less than input, plus one previous and one next scene (normal order)'
                   >
-                    {showShortWithNeighbors ? '✓ ' : ''}Short ±1
+                    Short ±1
                   </button>
                 </div>
                 <div className='flex items-center gap-1'>
@@ -7503,7 +7548,7 @@ export default function SceneCard({
                     }`}
                     title='Show scenes with sentence length greater than or equal to input'
                   >
-                    {showLongTextOnly ? '✓ ' : ''}Long+
+                    Long+
                   </button>
                 </div>
                 <div className='flex items-center gap-1'>
@@ -7518,8 +7563,8 @@ export default function SceneCard({
                       setFirstNPage(0);
                     }}
                     className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                    title='Maximum number of scenes shown by First N filter'
-                    aria-label='First N scenes count'
+                    title='Maximum number of scenes shown by N filter'
+                    aria-label='N scenes count'
                   />
                   <button
                     onClick={() => {
@@ -7531,9 +7576,9 @@ export default function SceneCard({
                         ? 'bg-slate-700 text-white'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                     }`}
-                    title='Show only the first N scenes from the current filtered/sorted list'
+                    title='Show scenes in N-sized batches from the current filtered/sorted list'
                   >
-                    {showFirstNScenes ? '✓ ' : ''}First N
+                    N
                   </button>
                   {showFirstNScenes && (
                     <div className='inline-flex items-center gap-0.5 rounded-full border border-gray-300 bg-white text-gray-700'>
@@ -7546,8 +7591,8 @@ export default function SceneCard({
                         }
                         disabled={safeFirstNPage === 0}
                         className='px-1.5 py-0.5 text-[11px] rounded-l-full hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed'
-                        title='Show the previous First N batch'
-                        aria-label='Previous First N batch'
+                        title='Show the previous N batch'
+                        aria-label='Previous N batch'
                       >
                         ‹
                       </button>
@@ -7563,13 +7608,43 @@ export default function SceneCard({
                         }
                         disabled={safeFirstNPage >= firstNPageCount - 1}
                         className='px-1.5 py-0.5 text-[11px] rounded-r-full hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed'
-                        title='Show the next First N batch'
-                        aria-label='Next First N batch'
+                        title='Show the next N batch'
+                        aria-label='Next N batch'
                       >
                         ›
                       </button>
                     </div>
                   )}
+                </div>
+                <div className='flex items-center gap-1'>
+                  <input
+                    type='number'
+                    min={0}
+                    step={1}
+                    value={timeFilterSecondsInput}
+                    onChange={(e) => {
+                      const sanitized = e.target.value.replace(/[^0-9]/g, '');
+                      setTimeFilterSecondsInput(sanitized);
+                      setFirstNPage(0);
+                    }}
+                    className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                    title='Maximum scene start time used by the Time filter, in seconds'
+                    aria-label='Time filter seconds'
+                  />
+                  <button
+                    onClick={() => {
+                      setFirstNPage(0);
+                      setShowTimeFilter(!showTimeFilter);
+                    }}
+                    className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
+                      showTimeFilter
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                    title='Show scenes whose start time is before the entered number of seconds'
+                  >
+                    Time
+                  </button>
                 </div>
                 <button
                   onClick={() => setShowOnlyFlagged(!showOnlyFlagged)}
@@ -7578,9 +7653,9 @@ export default function SceneCard({
                       ? 'bg-red-500 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                   }`}
-                  title='Show only scenes where Flagged (7096) is true'
+                  title='Show only scenes where Flag (7096) is true'
                 >
-                  {showOnlyFlagged ? '✓ ' : ''}Flagged
+                  Flag
                 </button>
                 <button
                   onClick={() => {
@@ -7594,7 +7669,7 @@ export default function SceneCard({
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                   }`}
                 >
-                  {showOnlyEmptyText ? '✓ ' : ''}Empty
+                  Empty
                 </button>
                 <button
                   onClick={() => {
@@ -7609,7 +7684,7 @@ export default function SceneCard({
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                   }`}
                 >
-                  {showOnlyNotEmptyText ? '✓ ' : ''}Not Empty
+                  Not Empty
                 </button>
                 <button
                   onClick={() =>
@@ -7621,7 +7696,7 @@ export default function SceneCard({
                       : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                   }`}
                 >
-                  {showRecentlyModifiedTTS ? '✓ ' : ''}TTS
+                  TTS
                 </button>
                 <button
                   onClick={() => {
@@ -7670,7 +7745,6 @@ export default function SceneCard({
                     <Loader2 className='w-2.5 h-2.5 animate-spin' />
                   ) : null}
                   <span>
-                    {showProcessingScenesAllVideos ? '✓ ' : ''}
                     {allVideosTargetStatusLabel} All
                   </span>
                 </button>
