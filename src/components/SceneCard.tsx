@@ -502,7 +502,7 @@ export default function SceneCard({
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
   const [showOnlyNotEmptyText, setShowOnlyNotEmptyText] =
     useState<boolean>(false);
-  const [showOnlyFlagged, setShowOnlyFlagged] = useState<boolean>(true);
+  const [showOnlyFlagged, setShowOnlyFlagged] = useState<boolean>(false);
   const [showShortWithNeighbors, setShowShortWithNeighbors] =
     useState<boolean>(false);
   const [shortTextCharLimitInput, setShortTextCharLimitInput] =
@@ -510,8 +510,8 @@ export default function SceneCard({
   const [showLongTextOnly, setShowLongTextOnly] = useState<boolean>(false);
   const [longTextCharMinInput, setLongTextCharMinInput] =
     useState<string>('150');
-  const [showFirstNScenes, setShowFirstNScenes] = useState<boolean>(false);
-  const [firstNScenesInput, setFirstNScenesInput] = useState<string>('50');
+  const [showFirstNScenes, setShowFirstNScenes] = useState<boolean>(true);
+  const [firstNScenesInput, setFirstNScenesInput] = useState<string>('20');
   const [firstNPage, setFirstNPage] = useState<number>(0);
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null,
@@ -654,12 +654,13 @@ export default function SceneCard({
   const allVideosTargetStatusLabel =
     allVideosTargetStatus === 'pending' ? 'Pending' : 'Processing';
 
-  // Keep Flagged filter active by default whenever a video is selected.
+  // Keep the original Flagged filter unselected by default whenever a video is
+  // selected.
   // This applies on initial load (including page refresh with restored
   // selection) and each time the selected video changes.
   useEffect(() => {
     if (!selectedOriginalVideo.id) return;
-    setShowOnlyFlagged(true);
+    setShowOnlyFlagged(false);
   }, [selectedOriginalVideo.id]);
 
   // Playback history belongs to the currently loaded scene dataset. Switching
