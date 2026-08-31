@@ -512,6 +512,7 @@ export default function SceneCard({
     useState<string>('150');
   const [showFirstNScenes, setShowFirstNScenes] = useState<boolean>(false);
   const [firstNScenesInput, setFirstNScenesInput] = useState<string>('50');
+  const [firstNPage, setFirstNPage] = useState<number>(0);
   const [showTimeAdjustment, setShowTimeAdjustment] = useState<number | null>(
     null,
   );
@@ -1262,15 +1263,6 @@ export default function SceneCard({
           });
         }
 
-        // Limit to first N scenes in the current filtered/sorted view
-        if (showFirstNScenes) {
-          const parsedCount = parseInt(firstNScenesInput, 10);
-          const maxScenes =
-            Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 50;
-
-          filtered = filtered.slice(0, maxScenes);
-        }
-
         // Find the current scene index in filtered and sorted data
         const currentIndex = filtered.findIndex(
           (scene) => scene.id === currentPlayingSceneId,
@@ -1287,6 +1279,19 @@ export default function SceneCard({
 
         // Check bounds
         if (targetIndex < 0 || targetIndex >= filtered.length) return;
+
+        // When First N is active, make the target batch visible before
+        // starting playback so ArrowLeft/ArrowRight can cross batch edges.
+        if (showFirstNScenes) {
+          const parsedCount = parseInt(firstNScenesInput, 10);
+          const pageSize =
+            Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 50;
+          const targetPage = Math.floor(targetIndex / pageSize);
+
+          if (targetPage !== firstNPage) {
+            setFirstNPage(targetPage);
+          }
+        }
 
         // Get target scene
         const targetScene = filtered[targetIndex];
@@ -1519,6 +1524,7 @@ export default function SceneCard({
     longTextCharMinInput,
     showFirstNScenes,
     firstNScenesInput,
+    firstNPage,
     showShortWithNeighbors,
     shortTextCharLimitInput,
     showRecentlyModifiedTTS,
@@ -7221,24 +7227,66 @@ export default function SceneCard({
       });
     }
 
-    // Limit to first N scenes in the current filtered/sorted view
-    if (showFirstNScenes) {
-      const parsedCount = parseInt(firstNScenesInput, 10);
-      const maxScenes =
-        Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 50;
-
-      filtered = filtered.slice(0, maxScenes);
-    }
-
     return filtered;
   }, [
     filteredOnlyData,
-    showFirstNScenes,
-    firstNScenesInput,
     showShortWithNeighbors,
     sortByDuration,
     sortByLastModified,
   ]);
+
+  const parsedFirstNScenes = parseInt(firstNScenesInput, 10);
+  const firstNPageSize =
+    Number.isFinite(parsedFirstNScenes) && parsedFirstNScenes > 0
+      ? parsedFirstNScenes
+      : 50;
+  const firstNPageCount = showFirstNScenes
+    ? Math.max(1, Math.ceil(filteredAndSortedData.length / firstNPageSize))
+    : 1;
+  const safeFirstNPage = Math.min(
+    firstNPage,
+    Math.max(0, firstNPageCount - 1),
+  );
+  const visibleSceneData = showFirstNScenes
+    ? filteredAndSortedData.slice(
+        safeFirstNPage * firstNPageSize,
+        (safeFirstNPage + 1) * firstNPageSize,
+      )
+    : filteredAndSortedData;
+
+  // Keep the current batch valid when the result count or page size changes.
+  useEffect(() => {
+    setFirstNPage((currentPage) =>
+      Math.min(currentPage, Math.max(0, firstNPageCount - 1)),
+    );
+  }, [firstNPageCount]);
+
+  // Start at the first batch whenever the view order or scene dataset changes.
+  useEffect(() => {
+    setFirstNPage(0);
+  }, [
+    selectedOriginalVideo.id,
+    showProcessingScenesAllVideos,
+    showOnlyFlagged,
+    showOnlyEmptyText,
+    showOnlyNotEmptyText,
+    showRecentlyModifiedTTS,
+    showLongTextOnly,
+    longTextCharMinInput,
+    showShortWithNeighbors,
+    shortTextCharLimitInput,
+    sortByDuration,
+    sortByLastModified,
+    showFirstNScenes,
+    firstNScenesInput,
+  ]);
+
+  const firstNRangeStart = visibleSceneData.length
+    ? safeFirstNPage * firstNPageSize + 1
+    : 0;
+  const firstNRangeEnd = visibleSceneData.length
+    ? firstNRangeStart + visibleSceneData.length - 1
+    : 0;
 
   const imageOverlayNarrativeContext = (() => {
     const activeSceneId = imageOverlayModal.sceneId;
@@ -7466,13 +7514,17 @@ export default function SceneCard({
                     onChange={(e) => {
                       const sanitized = e.target.value.replace(/[^0-9]/g, '');
                       setFirstNScenesInput(sanitized);
+                      setFirstNPage(0);
                     }}
                     className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
                     title='Maximum number of scenes shown by First N filter'
                     aria-label='First N scenes count'
                   />
                   <button
-                    onClick={() => setShowFirstNScenes(!showFirstNScenes)}
+                    onClick={() => {
+                      setFirstNPage(0);
+                      setShowFirstNScenes(!showFirstNScenes);
+                    }}
                     className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
                       showFirstNScenes
                         ? 'bg-slate-700 text-white'
@@ -7482,6 +7534,41 @@ export default function SceneCard({
                   >
                     {showFirstNScenes ? '✓ ' : ''}First N
                   </button>
+                  {showFirstNScenes && (
+                    <div className='inline-flex items-center gap-0.5 rounded-full border border-gray-300 bg-white text-gray-700'>
+                      <button
+                        type='button'
+                        onClick={() =>
+                          setFirstNPage((currentPage) =>
+                            Math.max(0, currentPage - 1),
+                          )
+                        }
+                        disabled={safeFirstNPage === 0}
+                        className='px-1.5 py-0.5 text-[11px] rounded-l-full hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed'
+                        title='Show the previous First N batch'
+                        aria-label='Previous First N batch'
+                      >
+                        ‹
+                      </button>
+                      <span className='px-1 text-[10px] tabular-nums whitespace-nowrap'>
+                        {safeFirstNPage + 1}/{firstNPageCount}
+                      </span>
+                      <button
+                        type='button'
+                        onClick={() =>
+                          setFirstNPage((currentPage) =>
+                            Math.min(firstNPageCount - 1, currentPage + 1),
+                          )
+                        }
+                        disabled={safeFirstNPage >= firstNPageCount - 1}
+                        className='px-1.5 py-0.5 text-[11px] rounded-r-full hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed'
+                        title='Show the next First N batch'
+                        aria-label='Next First N batch'
+                      >
+                        ›
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => setShowOnlyFlagged(!showOnlyFlagged)}
@@ -7591,22 +7678,38 @@ export default function SceneCard({
 
             {/* Results Count - Right Side on Desktop */}
             <div className='text-[11px] text-gray-500 flex items-center'>
-              Showing{' '}
-              <span className='font-semibold text-gray-700 mx-0.5'>
-                {filteredAndSortedData.length}
-              </span>{' '}
-              of{' '}
-              <span className='font-semibold text-gray-700 mx-0.5'>
-                {data.length}
-              </span>{' '}
-              scenes
+              {showFirstNScenes ? (
+                <>
+                  Showing{' '}
+                  <span className='font-semibold text-gray-700 mx-0.5'>
+                    {firstNRangeStart}-{firstNRangeEnd}
+                  </span>{' '}
+                  of{' '}
+                  <span className='font-semibold text-gray-700 mx-0.5'>
+                    {filteredAndSortedData.length}
+                  </span>{' '}
+                  matching scenes
+                </>
+              ) : (
+                <>
+                  Showing{' '}
+                  <span className='font-semibold text-gray-700 mx-0.5'>
+                    {filteredAndSortedData.length}
+                  </span>{' '}
+                  of{' '}
+                  <span className='font-semibold text-gray-700 mx-0.5'>
+                    {data.length}
+                  </span>{' '}
+                  scenes
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       <div className='w-full flex flex-col space-y-6'>
-        {filteredAndSortedData.map((scene) => {
+        {visibleSceneData.map((scene) => {
           const finalVideoUrl = extractFieldValueAsText(
             scene.field_6886,
           ).trim();
@@ -9434,8 +9537,8 @@ export default function SceneCard({
             ref={scrollToFirstSceneButtonRef}
             onClick={() => {
               // Scroll to just above the first scene
-              if (filteredAndSortedData.length > 0) {
-                const firstScene = filteredAndSortedData[0];
+              if (visibleSceneData.length > 0) {
+                const firstScene = visibleSceneData[0];
                 const cardElement = sceneCardRefs.current[firstScene.id];
                 if (cardElement) {
                   const cardTop =
