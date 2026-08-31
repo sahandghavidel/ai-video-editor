@@ -272,6 +272,10 @@ type ProducedVideoPlayOptions = {
   playbackRate?: number;
 };
 
+type RemoveTTSOptions = {
+  clearFlag?: boolean;
+};
+
 type SceneSpeedUpVideoHandler = (
   sceneId: number,
   sceneData?: BaserowRow,
@@ -466,9 +470,9 @@ export default function SceneCard({
   const handleSpeedUpVideoRef = useRef<SceneSpeedUpVideoHandler | null>(null);
   const handleClearSentenceFieldRef =
     useRef<ClearSentenceFieldHandler | null>(null);
-  const handleRemoveTTSRef = useRef<((sceneId: number) => Promise<void>) | null>(
-    null,
-  );
+  const handleRemoveTTSRef = useRef<
+    ((sceneId: number, options?: RemoveTTSOptions) => Promise<void>) | null
+  >(null);
   const speedUpAndClearSentenceRef = useRef<
     ((sceneId: number) => Promise<void>) | null
   >(null);
@@ -1420,10 +1424,13 @@ export default function SceneCard({
             activeScene &&
               extractFieldValueAsText(activeScene.field_6891).trim(),
           );
+          const hasFlag = Boolean(
+            activeScene && parseFixTtsStatus(activeScene.field_7096) !== null,
+          );
           const removeTTS = handleRemoveTTSRef.current;
 
-          if (hasTtsAudio && removeTTS) {
-            void removeTTS(activeSceneId);
+          if ((hasTtsAudio || hasFlag) && removeTTS) {
+            void removeTTS(activeSceneId, { clearFlag: true });
           }
         }
 
@@ -1694,8 +1701,12 @@ export default function SceneCard({
   };
 
   // Remove TTS audio handler
-  const handleRemoveTTS = async (sceneId: number) => {
+  const handleRemoveTTS = async (
+    sceneId: number,
+    options?: RemoveTTSOptions,
+  ) => {
     if (removingTTSId !== null) return;
+    const clearFlag = options?.clearFlag === true;
     setRemovingTTSId(sceneId);
     // Stop audio if playing
     if (mediaPlayer.playingAudioId === sceneId) {
@@ -1703,11 +1714,22 @@ export default function SceneCard({
     }
     // Optimistic update
     const optimisticData = data.map((scene) =>
-      scene.id === sceneId ? { ...scene, field_6891: '' } : scene,
+      scene.id === sceneId
+        ? {
+            ...scene,
+            field_6891: '',
+            ...(clearFlag
+              ? { field_7096: null, field_7106: '' }
+              : {}),
+          }
+        : scene,
     );
     onDataUpdate?.(optimisticData);
     try {
-      await updateSceneRow(sceneId, { field_6891: '' });
+      await updateSceneRow(sceneId, {
+        field_6891: '',
+        ...(clearFlag ? { field_7096: null, field_7106: '' } : {}),
+      });
       const refreshedScene = await refreshSceneInLocalCache(sceneId);
       if (!onDataUpdateRef.current || !refreshedScene) {
         refreshData?.();
