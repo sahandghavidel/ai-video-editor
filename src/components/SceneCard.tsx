@@ -255,6 +255,10 @@ type SpeedUpVideoRequestOptions = {
   throwOnError?: boolean;
 };
 
+type ProducedVideoPlayOptions = {
+  recordHistory?: boolean;
+};
+
 type SceneSpeedUpVideoHandler = (
   sceneId: number,
   sceneData?: BaserowRow,
@@ -424,6 +428,7 @@ export default function SceneCard({
   const audioRefs = useRef<Record<number, HTMLAudioElement>>({});
   const videoRefs = useRef<Record<number, HTMLVideoElement>>({});
   const producedVideoRefs = useRef<Record<number, HTMLVideoElement>>({});
+  const producedPlaybackHistoryRef = useRef<number[]>([]);
   const dropdownRefs = useRef<Record<number, HTMLDivElement>>({});
   const scrollToFirstSceneButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -656,6 +661,17 @@ export default function SceneCard({
     setShowOnlyFlagged(true);
   }, [selectedOriginalVideo.id]);
 
+  // Playback history belongs to the currently loaded scene dataset. Switching
+  // between a selected video and the all-processing-scenes view starts a new
+  // history without fetching anything extra.
+  const playbackHistoryDatasetKey = showProcessingScenesAllVideos
+    ? 'all-processing-scenes'
+    : selectedOriginalVideo.id ?? null;
+
+  useEffect(() => {
+    producedPlaybackHistoryRef.current = [];
+  }, [playbackHistoryDatasetKey]);
+
   // Click outside handler for time adjustment and settings dropdowns
   useEffect(() => {
     const handleClickOutside = async (event: MouseEvent) => {
@@ -733,8 +749,34 @@ export default function SceneCard({
     }
   }, []);
 
+  const recordProducedVideoPlay = useCallback(
+    (sceneId: number, previousSceneId: number | null) => {
+      const history = producedPlaybackHistoryRef.current;
+      const previousIndex =
+        previousSceneId !== null
+          ? history.indexOf(previousSceneId)
+          : history.length - 1;
+      const historyThroughPrevious =
+        previousIndex >= 0 ? history.slice(0, previousIndex + 1) : history;
+      const nextHistory = [
+        ...historyThroughPrevious.filter((id) => id !== sceneId),
+        sceneId,
+      ];
+
+      // Keep the current scene plus up to three previously played scenes.
+      producedPlaybackHistoryRef.current = nextHistory.slice(-4);
+    },
+    [],
+  );
+
   const handleProducedVideoPlay = useCallback(
-    async (sceneId: number, videoUrl: string) => {
+    async (
+      sceneId: number,
+      videoUrl: string,
+      options?: ProducedVideoPlayOptions,
+    ) => {
+      const previousProducedVideoId = mediaPlayer.playingProducedVideoId;
+
       try {
         // Stop any currently playing produced video
         if (
@@ -774,6 +816,9 @@ export default function SceneCard({
             video
               .play()
               .then(() => {
+                if (options?.recordHistory !== false) {
+                  recordProducedVideoPlay(sceneId, previousProducedVideoId);
+                }
                 setLoadingProducedVideo(null);
               })
               .catch((error) => {
@@ -792,9 +837,49 @@ export default function SceneCard({
     [
       mediaPlayer.playingProducedVideoId,
       mediaPlayer.playingVideoId,
+      recordProducedVideoPlay,
       videoSettings.playerSpeed,
       scrollCardToTop,
     ],
+  );
+
+  const navigateProducedVideoHistory = useCallback(
+    (direction: -1 | 1) => {
+      const currentPlayingSceneId = mediaPlayer.playingProducedVideoId;
+      if (currentPlayingSceneId === null) return;
+
+      const availableHistory = producedPlaybackHistoryRef.current.filter(
+        (sceneId, index, history) => {
+          if (history.indexOf(sceneId) !== index) return false;
+
+          const scene = dataRef.current.find((item) => item.id === sceneId);
+          return Boolean(
+            scene && extractFieldValueAsText(scene.field_6886).trim(),
+          );
+        },
+      );
+      producedPlaybackHistoryRef.current = availableHistory;
+
+      const currentIndex = availableHistory.indexOf(currentPlayingSceneId);
+      if (currentIndex === -1) return;
+
+      const targetSceneId = availableHistory[currentIndex + direction];
+      if (targetSceneId === undefined) return;
+
+      const targetScene = dataRef.current.find(
+        (scene) => scene.id === targetSceneId,
+      );
+      const finalVideoUrl = targetScene
+        ? extractFieldValueAsText(targetScene.field_6886).trim()
+        : '';
+
+      if (finalVideoUrl) {
+        void handleProducedVideoPlay(targetSceneId, finalVideoUrl, {
+          recordHistory: false,
+        });
+      }
+    },
+    [handleProducedVideoPlay, mediaPlayer.playingProducedVideoId],
   );
 
   const toggleSceneFixTtsConfirmation = useCallback(async (sceneId: number) => {
@@ -1216,6 +1301,23 @@ export default function SceneCard({
         return;
       }
 
+      // Use playback history for up/down navigation, independent of the
+      // current scene filters and sorting.
+      if (
+        (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+
+        if (!event.repeat) {
+          navigateProducedVideoHistory(event.key === 'ArrowUp' ? -1 : 1);
+        }
+
+        return;
+      }
+
       // While a Final video is playing, number 2 toggles this scene's
       // confirmation instead of restarting playback at 2x.
       if (
@@ -1403,6 +1505,7 @@ export default function SceneCard({
     mediaPlayer.playingProducedVideoId,
     imageOverlayModal.isOpen,
     handleProducedVideoPlay,
+    navigateProducedVideoHistory,
     toggleSceneFixTtsConfirmation,
     toggleSceneVisualRequirement,
     refreshSceneInLocalCache,
