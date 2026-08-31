@@ -1306,7 +1306,7 @@ export default function SceneCard({
         // Check bounds
         if (targetIndex < 0 || targetIndex >= filtered.length) return;
 
-        // When First N is active, make the target batch visible before
+        // When N is active, make the target batch visible before
         // starting playback so ArrowLeft/ArrowRight can cross batch edges.
         if (showFirstNScenes) {
           const parsedCount = parseInt(firstNScenesInput, 10);
@@ -7508,7 +7508,7 @@ export default function SceneCard({
                       setShortTextCharLimitInput(sanitized);
                     }}
                     className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                    title='Maximum character count used by Short ±1 filter'
+                    title='Maximum character count used by Short filter'
                     aria-label='Short text max characters'
                   />
                   <button
@@ -7522,7 +7522,7 @@ export default function SceneCard({
                     }`}
                     title='Show scenes with sentence length less than input, plus one previous and one next scene (normal order)'
                   >
-                    Short ±1
+                    Short
                   </button>
                 </div>
                 <div className='flex items-center gap-1'>
@@ -7536,7 +7536,7 @@ export default function SceneCard({
                       setLongTextCharMinInput(sanitized);
                     }}
                     className='w-14 px-1.5 py-0.5 text-[11px] rounded border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                    title='Minimum character count used by Long+ filter'
+                    title='Minimum character count used by Long filter'
                     aria-label='Long text minimum characters'
                   />
                   <button
@@ -7548,7 +7548,7 @@ export default function SceneCard({
                     }`}
                     title='Show scenes with sentence length greater than or equal to input'
                   >
-                    Long+
+                    Long
                   </button>
                 </div>
                 <div className='flex items-center gap-1'>
@@ -7745,7 +7745,7 @@ export default function SceneCard({
                     <Loader2 className='w-2.5 h-2.5 animate-spin' />
                   ) : null}
                   <span>
-                    {allVideosTargetStatusLabel} All
+                    All
                   </span>
                 </button>
               </div>
@@ -7755,7 +7755,6 @@ export default function SceneCard({
             <div className='text-[11px] text-gray-500 flex items-center'>
               {showFirstNScenes ? (
                 <>
-                  Showing{' '}
                   <span className='font-semibold text-gray-700 mx-0.5'>
                     {firstNRangeStart}-{firstNRangeEnd}
                   </span>{' '}
@@ -7763,11 +7762,10 @@ export default function SceneCard({
                   <span className='font-semibold text-gray-700 mx-0.5'>
                     {filteredAndSortedData.length}
                   </span>{' '}
-                  matching scenes
+                  scenes
                 </>
               ) : (
                 <>
-                  Showing{' '}
                   <span className='font-semibold text-gray-700 mx-0.5'>
                     {filteredAndSortedData.length}
                   </span>{' '}
