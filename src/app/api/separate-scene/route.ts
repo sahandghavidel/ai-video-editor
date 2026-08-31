@@ -237,12 +237,14 @@ function normalizeCreatePayload(
 ): Record<string, unknown> {
   const nextPayload: Record<string, unknown> = { ...payload };
 
-  if (Object.prototype.hasOwnProperty.call(nextPayload, 'field_7096')) {
-    const normalized = normalizeSingleSelectValue(nextPayload.field_7096);
+  for (const fieldKey of ['field_7096', 'field_7364']) {
+    if (!Object.prototype.hasOwnProperty.call(nextPayload, fieldKey)) continue;
+
+    const normalized = normalizeSingleSelectValue(nextPayload[fieldKey]);
     if (normalized === null) {
-      delete nextPayload.field_7096;
+      delete nextPayload[fieldKey];
     } else {
-      nextPayload.field_7096 = normalized;
+      nextPayload[fieldKey] = normalized;
     }
   }
 
