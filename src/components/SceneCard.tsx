@@ -439,6 +439,9 @@ export default function SceneCard({
   const handleSpeedUpVideoRef = useRef<SceneSpeedUpVideoHandler | null>(null);
   const handleClearSentenceFieldRef =
     useRef<ClearSentenceFieldHandler | null>(null);
+  const handleRemoveTTSRef = useRef<((sceneId: number) => Promise<void>) | null>(
+    null,
+  );
   const speedUpAndClearSentenceRef = useRef<
     ((sceneId: number) => Promise<void>) | null
   >(null);
@@ -1253,6 +1256,35 @@ export default function SceneCard({
         return;
       }
 
+      // While a Final video is playing, Q removes TTS from the active scene.
+      if (
+        event.key.toLowerCase() === 'q' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        mediaPlayer.playingProducedVideoId !== null
+      ) {
+        event.preventDefault();
+
+        if (!event.repeat) {
+          const activeSceneId = mediaPlayer.playingProducedVideoId;
+          const activeScene = dataRef.current.find(
+            (scene) => scene.id === activeSceneId,
+          );
+          const hasTtsAudio = Boolean(
+            activeScene &&
+              extractFieldValueAsText(activeScene.field_6891).trim(),
+          );
+          const removeTTS = handleRemoveTTSRef.current;
+
+          if (hasTtsAudio && removeTTS) {
+            void removeTTS(activeSceneId);
+          }
+        }
+
+        return;
+      }
+
       // While a Final video is playing, number 4 speeds up the active scene
       // at 4x with muted audio and clears only its editable sentence.
       if (
@@ -1438,6 +1470,7 @@ export default function SceneCard({
 
   // Remove TTS audio handler
   const handleRemoveTTS = async (sceneId: number) => {
+    if (removingTTSId !== null) return;
     setRemovingTTSId(sceneId);
     // Stop audio if playing
     if (mediaPlayer.playingAudioId === sceneId) {
@@ -1462,6 +1495,10 @@ export default function SceneCard({
       setRemovingTTSId(null);
     }
   };
+
+  // Keep the keyboard shortcut pointed at the current handler without moving
+  // the existing handler below the keyboard-shortcut effect.
+  handleRemoveTTSRef.current = handleRemoveTTS;
 
   // Clear video field handler
   const handleClearVideo = async (sceneId: number) => {
