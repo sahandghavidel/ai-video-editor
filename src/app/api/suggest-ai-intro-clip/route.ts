@@ -5,6 +5,7 @@ import {
   wordsInRange,
   type TimedWord,
 } from '@/lib/ai-intro-overlay';
+import { getFinalVideoCaptionStatus } from '@/utils/finalVideoCaptions';
 import type {
   AiIntroClipSuggestion,
   AiIntroSuggestionResponse,
@@ -238,11 +239,16 @@ export async function POST(request: Request) {
       );
     }
     const sceneCaptionsUrl = resolveSceneCaptionsUrl(context.scene);
-    if (!sceneCaptionsUrl) {
+    const captionStatus = getFinalVideoCaptionStatus({
+      sceneId,
+      finalVideoUrl: extractUrl(context.scene.field_6886),
+      captionsUrl: sceneCaptionsUrl,
+    });
+    if (captionStatus.status !== 'matched') {
       return Response.json(
         {
           error:
-            'The current scene needs a final-video transcription before AI clip selection can run.',
+            `The current scene needs an up-to-date final-video transcription before AI clip selection can run (${captionStatus.status} captions).`,
         },
         { status: 400 },
       );

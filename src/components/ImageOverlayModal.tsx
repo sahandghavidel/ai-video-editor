@@ -8089,6 +8089,24 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
         targetStartTime={startTime}
         targetEndTime={endTime}
         model={selectedOpenRouterModel}
+        onEnsureFinalVideoTranscription={async () => {
+          if (!handleTranscribeScene) {
+            throw new Error('Final video transcription is unavailable.');
+          }
+
+          await handleTranscribeScene(
+            sceneId,
+            sceneData ?? undefined,
+            'final',
+            true,
+            true,
+            false,
+            {
+              throwOnError: true,
+              skipIfFinalVideoAlreadyTranscribed: true,
+            },
+          );
+        }}
         onClose={() => setIsOriginalVideoEditModalOpen(false)}
         onUseVideo={handleUseOriginalVideo}
       />

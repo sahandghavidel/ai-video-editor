@@ -29,6 +29,7 @@ type Props = {
   targetStartTime: number;
   targetEndTime: number;
   model: string | null;
+  onEnsureFinalVideoTranscription: () => Promise<void>;
   onClose: () => void;
   onUseVideo: (selection: {
     segments: AiIntroSourceSegment[];
@@ -52,6 +53,7 @@ export function AiIntroVideoSectionsModal({
   targetStartTime,
   targetEndTime,
   model,
+  onEnsureFinalVideoTranscription,
   onClose,
   onUseVideo,
 }: Props) {
@@ -75,6 +77,7 @@ export function AiIntroVideoSectionsModal({
   const [previewSegmentIndex, setPreviewSegmentIndex] = useState(0);
   const [suggestions, setSuggestions] = useState<AiIntroClipSuggestion[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [isTranscribingFinal, setIsTranscribingFinal] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const targetDuration = Math.max(0, targetEndTime - targetStartTime);
@@ -93,6 +96,7 @@ export function AiIntroVideoSectionsModal({
     setIsPreviewingSelection(false);
     setPreviewSegmentIndex(0);
     setIsSuggesting(false);
+    setIsTranscribingFinal(false);
     setIsBuilding(false);
     setError(null);
   }, [isOpen, sourceVideoUrl]);
@@ -454,6 +458,10 @@ export function AiIntroVideoSectionsModal({
     setIsSuggesting(true);
     setError(null);
     try {
+      setIsTranscribingFinal(true);
+      await onEnsureFinalVideoTranscription();
+      setIsTranscribingFinal(false);
+
       const response = await fetch('/api/suggest-ai-intro-clip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -492,6 +500,7 @@ export function AiIntroVideoSectionsModal({
           : 'Failed to suggest clips.',
       );
     } finally {
+      setIsTranscribingFinal(false);
       setIsSuggesting(false);
     }
   };
@@ -740,7 +749,9 @@ export function AiIntroVideoSectionsModal({
                   ) : (
                     <Sparkles className='h-4 w-4' />
                   )}
-                  {isSuggesting
+                  {isTranscribingFinal
+                    ? 'Transcribing Final…'
+                    : isSuggesting
                     ? 'Suggesting Clips…'
                     : 'AI Clip for Selected Words'}
                 </button>
