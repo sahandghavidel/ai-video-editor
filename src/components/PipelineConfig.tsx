@@ -1060,6 +1060,8 @@ export default function PipelineConfig({
               const isSpeedUp = step.key === 'speedUp';
               const isFixIntroQa =
                 step.key === 'fixIntroQaAfterFixFlagged';
+              const isCreateDubbedLanguage =
+                step.key === 'createDubbedLanguage';
 
               return (
                 <div
@@ -1180,6 +1182,31 @@ export default function PipelineConfig({
                         className='h-3 w-3 accent-cyan-500 disabled:cursor-not-allowed'
                       />
                       All scenes
+                    </label>
+                  )}
+
+                  {isCreateDubbedLanguage && (
+                    <label
+                      className={`flex w-full items-center justify-center gap-1 text-[10px] font-medium ${
+                        isEnabled ? 'text-teal-700' : 'text-gray-400'
+                      }`}
+                      title='Save the final dubbed audio as WAV instead of M4A'
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type='checkbox'
+                        aria-label='Save final dubbed audio as WAV'
+                        checked={pipelineConfig.saveDubbedAudioAsWav}
+                        disabled={!isEnabled || isRunningFullPipeline}
+                        onChange={(event) =>
+                          updatePipelineConfig({
+                            saveDubbedAudioAsWav: event.target.checked,
+                          })
+                        }
+                        className='h-3 w-3 accent-teal-600 disabled:cursor-not-allowed'
+                      />
+                      Save as WAV
                     </label>
                   )}
 

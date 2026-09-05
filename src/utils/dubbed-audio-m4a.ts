@@ -178,6 +178,73 @@ export async function createDubbedAudioM4aBatch(options: {
   }
 }
 
+/** Concatenate one ordered group of scene WAV inputs into a temporary WAV. */
+export async function createDubbedAudioWavBatch(options: {
+  inputPaths: string[];
+  videoId: number;
+  batchIndex: number;
+}): Promise<string> {
+  const { inputPaths, videoId, batchIndex } = options;
+
+  if (inputPaths.length === 0) {
+    throw new Error('Cannot create a dubbed-audio WAV batch without scene audio');
+  }
+
+  if (inputPaths.length > DUBBED_AUDIO_SCENE_BATCH_SIZE) {
+    throw new Error(
+      `Dubbed-audio WAV batch ${batchIndex} contains ${inputPaths.length} inputs; maximum is ${DUBBED_AUDIO_SCENE_BATCH_SIZE}`,
+    );
+  }
+
+  const batchWavPath = makeTempPath(
+    `video_${videoId}_dubbed_audio_wav_batch_${batchIndex}`,
+    'wav',
+  );
+  const concatListPath = makeTempPath(
+    `video_${videoId}_dubbed_audio_wav_batch_${batchIndex}_concat`,
+    'txt',
+  );
+
+  try {
+    const listContent = inputPaths
+      .map((inputPath) => `file '${inputPath}'`)
+      .join('\n');
+    await writeFile(concatListPath, listContent, 'utf8');
+
+    await runFfmpeg([
+      '-y',
+      '-f',
+      'concat',
+      '-safe',
+      '0',
+      '-i',
+      concatListPath,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      '-rf64',
+      'auto',
+      batchWavPath,
+    ]);
+    await access(batchWavPath);
+
+    return batchWavPath;
+  } catch (error) {
+    await safeUnlink(batchWavPath);
+    throw error;
+  } finally {
+    await safeUnlink(concatListPath);
+  }
+}
+
 /** Concatenate consistently encoded M4A batches without another re-encode. */
 export async function concatenateDubbedAudioM4aBatches(options: {
   batchPaths: string[];
@@ -215,6 +282,67 @@ export async function concatenateDubbedAudioM4aBatches(options: {
       concatListPath,
       '-c',
       'copy',
+      outputPath,
+    ]);
+    await access(outputPath);
+
+    return outputPath;
+  } catch (error) {
+    await safeUnlink(outputPath);
+    throw error;
+  } finally {
+    await safeUnlink(concatListPath);
+  }
+}
+
+/** Concatenate consistently encoded WAV batches into one RF64-capable WAV. */
+export async function concatenateDubbedAudioWavBatches(options: {
+  batchPaths: string[];
+  videoId: number;
+}): Promise<string> {
+  const { batchPaths, videoId } = options;
+
+  if (batchPaths.length === 0) {
+    throw new Error('No dubbed-audio WAV batches to concatenate');
+  }
+
+  if (batchPaths.length === 1) {
+    return batchPaths[0];
+  }
+
+  const concatListPath = makeTempPath(
+    `video_${videoId}_dubbed_audio_wav_concat`,
+    'txt',
+  );
+  const outputPath = makeTempPath(`video_${videoId}_final_dubbed_audio`, 'wav');
+
+  try {
+    const listContent = batchPaths
+      .map((batchPath) => `file '${batchPath}'`)
+      .join('\n');
+    await writeFile(concatListPath, listContent, 'utf8');
+
+    await runFfmpeg([
+      '-y',
+      '-f',
+      'concat',
+      '-safe',
+      '0',
+      '-i',
+      concatListPath,
+      '-vn',
+      '-map_metadata',
+      '-1',
+      '-map_chapters',
+      '-1',
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      String(AUDIO_SAMPLE_RATE),
+      '-ac',
+      String(AUDIO_CHANNELS),
+      '-rf64',
+      'auto',
       outputPath,
     ]);
     await access(outputPath);

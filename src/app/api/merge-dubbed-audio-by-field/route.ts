@@ -6,7 +6,9 @@ import { uploadToMinio } from '@/utils/ffmpeg-direct';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 import {
   concatenateDubbedAudioM4aBatches,
+  concatenateDubbedAudioWavBatches,
   createDubbedAudioM4aBatch,
+  createDubbedAudioWavBatch,
   DUBBED_AUDIO_SCENE_BATCH_SIZE,
 } from '@/utils/dubbed-audio-m4a';
 
@@ -618,6 +620,7 @@ export async function POST(request: NextRequest) {
       requireAudioForDurationScenes?: unknown;
       skipIfDestinationExists?: unknown;
       language?: unknown;
+      saveFinalAudioAsWav?: unknown;
     } | null;
 
     const videoId = parsePositiveInt(body?.videoId);
@@ -681,6 +684,10 @@ export async function POST(request: NextRequest) {
     );
     const skipIfDestinationExists = parseBoolean(
       body?.skipIfDestinationExists,
+      false,
+    );
+    const saveFinalAudioAsWav = parseBoolean(
+      body?.saveFinalAudioAsWav,
       false,
     );
 
@@ -819,7 +826,7 @@ export async function POST(request: NextRequest) {
       const orderDelta = a.orderValue - b.orderValue;
       return orderDelta !== 0 ? orderDelta : a.sceneId - b.sceneId;
     });
-    const m4aBatchPaths: string[] = [];
+    const outputBatchPaths: string[] = [];
     let expectedMergedSamples = 0;
     let batchedSceneCount = 0;
 
@@ -832,7 +839,7 @@ export async function POST(request: NextRequest) {
         offset,
         offset + DUBBED_AUDIO_SCENE_BATCH_SIZE,
       );
-      const batchIndex = m4aBatchPaths.length + 1;
+      const batchIndex = outputBatchPaths.length + 1;
       const localScenePaths: string[] = [];
 
       try {
@@ -848,13 +855,19 @@ export async function POST(request: NextRequest) {
           expectedMergedSamples += normalized.metrics.sampleCount;
         }
 
-        const m4aBatchPath = await createDubbedAudioM4aBatch({
-          inputPaths: localScenePaths,
-          videoId,
-          batchIndex,
-        });
-        tempFiles.push(m4aBatchPath);
-        m4aBatchPaths.push(m4aBatchPath);
+        const outputBatchPath = saveFinalAudioAsWav
+          ? await createDubbedAudioWavBatch({
+              inputPaths: localScenePaths,
+              videoId,
+              batchIndex,
+            })
+          : await createDubbedAudioM4aBatch({
+              inputPaths: localScenePaths,
+              videoId,
+              batchIndex,
+            });
+        tempFiles.push(outputBatchPath);
+        outputBatchPaths.push(outputBatchPath);
         batchedSceneCount += batchJobs.length;
       } finally {
         for (const localScenePath of localScenePaths) {
@@ -869,25 +882,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const finalM4aPath = await concatenateDubbedAudioM4aBatches({
-      batchPaths: m4aBatchPaths,
-      videoId,
-    });
-    if (!tempFiles.includes(finalM4aPath)) {
-      tempFiles.push(finalM4aPath);
+    const finalAudioPath = saveFinalAudioAsWav
+      ? await concatenateDubbedAudioWavBatches({
+          batchPaths: outputBatchPaths,
+          videoId,
+        })
+      : await concatenateDubbedAudioM4aBatches({
+          batchPaths: outputBatchPaths,
+          videoId,
+        });
+    if (!tempFiles.includes(finalAudioPath)) {
+      tempFiles.push(finalAudioPath);
     }
 
-    const mergedMetrics = await probeAudioMetrics(finalM4aPath);
+    const mergedMetrics = await probeAudioMetrics(finalAudioPath);
 
     const languageSuffix =
       typeof body?.language === 'string' && body.language.trim()
         ? `${body.language.trim()}_`
         : '';
-    const finalFilename = `video_${videoId}_merged_${languageSuffix}${sourceSceneAudioFieldKey}_${Date.now()}.m4a`;
+    const finalAudioExtension = saveFinalAudioAsWav ? 'wav' : 'm4a';
+    const finalFilename = `video_${videoId}_merged_${languageSuffix}${sourceSceneAudioFieldKey}_${Date.now()}.${finalAudioExtension}`;
     const finalDubbedAudioUrl = await uploadToMinio(
-      finalM4aPath,
+      finalAudioPath,
       finalFilename,
-      'audio/mp4',
+      saveFinalAudioAsWav ? 'audio/wav' : 'audio/mp4',
     );
 
     token = await patchVideoAudioWithAuthRetry({
@@ -908,6 +927,7 @@ export async function POST(request: NextRequest) {
       sourceSceneAudioFieldKey,
       destinationVideoAudioFieldKey,
       sceneDurationFieldKey,
+      saveFinalAudioAsWav,
       mergedSceneCount: mergeJobs.length,
       skippedInvalidSceneIdCount,
       skippedNoDurationCount,
@@ -919,9 +939,11 @@ export async function POST(request: NextRequest) {
       mergedOutputDeltaSamples:
         mergedMetrics.sampleCount - expectedMergedSamples,
       mergeCorrectionPasses: 0,
-      m4aBatchCount: m4aBatchPaths.length,
-      m4aCodec: 'aac',
-      m4aBitrate: '192k',
+      finalAudioFormat: saveFinalAudioAsWav ? 'wav' : 'm4a',
+      wavBatchCount: saveFinalAudioAsWav ? outputBatchPaths.length : 0,
+      m4aBatchCount: saveFinalAudioAsWav ? 0 : outputBatchPaths.length,
+      audioCodec: saveFinalAudioAsWav ? 'pcm_s16le' : 'aac',
+      audioBitrate: saveFinalAudioAsWav ? null : '192k',
       finalDubbedAudioUrl,
     });
   } catch (error) {

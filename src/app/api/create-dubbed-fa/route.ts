@@ -409,6 +409,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as {
       videoId?: unknown;
       language?: unknown;
+      saveFinalAudioAsWav?: unknown;
     } | null;
 
     const videoId = parsePositiveInt(body?.videoId);
@@ -420,6 +421,7 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedLanguage = normalizeLanguageCode(body?.language);
+    const saveFinalAudioAsWav = body?.saveFinalAudioAsWav === true;
     const selectedLanguageReference =
       await resolveLanguageAudioReference(requestedLanguage);
 
@@ -980,6 +982,7 @@ export async function POST(request: NextRequest) {
           sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
           requireAudioForDurationScenes: true,
           language: selectedLanguageReference.language,
+          saveFinalAudioAsWav,
         }),
         dispatcher: STEP2_FETCH_DISPATCHER,
       } as RequestInit & { dispatcher: Agent },
@@ -996,6 +999,7 @@ export async function POST(request: NextRequest) {
       mergeCorrectionPasses?: unknown;
       finalDubbedAudioUrl?: unknown;
       destinationVideoAudioFieldKey?: unknown;
+      finalAudioFormat?: unknown;
     } | null;
 
     if (!step3Response.ok || step3Payload?.ok !== true) {
@@ -1034,7 +1038,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio-and-step-3-merge-save-final-dubbed-audio-m4a',
+      step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio-and-step-3-merge-save-final-dubbed-audio',
       videoId,
       language: selectedLanguageReference.language,
       step1: {
@@ -1097,6 +1101,12 @@ export async function POST(request: NextRequest) {
       step3: {
         sourceSceneAudioField: baserowFields.sceneDubbedAudioFieldKey,
         destinationVideoAudioField: finalDubbedAudioFieldKey,
+        finalAudioFormat:
+          typeof step3Payload?.finalAudioFormat === 'string'
+            ? step3Payload.finalAudioFormat
+            : saveFinalAudioAsWav
+              ? 'wav'
+              : 'm4a',
         mergedSceneCount: Number(step3Payload?.mergedSceneCount ?? 0),
         expectedMergedDurationSec: Number(
           step3Payload?.expectedMergedDurationSec ?? 0,

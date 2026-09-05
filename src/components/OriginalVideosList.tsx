@@ -3882,6 +3882,7 @@ export default function OriginalVideosList({
       languages?: string[];
       updatePipelineProgress?: boolean;
       pipelineStepNumber?: number;
+      saveDubbedAudioAsWav?: boolean;
     },
   ) => {
     if (creatingDubbedLanguageAllVideos) return;
@@ -3990,6 +3991,7 @@ export default function OriginalVideosList({
               body: JSON.stringify({
                 videoId: video.id,
                 language: languageCode,
+                saveFinalAudioAsWav: options?.saveDubbedAudioAsWav === true,
               }),
             });
 
@@ -12426,6 +12428,7 @@ export default function OriginalVideosList({
             languages: effectivePipelineDubbedLanguages,
             updatePipelineProgress: true,
             pipelineStepNumber: stepNumber,
+            saveDubbedAudioAsWav: pipelineConfig.saveDubbedAudioAsWav,
           });
           console.log(
             `✓ Step ${stepNumber} Complete: Create Dubbed ${pipelineDubbedLabel} finished`,

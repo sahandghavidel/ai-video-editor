@@ -325,6 +325,7 @@ export interface PipelineConfig {
   transcribeFinalAll: boolean;
   createEnSrt: boolean;
   createDubbedLanguage: boolean;
+  saveDubbedAudioAsWav: boolean;
   selectedDubbedLanguagesForPipeline: string[];
   generateYouTubeDescriptions: boolean;
   generateYouTubeKeywords: boolean;
@@ -808,6 +809,7 @@ const defaultPipelineConfig: PipelineConfig = {
   transcribeFinalAll: false,
   createEnSrt: false,
   createDubbedLanguage: false,
+  saveDubbedAudioAsWav: false,
   selectedDubbedLanguagesForPipeline: [],
   generateYouTubeDescriptions: false,
   generateYouTubeKeywords: false,
