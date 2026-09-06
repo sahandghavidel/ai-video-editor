@@ -263,6 +263,8 @@ export default function BatchOperations({
   const [promptingSceneId, setPromptingSceneId] = useState<number | null>(null);
   const [generatingHyperFramesPrompts, setGeneratingHyperFramesPrompts] =
     useState(false);
+  const [findingHyperFramesScenes, setFindingHyperFramesScenes] =
+    useState(false);
   const [generatingHyperFramesHtml, setGeneratingHyperFramesHtml] =
     useState(false);
   const [renderingHyperFramesVideos, setRenderingHyperFramesVideos] =
@@ -311,6 +313,121 @@ export default function BatchOperations({
 
   const playBatchDoneSound = () => {
     playSuccessSound();
+  };
+
+  const onFindHyperFramesScenes = async () => {
+    if (findingHyperFramesScenes || !selectedOriginalVideo.id) return;
+    const onlineModel = modelSelection.selectedOnlineModel;
+    if (!onlineModel) {
+      setHyperFramesBatchStatus('Find HF Scenes failed: select an online model.');
+      return;
+    }
+
+    setFindingHyperFramesScenes(true);
+    setHyperFramesBatchStatus('Refreshing scenes before HF analysis…');
+    try {
+      await onRefresh?.();
+      const freshScenes = [...useAppStore.getState().getFilteredData()].sort(
+        compareHyperFramesScenesByRealOrder,
+      );
+      if (freshScenes.length === 0) {
+        setHyperFramesBatchStatus('Find HF Scenes: no scenes found.');
+        return;
+      }
+
+      setHyperFramesBatchStatus(`Analyzing ${freshScenes.length} scenes with Nitro…`);
+      const response = await fetch('/api/find-hyperframes-scenes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: onlineModel,
+          scenes: freshScenes.map((scene) => ({
+            sceneId: scene.id,
+            text:
+              getSceneTextField(scene, 'field_6890') ||
+              getSceneTextField(scene, 'field_6901'),
+          })),
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        sceneIds?: unknown;
+        error?: unknown;
+      } | null;
+      if (!response.ok) {
+        throw new Error(
+          typeof payload?.error === 'string'
+            ? payload.error
+            : `HF scene analysis failed (${response.status})`,
+        );
+      }
+      if (!Array.isArray(payload?.sceneIds)) {
+        throw new Error('HF scene analysis returned an invalid sceneIds list.');
+      }
+
+      const allowedIds = new Set(freshScenes.map((scene) => scene.id));
+      const suggestedIds = [...new Set(payload.sceneIds.map(Number))].filter(
+        (sceneId) => Number.isInteger(sceneId) && allowedIds.has(sceneId),
+      );
+
+      await onRefresh?.();
+      const latestById = new Map(
+        useAppStore.getState().getFilteredData().map((scene) => [scene.id, scene]),
+      );
+      const updateIds = suggestedIds.filter((sceneId) => {
+        const scene = latestById.get(sceneId);
+        return scene && !isHyperFramesVisualRequired(scene);
+      });
+      const skipped = suggestedIds.length - updateIds.length;
+      const results: Array<{ sceneId: number; error?: string }> = [];
+      let cursor = 0;
+
+      setHyperFramesBatchStatus(`Saving ${updateIds.length} Needs Visual scenes…`);
+      await Promise.all(
+        Array.from({ length: Math.min(6, updateIds.length) }, async () => {
+          while (cursor < updateIds.length) {
+            const sceneId = updateIds[cursor++];
+            let errorMessage = '';
+            for (let attempt = 1; attempt <= 3; attempt += 1) {
+              try {
+                const saveResponse = await fetch(`/api/baserow/scenes/${sceneId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ field_7364: 'Needs Visual' }),
+                });
+                if (saveResponse.ok) {
+                  errorMessage = '';
+                  break;
+                }
+                errorMessage = `${saveResponse.status} ${await saveResponse.text().catch(() => '')}`.trim();
+                if (![429, 500, 502, 503, 504].includes(saveResponse.status)) break;
+              } catch (error) {
+                errorMessage = error instanceof Error ? error.message : String(error);
+              }
+              if (attempt < 3) {
+                await new Promise((resolve) =>
+                  window.setTimeout(resolve, 150 * 2 ** (attempt - 1)),
+                );
+              }
+            }
+            results.push({ sceneId, error: errorMessage || undefined });
+          }
+        }),
+      );
+
+      const failed = results.filter((result) => result.error).length;
+      setHyperFramesBatchStatus(
+        `Find HF Scenes: ${results.length - failed} updated, ${skipped} already set, ${failed} failed.`,
+      );
+      playBatchDoneSound();
+      await onRefresh?.();
+    } catch (error) {
+      console.error('Find HF Scenes failed:', error);
+      setHyperFramesBatchStatus(
+        `Find HF Scenes failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setFindingHyperFramesScenes(false);
+    }
   };
 
   const loadDubbedLanguages = useCallback(async () => {
@@ -5511,11 +5628,40 @@ export default function BatchOperations({
                   </button>
                   <div className='mt-2 grid grid-cols-1 gap-2'>
                     <button
+                      onClick={onFindHyperFramesScenes}
+                      disabled={
+                        !selectedOriginalVideo.id ||
+                        batchOperations.generatingAllTTS ||
+                        sceneLoading.producingTTS !== null ||
+                        findingHyperFramesScenes ||
+                        generatingHyperFramesPrompts ||
+                        generatingHyperFramesHtml ||
+                        renderingHyperFramesVideos ||
+                        applyingHyperFramesVideos
+                      }
+                      className='w-full min-h-10 px-2 py-2 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:cursor-not-allowed'
+                      title={
+                        !selectedOriginalVideo.id
+                          ? 'Select an original video first'
+                          : 'Use online AI with Nitro to mark suggested scenes as Needs Visual'
+                      }
+                    >
+                      {findingHyperFramesScenes && (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      )}
+                      <span>
+                        {findingHyperFramesScenes
+                          ? 'Finding HF Scenes…'
+                          : 'Find HF Scenes'}
+                      </span>
+                    </button>
+                    <button
                       onClick={onGenerateHyperFramesPrompts}
                       disabled={
                         !selectedOriginalVideo.id ||
                         batchOperations.generatingAllTTS ||
                         sceneLoading.producingTTS !== null ||
+                        findingHyperFramesScenes ||
                         generatingHyperFramesPrompts ||
                         generatingHyperFramesHtml ||
                         renderingHyperFramesVideos ||
@@ -5543,6 +5689,7 @@ export default function BatchOperations({
                         !selectedOriginalVideo.id ||
                         batchOperations.generatingAllTTS ||
                         sceneLoading.producingTTS !== null ||
+                        findingHyperFramesScenes ||
                         generatingHyperFramesPrompts ||
                         generatingHyperFramesHtml ||
                         renderingHyperFramesVideos ||
@@ -5570,6 +5717,7 @@ export default function BatchOperations({
                         !selectedOriginalVideo.id ||
                         batchOperations.generatingAllTTS ||
                         sceneLoading.producingTTS !== null ||
+                        findingHyperFramesScenes ||
                         generatingHyperFramesPrompts ||
                         generatingHyperFramesHtml ||
                         renderingHyperFramesVideos ||
@@ -5597,6 +5745,7 @@ export default function BatchOperations({
                         !selectedOriginalVideo.id ||
                         batchOperations.generatingAllTTS ||
                         sceneLoading.producingTTS !== null ||
+                        findingHyperFramesScenes ||
                         generatingHyperFramesPrompts ||
                         generatingHyperFramesHtml ||
                         renderingHyperFramesVideos ||
