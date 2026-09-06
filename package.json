@@ -11,6 +11,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
     "busboy": "^1.6.0",
     "context-filter-polyfill": "^0.3.23",
     "jszip": "^3.10.1",

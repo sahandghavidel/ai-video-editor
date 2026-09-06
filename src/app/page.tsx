@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 
 import {
   getOriginalVideosData,
@@ -477,6 +478,7 @@ export default function Home() {
   return (
     <div className='min-h-screen bg-gradient-to-br from-gray-50 to-white'>
       <div className='max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8'>
+        <nav className='mb-4 flex justify-end'><Link href='/svg-library' className='rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50'>SVG Library</Link></nav>
         {error ? (
           <div className='bg-red-50 border border-red-200 rounded-xl p-6 mb-8 shadow-sm'>
             <div className='flex items-start space-x-4'>
