@@ -6,6 +6,32 @@ type HyperFramesHtmlValidationOptions = {
   durationTolerance?: number;
 };
 
+export function normalizeHyperFramesTimingAttributes(html: string): string {
+  return html.replace(/<[^>]+>/g, (tag) => {
+    if (!/\sdata-end\s*=/i.test(tag)) return tag;
+
+    let normalizedTag = tag;
+    if (!/\sdata-duration\s*=/i.test(normalizedTag)) {
+      const start = Number(
+        normalizedTag.match(/\sdata-start\s*=\s*["']([^"']+)["']/i)?.[1],
+      );
+      const end = Number(
+        normalizedTag.match(/\sdata-end\s*=\s*["']([^"']+)["']/i)?.[1],
+      );
+      if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+        const duration = Number((end - start).toFixed(6)).toString();
+        const closing = normalizedTag.endsWith('/>') ? '/>' : '>';
+        normalizedTag = `${normalizedTag.slice(0, -closing.length)} data-duration="${duration}"${closing}`;
+      }
+    }
+
+    return normalizedTag.replace(
+      /\s+data-end\s*=\s*["'][^"']*["']/gi,
+      '',
+    );
+  });
+}
+
 export function validateHyperFramesHtml(
   html: string,
   options: HyperFramesHtmlValidationOptions = {},

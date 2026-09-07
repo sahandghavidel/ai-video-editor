@@ -7,7 +7,10 @@ import { promisify } from 'util';
 import { NextResponse } from 'next/server';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 import { ensureMinioRunning } from '@/lib/minio-runtime';
-import { validateHyperFramesHtml } from '@/lib/hyperframes-html-validation';
+import {
+  normalizeHyperFramesTimingAttributes,
+  validateHyperFramesHtml,
+} from '@/lib/hyperframes-html-validation';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
 import { listSoundEffects } from '@/lib/sound-effects-storage';
 import { validateSoundEffectCues } from '@/utils/hyperframes-sound-effects';
@@ -182,7 +185,9 @@ export async function POST(request: Request) {
 
     // Keep the saved draft unchanged while making older drafts renderable when
     // they already use GSAP but forgot to load the library.
-    const preparedHtml = ensureGsapScript(sourceHtml);
+    const preparedHtml = ensureGsapScript(
+      normalizeHyperFramesTimingAttributes(sourceHtml),
+    );
     const compositionDuration = Number(preparedHtml.match(/data-duration=["']([0-9.]+)["']/i)?.[1]);
     const soundEffects = await listSoundEffects();
     const validationIssues = [

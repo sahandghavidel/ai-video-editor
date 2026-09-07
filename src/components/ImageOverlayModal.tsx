@@ -44,6 +44,7 @@ import {
 } from './image-overlay-modal/TranscriptionControls';
 import { TextOverlayControls } from './image-overlay-modal/TextOverlayControls';
 import { VideoEditModal } from './VideoEditModal';
+import { HyperFramesEditorModal } from './HyperFramesEditorModal';
 import { AiIntroVideoSectionsModal } from './ai-intro-overlay/AiIntroVideoSectionsModal';
 import type {
   TextStyling,
@@ -861,6 +862,7 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
     string | null
   >(null);
   const [hyperFramesVideoUrl, setHyperFramesVideoUrl] = useState('');
+  const [isHyperFramesEditorOpen, setIsHyperFramesEditorOpen] = useState(false);
   const [isGeneratingSceneImage, setIsGeneratingSceneImage] = useState(false);
   const [sceneImageStatus, setSceneImageStatus] = useState<string | null>(null);
   const [sceneImageProvider, setSceneImageProvider] =
@@ -6307,6 +6309,19 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
                   'Render HF'
                 )}
               </button>
+              <button
+                type='button'
+                onClick={() => setIsHyperFramesEditorOpen(true)}
+                disabled={
+                  isApplying ||
+                  isGeneratingHyperFramesHtml ||
+                  isRenderingHyperFramesVideo
+                }
+                className='px-3 py-1 text-sm font-medium bg-teal-100 hover:bg-teal-200 text-teal-800 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+                title='Open this scene in the visual HyperFrames editor'
+              >
+                Edit HF
+              </button>
               <select
                 value={sceneImageProvider}
                 onChange={(event) => {
@@ -8152,6 +8167,16 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           if (baseVideo) {
             baseVideo.currentTime = Math.max(0, startTime);
           }
+        }}
+      />
+
+      <HyperFramesEditorModal
+        isOpen={isHyperFramesEditorOpen}
+        sceneId={sceneId}
+        onClose={() => setIsHyperFramesEditorOpen(false)}
+        onSaved={(html) => {
+          mergeLocalSceneSnapshot({ field_7367: html });
+          setHyperFramesHtmlStatus('Visual edits saved to HyperFrames HTML');
         }}
       />
 

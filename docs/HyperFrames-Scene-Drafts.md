@@ -26,3 +26,11 @@ FFprobe and is never taken from the original-video `Duration` field
 (`field_6884`). If the final caption timestamp is later, it is used as a
 safety floor. HTML generation probes the final video again, and rendering
 rejects HTML that is shorter than the measured final-video duration.
+
+The `Edit HF` button opens a large visual-editor modal inside Add Image
+Overlay. The server stages the scene HTML and its referenced sound effects in
+a temporary local HyperFrames project, starts HyperFrames Studio 0.8.30 in
+background mode, and embeds Studio in the modal. Studio provides playback,
+scrubbing, element selection, and timeline editing. `Save to Scene` converts
+the staged sound paths back to application paths, validates the edited HTML,
+and updates `field_7367`. Closing the modal stops that scene's preview server.
