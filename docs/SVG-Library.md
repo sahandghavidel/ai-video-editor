@@ -31,6 +31,29 @@ Previews use SVG image context, not inline HTML. Validation errors preserve edit
 contents so the user can correct them. Deletes use Baserow's normal row deletion.
 
 Two original examples, Browser Window and Code Editor Window, are stored as Draft
-assets for review. This page does not change HyperFrames prompts or generation.
-Future prompt integration should load approved assets and include their markup
-and metadata; it is intentionally separate from library management.
+assets for review. The library manager edits assets; prompt integration is described below.
+
+## HyperFrames prompt integration
+
+Individual Image Overlay prompts and shared/batch prompt creation automatically
+append all Approved assets through `/api/svg-library/prompt`. The marked section
+includes asset IDs, names, descriptions, exact SVG markup in JSON, derived
+ViewBox/dimensions, tags, and usage rules. JSON escaping must be decoded when
+embedding markup. Drafts are excluded. An empty approved library explicitly
+allows newly authored scene artwork.
+
+HTML generation refreshes and replaces the marked library section immediately
+before the model request, including older saved prompts. The same prompt is used
+for repair attempts. Refreshing the model prompt does not rewrite the saved scene
+prompt; regenerate that prompt when an updated copy is needed outside the app.
+Existing skip-existing behavior in batch prompt creation is preserved.
+
+Reuse rules preserve asset appearance and use outer wrappers for animation.
+Asset colors override general palette rules for that asset only. Existing timing,
+caption, seek-safety, and strict validation rules are unchanged. Newly generated
+SVGs are not automatically added to the library.
+
+Library load errors, invalid Approved SVGs, and prompts exceeding the conservative
+200,000 UTF-8-byte application limit stop the operation with an error. Nothing is
+silently truncated or omitted. This byte limit is not a provider-specific token
+budget; models with smaller context windows may still reject a request.

@@ -1,5 +1,7 @@
 'use client';
 
+import { attachCurrentSvgLibrary } from '@/utils/hyperframes-svg-library';
+import { attachCurrentSoundEffectsLibrary } from '@/utils/hyperframes-sound-effects';
 import React, {
   useState,
   useRef,
@@ -4387,12 +4389,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
 
       const requiredDuration = Math.max(captionDuration, finalVideoDuration);
-      const prompt = buildHyperFramesPrompt({
-        sentence: sentence || '(scene sentence not available)',
-        previousSceneSentences,
-        sceneDuration: requiredDuration,
-        captionWords,
-      });
+      const prompt = await attachCurrentSoundEffectsLibrary(
+        await attachCurrentSvgLibrary(buildHyperFramesPrompt({
+          sentence: sentence || '(scene sentence not available)',
+          previousSceneSentences,
+          sceneDuration: requiredDuration,
+          captionWords,
+        })),
+      );
 
       const patchRes = await fetch(`/api/baserow/scenes/${sceneId}`, {
         method: 'PATCH',

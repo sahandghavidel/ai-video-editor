@@ -70,3 +70,4 @@ src/data/tts-audio-references.json
 # Track the youtube-cookies README so users know how to export cookies
 !.cache/youtube-cookies/
 !.cache/youtube-cookies/README.md
+public/sound-effects/*

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { execFile } from 'child_process';
-import { mkdtemp, mkdir, rm, stat, writeFile } from 'fs/promises';
+import { copyFile, mkdtemp, mkdir, rm, stat, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
@@ -9,6 +9,8 @@ import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 import { ensureMinioRunning } from '@/lib/minio-runtime';
 import { validateHyperFramesHtml } from '@/lib/hyperframes-html-validation';
 import { uploadToMinio } from '@/utils/ffmpeg-cfr';
+import { listSoundEffects } from '@/lib/sound-effects-storage';
+import { validateSoundEffectCues } from '@/utils/hyperframes-sound-effects';
 
 export const runtime = 'nodejs';
 
@@ -180,8 +182,13 @@ export async function POST(request: Request) {
 
     // Keep the saved draft unchanged while making older drafts renderable when
     // they already use GSAP but forgot to load the library.
-    const renderHtml = ensureGsapScript(sourceHtml);
-    const validationIssues = validateHyperFramesHtml(renderHtml);
+    const preparedHtml = ensureGsapScript(sourceHtml);
+    const compositionDuration = Number(preparedHtml.match(/data-duration=["']([0-9.]+)["']/i)?.[1]);
+    const soundEffects = await listSoundEffects();
+    const validationIssues = [
+      ...validateHyperFramesHtml(preparedHtml),
+      ...validateSoundEffectCues(preparedHtml, soundEffects, compositionDuration),
+    ];
     if (validationIssues.length > 0) {
       return NextResponse.json(
         {
@@ -199,6 +206,15 @@ export async function POST(request: Request) {
     );
     const compositionDirectory = path.join(temporaryProjectRoot, 'compositions');
     await mkdir(compositionDirectory, { recursive: true });
+    const approvedSoundPaths = new Set(soundEffects.filter(sound => sound.status === 'Approved').map(sound => sound.filePath));
+    const referencedSounds = [...preparedHtml.matchAll(/<audio\b[^>]*\bsrc=["'](\/sound-effects\/[a-zA-Z0-9._-]+)["'][^>]*>/gi)].map(match => match[1]);
+    const soundAssetsDirectory = path.join(temporaryProjectRoot, 'assets', 'sound-effects');
+    if (referencedSounds.length) await mkdir(soundAssetsDirectory, { recursive: true });
+    for (const filePath of new Set(referencedSounds)) {
+      if (!approvedSoundPaths.has(filePath)) throw new Error(`Sound effect is not approved: ${filePath}`);
+      await copyFile(path.join(process.cwd(), 'public', filePath), path.join(soundAssetsDirectory, path.basename(filePath)));
+    }
+    const renderHtml = preparedHtml.replace(/(["'])\/sound-effects\//g, '$1assets/sound-effects/');
     await writeFile(path.join(compositionDirectory, 'scene.html'), renderHtml, 'utf8');
     await writeFile(path.join(temporaryProjectRoot, 'index.html'), renderHtml, 'utf8');
     await writeFile(

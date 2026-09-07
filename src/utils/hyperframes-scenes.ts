@@ -1,3 +1,5 @@
+import { attachCurrentSvgLibrary } from '@/utils/hyperframes-svg-library';
+import { attachCurrentSoundEffectsLibrary } from '@/utils/hyperframes-sound-effects';
 import { getSceneById, type BaserowRow } from '@/lib/baserow-actions';
 
 export type HyperFramesCaptionWord = {
@@ -298,15 +300,17 @@ export async function generateAndSaveHyperFramesPrompt(input: {
     0,
     ...captionWords.map((word) => word.end),
   );
-  const prompt = buildHyperFramesPrompt({
-    sentence:
-      getSceneTextField(latestScene, 'field_6890') ||
-      getSceneTextField(latestScene, 'field_6901') ||
-      '(scene sentence not available)',
-    previousSceneSentences: input.previousSceneSentences,
-    sceneDuration: Math.max(captionDuration, finalVideoDuration),
-    captionWords,
-  });
+  const prompt = await attachCurrentSoundEffectsLibrary(
+    await attachCurrentSvgLibrary(buildHyperFramesPrompt({
+      sentence:
+        getSceneTextField(latestScene, 'field_6890') ||
+        getSceneTextField(latestScene, 'field_6901') ||
+        '(scene sentence not available)',
+      previousSceneSentences: input.previousSceneSentences,
+      sceneDuration: Math.max(captionDuration, finalVideoDuration),
+      captionWords,
+    })),
+  );
 
   const patchResponse = await fetch(`/api/baserow/scenes/${input.sceneId}`, {
     method: 'PATCH',
