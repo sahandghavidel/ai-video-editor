@@ -3,6 +3,7 @@ import { mkdir, rename, unlink, writeFile } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { probeVideoDurationSeconds } from '@/lib/ffprobe-video-duration';
+import { measureAudioLevels } from '@/lib/audio-levels';
 import { SOUND_EFFECT_EXTENSIONS, SOUND_EFFECT_MAX_BYTES, type SoundEffect } from '@/lib/sound-effects';
 import { listSoundEffects, soundEffect, soundEffectsRequest } from '@/lib/sound-effects-storage';
 
@@ -36,6 +37,8 @@ function rowBody(input: Omit<SoundEffect, 'id'>) {
     Status: input.status,
     'File Path': input.filePath,
     'Duration (seconds)': input.durationSeconds.toFixed(3),
+    'Measured RMS (dBFS)': input.measuredRmsDbfs?.toFixed(2) ?? null,
+    'True Peak (dBFS)': input.truePeakDbfs?.toFixed(2) ?? null,
     'Default Volume (dB)': input.defaultVolumeDb.toFixed(1),
     'Sync Point (seconds)': input.syncPointSeconds.toFixed(3),
     Tags: input.tags,
@@ -87,6 +90,8 @@ async function save(request: NextRequest, updating: boolean) {
       description: text(form, 'description', 10000),
       filePath: existing?.filePath || '',
       durationSeconds: existing?.durationSeconds || 0,
+      measuredRmsDbfs: existing?.measuredRmsDbfs ?? null,
+      truePeakDbfs: existing?.truePeakDbfs ?? null,
       defaultVolumeDb,
       syncPointSeconds,
       tags: text(form, 'tags', 2000),
@@ -111,6 +116,9 @@ async function save(request: NextRequest, updating: boolean) {
       await writeFile(temporaryPath, Buffer.from(await upload.arrayBuffer()), { flag: 'wx' });
       try {
         input.durationSeconds = await probeVideoDurationSeconds(temporaryPath);
+        const levels = await measureAudioLevels(temporaryPath);
+        input.measuredRmsDbfs = levels.measuredRmsDbfs;
+        input.truePeakDbfs = levels.truePeakDbfs;
         if (input.syncPointSeconds > input.durationSeconds) throw new Error('Sync point cannot be later than the audio duration.');
         await rename(temporaryPath, savedPath);
       } catch (error) {
@@ -118,8 +126,15 @@ async function save(request: NextRequest, updating: boolean) {
         throw error;
       }
       input.filePath = `/sound-effects/${fileName}`;
-    } else if (input.syncPointSeconds > input.durationSeconds) {
-      throw new Error('Sync point cannot be later than the audio duration.');
+    } else {
+      if (input.syncPointSeconds > input.durationSeconds) throw new Error('Sync point cannot be later than the audio duration.');
+      if (input.measuredRmsDbfs === null || input.truePeakDbfs === null) {
+        const existingPath = localFilePath(input.filePath);
+        if (!existingPath) throw new Error('Stored audio path is invalid.');
+        const levels = await measureAudioLevels(existingPath);
+        input.measuredRmsDbfs = levels.measuredRmsDbfs;
+        input.truePeakDbfs = levels.truePeakDbfs;
+      }
     }
 
     const response = await soundEffectsRequest(`${updating ? `${id}/` : ''}?user_field_names=true`, {

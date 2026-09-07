@@ -31,6 +31,8 @@ export function soundEffect(row: Record<string, unknown>): SoundEffect {
     description: String(row.Description || ''),
     filePath: String(row['File Path'] || ''),
     durationSeconds: number(row['Duration (seconds)']),
+    measuredRmsDbfs: row['Measured RMS (dBFS)'] === null || row['Measured RMS (dBFS)'] === '' ? null : number(row['Measured RMS (dBFS)']),
+    truePeakDbfs: row['True Peak (dBFS)'] === null || row['True Peak (dBFS)'] === '' ? null : number(row['True Peak (dBFS)']),
     defaultVolumeDb: number(row['Default Volume (dB)'], -18),
     syncPointSeconds: number(row['Sync Point (seconds)']),
     tags: String(row.Tags || ''),

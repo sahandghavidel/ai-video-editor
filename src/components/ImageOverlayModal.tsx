@@ -4389,8 +4389,8 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
       }
 
       const requiredDuration = Math.max(captionDuration, finalVideoDuration);
-      const prompt = await attachCurrentSoundEffectsLibrary(
-        await attachCurrentSvgLibrary(buildHyperFramesPrompt({
+      const prompt = await attachCurrentSvgLibrary(
+        await attachCurrentSoundEffectsLibrary(buildHyperFramesPrompt({
           sentence: sentence || '(scene sentence not available)',
           previousSceneSentences,
           sceneDuration: requiredDuration,
@@ -4412,9 +4412,14 @@ export const ImageOverlayModal: React.FC<ImageOverlayModalProps> = ({
           `Failed to save HyperFrames prompt: ${patchRes.status} ${t}`,
         );
       }
+      const savedScene = (await patchRes.json().catch(() => null)) as
+        | Record<string, unknown>
+        | null;
+      const savedPrompt =
+        getSceneStringField(savedScene, 'field_7365') || prompt;
 
       setWordAssets(latestAssets);
-      mergeLocalSceneSnapshot({ field_7365: prompt });
+      mergeLocalSceneSnapshot({ field_7365: savedPrompt });
       setHyperFramesPromptStatus('Prompt saved to HyperFrames Prompt');
       window.setTimeout(() => setHyperFramesPromptStatus(null), 3500);
     } catch (error) {

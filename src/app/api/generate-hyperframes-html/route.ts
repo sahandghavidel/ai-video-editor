@@ -3,7 +3,7 @@ import { attachSvgLibrary, buildSvgLibrarySection } from '@/utils/hyperframes-sv
 import { listSoundEffects } from '@/lib/sound-effects-storage';
 import { attachSoundEffectsLibrary, buildSoundEffectsSection, validateSoundEffectCues } from '@/utils/hyperframes-sound-effects';
 import { execFile } from 'child_process';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
@@ -144,9 +144,19 @@ async function getHyperFramesStrictLintIssues(html: string): Promise<string[]> {
   );
 
   try {
+    const referencedSounds = [...html.matchAll(/<audio\b[^>]*\bsrc=["'](\/sound-effects\/[a-zA-Z0-9._-]+)["'][^>]*>/gi)].map(match => match[1]);
+    const soundAssetsDirectory = path.join(temporaryProjectRoot, 'assets', 'sound-effects');
+    if (referencedSounds.length) await mkdir(soundAssetsDirectory, { recursive: true });
+    for (const filePath of new Set(referencedSounds)) {
+      await copyFile(
+        path.join(process.cwd(), 'public', filePath),
+        path.join(soundAssetsDirectory, path.basename(filePath)),
+      );
+    }
+    const lintHtml = html.replace(/(["'])\/sound-effects\//g, '$1assets/sound-effects/');
     await writeFile(
       path.join(temporaryProjectRoot, 'index.html'),
-      html,
+      lintHtml,
       'utf8',
     );
 
@@ -265,9 +275,9 @@ export async function POST(request: Request) {
       parsePromptDuration(hyperFramesPrompt),
     );
     const soundEffects = await listSoundEffects();
-    const promptForModel = attachSoundEffectsLibrary(
-      attachSvgLibrary(hyperFramesPrompt, buildSvgLibrarySection(await listSvgAssets())),
-      buildSoundEffectsSection(soundEffects),
+    const promptForModel = attachSvgLibrary(
+      attachSoundEffectsLibrary(hyperFramesPrompt, buildSoundEffectsSection(soundEffects)),
+      buildSvgLibrarySection(await listSvgAssets()),
     );
     const systemPromptForModel = `${HYPERFRAMES_HTML_SYSTEM_PROMPT} For this scene, set the root data-duration="${requiredDuration.toFixed(3)}" exactly and hold the final visual state until ${requiredDuration.toFixed(3)} seconds.`;
 

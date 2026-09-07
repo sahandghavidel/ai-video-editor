@@ -300,8 +300,8 @@ export async function generateAndSaveHyperFramesPrompt(input: {
     0,
     ...captionWords.map((word) => word.end),
   );
-  const prompt = await attachCurrentSoundEffectsLibrary(
-    await attachCurrentSvgLibrary(buildHyperFramesPrompt({
+  const prompt = await attachCurrentSvgLibrary(
+    await attachCurrentSoundEffectsLibrary(buildHyperFramesPrompt({
       sentence:
         getSceneTextField(latestScene, 'field_6890') ||
         getSceneTextField(latestScene, 'field_6901') ||

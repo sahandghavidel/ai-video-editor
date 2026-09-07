@@ -12,6 +12,8 @@ Baserow attachments or in MinIO.
 | Status | 7380 | Single select; Draft (3133), Approved (3134); default Draft |
 | File Path | 7381 | Text; app-relative path |
 | Duration (seconds) | 7382 | Nonnegative number, 3 decimals; measured from file |
+| Measured RMS (dBFS) | 7389 | Signed number, 2 decimals; measured from file |
+| True Peak (dBFS) | 7390 | Signed number, 2 decimals; measured from file |
 | Default Volume (dB) | 7383 | Signed number, 1 decimal; default -18 |
 | Sync Point (seconds) | 7384 | Nonnegative number, 3 decimals; default 0 |
 | Tags | 7385 | Text; comma-separated |
@@ -26,7 +28,8 @@ place file start at visual event time minus Sync Point and handle negative start
 explicitly. Default 0 aligns file start to the event.
 
 Uploads support WAV, MP3, M4A, AAC, FLAC, OGG, OPUS, AIFF, and AIF files up to
-25 MB. FFprobe measures duration before the Baserow row is saved. Replacing audio
+25 MB. FFprobe measures duration and FFmpeg measures RMS and peak levels before
+the Baserow row is saved. Replacing audio
 refreshes the measurement and returns the sound to Draft. Deleting an entry removes
 its Baserow row and its managed local file. File Path and Duration are server-controlled.
 

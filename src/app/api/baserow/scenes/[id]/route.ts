@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
+import { listSoundEffects } from '@/lib/sound-effects-storage';
+import { listSvgAssets } from '@/lib/svg-library-storage';
+import { attachSoundEffectsLibrary, buildSoundEffectsSection } from '@/utils/hyperframes-sound-effects';
+import { attachSvgLibrary, buildSvgLibrarySection } from '@/utils/hyperframes-svg-library';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +25,7 @@ const FLAGGED_FIELD_ID = 7096;
 const FLAGGED_FIELD_KEY = 'field_7096';
 const SENTENCE_FIELD_KEY = 'field_6890';
 const TTS_AUDIO_FIELD_KEY = 'field_6891';
+const HYPERFRAMES_PROMPT_FIELD_KEY = 'field_7365';
 // Legacy: hasText (7097) was a single-select field (true/false). We keep
 // normalization for backwards compatibility if any older clients still send it.
 // New: hasText (7099) is a single-line text field (e.g. "true|<imageUrl>") and
@@ -287,6 +292,15 @@ export async function PATCH(
       string,
       unknown
     >;
+    if (typeof body[HYPERFRAMES_PROMPT_FIELD_KEY] === 'string' && body[HYPERFRAMES_PROMPT_FIELD_KEY].trim()) {
+      body[HYPERFRAMES_PROMPT_FIELD_KEY] = attachSvgLibrary(
+        attachSoundEffectsLibrary(
+          body[HYPERFRAMES_PROMPT_FIELD_KEY],
+          buildSoundEffectsSection(await listSoundEffects()),
+        ),
+        buildSvgLibrarySection(await listSvgAssets()),
+      );
+    }
     const baserowUrl = process.env.BASEROW_API_URL;
 
     if (!baserowUrl) {

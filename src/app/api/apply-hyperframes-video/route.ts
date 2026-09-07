@@ -89,6 +89,16 @@ function parseDurationSeconds(probe: FFprobeOutput): number {
   return duration;
 }
 
+function parseVideoDurationSeconds(probe: FFprobeOutput): number {
+  const videoDuration = Number(
+    probe.streams?.find((stream) => stream.codec_type === 'video')?.duration,
+  );
+  if (Number.isFinite(videoDuration) && videoDuration > 0) {
+    return videoDuration;
+  }
+  return parseDurationSeconds(probe);
+}
+
 function getVideoDimensions(probe: FFprobeOutput) {
   const video = probe.streams?.find((stream) => stream.codec_type === 'video');
   const width = Number(video?.width);
@@ -131,6 +141,17 @@ function getVideoFrameRate(probe: FFprobeOutput): number {
 
 function hasAudioStream(probe: FFprobeOutput): boolean {
   return Boolean(probe.streams?.some((stream) => stream.codec_type === 'audio'));
+}
+
+function buildAtempoChain(speed: number): string {
+  if (!Number.isFinite(speed) || speed <= 0) throw new Error('Invalid audio speed factor');
+  const parts: number[] = [];
+  let remaining = speed;
+  while (remaining > 2 + 1e-9) { parts.push(2); remaining /= 2; }
+  while (remaining < 0.5 - 1e-9) { parts.push(0.5); remaining /= 0.5; }
+  const remainder = Math.max(0.5, Math.min(2, remaining));
+  if (Math.abs(remainder - 1) > 1e-6) parts.push(remainder);
+  return parts.length ? parts.map(part => `atempo=${part.toFixed(6)}`).join(',') : 'anull';
 }
 
 function getUrlField(scene: BaserowRow, fieldKey: string): string {
@@ -281,6 +302,7 @@ export async function POST(request: Request) {
     const finalFrameRate = getVideoFrameRate(finalProbe);
     const hyperFramesFrameRate = getVideoFrameRate(hyperFramesProbe);
     const finalHasAudio = hasAudioStream(finalProbe);
+    const hyperFramesHasAudio = hasAudioStream(hyperFramesProbe);
     const frameTolerance = 1 / finalFrameRate + 0.005;
     const stretchFactor = finalDuration / hyperFramesDuration;
     if (!Number.isFinite(stretchFactor) || stretchFactor <= 0) {
@@ -303,11 +325,26 @@ export async function POST(request: Request) {
     const overlayPreparation = dimensionsMatch
       ? 'format=rgba'
       : `scale=w=${width}:h=${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba`;
+    const outputSampleRate = 48000;
+    const outputChannelLayout = 'stereo';
+    const audioSpeed = hyperFramesDuration / finalDuration;
+    const audioTempo = buildAtempoChain(audioSpeed);
+    const baseAudio = finalHasAudio
+      ? `[0:a]aresample=${outputSampleRate},aformat=channel_layouts=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[baseAudio]`
+      : `anullsrc=r=${outputSampleRate}:cl=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[baseAudio]`;
+    const hyperFramesAudio = hyperFramesHasAudio
+      ? `[1:a]${audioTempo},aresample=${outputSampleRate},aformat=channel_layouts=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[hyperFramesAudio]`
+      : `anullsrc=r=${outputSampleRate}:cl=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[hyperFramesAudio]`;
+    const audioTailPadDuration = 0.25;
     const filterComplex = [
       `[1:v]trim=start=0:end=${hyperFramesDuration.toFixed(6)},setpts=PTS-STARTPTS[source]`,
       `[source]setpts=(PTS-STARTPTS)*${stretchFactor.toFixed(8)},tpad=stop_mode=clone:stop_duration=${overlayTailPadDuration.toFixed(8)},${overlayPreparation}[overlay]`,
       `[0:v][overlay]overlay=x=0:y=0:enable='gte(t\\,0)*lte(t\\,${finalDuration.toFixed(6)})':eof_action=repeat:repeatlast=1[composited]`,
       `[composited]trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[vout]`,
+      baseAudio,
+      hyperFramesAudio,
+      '[baseAudio][hyperFramesAudio]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98[mixedAudio]',
+      `[mixedAudio]apad=pad_dur=${audioTailPadDuration},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[aout]`,
     ].join(';');
 
     const ffmpegArgs = [
@@ -323,11 +360,13 @@ export async function POST(request: Request) {
       '-map',
       '[vout]',
       '-map',
-      '0:a?',
+      '[aout]',
       '-t',
       finalDuration.toFixed(6),
       '-c:a',
-      'copy',
+      'aac',
+      '-b:a',
+      '192k',
       '-c:v',
       'libx264',
       '-preset',
@@ -350,11 +389,12 @@ export async function POST(request: Request) {
 
     const outputProbe = await probeVideo(outputPath);
     const outputDuration = parseDurationSeconds(outputProbe);
+    const outputVideoDuration = parseVideoDurationSeconds(outputProbe);
     const outputDimensions = getVideoDimensions(outputProbe);
     const outputFrameRate = getVideoFrameRate(outputProbe);
-    if (Math.abs(outputDuration - finalDuration) > frameTolerance) {
+    if (Math.abs(outputVideoDuration - finalDuration) > frameTolerance) {
       throw new Error(
-        `Output duration ${outputDuration.toFixed(6)} does not match final duration ${finalDuration.toFixed(6)}`,
+        `Output video duration ${outputVideoDuration.toFixed(6)} does not match final duration ${finalDuration.toFixed(6)}`,
       );
     }
     if (outputDimensions.width !== width || outputDimensions.height !== height) {
@@ -363,8 +403,8 @@ export async function POST(request: Request) {
     if (Math.abs(outputFrameRate - finalFrameRate) > 0.02) {
       throw new Error('Output frame rate does not match the final video');
     }
-    if (finalHasAudio && !hasAudioStream(outputProbe)) {
-      throw new Error('Output is missing the final video audio');
+    if ((finalHasAudio || hyperFramesHasAudio) && !hasAudioStream(outputProbe)) {
+      throw new Error('Output is missing the mixed narration and HyperFrames audio');
     }
 
     const filename = appliedFilename;
@@ -378,7 +418,11 @@ export async function POST(request: Request) {
       hyperFramesVideoUrl,
       finalDuration,
       hyperFramesDuration,
+      outputDuration,
+      outputVideoDuration,
       stretchFactor,
+      finalHasAudio,
+      hyperFramesHasAudio,
       outputMode: 'image-overlay-compatible',
       filename,
       skipped: false,

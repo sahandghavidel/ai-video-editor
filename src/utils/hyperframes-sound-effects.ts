@@ -20,7 +20,7 @@ export function buildSoundEffectsSection(sounds: SoundEffect[]): string {
       throw new Error(`Approved sound “${sound.name}” has no valid measured duration. Replace its file or return it to Draft.`);
     }
     const linearVolume = Math.min(1, Math.max(0, 10 ** (sound.defaultVolumeDb / 20)));
-    return { id: sound.id, name: sound.name, description: sound.description, filePath: sound.filePath, durationSeconds: sound.durationSeconds, defaultVolumeDb: sound.defaultVolumeDb, linearVolume: Number(linearVolume.toFixed(4)), syncPointSeconds: sound.syncPointSeconds, tags: sound.tags, usageRules: sound.usageRules, sourceCredit: sound.sourceCredit, license: sound.license };
+    return { id: sound.id, name: sound.name, description: sound.description, filePath: sound.filePath, durationSeconds: sound.durationSeconds, measuredRmsDbfs: sound.measuredRmsDbfs, truePeakDbfs: sound.truePeakDbfs, defaultVolumeDb: sound.defaultVolumeDb, linearVolume: Number(linearVolume.toFixed(4)), syncPointSeconds: sound.syncPointSeconds, tags: sound.tags, usageRules: sound.usageRules, sourceCredit: sound.sourceCredit, license: sound.license };
   });
   const section = `${START}
 Sound Effects Library — ${entries.length} approved sounds.

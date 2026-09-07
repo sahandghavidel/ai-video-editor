@@ -6,6 +6,8 @@ export type SoundEffect = {
   description: string;
   filePath: string;
   durationSeconds: number;
+  measuredRmsDbfs: number | null;
+  truePeakDbfs: number | null;
   defaultVolumeDb: number;
   syncPointSeconds: number;
   tags: string;
