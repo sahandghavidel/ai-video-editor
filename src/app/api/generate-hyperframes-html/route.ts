@@ -36,7 +36,7 @@ const FINAL_VIDEO_FIELD_KEY = 'field_6886';
 const HYPERFRAMES_PROMPT_FIELD_KEY = 'field_7365';
 const HYPERFRAMES_HTML_FIELD_KEY = 'field_7367';
 const HYPERFRAMES_VERSION = '0.7.63';
-const HYPERFRAMES_LINT_TIMEOUT_MS = 60 * 1000;
+const HYPERFRAMES_CHECK_TIMEOUT_MS = 90 * 1000;
 const HYPERFRAMES_HTML_SYSTEM_PROMPT = `You are an expert HyperFrames HTML composition author. Return ONLY one complete editable standalone HyperFrames HTML source. Do not use Markdown code fences, explanations, headings, plans, or commentary.
 
 The output MUST be a complete standards-mode document, never an HTML fragment. It must contain <!DOCTYPE html>, <html>, <head>, <meta charset="UTF-8">, and <body>. Do not wrap the standalone composition root in <template>.
@@ -64,7 +64,7 @@ Use this required outer structure and preserve its registration sequence:
 
 The root data-composition-id and window.__timelines registry key MUST match exactly. Initialize window.__timelines, create exactly one paused GSAP timeline synchronously, and assign that exact timeline to the registry immediately after creation. Merely creating the timeline is not registration. Never put timeline creation or registration inside a callback, event listener, promise, async function, timeout, or conditional.
 
-The root MUST be a 16:9 landscape 4K composition with data-composition-id, data-start, data-duration, data-width="3840", and data-height="2160". Never return a square or portrait composition. Set the root data-duration to the exact numeric duration supplied in this system message. Do not use any external scene-duration field or invent a shorter duration. Every timed visible unit must be a direct-child class="clip" with a unique stable id, data-start, data-duration, and data-track-index. The GSAP CDN script shown above is the only allowed external script. Drive motion through the paused timeline.
+The root MUST be a 16:9 landscape 4K composition with data-composition-id, data-start, data-duration, data-width="3840", and data-height="2160". Never return a square or portrait composition. Treat 3840 x 2160 as a hard canvas boundary. Keep every important visible object fully inside the safe rectangle x=180..3660 and y=120..2040, including its complete transformed bounding box, SVG stroke, and shadow. An object may cross the canvas edge only while it is intentionally entering or exiting; every settled or held visible state must fit inside the safe rectangle. Set the root data-duration to the exact numeric duration supplied in this system message. Do not use any external scene-duration field or invent a shorter duration. Every timed visible unit must be a direct-child class="clip" with a unique stable id, data-start, data-duration, and data-track-index. The GSAP CDN script shown above is the only allowed external script. Drive motion through the paused timeline.
 
 Never create overlapping GSAP tweens that change the same property on the same target. When properties share timing, combine them into one tween. Otherwise sequence them with distinct non-overlapping time ranges or use overwrite: "auto". Do not start a later tween at a boundary that the linter treats as overlapping with the earlier tween. Before returning the HTML, audit every target/property pair for overlapping time ranges.
 
@@ -138,9 +138,9 @@ function cleanHyperFramesOutput(raw: string): string {
     .trim();
 }
 
-async function getHyperFramesStrictLintIssues(html: string): Promise<string[]> {
+async function getHyperFramesPreflightIssues(html: string): Promise<string[]> {
   const temporaryProjectRoot = await mkdtemp(
-    path.join(os.tmpdir(), 'ultimate-video-editr-hyperframes-lint-'),
+    path.join(os.tmpdir(), 'ultimate-video-editr-hyperframes-check-'),
   );
 
   try {
@@ -153,10 +153,10 @@ async function getHyperFramesStrictLintIssues(html: string): Promise<string[]> {
         path.join(soundAssetsDirectory, path.basename(filePath)),
       );
     }
-    const lintHtml = html.replace(/(["'])\/sound-effects\//g, '$1assets/sound-effects/');
+    const stagedHtml = html.replace(/(["'])\/sound-effects\//g, '$1assets/sound-effects/');
     await writeFile(
       path.join(temporaryProjectRoot, 'index.html'),
-      lintHtml,
+      stagedHtml,
       'utf8',
     );
 
@@ -166,33 +166,49 @@ async function getHyperFramesStrictLintIssues(html: string): Promise<string[]> {
         [
           '--yes',
           `hyperframes@${HYPERFRAMES_VERSION}`,
-          'lint',
+          'check',
           temporaryProjectRoot,
+          '--json',
+          '--samples=9',
+          '--at-transitions',
+          '--tolerance=2',
+          '--max-issues=80',
+          '--strict',
+          '--no-contrast',
+          '--frame-check=severity=error;seek=.2,.35,.5,.65,.8;tol=2',
         ],
         {
           cwd: temporaryProjectRoot,
-          timeout: HYPERFRAMES_LINT_TIMEOUT_MS,
+          timeout: HYPERFRAMES_CHECK_TIMEOUT_MS,
           maxBuffer: 5 * 1024 * 1024,
         },
       );
+      const jsonOutput = cleanHyperFramesOutput(stdout);
       const output = cleanHyperFramesOutput(`${stdout}\n${stderr}`);
-      return /(^|\n)\s*[✗⚠]/u.test(output) ? [output] : [];
+      if (!jsonOutput) return output ? [output] : [];
+      try {
+        const jsonStart = jsonOutput.indexOf('{');
+        const result = JSON.parse(jsonOutput.slice(jsonStart)) as { ok?: unknown };
+        return result.ok === false ? [jsonOutput.slice(jsonStart)] : [];
+      } catch {
+        return [output];
+      }
     } catch (error) {
-      const lintError = error as {
+      const checkError = error as {
         message?: unknown;
         stdout?: unknown;
         stderr?: unknown;
       };
       const output = cleanHyperFramesOutput(
-        [lintError.stdout, lintError.stderr]
+        [checkError.stdout, checkError.stderr]
           .filter((value): value is string => typeof value === 'string')
           .join('\n'),
       );
       return [
         output ||
-          (typeof lintError.message === 'string'
-            ? lintError.message
-            : 'HyperFrames lint failed'),
+          (typeof checkError.message === 'string'
+            ? checkError.message
+            : 'HyperFrames preflight failed'),
       ];
     }
   } finally {
@@ -357,8 +373,8 @@ export async function POST(request: Request) {
       );
     }
 
-    let lintIssues = await getHyperFramesStrictLintIssues(html);
-    if (lintIssues.length > 0) {
+    let preflightIssues = await getHyperFramesPreflightIssues(html);
+    if (preflightIssues.length > 0) {
       const lintRepairCompletion = await openaiClient.chat.completions.create({
         model: effectiveModel,
         messages: [
@@ -370,7 +386,7 @@ export async function POST(request: Request) {
           { role: 'assistant', content: html },
           {
             role: 'user',
-            content: `Repair every issue from the pinned HyperFrames strict lint preflight while preserving the composition's design, timings, duration, and complete document structure. For gsap_exit_missing_hard_kill, add a zero-duration tl.set() for the reported non-clip selector at the exact positive-time end of its exit tween, for example tl.set(".card", { opacity: 0 }, 7.3);. Never target a .clip element, and do not add an initial-hidden tl.set() at timeline position 0. HyperFrames lint findings:\n${lintIssues.join('\n\n')}\nReturn the complete corrected HTML only.`,
+            content: `Repair every issue from the pinned HyperFrames browser preflight while preserving the composition's design, timings, duration, and complete document structure. For frame_out_of_frame, use the reported selector, timestamp, bounding box, and overflow to resize or reposition the object so its settled visible state is fully inside x=180..3660 and y=120..2040 on the 3840 x 2160 canvas. Account for transforms, SVG strokes, and shadows. Keep an off-canvas position only when it is an intentional entrance or exit. For gsap_exit_missing_hard_kill, add a zero-duration tl.set() for the reported non-clip selector at the exact positive-time end of its exit tween, for example tl.set(".card", { opacity: 0 }, 7.3);. Never target a .clip element, and do not add an initial-hidden tl.set() at timeline position 0. HyperFrames preflight findings:\n${preflightIssues.join('\n\n')}\nReturn the complete corrected HTML only.`,
           },
         ],
         temperature: 0.1,
@@ -387,14 +403,14 @@ export async function POST(request: Request) {
       }
 
       validationIssues = validateGeneratedHtml(html);
-      lintIssues =
+      preflightIssues =
         validationIssues.length === 0
-          ? await getHyperFramesStrictLintIssues(html)
+          ? await getHyperFramesPreflightIssues(html)
           : [];
     }
 
-    if (validationIssues.length > 0 || lintIssues.length > 0) {
-      const finalIssues = [...validationIssues, ...lintIssues];
+    if (validationIssues.length > 0 || preflightIssues.length > 0) {
+      const finalIssues = [...validationIssues, ...preflightIssues];
       return NextResponse.json(
         {
           error: `The LLM returned HyperFrames HTML that still fails the generation preflight: ${finalIssues.join('; ')}. Generate it again using the HyperFrames rules.`,

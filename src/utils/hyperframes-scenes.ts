@@ -182,6 +182,8 @@ Requirements:
 - Return only one complete standalone editable HyperFrames HTML composition.
 - Return a complete standards-mode HTML document beginning with <!DOCTYPE html> and containing <html>, <head>, <meta charset="UTF-8">, and <body>. Never return a fragment and never wrap the standalone composition in <template>.
 - Use a 16:9 landscape 4K root element with data-composition-id, data-start="0", data-duration="${requiredDuration}", data-width="3840", and data-height="2160". Never use a square or portrait canvas.
+- Treat 3840 x 2160 as a hard canvas boundary. Keep every important visible object fully inside the safe rectangle x=180..3660 and y=120..2040, including its complete transformed bounding box, SVG stroke, and shadow.
+- An object may cross a canvas edge only while it is intentionally entering or exiting. At every settled or held state, the complete visible object must be inside the safe rectangle. Audit the opening, every animation boundary, every held state, and the final frame before returning the HTML.
 - Put every timed visible unit in a direct-child element with class="clip", data-start, data-duration, and data-track-index attributes.
 - Use one stable root composition id such as "scene". That id and the window.__timelines registry key must match exactly.
 - Register exactly one synchronously-created paused GSAP timeline using this exact sequence immediately after the GSAP script loads: window.__timelines = window.__timelines || {}; const tl = gsap.timeline({ paused: true }); window.__timelines["scene"] = tl;. Merely creating tl is not registration. Never create or register it inside a callback, event listener, promise, async function, timeout, or conditional.

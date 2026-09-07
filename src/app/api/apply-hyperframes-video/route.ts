@@ -25,6 +25,11 @@ type BaserowRow = {
 
 type FFprobeStream = {
   codec_type?: string;
+  codec_name?: string;
+  bit_rate?: string | number;
+  sample_rate?: string | number;
+  channels?: number;
+  channel_layout?: string;
   width?: number;
   height?: number;
   duration?: string | number;
@@ -141,6 +146,31 @@ function getVideoFrameRate(probe: FFprobeOutput): number {
 
 function hasAudioStream(probe: FFprobeOutput): boolean {
   return Boolean(probe.streams?.some((stream) => stream.codec_type === 'audio'));
+}
+
+function getAudioProfile(probe: FFprobeOutput) {
+  const audio = probe.streams?.find((stream) => stream.codec_type === 'audio');
+  const channels = Number(audio?.channels);
+  const sampleRate = Number(audio?.sample_rate);
+  const bitRate = Number(audio?.bit_rate);
+  const normalizedChannels = Number.isFinite(channels) && channels > 0 ? channels : 2;
+
+  return {
+    codec:
+      typeof audio?.codec_name === 'string' && audio.codec_name.trim()
+        ? audio.codec_name.trim()
+        : 'aac',
+    sampleRate:
+      Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : 48000,
+    channels: normalizedChannels,
+    channelLayout:
+      typeof audio?.channel_layout === 'string' && audio.channel_layout.trim()
+        ? audio.channel_layout.trim()
+        : normalizedChannels === 1
+          ? 'mono'
+          : 'stereo',
+    bitRate: Number.isFinite(bitRate) && bitRate > 0 ? bitRate : 128000,
+  };
 }
 
 function buildAtempoChain(speed: number): string {
@@ -303,6 +333,7 @@ export async function POST(request: Request) {
     const hyperFramesFrameRate = getVideoFrameRate(hyperFramesProbe);
     const finalHasAudio = hasAudioStream(finalProbe);
     const hyperFramesHasAudio = hasAudioStream(hyperFramesProbe);
+    const originalAudio = getAudioProfile(finalProbe);
     const frameTolerance = 1 / finalFrameRate + 0.005;
     const stretchFactor = finalDuration / hyperFramesDuration;
     if (!Number.isFinite(stretchFactor) || stretchFactor <= 0) {
@@ -325,27 +356,42 @@ export async function POST(request: Request) {
     const overlayPreparation = dimensionsMatch
       ? 'format=rgba'
       : `scale=w=${width}:h=${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba`;
-    const outputSampleRate = 48000;
-    const outputChannelLayout = 'stereo';
-    const audioSpeed = hyperFramesDuration / finalDuration;
-    const audioTempo = buildAtempoChain(audioSpeed);
-    const baseAudio = finalHasAudio
-      ? `[0:a]aresample=${outputSampleRate},aformat=channel_layouts=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[baseAudio]`
-      : `anullsrc=r=${outputSampleRate}:cl=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[baseAudio]`;
-    const hyperFramesAudio = hyperFramesHasAudio
-      ? `[1:a]${audioTempo},aresample=${outputSampleRate},aformat=channel_layouts=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[hyperFramesAudio]`
-      : `anullsrc=r=${outputSampleRate}:cl=${outputChannelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[hyperFramesAudio]`;
     const audioTailPadDuration = 0.25;
-    const filterComplex = [
+    const videoFilters = [
       `[1:v]trim=start=0:end=${hyperFramesDuration.toFixed(6)},setpts=PTS-STARTPTS[source]`,
       `[source]setpts=(PTS-STARTPTS)*${stretchFactor.toFixed(8)},tpad=stop_mode=clone:stop_duration=${overlayTailPadDuration.toFixed(8)},${overlayPreparation}[overlay]`,
       `[0:v][overlay]overlay=x=0:y=0:enable='gte(t\\,0)*lte(t\\,${finalDuration.toFixed(6)})':eof_action=repeat:repeatlast=1[composited]`,
       `[composited]trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[vout]`,
-      baseAudio,
-      hyperFramesAudio,
-      '[baseAudio][hyperFramesAudio]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98[mixedAudio]',
-      `[mixedAudio]apad=pad_dur=${audioTailPadDuration},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[aout]`,
-    ].join(';');
+    ];
+
+    // The ordinary Add Image Overlay path stream-copies narration whenever it
+    // does not need to mix a sound. Do the same here. If HF has effects, match
+    // the narration's native audio profile, limit only the effects, and leave
+    // the narration itself at unity gain without a post-mix limiter.
+    const audioDurationDelta = Math.abs(hyperFramesDuration - finalDuration);
+    const audioDurationTolerance = Math.max(0.1, finalDuration * 0.005);
+    const shouldRetimeHyperFramesAudio =
+      audioDurationDelta > audioDurationTolerance;
+    const audioTempo = shouldRetimeHyperFramesAudio
+      ? `${buildAtempoChain(hyperFramesDuration / finalDuration)},`
+      : '';
+    const mixedAudioBitrate = Math.min(
+      512000,
+      Math.max(
+        originalAudio.bitRate,
+        originalAudio.channels === 1 ? 96000 : 192000,
+      ),
+    );
+    const audioFilters = hyperFramesHasAudio
+      ? [
+          finalHasAudio
+            ? `[0:a]atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB,aresample=${originalAudio.sampleRate},aformat=channel_layouts=${originalAudio.channelLayout}[baseAudio]`
+            : `anullsrc=r=${originalAudio.sampleRate}:cl=${originalAudio.channelLayout},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[baseAudio]`,
+          `[1:a]${audioTempo}aresample=${originalAudio.sampleRate},aformat=channel_layouts=${originalAudio.channelLayout},alimiter=limit=0.95:level=false:latency=true,apad=pad_dur=${audioTailPadDuration},atrim=0:${finalDuration.toFixed(6)},asetpts=N/SR/TB[hyperFramesAudio]`,
+          '[baseAudio][hyperFramesAudio]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
+        ]
+      : [];
+    const filterComplex = [...videoFilters, ...audioFilters].join(';');
 
     const ffmpegArgs = [
       '-hide_banner',
@@ -360,13 +406,21 @@ export async function POST(request: Request) {
       '-map',
       '[vout]',
       '-map',
-      '[aout]',
+      hyperFramesHasAudio ? '[aout]' : '0:a:0?',
       '-t',
       finalDuration.toFixed(6),
       '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
+      hyperFramesHasAudio ? originalAudio.codec : 'copy',
+      ...(hyperFramesHasAudio
+        ? [
+            '-b:a',
+            `${Math.round(mixedAudioBitrate / 1000)}k`,
+            '-ar',
+            String(originalAudio.sampleRate),
+            '-ac',
+            String(originalAudio.channels),
+          ]
+        : []),
       '-c:v',
       'libx264',
       '-preset',
@@ -406,6 +460,14 @@ export async function POST(request: Request) {
     if ((finalHasAudio || hyperFramesHasAudio) && !hasAudioStream(outputProbe)) {
       throw new Error('Output is missing the mixed narration and HyperFrames audio');
     }
+    const outputAudio = getAudioProfile(outputProbe);
+    if (
+      finalHasAudio &&
+      (outputAudio.sampleRate !== originalAudio.sampleRate ||
+        outputAudio.channels !== originalAudio.channels)
+    ) {
+      throw new Error('Output audio profile does not match the original narration');
+    }
 
     const filename = appliedFilename;
     const videoUrl = await uploadToMinio(outputPath, filename, 'video/mp4');
@@ -423,6 +485,11 @@ export async function POST(request: Request) {
       stretchFactor,
       finalHasAudio,
       hyperFramesHasAudio,
+      audioMode: hyperFramesHasAudio
+        ? 'effects-mixed-with-original-profile'
+        : 'original-stream-copy',
+      shouldRetimeHyperFramesAudio,
+      originalAudio,
       outputMode: 'image-overlay-compatible',
       filename,
       skipped: false,
