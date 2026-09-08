@@ -326,6 +326,7 @@ export async function POST(request: Request) {
       probeVideo(hyperFramesPath),
     ]);
     const finalDuration = parseDurationSeconds(finalProbe);
+    const finalVideoDuration = parseVideoDurationSeconds(finalProbe);
     const hyperFramesDuration = parseDurationSeconds(hyperFramesProbe);
     const { width, height } = getVideoDimensions(finalProbe);
     const hyperFramesDimensions = getVideoDimensions(hyperFramesProbe);
@@ -350,6 +351,9 @@ export async function POST(request: Request) {
     const overlayTailPadDuration =
       Math.max(outputFrameDuration, stretchedOverlayFrameDuration) +
       outputFrameDuration;
+    const baseVideoTailPadDuration =
+      Math.max(0, finalDuration - finalVideoDuration) +
+      outputFrameDuration * 2;
     const dimensionsMatch =
       hyperFramesDimensions.width === width &&
       hyperFramesDimensions.height === height;
@@ -358,9 +362,10 @@ export async function POST(request: Request) {
       : `scale=w=${width}:h=${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba`;
     const audioTailPadDuration = 0.25;
     const videoFilters = [
+      `[0:v]trim=start=0:end=${finalVideoDuration.toFixed(6)},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${baseVideoTailPadDuration.toFixed(8)}[baseVideo]`,
       `[1:v]trim=start=0:end=${hyperFramesDuration.toFixed(6)},setpts=PTS-STARTPTS[source]`,
       `[source]setpts=(PTS-STARTPTS)*${stretchFactor.toFixed(8)},tpad=stop_mode=clone:stop_duration=${overlayTailPadDuration.toFixed(8)},${overlayPreparation}[overlay]`,
-      `[0:v][overlay]overlay=x=0:y=0:enable='gte(t\\,0)*lte(t\\,${finalDuration.toFixed(6)})':eof_action=repeat:repeatlast=1[composited]`,
+      `[baseVideo][overlay]overlay=x=0:y=0:enable='gte(t\\,0)*lte(t\\,${finalDuration.toFixed(6)})':eof_action=repeat:repeatlast=1[composited]`,
       `[composited]trim=0:${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[vout]`,
     ];
 
@@ -479,6 +484,7 @@ export async function POST(request: Request) {
       finalVideoUrl,
       hyperFramesVideoUrl,
       finalDuration,
+      finalVideoDuration,
       hyperFramesDuration,
       outputDuration,
       outputVideoDuration,
