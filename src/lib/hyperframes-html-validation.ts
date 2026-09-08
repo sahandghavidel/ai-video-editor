@@ -1,5 +1,4 @@
 type HyperFramesHtmlValidationOptions = {
-  maxLines?: number;
   require4KCanvas?: boolean;
   expectedDuration?: number;
   minimumDuration?: number;
@@ -156,11 +155,5 @@ export function validateHyperFramesHtml(
   if (/\btransition\s*:/i.test(html)) {
     issues.push('CSS transitions are not deterministic for HyperFrames rendering');
   }
-  if (options.maxLines && html.split(/\r?\n/).length > options.maxLines) {
-    issues.push(
-      `composition HTML must be ${options.maxLines} lines or fewer`,
-    );
-  }
-
   return issues;
 }

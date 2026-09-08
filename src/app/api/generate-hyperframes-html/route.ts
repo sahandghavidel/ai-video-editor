@@ -70,7 +70,7 @@ Never create overlapping GSAP tweens that change the same property on the same t
 
 Every GSAP exit tween that fades a non-clip element or inner wrapper to opacity 0 and ends at a positive clip or beat boundary MUST be followed by a zero-duration hard kill at that exact ending time. Example: tl.to(".card", { opacity: 0, duration: 0.3 }, 7.0); tl.set(".card", { opacity: 0 }, 7.3);. If visibility is also controlled, the boundary set may use { opacity: 0, visibility: "hidden" }. Never apply this hard-kill pattern to a .clip element because HyperFrames owns clip visibility. The prohibition on tl.set() for an initial hidden state applies only at timeline position 0; a hard-kill tl.set() at a positive exit boundary is required. Before returning HTML, audit every opacity or autoAlpha exit and add its matching boundary hard kill.
 
-Keep authored HTML concise and under 300 lines excluding supplied approved SVG markup; preserve that markup rather than simplifying it to meet a line limit. Never use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, external CSS frameworks, other CDN scripts, or render-time fetches. Follow the exact timings from the user prompt and use approved inline SVG assets from the SVG Library when relevant, following its reuse rules. Use only approved Sound Effects Library audio when relevant. Every audio element must be a direct child of the composition root and must use framework-owned data timing; never control audio in JavaScript. Do not use external image or audio URLs. Preserve approved asset appearance even when it differs from general visual-style rules; style the surrounding scene consistently. Do not render or describe a video.`;
+Keep authored HTML clear and editable. Preserve supplied approved SVG markup rather than simplifying its artwork. Never use requestAnimationFrame, performance.now, Date.now, CSS transitions, event-driven render loops, external CSS frameworks, other CDN scripts, or render-time fetches. Follow the exact timings from the user prompt and use approved inline SVG assets from the SVG Library when relevant, following its reuse rules. Use only approved Sound Effects Library audio when relevant. Every audio element must be a direct child of the composition root and must use framework-owned data timing; never control audio in JavaScript. Do not use external image or audio URLs. Preserve approved asset appearance even when it differs from general visual-style rules; style the surrounding scene consistently. Do not render or describe a video.`;
 
 function extractUrl(raw: unknown): string {
   if (typeof raw === 'string') return raw.trim();
@@ -328,7 +328,6 @@ export async function POST(request: Request) {
 
     const validateGeneratedHtml = (source: string) => [
       ...validateHyperFramesHtml(source, {
-        maxLines: 300,
         require4KCanvas: true,
         expectedDuration: requiredDuration,
       }),

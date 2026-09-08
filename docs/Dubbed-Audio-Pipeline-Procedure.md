@@ -267,3 +267,32 @@ If this guide and code ever diverge, update this guide immediately after code ch
 Primary source file:
 
 - `src/app/api/create-dubbed-en/route.ts`
+
+---
+
+## 16) Configured-Language HyperFrames Effects
+
+Configured languages use `POST /api/generate-scene-tts-by-field`. The clean
+provider result is saved to the language's `Original_<language>` field before
+duration fitting. The fitted/mixed WAV is saved to its `Dubbed_<language>`
+field.
+
+HyperFrames effects are mixed only when the Final Video (`field_6886`)
+filename proves that the exact HyperFrames Video (`field_7368`) has been
+applied. Effects are cached in `Fitted HyperFrames Audio` (`field_7391`) using
+a filename that includes the scene ID, HyperFrames identity, six-decimal target
+duration, and exact 48 kHz target sample count.
+
+The cached effects use the same no-trim duration contract as configured-language
+dubbed WAVs:
+
+- shorter audio receives appended silence;
+- longer audio is tempo-adjusted to an adaptive undershoot and then padded;
+- output is PCM `s16le`, 48 kHz, stereo;
+- the effects waveform is never hard-trimmed.
+
+Mixing keeps the fitted narration as the first/authoritative input, leaves its
+gain and tempo unchanged, limits only the effects track, and verifies that the
+mixed WAV retains the narration's sample rate, channel count, codec, and sample
+count before the `Dubbed_<language>` field is patched. Final per-video M4A
+assembly is unchanged.

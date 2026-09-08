@@ -178,7 +178,7 @@ async function saveEditor(sceneId: number) {
       html.match(/data-duration=["']([0-9.]+)["']/i)?.[1],
   );
   const validationIssues = [
-    ...validateHyperFramesHtml(html, { maxLines: 300, require4KCanvas: true }),
+    ...validateHyperFramesHtml(html, { require4KCanvas: true }),
     ...validateSoundEffectCues(
       html,
       soundEffects,
