@@ -316,6 +316,7 @@ type SceneSeparationExecutionResult = {
   skippedNoSplit: boolean;
   sourceType: SceneSeparationSourceType;
   finalSourceUrl: string | null;
+  hyperFramesSourceUrl: string | null;
   finalSegmentCuts: FinalSceneCut[];
 };
 
@@ -2580,6 +2581,7 @@ export default function SceneCard({
         skippedNoSplit?: unknown;
         sourceType?: unknown;
         finalSourceUrl?: unknown;
+        hyperFramesSourceUrl?: unknown;
         finalSegmentCuts?: unknown;
       } | null;
 
@@ -2599,6 +2601,11 @@ export default function SceneCard({
         typeof payload?.finalSourceUrl === 'string' &&
         payload.finalSourceUrl.trim()
           ? payload.finalSourceUrl.trim()
+          : null;
+      const hyperFramesSourceUrl =
+        typeof payload?.hyperFramesSourceUrl === 'string' &&
+        payload.hyperFramesSourceUrl.trim()
+          ? payload.hyperFramesSourceUrl.trim()
           : null;
       const finalSegmentCuts = Array.isArray(payload?.finalSegmentCuts)
         ? payload.finalSegmentCuts
@@ -2638,6 +2645,7 @@ export default function SceneCard({
           skippedNoSplit: true,
           sourceType: responseSourceType,
           finalSourceUrl,
+          hyperFramesSourceUrl,
           finalSegmentCuts,
         };
       }
@@ -2657,6 +2665,7 @@ export default function SceneCard({
         skippedNoSplit: false,
         sourceType: responseSourceType,
         finalSourceUrl,
+        hyperFramesSourceUrl,
         finalSegmentCuts,
       };
     } catch (error) {
@@ -2753,6 +2762,66 @@ export default function SceneCard({
     }
   };
 
+  const generateHyperFramesSceneClips = async (
+    separation: SceneSeparationExecutionResult,
+  ) => {
+    if (
+      separation.sourceType !== 'final' ||
+      !separation.hyperFramesSourceUrl
+    ) {
+      return;
+    }
+
+    if (!separation.finalSourceUrl || !separation.finalSegmentCuts.length) {
+      throw new Error(
+        'Final source and cut ranges are required for HyperFrames clip generation.',
+      );
+    }
+
+    const response = await fetch('/api/generate-hyperframes-clips', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        finalSourceUrl: separation.finalSourceUrl,
+        hyperFramesSourceUrl: separation.hyperFramesSourceUrl,
+        cuts: separation.finalSegmentCuts,
+      }),
+    });
+    const result = (await response.json().catch(() => null)) as {
+      clips?: Array<{ sceneId?: unknown; clipUrl?: unknown }>;
+      error?: unknown;
+    } | null;
+
+    if (!response.ok) {
+      throw new Error(
+        typeof result?.error === 'string'
+          ? result.error
+          : `HyperFrames clip generation failed (${response.status})`,
+      );
+    }
+
+    const clipUrls = new Map<number, string>();
+    for (const clip of result?.clips ?? []) {
+      const sceneId = Number(clip.sceneId);
+      if (
+        Number.isInteger(sceneId) &&
+        sceneId > 0 &&
+        typeof clip.clipUrl === 'string' &&
+        clip.clipUrl.trim()
+      ) {
+        clipUrls.set(sceneId, clip.clipUrl.trim());
+      }
+    }
+
+    const updatedData = dataRef.current.map((scene) => {
+      const clipUrl = clipUrls.get(scene.id);
+      return clipUrl ? { ...scene, field_7368: clipUrl } : scene;
+    });
+    dataRef.current = updatedData;
+    onDataUpdateRef.current?.(updatedData);
+    setData(updatedData);
+  };
+
   const handleApplySeparationAndGenerateClips = async (
     editedWords: Array<{ word: string; start: number; end: number }>,
   ) => {
@@ -2786,6 +2855,7 @@ export default function SceneCard({
 
       if (separation.sourceType === 'final') {
         await generateFinalSceneClips(separation);
+        await generateHyperFramesSceneClips(separation);
       } else {
         const clipSceneIds = parsePositiveSceneIds([
           activeSceneId,
@@ -2929,6 +2999,7 @@ export default function SceneCard({
 
       if (separation.sourceType === 'final') {
         await generateFinalSceneClips(separation);
+        await generateHyperFramesSceneClips(separation);
       } else {
         const clipSceneIds = parsePositiveSceneIds([
           activeSceneId,

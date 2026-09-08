@@ -57,6 +57,12 @@ const CLEARED_GENERATED_FIELDS: Record<string, unknown> = {
   field_7099: '', // hasText
 };
 
+const CLEARED_HYPERFRAMES_FIELDS: Record<string, unknown> = {
+  field_7365: '', // HyperFrames Prompt
+  field_7367: '', // HyperFrames HTML
+  field_7368: '', // HyperFrames Video
+};
+
 function roundTiming(value: number): number {
   return Number(value.toFixed(TIMING_DECIMALS));
 }
@@ -1201,9 +1207,11 @@ export async function POST(request: NextRequest) {
     let sourceEnd = sourceEndField ?? originalStart;
     let sourceDuration: number;
     let finalSourceUrl = '';
+    let hyperFramesSourceUrl = '';
 
     if (sourceType === 'final') {
       finalSourceUrl = extractUrlFromField(sourceScene.field_6886);
+      hyperFramesSourceUrl = extractUrlFromField(sourceScene.field_7368);
       if (!finalSourceUrl) {
         return NextResponse.json(
           {
@@ -1398,6 +1406,7 @@ export async function POST(request: NextRequest) {
         (baseSceneOrder + index * SPLIT_ORDER_STEP).toFixed(3),
       ),
       ...CLEARED_GENERATED_FIELDS,
+      ...(sourceType === 'final' ? CLEARED_HYPERFRAMES_FIELDS : {}),
     }));
 
     let updatedSourceScene = await patchTableRow(
@@ -1518,6 +1527,10 @@ export async function POST(request: NextRequest) {
       segmentCount: segmentPayloads.length,
       createdSceneIds,
       finalSourceUrl: sourceType === 'final' ? finalSourceUrl : null,
+      hyperFramesSourceUrl:
+        sourceType === 'final' && hyperFramesSourceUrl
+          ? hyperFramesSourceUrl
+          : null,
       finalSegmentCuts,
       canonicalBeforeSceneId: canonicalBeforeSceneId ?? null,
       linkedScenesUpdated,
