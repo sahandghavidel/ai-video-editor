@@ -4,7 +4,7 @@ import { access, unlink, writeFile } from 'fs/promises';
 
 export const DUBBED_AUDIO_SCENE_BATCH_SIZE = 30000;
 
-const AUDIO_SAMPLE_RATE = 48000;
+const AUDIO_SAMPLE_RATE = 44100;
 const AUDIO_CHANNELS = 2;
 const AUDIO_BITRATE = '192k';
 const DEFAULT_FFMPEG_TIMEOUT_MS = 60 * 60 * 1000;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
-import { probeVideoDurationSeconds } from '@/lib/ffprobe-video-duration';
+import { probeVideoTimelineMetrics } from '@/lib/ffprobe-video-duration';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,6 +8,8 @@ export const dynamic = 'force-dynamic';
 const SCENES_TABLE_ID = '714';
 const FINAL_VIDEO_FIELD_KEY = 'field_6886';
 const FINAL_VIDEO_DURATION_FIELD_KEY = 'field_7107';
+const FINAL_VIDEO_TIMELINE_SAMPLES_FIELD_KEY = 'field_7392';
+const FINAL_VIDEO_AUDIO_SAMPLE_RATE = 44100;
 
 type BaserowRow = Record<string, unknown>;
 
@@ -122,6 +124,7 @@ export async function POST(request: NextRequest) {
     let updatedCount = 0;
     let skippedMissingFinalVideoUrlCount = 0;
     const durationsByScene: Record<string, number> = {};
+    const timelineSamplesByScene: Record<string, number> = {};
     const failures: Array<{ sceneId: number; error: string }> = [];
     const scenesWithoutAnyDuration: number[] = [];
 
@@ -144,12 +147,23 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const durationSeconds = await probeVideoDurationSeconds(finalVideoUrl);
+        const { durationSeconds, audioTimelineSamples: sceneSamples } =
+          await probeVideoTimelineMetrics(
+            finalVideoUrl,
+            FINAL_VIDEO_AUDIO_SAMPLE_RATE,
+          );
+        if (sceneSamples <= 0) {
+          throw new Error(
+            `Final video for scene ${sceneId} has no measurable audio timeline`,
+          );
+        }
         const roundedDuration = Number(durationSeconds.toFixed(6));
         durationsByScene[String(sceneId)] = roundedDuration;
+        timelineSamplesByScene[String(sceneId)] = sceneSamples;
 
         await baserowPatchSceneRow(baserowUrl, token, sceneId, {
           [FINAL_VIDEO_DURATION_FIELD_KEY]: roundedDuration,
+          [FINAL_VIDEO_TIMELINE_SAMPLES_FIELD_KEY]: sceneSamples,
         });
 
         updatedCount += 1;
@@ -167,6 +181,8 @@ export async function POST(request: NextRequest) {
       updatedCount,
       skippedMissingFinalVideoUrlCount,
       durationsByScene,
+      timelineSamplesByScene,
+      timelineSampleRate: FINAL_VIDEO_AUDIO_SAMPLE_RATE,
       failedCount: failures.length,
       scenesWithoutAnyDuration,
       failures,

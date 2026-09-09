@@ -21,7 +21,7 @@ const SCENES_TABLE_ID = '714';
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const FIELD_KEY_REGEX = /^field_\d+$/;
 
-const AUDIO_SAMPLE_RATE = 48000;
+const AUDIO_SAMPLE_RATE = 44100;
 const AUDIO_CHANNELS = 2;
 const TIME_DECIMALS = 9;
 const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
@@ -60,6 +60,7 @@ type SceneMergeJob = {
   sceneId: number;
   orderValue: number;
   audioUrl: string;
+  targetSamples: number;
 };
 
 class BaserowRequestError extends Error {
@@ -617,6 +618,7 @@ export async function POST(request: NextRequest) {
       sourceSceneAudioFieldKey?: unknown;
       destinationVideoAudioFieldKey?: unknown;
       sceneDurationFieldKey?: unknown;
+      sceneSampleCountFieldKey?: unknown;
       requireAudioForDurationScenes?: unknown;
       skipIfDestinationExists?: unknown;
       language?: unknown;
@@ -673,6 +675,19 @@ export async function POST(request: NextRequest) {
         {
           error:
             'sceneDurationFieldKey must be a Baserow field key (e.g., field_6884) when provided',
+        },
+        { status: 400 },
+      );
+    }
+
+    const sceneSampleCountFieldKey = asFieldKey(
+      body?.sceneSampleCountFieldKey,
+    );
+    if (!sceneSampleCountFieldKey) {
+      return NextResponse.json(
+        {
+          error:
+            'sceneSampleCountFieldKey is required and must be a Baserow field key',
         },
         { status: 400 },
       );
@@ -787,10 +802,19 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const targetSamples = parsePositiveInt(
+        scene[sceneSampleCountFieldKey],
+      );
+      if (!targetSamples) {
+        skippedNoDurationCount += 1;
+        continue;
+      }
+
       mergeJobs.push({
         sceneId,
         orderValue: getSceneOrderValue(scene),
         audioUrl,
+        targetSamples,
       });
     }
 
@@ -852,7 +876,12 @@ export async function POST(request: NextRequest) {
 
           tempFiles.push(normalized.localPath);
           localScenePaths.push(normalized.localPath);
-          expectedMergedSamples += normalized.metrics.sampleCount;
+          if (normalized.metrics.sampleCount !== job.targetSamples) {
+            throw new Error(
+              `Scene ${job.sceneId} dubbed audio has ${normalized.metrics.sampleCount} samples; expected ${job.targetSamples}`,
+            );
+          }
+          expectedMergedSamples += job.targetSamples;
         }
 
         const outputBatchPath = saveFinalAudioAsWav
@@ -896,6 +925,14 @@ export async function POST(request: NextRequest) {
     }
 
     const mergedMetrics = await probeAudioMetrics(finalAudioPath);
+    if (
+      saveFinalAudioAsWav &&
+      mergedMetrics.sampleCount !== expectedMergedSamples
+    ) {
+      throw new Error(
+        `Merged dubbed WAV has ${mergedMetrics.sampleCount} samples; expected ${expectedMergedSamples}`,
+      );
+    }
 
     const languageSuffix =
       typeof body?.language === 'string' && body.language.trim()
@@ -927,6 +964,7 @@ export async function POST(request: NextRequest) {
       sourceSceneAudioFieldKey,
       destinationVideoAudioFieldKey,
       sceneDurationFieldKey,
+      sceneSampleCountFieldKey,
       saveFinalAudioAsWav,
       mergedSceneCount: mergeJobs.length,
       skippedInvalidSceneIdCount,

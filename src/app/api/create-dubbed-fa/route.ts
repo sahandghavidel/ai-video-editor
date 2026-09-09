@@ -19,6 +19,7 @@ const SCENES_TABLE_ID = '714';
 
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT = 'field_7107';
+const SCENE_TIMELINE_SAMPLES_FIELD_KEY_FOR_AUDIO_FIT = 'field_7392';
 const SCENE_REFERENCE_SENTENCE_FALLBACK_FIELD_KEY = 'field_6890';
 const VIDEO_FINAL_DUBBED_FA_FIELD_KEY = 'field_7113';
 
@@ -820,6 +821,8 @@ export async function POST(request: NextRequest) {
         createSilenceForEmptySentence: true,
         emptySentenceFieldKey: baserowFields.sceneTargetSentenceFieldKey,
         sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
+        sceneSampleCountFieldKey:
+          SCENE_TIMELINE_SAMPLES_FIELD_KEY_FOR_AUDIO_FIT,
         provider: 'omnivoice',
         referenceAudioFilename: selectedLanguageReference.filename,
         skipIfDestinationExists: true,
@@ -980,6 +983,8 @@ export async function POST(request: NextRequest) {
           sourceSceneAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
           destinationVideoAudioFieldKey: finalDubbedAudioFieldKey,
           sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
+          sceneSampleCountFieldKey:
+            SCENE_TIMELINE_SAMPLES_FIELD_KEY_FOR_AUDIO_FIT,
           requireAudioForDurationScenes: true,
           language: selectedLanguageReference.language,
           saveFinalAudioAsWav,
