@@ -530,7 +530,9 @@ export default function SceneCard({
   const [showOnlyEmptyText, setShowOnlyEmptyText] = useState<boolean>(false);
   const [showOnlyNotEmptyText, setShowOnlyNotEmptyText] =
     useState<boolean>(false);
-  const [showOnlyFlagged, setShowOnlyFlagged] = useState<boolean>(false);
+  const [fixTtsStatusFilter, setFixTtsStatusFilter] = useState<
+    FixTtsStatus | 'green-orange' | 'all'
+  >('all');
   const [showShortWithNeighbors, setShowShortWithNeighbors] =
     useState<boolean>(false);
   const [shortTextCharLimitInput, setShortTextCharLimitInput] =
@@ -688,13 +690,13 @@ export default function SceneCard({
   const allVideosTargetStatusLabel =
     allVideosTargetStatus === 'pending' ? 'Pending' : 'Processing';
 
-  // Keep the original Flagged filter unselected by default whenever a video is
+  // Keep the Fix TTS status filter unselected by default whenever a video is
   // selected.
   // This applies on initial load (including page refresh with restored
   // selection) and each time the selected video changes.
   useEffect(() => {
     if (!selectedOriginalVideo.id) return;
-    setShowOnlyFlagged(false);
+    setFixTtsStatusFilter('all');
   }, [selectedOriginalVideo.id]);
 
   // Playback history belongs to the currently loaded scene dataset. Switching
@@ -1175,12 +1177,16 @@ export default function SceneCard({
         // Compute filtered and sorted data locally to avoid dependency issues
         let filtered = data;
 
-        const isSceneFlagged = (scene: Record<string, unknown>): boolean =>
-          parseFixTtsStatus(scene.field_7096 ?? scene['field_7096']) === 'true';
-
-        // Filter by flagged scenes
-        if (showOnlyFlagged) {
-          filtered = filtered.filter((scene) => isSceneFlagged(scene));
+        // Filter by the selected Fix TTS status color.
+        if (fixTtsStatusFilter !== 'all') {
+          filtered = filtered.filter((scene) => {
+            const status = parseFixTtsStatus(
+              scene.field_7096 ?? scene['field_7096'],
+            );
+            return fixTtsStatusFilter === 'green-orange'
+              ? status === null || status === 'true'
+              : status === fixTtsStatusFilter;
+          });
         }
 
         const normalizedSentenceSearch = sentenceSearchQuery.trim().toLowerCase();
@@ -1650,7 +1656,7 @@ export default function SceneCard({
     toggleSceneVisualRequirement,
     refreshSceneInLocalCache,
     data,
-    showOnlyFlagged,
+    fixTtsStatusFilter,
     sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
@@ -7298,12 +7304,16 @@ export default function SceneCard({
   const filteredOnlyData = React.useMemo(() => {
     let filtered = data;
 
-    const isSceneFlagged = (scene: Record<string, unknown>): boolean =>
-      parseFixTtsStatus(scene.field_7096 ?? scene['field_7096']) === 'true';
-
-    // Filter by flagged scenes
-    if (showOnlyFlagged) {
-      filtered = filtered.filter((scene) => isSceneFlagged(scene));
+    // Filter by the selected Fix TTS status color.
+    if (fixTtsStatusFilter !== 'all') {
+      filtered = filtered.filter((scene) => {
+        const status = parseFixTtsStatus(
+          scene.field_7096 ?? scene['field_7096'],
+        );
+        return fixTtsStatusFilter === 'green-orange'
+          ? status === null || status === 'true'
+          : status === fixTtsStatusFilter;
+      });
     }
 
     const normalizedSentenceSearch = sentenceSearchQuery.trim().toLowerCase();
@@ -7412,7 +7422,7 @@ export default function SceneCard({
     return filtered;
   }, [
     data,
-    showOnlyFlagged,
+    fixTtsStatusFilter,
     sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
@@ -7524,7 +7534,7 @@ export default function SceneCard({
   }, [
     selectedOriginalVideo.id,
     showProcessingScenesAllVideos,
-    showOnlyFlagged,
+    fixTtsStatusFilter,
     sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
@@ -7861,15 +7871,39 @@ export default function SceneCard({
                   </button>
                 </div>
                 <button
-                  onClick={() => setShowOnlyFlagged(!showOnlyFlagged)}
-                  className={`px-2 py-0.5 text-[11px] rounded-full transition-colors whitespace-nowrap ${
-                    showOnlyFlagged
-                      ? 'bg-red-500 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  type='button'
+                  onClick={() =>
+                    setFixTtsStatusFilter((currentStatus) => {
+                      if (currentStatus === 'all') return null;
+                      if (currentStatus === null) return 'true';
+                      if (currentStatus === 'true') return 'green-orange';
+                      if (currentStatus === 'green-orange') return 'confirmed';
+                      return 'all';
+                    })
+                  }
+                  className={`inline-flex items-center justify-center w-9 h-7 rounded-full text-xs font-medium transition-colors ${
+                    fixTtsStatusFilter === 'all'
+                      ? 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                      : fixTtsStatusFilter === 'green-orange'
+                        ? 'text-slate-700 bg-[linear-gradient(90deg,rgb(209_250_229)_0%,rgb(209_250_229)_50%,rgb(255_237_213)_50%,rgb(255_237_213)_100%)] hover:brightness-95'
+                      : getFixTtsButtonClasses(fixTtsStatusFilter, false)
                   }`}
-                  title='Show only scenes where Flag (7096) is true'
+                  title={
+                    fixTtsStatusFilter === 'all'
+                      ? 'Showing all Fix TTS statuses. Click for green (no flag).'
+                      : fixTtsStatusFilter === 'green-orange'
+                        ? 'Showing green (no flag) and orange (flagged) scenes. Click to cycle status.'
+                      : `Showing only ${getFixTtsStatusLabel(fixTtsStatusFilter)} scenes. Click to cycle status.`
+                  }
+                  aria-label={
+                    fixTtsStatusFilter === 'all'
+                      ? 'Filter by Fix TTS status: showing all'
+                      : fixTtsStatusFilter === 'green-orange'
+                        ? 'Filter by Fix TTS status: green and orange'
+                      : `Filter by Fix TTS status: ${getFixTtsStatusLabel(fixTtsStatusFilter)}`
+                  }
                 >
-                  Flag
+                  <Wand2 className='h-3 w-3' />
                 </button>
                 <button
                   onClick={() => {
