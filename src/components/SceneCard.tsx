@@ -59,6 +59,7 @@ import {
   FastForward,
   ImageIcon,
   Wand2,
+  Search,
 } from 'lucide-react';
 
 const getFixTtsButtonClasses = (
@@ -548,6 +549,9 @@ export default function SceneCard({
   );
   const [showRecentlyModifiedTTS, setShowRecentlyModifiedTTS] =
     useState<boolean>(false);
+  const [showSentenceSearch, setShowSentenceSearch] = useState<boolean>(false);
+  const [sentenceSearchQuery, setSentenceSearchQuery] = useState<string>('');
+  const sentenceSearchInputRef = useRef<HTMLInputElement>(null);
   const [updatingTime, setUpdatingTime] = useState<Set<number>>(new Set());
   const [dropdownPositions, setDropdownPositions] = useState<
     Record<number, 'up' | 'down'>
@@ -1179,6 +1183,15 @@ export default function SceneCard({
           filtered = filtered.filter((scene) => isSceneFlagged(scene));
         }
 
+        const normalizedSentenceSearch = sentenceSearchQuery.trim().toLowerCase();
+        if (normalizedSentenceSearch) {
+          filtered = filtered.filter((scene) =>
+            String(scene['field_6890'] ?? '')
+              .toLowerCase()
+              .includes(normalizedSentenceSearch),
+          );
+        }
+
         // Filter by scene start time in seconds.
         if (showTimeFilter) {
           const parsedSeconds = parseFloat(timeFilterSecondsInput);
@@ -1638,6 +1651,7 @@ export default function SceneCard({
     refreshSceneInLocalCache,
     data,
     showOnlyFlagged,
+    sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
     showOnlyEmptyText,
@@ -7292,6 +7306,15 @@ export default function SceneCard({
       filtered = filtered.filter((scene) => isSceneFlagged(scene));
     }
 
+    const normalizedSentenceSearch = sentenceSearchQuery.trim().toLowerCase();
+    if (normalizedSentenceSearch) {
+      filtered = filtered.filter((scene) =>
+        String(scene['field_6890'] ?? '')
+          .toLowerCase()
+          .includes(normalizedSentenceSearch),
+      );
+    }
+
     // Filter by scene start time in seconds.
     if (showTimeFilter) {
       const parsedSeconds = parseFloat(timeFilterSecondsInput);
@@ -7390,6 +7413,7 @@ export default function SceneCard({
   }, [
     data,
     showOnlyFlagged,
+    sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
     showOnlyEmptyText,
@@ -7501,6 +7525,7 @@ export default function SceneCard({
     selectedOriginalVideo.id,
     showProcessingScenesAllVideos,
     showOnlyFlagged,
+    sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
     showOnlyEmptyText,
@@ -7937,6 +7962,31 @@ export default function SceneCard({
                     All
                   </span>
                 </button>
+                <button
+                  type='button'
+                  onClick={() => {
+                    if (showSentenceSearch) {
+                      setShowSentenceSearch(false);
+                      setSentenceSearchQuery('');
+                      return;
+                    }
+
+                    setShowSentenceSearch(true);
+                    window.requestAnimationFrame(() =>
+                      sentenceSearchInputRef.current?.focus(),
+                    );
+                  }}
+                  className={`p-1 text-[11px] rounded-full transition-colors inline-flex items-center justify-center ${
+                    showSentenceSearch
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  }`}
+                  title='Search inside Sentence (6890)'
+                  aria-label='Search inside Sentence (6890)'
+                  aria-expanded={showSentenceSearch}
+                >
+                  <Search className='w-3 h-3' />
+                </button>
               </div>
             </div>
 
@@ -7967,6 +8017,20 @@ export default function SceneCard({
               )}
             </div>
           </div>
+          {showSentenceSearch && (
+            <div className='flex items-center gap-1.5 pt-1'>
+              <Search className='w-3.5 h-3.5 text-gray-400 shrink-0' />
+              <input
+                ref={sentenceSearchInputRef}
+                type='search'
+                value={sentenceSearchQuery}
+                onChange={(event) => setSentenceSearchQuery(event.target.value)}
+                placeholder='Search Sentence (6890)...'
+                aria-label='Search Sentence (6890)'
+                className='w-full sm:max-w-md px-2.5 py-1 text-[12px] rounded-md border border-gray-300 bg-white text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500'
+              />
+            </div>
+          )}
         </div>
       </div>
 
