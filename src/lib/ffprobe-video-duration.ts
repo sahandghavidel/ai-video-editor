@@ -1,11 +1,7 @@
 import { spawn } from 'child_process';
 
 type FFprobeStream = {
-  codec_type?: string;
   duration?: string | number;
-  duration_ts?: string | number;
-  sample_rate?: string | number;
-  time_base?: string;
 };
 
 type FFprobeOutput = {
@@ -38,10 +34,7 @@ function parseNumberish(value?: string | number): number {
   return Number.NaN;
 }
 
-export async function probeVideoTimelineMetrics(
-  videoUrl: string,
-  timelineSampleRate = 44100,
-): Promise<{ durationSeconds: number; audioTimelineSamples: number }> {
+export async function probeVideoDurationSeconds(videoUrl: string): Promise<number> {
   const { stdout, stderr, code } = await runSpawnCapture('ffprobe', [
     '-v',
     'quiet',
@@ -76,47 +69,5 @@ export async function probeVideoTimelineMetrics(
     throw new Error('Unable to determine video duration with ffprobe');
   }
 
-  const audioStream = (probe.streams ?? []).find(
-    (stream) => stream.codec_type === 'audio',
-  );
-  if (!audioStream) {
-    return { durationSeconds: duration, audioTimelineSamples: 0 };
-  }
-
-  const durationTs = parseNumberish(audioStream.duration_ts);
-  const timeBaseParts = String(audioStream.time_base ?? '').split('/');
-  const timeBaseNumerator = Number(timeBaseParts[0]);
-  const timeBaseDenominator = Number(timeBaseParts[1]);
-  const streamDuration = parseNumberish(audioStream.duration);
-  const sampleRate = parseNumberish(audioStream.sample_rate);
-
-  let audioTimelineSamples = Number.NaN;
-  if (
-    Number.isInteger(durationTs) &&
-    durationTs > 0 &&
-    Number.isFinite(timeBaseNumerator) &&
-    timeBaseNumerator > 0 &&
-    Number.isFinite(timeBaseDenominator) &&
-    timeBaseDenominator > 0
-  ) {
-    audioTimelineSamples = Math.round(
-      (durationTs * timeBaseNumerator * timelineSampleRate) /
-        timeBaseDenominator,
-    );
-  } else if (Number.isFinite(streamDuration) && streamDuration > 0) {
-    audioTimelineSamples = Math.round(streamDuration * timelineSampleRate);
-  } else if (Number.isFinite(sampleRate) && sampleRate > 0) {
-    audioTimelineSamples = Math.round(duration * timelineSampleRate);
-  }
-
-  if (!Number.isInteger(audioTimelineSamples) || audioTimelineSamples <= 0) {
-    audioTimelineSamples = 0;
-  }
-
-  return { durationSeconds: duration, audioTimelineSamples };
-}
-
-export async function probeVideoDurationSeconds(videoUrl: string): Promise<number> {
-  const metrics = await probeVideoTimelineMetrics(videoUrl);
-  return metrics.durationSeconds;
+  return duration;
 }

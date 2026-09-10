@@ -1186,28 +1186,55 @@ export default function PipelineConfig({
                   )}
 
                   {isCreateDubbedLanguage && (
-                    <label
-                      className={`flex w-full items-center justify-center gap-1 text-[10px] font-medium ${
-                        isEnabled ? 'text-teal-700' : 'text-gray-400'
-                      }`}
-                      title='Save the final dubbed audio as WAV instead of M4A'
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
-                    >
-                      <input
-                        type='checkbox'
-                        aria-label='Save final dubbed audio as WAV'
-                        checked={pipelineConfig.saveDubbedAudioAsWav}
-                        disabled={!isEnabled || isRunningFullPipeline}
-                        onChange={(event) =>
-                          updatePipelineConfig({
-                            saveDubbedAudioAsWav: event.target.checked,
-                          })
-                        }
-                        className='h-3 w-3 accent-teal-600 disabled:cursor-not-allowed'
-                      />
-                      Save as WAV
-                    </label>
+                    <div className='flex w-full flex-col items-center gap-0.5'>
+                      <label
+                        className={`flex items-center justify-center gap-1 text-[10px] font-medium ${
+                          isEnabled ? 'text-teal-700' : 'text-gray-400'
+                        }`}
+                        title='Save the final dubbed audio as WAV instead of M4A'
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type='checkbox'
+                          aria-label='Save final dubbed audio as WAV'
+                          checked={pipelineConfig.saveDubbedAudioAsWav}
+                          disabled={!isEnabled || isRunningFullPipeline}
+                          onChange={(event) =>
+                            updatePipelineConfig({
+                              saveDubbedAudioAsWav: event.target.checked,
+                            })
+                          }
+                          className='h-3 w-3 accent-teal-600 disabled:cursor-not-allowed'
+                        />
+                        Save as WAV
+                      </label>
+                      <label
+                        className={`flex items-center justify-center gap-1 text-[10px] font-medium ${
+                          isEnabled ? 'text-teal-700' : 'text-gray-400'
+                        }`}
+                        title='Mix eligible HyperFrames sound effects into dubbed scene audio'
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type='checkbox'
+                          aria-label='Add HyperFrames sound effects to dubbed audio'
+                          checked={
+                            pipelineConfig.includeHyperFramesSoundEffectsInDubbedAudio
+                          }
+                          disabled={!isEnabled || isRunningFullPipeline}
+                          onChange={(event) =>
+                            updatePipelineConfig({
+                              includeHyperFramesSoundEffectsInDubbedAudio:
+                                event.target.checked,
+                            })
+                          }
+                          className='h-3 w-3 accent-teal-600 disabled:cursor-not-allowed'
+                        />
+                        Add HF sound effects
+                      </label>
+                    </div>
                   )}
 
                   {/* Step Number Badge */}

@@ -326,6 +326,7 @@ export interface PipelineConfig {
   createEnSrt: boolean;
   createDubbedLanguage: boolean;
   saveDubbedAudioAsWav: boolean;
+  includeHyperFramesSoundEffectsInDubbedAudio: boolean;
   selectedDubbedLanguagesForPipeline: string[];
   generateYouTubeDescriptions: boolean;
   generateYouTubeKeywords: boolean;
@@ -810,6 +811,7 @@ const defaultPipelineConfig: PipelineConfig = {
   createEnSrt: false,
   createDubbedLanguage: false,
   saveDubbedAudioAsWav: false,
+  includeHyperFramesSoundEffectsInDubbedAudio: false,
   selectedDubbedLanguagesForPipeline: [],
   generateYouTubeDescriptions: false,
   generateYouTubeKeywords: false,

@@ -169,6 +169,7 @@ export default function BatchOperations({
     clearMergedVideo,
     saveMergedVideoToOriginalTable,
     selectedOriginalVideo,
+    pipelineConfig,
     saveSettingsToLocalStorage,
     loadSettingsFromLocalStorage,
     clearLocalStorageSettings,
@@ -4838,6 +4839,8 @@ export default function BatchOperations({
         body: JSON.stringify({
           videoId: selectedVideoId,
           language: activeDubbedLanguage,
+          includeHyperFramesSoundEffects:
+            pipelineConfig.includeHyperFramesSoundEffectsInDubbedAudio,
         }),
       });
 

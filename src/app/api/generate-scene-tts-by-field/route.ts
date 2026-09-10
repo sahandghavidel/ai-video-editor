@@ -26,7 +26,7 @@ const TTS_PROVIDER_FETCH_DISPATCHER = new Agent({
   bodyTimeout: 0,
 });
 
-const AUDIO_SAMPLE_RATE = 44100;
+const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_CHANNELS = 2;
 const TIME_DECIMALS = 6;
 const SPEED_DECIMALS = 12;
@@ -189,6 +189,21 @@ function parsePositiveInt(value: unknown): number | null {
   return parsed;
 }
 
+function parsePositiveNumber(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : Number.NaN;
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
 function getBaseOmniVoiceNumStep(baseNumStep: unknown): number {
   return Math.max(
     MIN_OMNIVOICE_STEPS,
@@ -331,6 +346,10 @@ function resolveTtsPath(provider: TtsProvider): string {
   }
 
   return '/api/generate-tts';
+}
+
+function formatSeconds(value: number): string {
+  return value.toFixed(TIME_DECIMALS);
 }
 
 function roundDurationSeconds(value: number): number {
@@ -764,8 +783,10 @@ async function appendSilenceToAudioLocal(options: {
       inputPath,
       '-f',
       'lavfi',
+      '-t',
+      formatSeconds(silenceDurationSec),
       '-i',
-      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo,atrim=end_sample=${silenceSamples}`,
+      `anullsrc=sample_rate=${AUDIO_SAMPLE_RATE}:channel_layout=stereo`,
       '-vn',
       '-map_metadata',
       '-1',
@@ -802,9 +823,8 @@ async function createSilenceAudioToDurationLocal(options: {
   sceneId: number;
   videoId: number;
   targetDurationSec: number;
-  targetSamples: number;
 }): Promise<string> {
-  const { sceneId, videoId, targetDurationSec, targetSamples } = options;
+  const { sceneId, videoId, targetDurationSec } = options;
 
   const roundedTargetDurationSec = roundDurationSeconds(targetDurationSec);
   if (
@@ -816,6 +836,10 @@ async function createSilenceAudioToDurationLocal(options: {
     );
   }
 
+  const targetSamples = secondsToSamples(
+    roundedTargetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
   const sampleAlignedTargetDurationSec = roundDurationSeconds(
     samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE),
   );
@@ -849,7 +873,7 @@ async function createSilenceAudioToDurationLocal(options: {
       '-map_chapters',
       '-1',
       '-filter_complex',
-      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=end_sample=${targetSamples},asetpts=N/SR/TB[aout]`,
+      `[0:a]aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,atrim=0:${formatSeconds(sampleAlignedTargetDurationSec)},asetpts=N/SR/TB[aout]`,
       '-map',
       '[aout]',
       '-c:a',
@@ -880,7 +904,6 @@ async function createAndUploadSilentSceneAudio(options: {
   sceneId: number;
   videoId: number;
   targetDurationSec: number;
-  targetSamples: number;
   language?: string;
 }): Promise<{
   uploadUrl: string;
@@ -893,7 +916,6 @@ async function createAndUploadSilentSceneAudio(options: {
     sceneId,
     videoId,
     targetDurationSec,
-    targetSamples,
     language,
   } = options;
 
@@ -901,7 +923,6 @@ async function createAndUploadSilentSceneAudio(options: {
     sceneId,
     videoId,
     targetDurationSec,
-    targetSamples,
   });
 
   try {
@@ -911,7 +932,6 @@ async function createAndUploadSilentSceneAudio(options: {
       sceneId,
       videoId,
       targetDurationSec,
-      targetSamples,
       language,
     });
   } finally {
@@ -1138,22 +1158,19 @@ async function fitSceneAudioToDurationLocal(options: {
   videoId: number;
   inputAudioUrl: string;
   targetDurationSec: number;
-  targetSamples: number;
 }): Promise<{
   localPath: string;
   inputDurationSec: number;
   outputDurationSec: number;
   speedApplied: number;
 }> {
-  const {
-    sceneId,
-    videoId,
-    inputAudioUrl,
-    targetDurationSec,
-    targetSamples,
-  } = options;
+  const { sceneId, videoId, inputAudioUrl, targetDurationSec } = options;
   const startedAt = Date.now();
   const normalizedTargetDurationSec = roundDurationSeconds(targetDurationSec);
+  const targetSamples = secondsToSamples(
+    normalizedTargetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
 
   logFitInfo('fitSceneAudioToDurationLocal:start', {
     sceneId,
@@ -1531,14 +1548,17 @@ function getFittedHyperFramesAudioFilename(options: {
   sceneId: number;
   hyperFramesVideoUrl: string;
   targetDurationSec: number;
-  targetSamples: number;
 }): string | null {
   const hyperFramesIdentity = getHyperFramesIdentity(
     options.hyperFramesVideoUrl,
   );
   if (!hyperFramesIdentity) return null;
 
-  return `scene_${options.sceneId}_hf_${hyperFramesIdentity}_sfx_stretch_v3_${AUDIO_SAMPLE_RATE}hz_${options.targetDurationSec.toFixed(6)}_${options.targetSamples}_samples.wav`;
+  const targetSamples = secondsToSamples(
+    options.targetDurationSec,
+    AUDIO_SAMPLE_RATE,
+  );
+  return `scene_${options.sceneId}_hf_${hyperFramesIdentity}_sfx_stretch_v2_${options.targetDurationSec.toFixed(6)}_${targetSamples}_samples.wav`;
 }
 
 async function stretchHyperFramesAudioToDurationLocal(options: {
@@ -1546,10 +1566,10 @@ async function stretchHyperFramesAudioToDurationLocal(options: {
   videoId: number;
   inputAudioUrl: string;
   targetDurationSec: number;
-  targetSamples: number;
 }): Promise<string> {
-  const { sceneId, videoId, inputAudioUrl, targetSamples } = options;
+  const { sceneId, videoId, inputAudioUrl, targetDurationSec } = options;
   const inputMetrics = await probeAudioMetrics(inputAudioUrl);
+  const targetSamples = secondsToSamples(targetDurationSec, AUDIO_SAMPLE_RATE);
   const sampleAlignedTargetDurationSec = samplesToSeconds(
     targetSamples,
     AUDIO_SAMPLE_RATE,
@@ -1580,7 +1600,7 @@ async function stretchHyperFramesAudioToDurationLocal(options: {
         '-map_chapters',
         '-1',
         '-filter_complex',
-        `[0:a]${buildAtempoChain(speed)},aresample=${AUDIO_SAMPLE_RATE},aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,apad,atrim=end_sample=${targetSamples},asetpts=N/SR/TB[aout]`,
+        `[0:a]${buildAtempoChain(speed)},aresample=${AUDIO_SAMPLE_RATE},aformat=sample_fmts=fltp:sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo,apad=pad_dur=0.25,atrim=0:${formatSeconds(sampleAlignedTargetDurationSec)},asetpts=N/SR/TB[aout]`,
         '-map',
         '[aout]',
         '-c:a',
@@ -1623,7 +1643,6 @@ async function prepareFittedHyperFramesAudio(options: {
   sceneId: number;
   videoId: number;
   targetDurationSec: number;
-  targetSamples: number;
 }): Promise<{ audioUrl: string | null; token: string }> {
   const {
     baserowUrl,
@@ -1631,7 +1650,6 @@ async function prepareFittedHyperFramesAudio(options: {
     sceneId,
     videoId,
     targetDurationSec,
-    targetSamples,
   } = options;
   let { token } = options;
   const finalVideoUrl = extractUrl(scene[FINAL_VIDEO_FIELD_KEY]);
@@ -1653,7 +1671,6 @@ async function prepareFittedHyperFramesAudio(options: {
     sceneId,
     hyperFramesVideoUrl,
     targetDurationSec,
-    targetSamples,
   });
   if (!expectedFilename) return { audioUrl: null, token };
 
@@ -1675,9 +1692,12 @@ async function prepareFittedHyperFramesAudio(options: {
       videoId,
       inputAudioUrl: hyperFramesVideoUrl,
       targetDurationSec,
-      targetSamples,
     });
 
+    const targetSamples = secondsToSamples(
+      targetDurationSec,
+      AUDIO_SAMPLE_RATE,
+    );
     const fittedProfile = await probeAudioOutputProfile(fittedEffectsPath);
     if (
       fittedProfile.codecName !== 'pcm_s16le' ||
@@ -1942,7 +1962,6 @@ async function fitAndUploadSceneAudio(options: {
   sceneId: number;
   videoId: number;
   targetDurationSec: number;
-  targetSamples: number;
   language?: string;
 }): Promise<{
   uploadUrl: string;
@@ -1956,7 +1975,6 @@ async function fitAndUploadSceneAudio(options: {
     sceneId,
     videoId,
     targetDurationSec,
-    targetSamples,
     language,
   } = options;
   const startedAt = Date.now();
@@ -1980,7 +1998,6 @@ async function fitAndUploadSceneAudio(options: {
       videoId,
       inputAudioUrl: audioUrl,
       targetDurationSec,
-      targetSamples,
     });
     fittedLocalPath = fitted.localPath;
 
@@ -1997,7 +2014,6 @@ async function fitAndUploadSceneAudio(options: {
         videoId,
         inputAudioUrl: mixedLocalPath,
         targetDurationSec,
-        targetSamples,
       });
       postMixFittedLocalPath = postMixFitted.localPath;
     }
@@ -2451,7 +2467,6 @@ export async function POST(request: NextRequest) {
       createSilenceForEmptySentence?: unknown;
       emptySentenceFieldKey?: unknown;
       sceneDurationFieldKey?: unknown;
-      sceneSampleCountFieldKey?: unknown;
       provider?: unknown;
       referenceAudioFilename?: unknown;
       ttsSettings?: unknown;
@@ -2459,6 +2474,7 @@ export async function POST(request: NextRequest) {
       skipIfDestinationExists?: unknown;
       failFastOnSaveError?: unknown;
       fitAudioToSceneDuration?: unknown;
+      includeHyperFramesSoundEffects?: unknown;
       onlySceneIds?: unknown;
     } | null;
 
@@ -2587,20 +2603,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sceneSampleCountFieldKey = asFieldKey(
-      body?.sceneSampleCountFieldKey,
-    );
-    if (fitAudioToSceneDuration && !sceneSampleCountFieldKey) {
-      return NextResponse.json(
-        {
-          error:
-            'sceneSampleCountFieldKey is required when fitAudioToSceneDuration is enabled',
-        },
-        { status: 400 },
-      );
-    }
-
     const provider = resolveProvider(body?.provider);
+    const includeHyperFramesSoundEffects =
+      body?.includeHyperFramesSoundEffects === true;
     const providerPath = resolveTtsPath(provider);
 
     const referenceAudioFilename =
@@ -2654,7 +2659,6 @@ export async function POST(request: NextRequest) {
       createSilenceForEmptySentence,
       emptySentenceFieldKey,
       sceneDurationFieldKey,
-      sceneSampleCountFieldKey,
       provider,
       providerPath,
       fitAudioToSceneDuration,
@@ -2767,15 +2771,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const targetSamples = fitAudioToSceneDuration
+      const targetDurationSec = fitAudioToSceneDuration
         ? (() => {
-            return parsePositiveInt(
-              scene[sceneSampleCountFieldKey as string],
+            const parsed = parsePositiveNumber(
+              scene[sceneDurationFieldKey as string],
             );
+            return parsed ? roundDurationSeconds(parsed) : null;
           })()
-        : null;
-      const targetDurationSec = targetSamples
-        ? samplesToSeconds(targetSamples, AUDIO_SAMPLE_RATE)
         : null;
 
       if (fitAudioToSceneDuration && !targetDurationSec) {
@@ -2784,8 +2786,7 @@ export async function POST(request: NextRequest) {
           fitDebugRunId,
           sceneId,
           sceneDurationFieldKey,
-          sceneSampleCountFieldKey,
-          rawSampleCount: scene[sceneSampleCountFieldKey as string],
+          rawDuration: scene[sceneDurationFieldKey as string],
         });
 
         continue;
@@ -2822,28 +2823,35 @@ export async function POST(request: NextRequest) {
         mode: shouldCreateSilenceForScene ? 'silence' : 'tts',
         textLength: text.length,
         targetDurationSec,
-        targetSamples,
+        targetSamples:
+          targetDurationSec && fitAudioToSceneDuration
+            ? secondsToSamples(targetDurationSec, AUDIO_SAMPLE_RATE)
+            : null,
       });
 
-      if (shouldCreateSilenceForScene && targetDurationSec && targetSamples) {
+      if (shouldCreateSilenceForScene && targetDurationSec) {
         try {
           logFitInfo('post:scene-silence-fit-start', {
             fitDebugRunId,
             sceneId,
             targetDurationSec,
-            targetSamples,
+            targetSamples: secondsToSamples(
+              targetDurationSec,
+              AUDIO_SAMPLE_RATE,
+            ),
             emptySentenceFieldKey,
           });
 
-          const preparedEffects = await prepareFittedHyperFramesAudio({
-            baserowUrl,
-            token,
-            scene,
-            sceneId,
-            videoId,
-            targetDurationSec,
-            targetSamples,
-          });
+          const preparedEffects = includeHyperFramesSoundEffects
+            ? await prepareFittedHyperFramesAudio({
+                baserowUrl,
+                token,
+                scene,
+                sceneId,
+                videoId,
+                targetDurationSec,
+              })
+            : { audioUrl: null, token };
           token = preparedEffects.token;
 
           const silentFitted = await createAndUploadSilentSceneAudio({
@@ -2851,7 +2859,6 @@ export async function POST(request: NextRequest) {
             sceneId,
             videoId,
             targetDurationSec,
-            targetSamples,
             language,
           });
 
@@ -3064,23 +3071,27 @@ export async function POST(request: NextRequest) {
           skippedOriginalSaveCount += 1;
         }
 
-        if (fitAudioToSceneDuration && targetDurationSec && targetSamples) {
+        if (fitAudioToSceneDuration && targetDurationSec) {
           logFitInfo('post:scene-fit-start', {
             fitDebugRunId,
             sceneId,
             targetDurationSec,
-            targetSamples,
+            targetSamples: secondsToSamples(
+              targetDurationSec,
+              AUDIO_SAMPLE_RATE,
+            ),
           });
 
-          const preparedEffects = await prepareFittedHyperFramesAudio({
-            baserowUrl,
-            token,
-            scene,
-            sceneId,
-            videoId,
-            targetDurationSec,
-            targetSamples,
-          });
+          const preparedEffects = includeHyperFramesSoundEffects
+            ? await prepareFittedHyperFramesAudio({
+                baserowUrl,
+                token,
+                scene,
+                sceneId,
+                videoId,
+                targetDurationSec,
+              })
+            : { audioUrl: null, token };
           token = preparedEffects.token;
 
           const fitted = await fitAndUploadSceneAudio({
@@ -3089,7 +3100,6 @@ export async function POST(request: NextRequest) {
             sceneId,
             videoId,
             targetDurationSec,
-            targetSamples,
             language,
           });
 

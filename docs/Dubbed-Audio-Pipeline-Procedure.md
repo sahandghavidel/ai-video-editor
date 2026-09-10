@@ -281,25 +281,23 @@ HyperFrames effects are mixed only when the Final Video (`field_6886`)
 filename proves that the exact HyperFrames Video (`field_7368`) has been
 applied. Effects are cached in `Fitted HyperFrames Audio` (`field_7391`) using
 a filename that includes the scene ID, HyperFrames identity, six-decimal target
-duration, sample rate, and exact target sample count.
+duration, and exact 48 kHz target sample count.
 
-`POST /api/calculate-final-video-durations` continues to write the existing
-six-decimal Final Video Duration (`field_7107`) used by English SRT creation.
-It also writes the final video's audio timeline length as an integer 44.1 kHz
-sample count to `Final Video Timeline Samples 44.1k` (`field_7392`). Configured
-language dubbing uses this integer field as its duration authority.
+HyperFrames effects are opt-in. The persisted pipeline setting “Add HF sound
+effects” defaults to off and controls both the full Create Dubbed Lang pipeline
+step and the Batch Operations Create Dubbed language button. When it is off,
+the scene dubbing route does not prepare, cache, or mix HyperFrames audio.
 
 The cached effects use the same no-trim duration contract as configured-language
 dubbed WAVs:
 
 - shorter audio receives appended silence;
 - longer audio is tempo-adjusted to an adaptive undershoot and then padded;
-- output is PCM `s16le`, 44.1 kHz, stereo;
+- output is PCM `s16le`, 48 kHz, stereo;
 - the effects waveform is never hard-trimmed.
 
 Mixing keeps the fitted narration as the first/authoritative input, leaves its
 gain and tempo unchanged, limits only the effects track, and verifies that the
 mixed WAV retains the narration's sample rate, channel count, codec, and sample
-count before the `Dubbed_<language>` field is patched. Final per-video assembly
-also runs at 44.1 kHz and verifies each scene WAV against `field_7392` before
-concatenation.
+count before the `Dubbed_<language>` field is patched. Final per-video M4A
+assembly is unchanged.
