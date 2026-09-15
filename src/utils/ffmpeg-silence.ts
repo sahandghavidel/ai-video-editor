@@ -240,7 +240,7 @@ export async function optimizeSilence(
     const { stdout: videoInfo } = await execAsync(videoInfoCommand);
 
     const fpsMatch = videoInfo.match(/r_frame_rate=(\d+)\/(\d+)/);
-    const fps = fpsMatch ? parseInt(fpsMatch[1]) / parseInt(fpsMatch[2]) : 30;
+    const fps = fpsMatch ? parseInt(fpsMatch[1]) / parseInt(fpsMatch[2]) : 60;
     const gopSize = Math.round(fps); // 1 second GOP
 
     console.log(`Video properties: ${fps} fps, GOP size: ${gopSize}`);
