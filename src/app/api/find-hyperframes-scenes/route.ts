@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
 import { resolveOpenAIClient, withOpenRouterNitro } from '@/lib/ai-provider';
 
-export const maxDuration = 120;
+export const maxDuration = 600;
 
 const DEFAULT_MODEL = 'deepseek/deepseek-v3.2-exp';
-const MODEL_CALL_TIMEOUT_MS = 120_000;
+const MODEL_CALL_TIMEOUT_MS = 600_000;
 const MAX_SCENES = 500;
 
 type InputScene = {
