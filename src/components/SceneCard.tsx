@@ -277,6 +277,11 @@ type RemoveTTSOptions = {
   clearFlag?: boolean;
 };
 
+type TtsReferenceMenuEntry = {
+  id: string;
+  filename: string;
+};
+
 type SceneSpeedUpVideoHandler = (
   sceneId: number,
   sceneData?: BaserowRow,
@@ -571,6 +576,18 @@ export default function SceneCard({
   const [panModeDropdownOpen, setPanModeDropdownOpen] = useState<number | null>(
     null,
   );
+  const [ttsReferenceMenuSceneId, setTtsReferenceMenuSceneId] = useState<
+    number | null
+  >(null);
+  const [ttsReferenceMenuEntries, setTtsReferenceMenuEntries] = useState<
+    TtsReferenceMenuEntry[]
+  >([]);
+  const [ttsReferenceMenuLoading, setTtsReferenceMenuLoading] =
+    useState(false);
+  const [ttsReferenceMenuError, setTtsReferenceMenuError] = useState<
+    string | null
+  >(null);
+  const ttsReferenceMenuRef = useRef<HTMLDivElement>(null);
 
   // Image overlay modal state
   const [imageOverlayModal, setImageOverlayModal] = useState<{
@@ -738,6 +755,93 @@ export default function SceneCard({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTimeAdjustment, inputValues]);
+
+  useEffect(() => {
+    if (ttsReferenceMenuSceneId === null) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        ttsReferenceMenuRef.current &&
+        !ttsReferenceMenuRef.current.contains(event.target as Node)
+      ) {
+        setTtsReferenceMenuSceneId(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setTtsReferenceMenuSceneId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [ttsReferenceMenuSceneId]);
+
+  const openTtsReferenceMenu = useCallback(async (sceneId: number) => {
+    setTtsReferenceMenuSceneId(sceneId);
+    setTtsReferenceMenuEntries([]);
+    setTtsReferenceMenuError(null);
+    setTtsReferenceMenuLoading(true);
+
+    try {
+      const response = await fetch('/api/tts-audio-references', {
+        cache: 'no-store',
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        entries?: unknown;
+        error?: unknown;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          typeof payload?.error === 'string'
+            ? payload.error
+            : 'Failed to load language presets',
+        );
+      }
+
+      const rawEntries = Array.isArray(payload?.entries) ? payload.entries : [];
+      const englishEntries = rawEntries.flatMap((rawEntry, index) => {
+        if (!rawEntry || typeof rawEntry !== 'object') return [];
+
+        const entry = rawEntry as Record<string, unknown>;
+        const language =
+          typeof entry.language === 'string'
+            ? entry.language.trim().toLowerCase()
+            : '';
+        const filename =
+          typeof entry.filename === 'string' ? entry.filename.trim() : '';
+
+        if (entry.enabled !== true || language !== 'en' || !filename) {
+          return [];
+        }
+
+        return [
+          {
+            id:
+              typeof entry.id === 'string' && entry.id.trim()
+                ? entry.id.trim()
+                : `english-reference-${index}`,
+            filename,
+          },
+        ];
+      });
+
+      setTtsReferenceMenuEntries(englishEntries);
+    } catch (error) {
+      setTtsReferenceMenuError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to load language presets',
+      );
+    } finally {
+      setTtsReferenceMenuLoading(false);
+    }
+  }, []);
 
   // Helper function to scroll a scene card to the top of the screen
   const scrollCardToTop = (sceneId: number) => {
@@ -4515,7 +4619,7 @@ export default function SceneCard({
       sceneData?: unknown,
       opts?: {
         seedOverride?: number;
-        aggressiveEdgeTrim?: boolean;
+        referenceAudioFilename?: string;
         throwOnError?: boolean;
         skipAutoSyncAfterTtsGeneration?: boolean;
         suppressRefreshes?: boolean;
@@ -4554,7 +4658,12 @@ export default function SceneCard({
         const selectedVideoVoiceOverride = extractTtsVoiceReference(
           liveStoreState.selectedOriginalVideo.ttsVoiceReference,
         );
-        const voiceOverride = sceneVoiceOverride ?? selectedVideoVoiceOverride;
+        const selectedReferenceAudioFilename =
+          opts?.referenceAudioFilename?.trim() || undefined;
+        const voiceOverride =
+          selectedReferenceAudioFilename ??
+          sceneVoiceOverride ??
+          selectedVideoVoiceOverride;
 
         const currentTtsSettings = liveStoreState.ttsSettings;
         const effectiveTtsSettings =
@@ -4570,13 +4679,13 @@ export default function SceneCard({
           : effectiveTtsSettings;
 
         const ttsEndpoint =
-          currentTtsSettings.provider === 'fish-s2-pro'
-            ? '/api/generate-tts-fish'
-            : currentTtsSettings.provider === 'omnivoice'
-              ? opts?.aggressiveEdgeTrim
-                ? '/api/generate-tts-omnivoice-right-click'
-                : '/api/generate-tts-omnivoice'
-              : '/api/generate-tts';
+          selectedReferenceAudioFilename
+            ? '/api/generate-tts-omnivoice'
+            : currentTtsSettings.provider === 'fish-s2-pro'
+              ? '/api/generate-tts-fish'
+              : currentTtsSettings.provider === 'omnivoice'
+                ? '/api/generate-tts-omnivoice'
+                : '/api/generate-tts';
 
         // Call provider-specific TTS API route directly to avoid double-hop timeouts
         const response = await fetch(ttsEndpoint, {
@@ -4589,7 +4698,6 @@ export default function SceneCard({
             sceneId,
             videoId: videoId || undefined,
             referenceAudioFilename: voiceOverride || undefined,
-            ...(opts?.aggressiveEdgeTrim ? { aggressiveEdgeTrim: true } : {}),
             ttsSettings: ttsPayloadSettings,
           }),
         });
@@ -8982,118 +9090,157 @@ export default function SceneCard({
               <div className='flex-1 flex justify-end'>
                 <div className='flex flex-wrap gap-2'>
                   {/* TTS Produce Button */}
-                  <button
-                    onClick={() =>
-                      handleTTSProduce(
-                        scene.id,
-                        String(scene['field_6890'] || scene.field_6890 || ''),
-                        scene,
-                      )
-                    }
-                    onContextMenu={(e) => {
-                      // Right-click: generate with a one-off random seed.
-                      e.preventDefault();
-                      e.stopPropagation();
-
-                      const randomSeed =
-                        typeof crypto !== 'undefined' &&
-                        typeof crypto.getRandomValues === 'function'
-                          ? crypto.getRandomValues(new Uint32Array(1))[0]
-                          : Math.floor(Math.random() * 2 ** 32);
-
-                      const provider =
-                        useAppStore.getState().ttsSettings.provider;
-
-                      void handleTTSProduce(
-                        scene.id,
-                        String(scene['field_6890'] || scene.field_6890 || ''),
-                        scene,
-                        {
-                          seedOverride: Number(randomSeed),
-                          ...(provider === 'omnivoice'
-                            ? { aggressiveEdgeTrim: true }
-                            : {}),
-                        },
-                      );
-                    }}
-                    disabled={
-                      sceneLoading.producingTTS !== null ||
-                      !String(
-                        scene['field_6890'] || scene.field_6890 || '',
-                      ).trim()
-                    }
-                    className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
-                      sceneLoading.producingTTS === scene.id
-                        ? 'bg-gray-100 text-gray-500'
-                        : sceneLoading.producingTTS !== null
-                          ? 'bg-gray-50 text-gray-400'
-                          : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    title={
-                      sceneLoading.producingTTS === scene.id
-                        ? 'Generating TTS for this scene...'
-                        : sceneLoading.producingTTS !== null
-                          ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
-                          : 'Generate TTS from sentence (right-click: random seed)'
+                  <div
+                    className='relative'
+                    ref={
+                      ttsReferenceMenuSceneId === scene.id
+                        ? ttsReferenceMenuRef
+                        : undefined
                     }
                   >
-                    {sceneLoading.producingTTS === scene.id ? (
-                      <Loader2 className='animate-spin h-3 w-3' />
-                    ) : typeof scene['field_6891'] === 'string' &&
-                      scene['field_6891'] ? (
-                      <div className='flex items-center space-x-1'>
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveTTS(scene.id);
-                          }}
-                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
-                          title='Remove TTS audio'
-                        >
-                          {removingTTSId === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : (
-                            <X className='h-3 w-3 text-purple-700' />
-                          )}
+                    <button
+                      onClick={() =>
+                        handleTTSProduce(
+                          scene.id,
+                          String(
+                            scene['field_6890'] || scene.field_6890 || '',
+                          ),
+                          scene,
+                        )
+                      }
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void openTtsReferenceMenu(scene.id);
+                      }}
+                      disabled={
+                        sceneLoading.producingTTS !== null ||
+                        !String(
+                          scene['field_6890'] || scene.field_6890 || '',
+                        ).trim()
+                      }
+                      className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[70px] rounded-full text-xs font-medium transition-colors ${
+                        sceneLoading.producingTTS === scene.id
+                          ? 'bg-gray-100 text-gray-500'
+                          : sceneLoading.producingTTS !== null
+                            ? 'bg-gray-50 text-gray-400'
+                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title={
+                        sceneLoading.producingTTS === scene.id
+                          ? 'Generating TTS for this scene...'
+                          : sceneLoading.producingTTS !== null
+                            ? `TTS is being generated for scene ${sceneLoading.producingTTS}`
+                            : 'Generate TTS from sentence (right-click: choose English reference audio)'
+                      }
+                    >
+                      {sceneLoading.producingTTS === scene.id ? (
+                        <Loader2 className='animate-spin h-3 w-3' />
+                      ) : typeof scene['field_6891'] === 'string' &&
+                        scene['field_6891'] ? (
+                        <div className='flex items-center space-x-1'>
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveTTS(scene.id);
+                            }}
+                            className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                            title='Remove TTS audio'
+                          >
+                            {removingTTSId === scene.id ? (
+                              <Loader2 className='animate-spin h-3 w-3' />
+                            ) : (
+                              <X className='h-3 w-3 text-purple-700' />
+                            )}
+                          </div>
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAudioPlay(
+                                scene.id,
+                                scene['field_6891'] as string,
+                              );
+                            }}
+                            className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
+                            title={
+                              mediaPlayer.playingAudioId === scene.id
+                                ? 'Pause audio'
+                                : 'Play audio'
+                            }
+                          >
+                            {loadingAudio === scene.id ? (
+                              <Loader2 className='animate-spin h-3 w-3' />
+                            ) : mediaPlayer.playingAudioId === scene.id ? (
+                              <Pause className='h-3 w-3 text-purple-700' />
+                            ) : (
+                              <Play className='h-3 w-3 text-purple-700' />
+                            )}
+                          </div>
                         </div>
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAudioPlay(
-                              scene.id,
-                              scene['field_6891'] as string,
-                            );
-                          }}
-                          className='p-0 bg-transparent hover:scale-125 transition-transform duration-200 cursor-pointer'
-                          title={
-                            mediaPlayer.playingAudioId === scene.id
-                              ? 'Pause audio'
-                              : 'Play audio'
-                          }
-                        >
-                          {loadingAudio === scene.id ? (
-                            <Loader2 className='animate-spin h-3 w-3' />
-                          ) : mediaPlayer.playingAudioId === scene.id ? (
-                            <Pause className='h-3 w-3 text-purple-700' />
-                          ) : (
-                            <Play className='h-3 w-3 text-purple-700' />
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <CheckCircle className='h-3 w-3' />
-                    )}
-                    <span>
-                      {sceneLoading.producingTTS === scene.id
-                        ? 'Prod...'
-                        : sceneLoading.producingTTS !== null
-                          ? 'TTS'
-                          : typeof scene['field_6891'] === 'string' &&
-                              scene['field_6891']
+                      ) : (
+                        <CheckCircle className='h-3 w-3' />
+                      )}
+                      <span>
+                        {sceneLoading.producingTTS === scene.id
+                          ? 'Prod...'
+                          : sceneLoading.producingTTS !== null
                             ? 'TTS'
-                            : 'Gen TTS'}
-                    </span>
-                  </button>
+                            : typeof scene['field_6891'] === 'string' &&
+                                scene['field_6891']
+                              ? 'TTS'
+                              : 'Gen TTS'}
+                      </span>
+                    </button>
+                    {ttsReferenceMenuSceneId === scene.id && (
+                      <div className='absolute bottom-full left-0 z-50 mb-1 min-w-[220px] max-w-[320px] overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg'>
+                        <div className='border-b border-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-500'>
+                          English reference audio
+                        </div>
+                        {ttsReferenceMenuLoading ? (
+                          <div className='flex items-center gap-2 px-3 py-2 text-xs text-gray-500'>
+                            <Loader2 className='h-3 w-3 animate-spin' />
+                            Loading presets...
+                          </div>
+                        ) : ttsReferenceMenuError ? (
+                          <div className='px-3 py-2 text-xs text-red-600'>
+                            {ttsReferenceMenuError}
+                          </div>
+                        ) : ttsReferenceMenuEntries.length === 0 ? (
+                          <div className='px-3 py-2 text-xs text-gray-500'>
+                            No enabled English presets
+                          </div>
+                        ) : (
+                          <div className='max-h-64 overflow-y-auto'>
+                            {ttsReferenceMenuEntries.map((entry) => (
+                              <button
+                                key={entry.id}
+                                type='button'
+                                className='block w-full truncate px-3 py-2 text-left text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-800'
+                                title={entry.filename}
+                                onClick={() => {
+                                  setTtsReferenceMenuSceneId(null);
+                                  void handleTTSProduce(
+                                    scene.id,
+                                    String(
+                                      scene['field_6890'] ||
+                                        scene.field_6890 ||
+                                        '',
+                                    ),
+                                    scene,
+                                    {
+                                      referenceAudioFilename: entry.filename,
+                                    },
+                                  );
+                                }}
+                              >
+                                {entry.filename}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {/* AI rewrite controls */}
                   <div
