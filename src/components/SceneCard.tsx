@@ -1166,10 +1166,7 @@ export default function SceneCard({
         return;
       }
 
-      // Handle arrow key navigation for final videos
-      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-        event.preventDefault();
-
+      const navigateAdjacentProducedVideo = (direction: -1 | 1) => {
         // Find the currently playing produced video scene
         const currentPlayingSceneId = mediaPlayer.playingProducedVideoId;
         if (!currentPlayingSceneId) return;
@@ -1332,12 +1329,7 @@ export default function SceneCard({
         if (currentIndex === -1) return;
 
         // Calculate next/previous index
-        let targetIndex;
-        if (event.key === 'ArrowRight') {
-          targetIndex = currentIndex + 1;
-        } else {
-          targetIndex = currentIndex - 1;
-        }
+        const targetIndex = currentIndex + direction;
 
         // Check bounds
         if (targetIndex < 0 || targetIndex >= filtered.length) return;
@@ -1364,6 +1356,13 @@ export default function SceneCard({
         if (finalVideoUrl && typeof finalVideoUrl === 'string') {
           handleProducedVideoPlay(targetScene.id, finalVideoUrl);
         }
+      };
+
+      // Handle arrow key navigation for final videos
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+
+        navigateAdjacentProducedVideo(event.key === 'ArrowRight' ? 1 : -1);
 
         return;
       }
@@ -1397,9 +1396,21 @@ export default function SceneCard({
         event.preventDefault();
 
         if (!event.repeat) {
-          void toggleSceneFixTtsConfirmation(
-            mediaPlayer.playingProducedVideoId,
+          const activeSceneId = mediaPlayer.playingProducedVideoId;
+          const activeScene = dataRef.current.find(
+            (scene) => scene.id === activeSceneId,
           );
+          const currentStatus = activeScene
+            ? parseFixTtsStatus(activeScene.field_7096)
+            : null;
+
+          // Move playback first when confirming a scene. Keep the original
+          // scene ID so the scene just reviewed becomes blue, not the next one.
+          if (currentStatus !== 'confirmed') {
+            navigateAdjacentProducedVideo(1);
+          }
+
+          void toggleSceneFixTtsConfirmation(activeSceneId);
         }
 
         return;
