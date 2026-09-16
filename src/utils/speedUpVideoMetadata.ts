@@ -1,4 +1,4 @@
-export const SPEED_UP_MULTIPLIERS = [1, 1.125, 1.5, 2, 4, 8] as const;
+export const SPEED_UP_MULTIPLIERS = [0.5, 0.75, 1, 1.125, 1.5, 2, 4, 8] as const;
 
 export type SpeedUpMultiplier = (typeof SPEED_UP_MULTIPLIERS)[number];
 

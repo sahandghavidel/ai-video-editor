@@ -9197,15 +9197,32 @@ export default function SceneCard({
                   {/* Speed Up Video Button */}
                   {typeof scene['field_6888'] === 'string' &&
                     scene['field_6888'] && (
-                      <button
-                        onClick={() => handleSpeedUpVideo(scene.id, scene)}
-                        disabled={sceneLoading.speedingUpVideo !== null}
-                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      <div
+                        onClick={() => {
+                          if (sceneLoading.speedingUpVideo === null) {
+                            void handleSpeedUpVideo(scene.id, scene);
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (
+                            (event.key === 'Enter' || event.key === ' ') &&
+                            sceneLoading.speedingUpVideo === null
+                          ) {
+                            event.preventDefault();
+                            void handleSpeedUpVideo(scene.id, scene);
+                          }
+                        }}
+                        role='button'
+                        tabIndex={
+                          sceneLoading.speedingUpVideo !== null ? -1 : 0
+                        }
+                        aria-disabled={sceneLoading.speedingUpVideo !== null}
+                        className={`flex items-center justify-center space-x-1 px-3 py-1 h-7 min-w-[80px] rounded-full text-xs font-medium transition-all duration-300 ${
                           sceneLoading.speedingUpVideo === scene.id
-                            ? 'bg-gray-100 text-gray-500'
+                            ? 'bg-gray-100 text-gray-500 opacity-50 cursor-not-allowed'
                             : sceneLoading.speedingUpVideo !== null
-                              ? 'bg-gray-50 text-gray-400'
-                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer'
                         }`}
                         title={
                           sceneLoading.speedingUpVideo === scene.id
@@ -9270,21 +9287,13 @@ export default function SceneCard({
                                 <Volume2 className='h-3 w-3' />
                               )}
                             </div>
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (sceneLoading.speedingUpVideo !== null) {
-                                  return;
-                                }
-                                const currentIndex =
-                                  SPEED_UP_MULTIPLIERS.indexOf(
-                                    sceneSpeedUpControl.speed,
-                                  );
-                                const nextSpeed =
-                                  SPEED_UP_MULTIPLIERS[
-                                    (currentIndex + 1) %
-                                      SPEED_UP_MULTIPLIERS.length
-                                  ];
+                            <select
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                              onChange={(event) => {
+                                const nextSpeed = Number(
+                                  event.target.value,
+                                ) as SpeedUpMultiplier;
                                 setSceneSpeedUpControls((currentControls) => {
                                   const currentControl =
                                     currentControls[scene.id] ||
@@ -9298,11 +9307,18 @@ export default function SceneCard({
                                   };
                                 });
                               }}
-                              className='px-1 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-600/20 rounded transition-colors duration-200 cursor-pointer'
-                              title='Click to cycle through speeds (1x → 1.125x → 1.5x → 2x → 4x → 8x)'
+                              value={sceneSpeedUpControl.speed}
+                              disabled={sceneLoading.speedingUpVideo !== null}
+                              className='w-[48px] px-0 py-0.5 text-xs font-bold text-blue-700 bg-transparent hover:bg-blue-600/20 rounded transition-colors duration-200 cursor-pointer focus:outline-none disabled:cursor-not-allowed'
+                              title='Select the speed for this scene'
+                              aria-label={`Speed for scene ${scene.id}`}
                             >
-                              {sceneSpeedUpControl.speed}x
-                            </div>
+                              {SPEED_UP_MULTIPLIERS.map((speed) => (
+                                <option key={speed} value={speed}>
+                                  {speed}x
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         )}
                         <span>
@@ -9312,7 +9328,7 @@ export default function SceneCard({
                               ? 'Spe..'
                               : 'Speed'}
                         </span>
-                      </button>
+                      </div>
                     )}
 
                   {/* Generate Clip Button */}
