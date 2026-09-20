@@ -19,6 +19,7 @@ import {
 } from '@/utils/fixTtsBatch';
 import { playSuccessSound, playErrorSound } from '@/utils/soundManager';
 import { extractTtsVoiceReference } from '@/utils/ttsVoiceReference';
+import { isHyperFramesAlreadyApplied } from '@/utils/finalVideoIdentity';
 import { sanitizeCaptionWordTimestamps } from '@/utils/transcriptionWordCleanup';
 import {
   getFinalVideoCaptionFilename,
@@ -61,6 +62,7 @@ import {
   ImageIcon,
   Wand2,
   ListFilter,
+  Clapperboard,
   Search,
 } from 'lucide-react';
 
@@ -337,6 +339,70 @@ const isSceneVisualRequired = (scene: BaserowRow): boolean =>
   extractFieldValueAsText(scene['field_7364']).trim().toLowerCase() ===
   'needs visual';
 
+type HyperFramesFilter =
+  | 'all'
+  | 'needs-visual'
+  | 'has-prompt'
+  | 'has-html'
+  | 'has-video'
+  | 'has-final'
+  | 'ready-to-apply'
+  | 'video-no-final'
+  | 'applied'
+  | 'needs-prompt'
+  | 'needs-html'
+  | 'needs-render';
+
+const hyperFramesFilterOptions: Array<{
+  value: HyperFramesFilter;
+  label: string;
+}> = [
+  { value: 'all', label: 'All scenes' },
+  { value: 'needs-visual', label: 'Needs Visual' },
+  { value: 'has-prompt', label: 'Has HF prompt' },
+  { value: 'has-html', label: 'Has HF HTML' },
+  { value: 'has-video', label: 'Has HF video' },
+  { value: 'has-final', label: 'Has Final video' },
+  { value: 'ready-to-apply', label: 'Ready to apply HF' },
+  { value: 'video-no-final', label: 'HF video, no Final' },
+  { value: 'applied', label: 'HF applied to Final' },
+  { value: 'needs-prompt', label: 'Needs HF prompt' },
+  { value: 'needs-html', label: 'Needs HF HTML' },
+  { value: 'needs-render', label: 'Needs HF render' },
+];
+
+const matchesHyperFramesFilter = (
+  scene: BaserowRow,
+  filter: HyperFramesFilter,
+): boolean => {
+  if (filter === 'all') return true;
+
+  const needsVisual = isSceneVisualRequired(scene);
+  const prompt = extractFieldValueAsText(scene.field_7365).trim();
+  const html = extractFieldValueAsText(scene.field_7367).trim();
+  const video = extractFieldValueAsText(scene.field_7368).trim();
+  const finalVideo = extractFieldValueAsText(scene.field_6886).trim();
+  const applied = Boolean(video && finalVideo) && isHyperFramesAlreadyApplied({
+    sceneId: scene.id,
+    finalVideoUrl: finalVideo,
+    hyperFramesVideoUrl: video,
+  });
+
+  switch (filter) {
+    case 'needs-visual': return needsVisual;
+    case 'has-prompt': return Boolean(prompt);
+    case 'has-html': return Boolean(html);
+    case 'has-video': return Boolean(video);
+    case 'has-final': return Boolean(finalVideo);
+    case 'ready-to-apply': return Boolean(video && finalVideo && !applied);
+    case 'video-no-final': return Boolean(video && !finalVideo);
+    case 'applied': return applied;
+    case 'needs-prompt': return needsVisual && Boolean(finalVideo) && !prompt;
+    case 'needs-html': return needsVisual && Boolean(prompt) && !html;
+    case 'needs-render': return needsVisual && Boolean(html) && !video;
+  }
+};
+
 const getVisualRequirementButtonClasses = (
   needsVisual: boolean,
   isUpdating: boolean,
@@ -545,6 +611,10 @@ export default function SceneCard({
   const [fixTtsStatusFilter, setFixTtsStatusFilter] = useState<
     FixTtsStatus | 'green-orange' | 'all'
   >('all');
+  const [hyperFramesFilter, setHyperFramesFilter] =
+    useState<HyperFramesFilter>('all');
+  const [showHyperFramesFilters, setShowHyperFramesFilters] = useState(false);
+  const hyperFramesFiltersRef = useRef<HTMLDivElement>(null);
   const [showShortWithNeighbors, setShowShortWithNeighbors] =
     useState<boolean>(false);
   const [shortTextCharLimitInput, setShortTextCharLimitInput] =
@@ -749,6 +819,26 @@ export default function SceneCard({
   useEffect(() => {
     producedPlaybackHistoryRef.current = [];
   }, [playbackHistoryDatasetKey]);
+
+  useEffect(() => {
+    if (!showHyperFramesFilters) return;
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!hyperFramesFiltersRef.current?.contains(event.target as Node)) {
+        setShowHyperFramesFilters(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowHyperFramesFilters(false);
+    };
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showHyperFramesFilters]);
 
   // Click outside handler for time adjustment and settings dropdowns
   useEffect(() => {
@@ -1486,6 +1576,12 @@ export default function SceneCard({
           });
         }
 
+        if (hyperFramesFilter !== 'all') {
+          filtered = filtered.filter((scene) =>
+            matchesHyperFramesFilter(scene, hyperFramesFilter),
+          );
+        }
+
         const normalizedSentenceSearch = sentenceSearchQuery.trim().toLowerCase();
         if (normalizedSentenceSearch) {
           filtered = filtered.filter((scene) =>
@@ -1968,6 +2064,7 @@ export default function SceneCard({
     refreshSceneInLocalCache,
     data,
     fixTtsStatusFilter,
+    hyperFramesFilter,
     sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
@@ -7631,6 +7728,12 @@ export default function SceneCard({
       });
     }
 
+    if (hyperFramesFilter !== 'all') {
+      filtered = filtered.filter((scene) =>
+        matchesHyperFramesFilter(scene, hyperFramesFilter),
+      );
+    }
+
     const normalizedSentenceSearch = sentenceSearchQuery.trim().toLowerCase();
     if (normalizedSentenceSearch) {
       filtered = filtered.filter((scene) =>
@@ -7738,6 +7841,7 @@ export default function SceneCard({
   }, [
     data,
     fixTtsStatusFilter,
+    hyperFramesFilter,
     sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
@@ -7850,6 +7954,7 @@ export default function SceneCard({
     selectedOriginalVideo.id,
     showProcessingScenesAllVideos,
     fixTtsStatusFilter,
+    hyperFramesFilter,
     sentenceSearchQuery,
     showTimeFilter,
     timeFilterSecondsInput,
@@ -8220,6 +8325,51 @@ export default function SceneCard({
                 >
                   <Wand2 className='h-3 w-3' />
                 </button>
+                <div ref={hyperFramesFiltersRef} className='relative'>
+                  <button
+                    type='button'
+                    onClick={() => setShowHyperFramesFilters(!showHyperFramesFilters)}
+                    aria-expanded={showHyperFramesFilters}
+                    aria-haspopup='menu'
+                    aria-label={`HyperFrames filter: ${hyperFramesFilterOptions.find((option) => option.value === hyperFramesFilter)?.label}`}
+                    title={`HyperFrames filter: ${hyperFramesFilterOptions.find((option) => option.value === hyperFramesFilter)?.label}`}
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                      hyperFramesFilter === 'all'
+                        ? 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
+                        : 'bg-amber-500 text-white hover:bg-amber-600'
+                    }`}
+                  >
+                    <Clapperboard className='h-3.5 w-3.5' />
+                  </button>
+                  {showHyperFramesFilters && (
+                    <div
+                      role='menu'
+                      aria-label='Filter scenes by HyperFrames stage'
+                      className='absolute left-0 top-full z-50 mt-1 max-h-[70vh] w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 text-[11px] text-gray-700 shadow-lg'
+                    >
+                      {hyperFramesFilterOptions.map((option, index) => (
+                        <React.Fragment key={option.value}>
+                          {[1, 6, 9].includes(index) && <div className='my-1 border-t border-gray-200' />}
+                          <button
+                            type='button'
+                            role='menuitemradio'
+                            aria-checked={hyperFramesFilter === option.value}
+                            onClick={() => {
+                              setHyperFramesFilter(option.value);
+                              setShowHyperFramesFilters(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-gray-100 ${
+                              hyperFramesFilter === option.value ? 'font-semibold text-amber-700' : ''
+                            }`}
+                          >
+                            {option.label}
+                            {hyperFramesFilter === option.value && <span aria-hidden='true'>✓</span>}
+                          </button>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div ref={textTtsFiltersRef} className='relative'>
                   <button
                     type='button'
