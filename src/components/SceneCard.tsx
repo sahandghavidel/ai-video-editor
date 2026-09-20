@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { createPortal } from 'react-dom';
 import {
   updateBaserowRow,
   updateSceneRow,
@@ -191,6 +192,11 @@ const LazyImageOverlayModal = dynamic(
     ssr: false,
     loading: () => null,
   },
+);
+
+const LazyHyperFramesEditorModal = dynamic(
+  () => import('./HyperFramesEditorModal').then((mod) => mod.HyperFramesEditorModal),
+  { ssr: false, loading: () => null },
 );
 
 const LazyTTSWordReplacementsModal = dynamic(
@@ -646,6 +652,15 @@ export default function SceneCard({
   const [visualRequirementStatus, setVisualRequirementStatus] = useState<
     Record<number, string | null>
   >({});
+  const [hyperFramesMenu, setHyperFramesMenu] = useState<{
+    sceneId: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [hyperFramesEditorSceneId, setHyperFramesEditorSceneId] = useState<number | null>(null);
+  const [hyperFramesActionSceneId, setHyperFramesActionSceneId] = useState<number | null>(null);
+  const [hyperFramesActionStatus, setHyperFramesActionStatus] = useState<Record<number, string>>({});
+  const hyperFramesMenuRef = useRef<HTMLDivElement>(null);
 
   const [autoFixingMismatchSceneId, setAutoFixingMismatchSceneId] = useState<
     number | null
@@ -1088,6 +1103,106 @@ export default function SceneCard({
       setConfirmingFixTtsSceneId(null);
     }
   }, []);
+
+  useEffect(() => {
+    if (!hyperFramesMenu) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!hyperFramesMenuRef.current?.contains(event.target as Node)) {
+        setHyperFramesMenu(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setHyperFramesMenu(null);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [hyperFramesMenu]);
+
+  const runHyperFramesMenuAction = async (
+    sceneId: number,
+    action: 'prompt' | 'html' | 'render' | 'apply' | 'deleteHtml' | 'deleteVideo',
+  ) => {
+    if (hyperFramesActionSceneId !== null) return;
+    if ((action === 'deleteHtml' || action === 'deleteVideo') &&
+      !window.confirm(action === 'deleteHtml'
+        ? 'Clear the saved HyperFrames HTML for this scene?'
+        : 'Clear the saved HyperFrames video URL for this scene?')) return;
+
+    setHyperFramesActionSceneId(sceneId);
+    setHyperFramesActionStatus((prev) => ({ ...prev, [sceneId]: 'Working...' }));
+    try {
+      const latestScene = await getSceneById(sceneId);
+      if (!latestScene) throw new Error('Scene could not be found');
+      let changes: Partial<BaserowRow> = {};
+      if (action === 'prompt') {
+        const transcribe = hyperFramesTranscribeSceneRef.current;
+        if (!transcribe) throw new Error('Final video transcription is not ready');
+        await transcribe(sceneId, latestScene, 'final', true, true, false, {
+          throwOnError: true,
+          skipIfFinalVideoAlreadyTranscribed: true,
+        });
+        const videoId = getHyperFramesSceneVideoId(latestScene);
+        const videoScenes = dataRef.current
+          .filter((scene) => videoId === null || getHyperFramesSceneVideoId(scene) === videoId)
+          .sort(compareHyperFramesScenesByRealOrder);
+        const { prompt } = await generateAndSaveHyperFramesPrompt({
+          sceneId,
+          previousSceneSentences: getPreviousHyperFramesSceneSentences(videoScenes, sceneId),
+          overwrite: true,
+        });
+        changes = { field_7365: prompt };
+      } else if (action === 'html') {
+        const model = useAppStore.getState().modelSelection.selectedModel;
+        if (!model) throw new Error('Select an AI model first');
+        const response = await fetch('/api/generate-hyperframes-html', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId, model }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || `HF HTML failed (${response.status})`);
+        const html = typeof result?.html === 'string' ? result.html.trim() : '';
+        if (!html) throw new Error('HF HTML generation returned empty HTML');
+        changes = { field_7367: html };
+      } else if (action === 'render' || action === 'apply') {
+        const response = await fetch(action === 'render'
+          ? '/api/render-hyperframes-video' : '/api/apply-hyperframes-video', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || `${action} failed (${response.status})`);
+        if (result?.skipped) throw new Error(`${action} was skipped`);
+        const videoUrl = typeof result?.videoUrl === 'string' ? result.videoUrl.trim() : '';
+        if (!videoUrl) throw new Error(`${action} returned no video URL`);
+        changes = action === 'render' ? { field_7368: videoUrl } : { field_6886: videoUrl };
+      } else {
+        changes = action === 'deleteHtml' ? { field_7367: '' } : { field_7368: '' };
+      }
+
+      if (action === 'html' || action === 'deleteHtml' || action === 'deleteVideo') {
+        const response = await fetch(`/api/baserow/scenes/${sceneId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(changes),
+        });
+        if (!response.ok) throw new Error(`Could not save scene (${response.status})`);
+      }
+      const updatedData = dataRef.current.map((scene) => scene.id === sceneId ? { ...scene, ...changes } : scene);
+      dataRef.current = updatedData;
+      onDataUpdateRef.current?.(updatedData);
+      refreshDataRef.current?.();
+      setHyperFramesActionStatus((prev) => ({ ...prev, [sceneId]: 'Done' }));
+    } catch (error) {
+      setHyperFramesActionStatus((prev) => ({
+        ...prev, [sceneId]: error instanceof Error ? error.message : 'Action failed',
+      }));
+    } finally {
+      setHyperFramesActionSceneId(null);
+    }
+  };
 
   const toggleSceneVisualRequirement = useCallback(async (sceneId: number) => {
     if (visualRequirementUpdateLockRef.current) return;
@@ -9803,16 +9918,12 @@ export default function SceneCard({
                           onContextMenu={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-
-                            if (
-                              addingImageOverlay === scene.id ||
-                              visualRequirementUpdatingSceneId === scene.id ||
-                              visualRequirementUpdateLockRef.current
-                            ) {
-                              return;
-                            }
-
-                            void toggleSceneVisualRequirement(scene.id);
+                            setHyperFramesActionStatus((prev) => ({ ...prev, [scene.id]: '' }));
+                            setHyperFramesMenu({
+                              sceneId: scene.id,
+                              x: Math.min(e.clientX, window.innerWidth - 224),
+                              y: Math.min(e.clientY, window.innerHeight - 324),
+                            });
                           }}
                           aria-label={
                             visualRequirementUpdatingSceneId === scene.id
@@ -9834,10 +9945,10 @@ export default function SceneCard({
                                 ? 'Clearing visual requirement...'
                                 : 'Saving Needs Visual and creating HF prompt...'
                               : visualRequirementStatus[scene.id]
-                                ? visualRequirementStatus[scene.id]
+                                ? visualRequirementStatus[scene.id] ?? undefined
                                 : isSceneVisualRequired(scene as BaserowRow)
-                                  ? 'Add image overlay to final video. Right-click or press 3 while Final is playing to clear Needs Visual.'
-                                  : 'Add image overlay to final video. Right-click or press 3 while Final is playing to mark Needs Visual and create its HF prompt.'
+                                  ? 'Add image overlay to final video. Right-click for HyperFrames actions; press 3 while Final is playing to clear Needs Visual.'
+                                  : 'Add image overlay to final video. Right-click for HyperFrames actions; press 3 while Final is playing to mark Needs Visual.'
                           }
                         >
                           {addingImageOverlay === scene.id ||
@@ -10106,6 +10217,60 @@ export default function SceneCard({
           </button>
         </>
       )}
+
+      {hyperFramesMenu && createPortal((() => {
+        const scene = data.find((item) => item.id === hyperFramesMenu.sceneId);
+        const sceneId = hyperFramesMenu.sceneId;
+        const prompt = extractFieldValueAsText(scene?.field_7365).trim();
+        const html = extractFieldValueAsText(scene?.field_7367).trim();
+        const video = extractFieldValueAsText(scene?.field_7368).trim();
+        const finalVideo = extractFieldValueAsText(scene?.field_6886).trim();
+        const busy = hyperFramesActionSceneId !== null;
+        const items: Array<{ label: string; action: 'prompt' | 'html' | 'render' | 'apply' | 'deleteHtml' | 'deleteVideo'; disabled?: boolean }> = [
+          { label: 'HF Prompt', action: 'prompt' },
+          { label: 'HF HTML', action: 'html', disabled: !prompt },
+          { label: 'Render HF', action: 'render', disabled: !html },
+          { label: 'Apply HF', action: 'apply', disabled: !video || !finalVideo },
+          { label: 'Delete HTML', action: 'deleteHtml', disabled: !html },
+          { label: 'Delete HF Video', action: 'deleteVideo', disabled: !video },
+        ];
+        return <div
+          ref={hyperFramesMenuRef}
+          role='menu'
+          aria-label={`HyperFrames actions for scene ${sceneId}`}
+          className='fixed z-[100] w-52 rounded-lg border border-gray-200 bg-white p-1 shadow-xl'
+          style={{ left: Math.max(8, hyperFramesMenu.x), top: Math.max(8, hyperFramesMenu.y) }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {items.slice(0, 3).map((item) => <button key={item.action} type='button' role='menuitem'
+            disabled={busy || item.disabled}
+            onClick={() => { void runHyperFramesMenuAction(sceneId, item.action); }}
+            className='block w-full rounded px-3 py-2 text-left text-sm text-gray-800 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40'
+          >{item.label}</button>)}
+          <button type='button' role='menuitem' disabled={busy || !html}
+            onClick={() => { setHyperFramesEditorSceneId(sceneId); setHyperFramesMenu(null); }}
+            className='block w-full rounded px-3 py-2 text-left text-sm text-gray-800 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40'
+          >Edit HF</button>
+          {items.slice(3).map((item) => <button key={item.action} type='button' role='menuitem'
+            disabled={busy || item.disabled}
+            onClick={() => { void runHyperFramesMenuAction(sceneId, item.action); }}
+            className={`block w-full rounded px-3 py-2 text-left text-sm hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40 ${item.action.startsWith('delete') ? 'text-red-700' : 'text-gray-800'}`}
+          >{item.label}</button>)}
+          {hyperFramesActionStatus[sceneId] && <p role='status' className='border-t px-3 py-2 text-xs text-gray-600'>{hyperFramesActionStatus[sceneId]}</p>}
+        </div>;
+      })(), document.body)}
+
+      {hyperFramesEditorSceneId !== null && <LazyHyperFramesEditorModal
+        isOpen={true}
+        sceneId={hyperFramesEditorSceneId}
+        onClose={() => setHyperFramesEditorSceneId(null)}
+        onSaved={(html) => {
+          const updatedData = dataRef.current.map((scene) => scene.id === hyperFramesEditorSceneId ? { ...scene, field_7367: html } : scene);
+          dataRef.current = updatedData;
+          onDataUpdateRef.current?.(updatedData);
+          refreshDataRef.current?.();
+        }}
+      />}
 
       {/* Image Overlay Modal */}
       {imageOverlayModal.isOpen && (
