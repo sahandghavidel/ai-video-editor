@@ -34,3 +34,20 @@ background mode, and embeds Studio in the modal. Studio provides playback,
 scrubbing, element selection, and timeline editing. `Save to Scene` converts
 the staged sound paths back to application paths, validates the edited HTML,
 and updates `field_7367`. Closing the modal stops that scene's preview server.
+
+## Audio in empty-sentence DUB scenes
+
+For an empty target sentence, configured-language dubbing preserves audio from
+the current Final video (`field_6886`) when the existing speed-up filename
+parser identifies it as explicitly `unmuted` and FFprobe finds an audio stream.
+This applies independently of the `Add HF sound effects` checkbox. The video
+already carries its selected playback speed; that multiplier is not reapplied.
+
+The audio uses the existing HyperFrames stretching helper, then the existing
+silent-base mixing, fitting, and DUB upload path: PCM signed 16-bit WAV, 48 kHz,
+stereo, fitted to the scene duration (`field_7107`) with sample-based checks.
+Only one overlay source is selected; otherwise the existing optional
+HyperFrames effects or silence behavior applies. The temporary extracted WAV
+is cleaned up and does not use the Fitted HyperFrames Audio cache (`field_7391`).
+Existing DUB outputs are still skipped and need targeted regeneration to adopt
+this behavior. Spoken scenes and final audio merging are unchanged.

@@ -5,6 +5,7 @@ import path from 'path';
 import { access, unlink } from 'fs/promises';
 import { uploadToMinio } from '@/utils/ffmpeg-direct';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
+import { parseSpeedUpVideoMetadata } from '@/utils/speedUpVideoMetadata';
 import {
   getHyperFramesIdentity,
   getMediaFilename,
@@ -2830,6 +2831,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (shouldCreateSilenceForScene && targetDurationSec) {
+        let fittedUnmutedAudioPath: string | null = null;
         try {
           logFitInfo('post:scene-silence-fit-start', {
             fitDebugRunId,
@@ -2842,7 +2844,31 @@ export async function POST(request: NextRequest) {
             emptySentenceFieldKey,
           });
 
-          const preparedEffects = includeHyperFramesSoundEffects
+          const finalVideoUrl = extractUrl(scene[FINAL_VIDEO_FIELD_KEY]);
+          if (
+            finalVideoUrl &&
+            parseSpeedUpVideoMetadata(finalVideoUrl)?.muteAudio === false &&
+            (await hasAudioStream(finalVideoUrl))
+          ) {
+            // The processed video already has its selected playback speed.
+            // Reuse HF fitting and the existing silent-base overlay mix.
+            fittedUnmutedAudioPath = await stretchHyperFramesAudioToDurationLocal({
+              sceneId,
+              videoId,
+              inputAudioUrl: finalVideoUrl,
+              targetDurationSec,
+            });
+            logFitInfo('post:scene-unmuted-video-audio-prepared', {
+              fitDebugRunId,
+              sceneId,
+              finalVideoUrl,
+              targetDurationSec,
+            });
+          }
+
+          const preparedEffects = fittedUnmutedAudioPath
+            ? { audioUrl: fittedUnmutedAudioPath, token }
+            : includeHyperFramesSoundEffects
             ? await prepareFittedHyperFramesAudio({
                 baserowUrl,
                 token,
@@ -2940,6 +2966,8 @@ export async function POST(request: NextRequest) {
             message,
             elapsedMs: Date.now() - sceneStartedAt,
           });
+        } finally {
+          await safeUnlink(fittedUnmutedAudioPath);
         }
 
         continue;
