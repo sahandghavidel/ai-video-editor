@@ -1,4 +1,5 @@
 'use client';
+import { normalizePersianTtsSettings, DEFAULT_PERSIAN_TTS_SETTINGS, PERSIAN_CONTROL_RANGES, type PersianTtsSettings } from '@/utils/persianTtsSettings';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
@@ -24,6 +25,7 @@ type AudioReferenceEntry = {
   filename: string;
   provider: LanguageTtsProvider;
   gemini: GeminiTtsSettings;
+  persian: PersianTtsSettings;
   language: string;
   youtubeLangCode?: string;
   referenceText: string;
@@ -75,7 +77,7 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
 
   const filename =
     typeof entry.filename === 'string' ? entry.filename.trim() : '';
-  const provider = entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
+  const provider = entry.provider === 'chatterbox-persian' ? 'chatterbox-persian' : entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
   if (!filename && provider === 'omnivoice') return null;
 
   const id =
@@ -169,6 +171,7 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
     filename,
     provider,
     gemini: normalizeGeminiTtsSettings(entry.gemini),
+    persian: normalizePersianTtsSettings(entry.persian),
     language: (languageRaw || 'und').toLowerCase(),
     youtubeLangCode,
     referenceText:
@@ -336,6 +339,7 @@ export function TTSAudioReferencesModal({
         filename: '',
         provider: 'omnivoice',
         gemini: { ...DEFAULT_GEMINI_TTS_SETTINGS },
+        persian: { ...DEFAULT_PERSIAN_TTS_SETTINGS },
         language: 'fa',
         referenceText: '',
         baserowFields: {
@@ -531,7 +535,7 @@ export function TTSAudioReferencesModal({
                     />
                   </div>
 
-                  {entry.provider === 'omnivoice' && (
+                  {(entry.provider === 'omnivoice' || entry.provider === 'chatterbox-persian') && (
                   <div className='space-y-1'>
                     <label className='text-xs font-medium text-gray-700'>
                       Audio Filename
@@ -574,8 +578,25 @@ export function TTSAudioReferencesModal({
                     className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
                     <option value='omnivoice'>OmniVoice — Local</option>
                     <option value='gemini'>Google Gemini — Online</option>
+                    {entry.language === 'fa' && <option value='chatterbox-persian'>Chatterbox Persian — Isolated Local</option>}
                   </select>
                 </div>
+                {entry.provider === 'chatterbox-persian' && (
+                  <div className='space-y-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4'>
+                    <div className='grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3'>
+                    {Object.entries(PERSIAN_CONTROL_RANGES).filter(([name]) => name !== 'steps').map(([name, [min, max, step]]) => {
+                      const key = name as keyof typeof PERSIAN_CONTROL_RANGES;
+                      const labels = { seed: 'Seed', exaggeration: 'Expressiveness', cfgWeight: 'CFG weight', temperature: 'Temperature', repetitionPenalty: 'Repetition penalty', topP: 'Top P', minP: 'Min P', steps: 'Audio decoder steps' };
+                      return <label key={key} className='block min-w-0 space-y-1.5 text-xs font-medium text-gray-700'>{labels[key]}
+                        <input type='number' aria-label={`Persian ${labels[key]}`} min={min} max={max} step={step} value={entry.persian[key]}
+                          onChange={(event) => updateEntry(entry.id, { persian: normalizePersianTtsSettings({ ...entry.persian, [key]: Number(event.target.value) }) })}
+                          className='block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500' />
+                      </label>;
+                    })}
+                    </div>
+                    <p className='text-xs text-gray-500'>Decoder steps affect audio synthesis time. More steps do not guarantee better pronunciation. A fixed seed helps repeatability.</p>
+                  </div>
+                )}
                 {entry.provider === 'gemini' && (
                   <div className='rounded-md border border-blue-200 bg-blue-50 p-3 space-y-2'>
                     <p className='text-xs text-blue-900'>Gemini 3.8 Flash TTS</p>
@@ -625,13 +646,14 @@ export function TTSAudioReferencesModal({
                   </div>
                 </div>
 
-                {entry.provider === 'omnivoice' && (<>
+                {(entry.provider === 'omnivoice' || entry.provider === 'chatterbox-persian') && (<>
                 <div className='space-y-1'>
                   <label className='text-xs font-medium text-gray-700'>
                     Reference Text
                   </label>
                   <textarea
                     rows={3}
+                    disabled={entry.provider === 'chatterbox-persian'}
                     value={entry.referenceText}
                     onChange={(event) =>
                       updateEntry(entry.id, {
@@ -643,6 +665,7 @@ export function TTSAudioReferencesModal({
                   />
                 </div>
 
+                {entry.provider === 'chatterbox-persian' && <p className='text-xs text-gray-500'>Chatterbox clones from the recording alone; Reference Text is retained but unused. DType is float32 until other precisions are validated.</p>}
                 <div className='grid grid-cols-2 md:grid-cols-4 gap-2'>
                   <div className='space-y-1'>
                     <label className='text-xs font-medium text-gray-700'>
@@ -668,7 +691,8 @@ export function TTSAudioReferencesModal({
                       DType
                     </label>
                     <select
-                      value={entry.dtype}
+                      disabled={entry.provider === 'chatterbox-persian'}
+                      value={entry.provider === 'chatterbox-persian' ? 'float32' : entry.dtype}
                       onChange={(event) =>
                         updateEntry(entry.id, {
                           dtype: event.target.value as DType,
@@ -690,12 +714,10 @@ export function TTSAudioReferencesModal({
                       type='number'
                       min='8'
                       max='64'
-                      value={entry.numStep}
+                      value={entry.provider === 'chatterbox-persian' ? entry.persian.steps : entry.numStep}
                       onChange={(event) =>
                         updateEntry(entry.id, {
-                          numStep: Math.round(
-                            clamp(Number(event.target.value) || 64, 8, 64),
-                          ),
+                          ...(entry.provider === 'chatterbox-persian' ? { persian: { ...entry.persian, steps: Math.round(clamp(Number(event.target.value) || 10, 8, 64)) } } : { numStep: Math.round(clamp(Number(event.target.value) || 64, 8, 64)) }),
                         })
                       }
                       className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'

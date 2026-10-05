@@ -1,4 +1,4 @@
-export type LanguageTtsProvider = 'omnivoice' | 'gemini';
+export type LanguageTtsProvider = 'omnivoice' | 'gemini' | 'chatterbox-persian';
 
 export interface GeminiTtsSettings {
   voice: string;

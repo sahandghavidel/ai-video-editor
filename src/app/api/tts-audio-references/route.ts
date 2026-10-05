@@ -45,11 +45,14 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Each language preset must be an object' }, { status: 400 });
       }
       const entry = value as Record<string, unknown>;
-      if (entry.provider !== undefined && entry.provider !== 'omnivoice' && entry.provider !== 'gemini') {
+      if (entry.provider !== undefined && entry.provider !== 'omnivoice' && entry.provider !== 'gemini' && entry.provider !== 'chatterbox-persian') {
         return NextResponse.json({ error: 'Unsupported language TTS provider' }, { status: 400 });
       }
-      if (entry.provider === 'gemini') {
-        const error = validateGeminiTtsSettings(normalizeGeminiTtsSettings(entry.gemini));
+      if (entry.provider === 'chatterbox-persian' && entry.language !== 'fa') {
+        return NextResponse.json({ error: 'Chatterbox Persian is only available for fa' }, { status: 400 });
+      }
+      if (entry.provider === 'gemini' || entry.provider === 'chatterbox-persian') {
+        const error = entry.provider === 'chatterbox-persian' ? null : validateGeminiTtsSettings(normalizeGeminiTtsSettings(entry.gemini));
         if (error) return NextResponse.json({ error }, { status: 400 });
       } else if (typeof entry.filename !== 'string' || !entry.filename.trim()) {
         return NextResponse.json({ error: 'Local presets require a reference filename' }, { status: 400 });

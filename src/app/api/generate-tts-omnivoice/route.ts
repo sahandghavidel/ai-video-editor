@@ -1,3 +1,4 @@
+import { resolveReferenceAudioPath } from '@/lib/ttsReferenceAudio';
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile, spawn } from 'child_process';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
@@ -348,36 +349,6 @@ async function selectOmniVoicePythonCommand(options: {
   return preferred;
 }
 
-function resolveReferenceAudioPath(input: {
-  filenameOrPath: string;
-  configuredDir?: string;
-}): { fullPath: string; searchedDirs: string[] } {
-  const { filenameOrPath, configuredDir } = input;
-
-  if (path.isAbsolute(filenameOrPath)) {
-    if (fs.existsSync(filenameOrPath)) {
-      return { fullPath: filenameOrPath, searchedDirs: [] };
-    }
-    throw new Error(`Reference audio path does not exist: ${filenameOrPath}`);
-  }
-
-  const dirs = [
-    configuredDir?.trim() || '',
-    process.env.OMNIVOICE_REFERENCE_AUDIO_DIR?.trim() || '',
-    path.join(process.cwd(), 'omnivoice-local', 'references'),
-  ].filter((d, idx, arr) => d.length > 0 && arr.indexOf(d) === idx);
-
-  for (const dir of dirs) {
-    const full = path.resolve(dir, filenameOrPath);
-    if (fs.existsSync(full)) {
-      return { fullPath: full, searchedDirs: dirs };
-    }
-  }
-
-  throw new Error(
-    `Reference audio not found for '${filenameOrPath}'. Checked: ${dirs.join(', ') || '(no directories configured)'}`,
-  );
-}
 
 function resolveDType(value: unknown): OmniVoiceDType {
   return value === 'float32' || value === 'bfloat16' || value === 'float16'
