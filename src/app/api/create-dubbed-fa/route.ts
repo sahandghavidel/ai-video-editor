@@ -9,6 +9,8 @@ import {
   type LanguageBaserowFields,
 } from '@/lib/ttsAudioReferencesStore';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
+import { DEFAULT_GEMINI_TTS_SETTINGS, type GeminiTtsSettings, type LanguageTtsProvider } from '@/utils/geminiTtsSettings';
+import { validateGeminiTtsSettings } from '@/lib/geminiTts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -66,6 +68,8 @@ type TimestampMismatch = {
 type ResolvedAudioReference = {
   id: string | null;
   filename: string;
+  provider: LanguageTtsProvider;
+  gemini: GeminiTtsSettings;
   language: string;
   youtubeLangCode?: string;
   referenceText: string;
@@ -246,7 +250,7 @@ async function resolveLanguageAudioReference(
       (entry) =>
         entry.enabled &&
         entry.language.toLowerCase() === normalizedLanguage &&
-        entry.filename.trim().length > 0,
+        (entry.provider === 'gemini' || entry.filename.trim().length > 0),
     );
 
     if (languageEntries.length > 0) {
@@ -255,6 +259,8 @@ async function resolveLanguageAudioReference(
         return {
           id: defaultEntry.id,
           filename: defaultEntry.filename,
+          provider: defaultEntry.provider,
+          gemini: defaultEntry.gemini,
           language: defaultEntry.language,
           youtubeLangCode: defaultEntry.youtubeLangCode,
           referenceText: defaultEntry.referenceText,
@@ -271,6 +277,8 @@ async function resolveLanguageAudioReference(
       return {
         id: firstEntry.id,
         filename: firstEntry.filename,
+        provider: firstEntry.provider,
+        gemini: firstEntry.gemini,
         language: firstEntry.language,
         youtubeLangCode: firstEntry.youtubeLangCode,
         referenceText: firstEntry.referenceText,
@@ -292,6 +300,8 @@ async function resolveLanguageAudioReference(
   return {
     id: null,
     filename: DEFAULT_REFERENCE_AUDIO_FILENAME,
+    provider: 'omnivoice',
+    gemini: { ...DEFAULT_GEMINI_TTS_SETTINGS },
     language: normalizedLanguage,
     referenceText: DEFAULT_REFERENCE_TEXT,
     baserowFields: FALLBACK_LANGUAGE_BASEROW_FIELDS,
@@ -438,6 +448,14 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       );
+    }
+
+    if (selectedLanguageReference.provider === 'gemini') {
+      const settingsError = validateGeminiTtsSettings(selectedLanguageReference.gemini);
+      if (settingsError) return NextResponse.json({ error: settingsError }, { status: 400 });
+      if (!process.env.GEMINI_API_KEY?.trim()) {
+        return NextResponse.json({ error: 'GEMINI_API_KEY is not configured on the server' }, { status: 400 });
+      }
     }
 
     const baserowFields = selectedLanguageReference.baserowFields;
@@ -823,16 +841,19 @@ export async function POST(request: NextRequest) {
         createSilenceForEmptySentence: true,
         emptySentenceFieldKey: baserowFields.sceneTargetSentenceFieldKey,
         sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
-        provider: 'omnivoice',
-        referenceAudioFilename: selectedLanguageReference.filename,
+        provider: selectedLanguageReference.provider,
+        referenceAudioFilename: selectedLanguageReference.provider === 'omnivoice'
+          ? selectedLanguageReference.filename : undefined,
         skipIfDestinationExists: true,
         failFastOnSaveError: false,
         fitAudioToSceneDuration: true,
         includeHyperFramesSoundEffects,
-        boostFirstFiveMinutesSteps: true,
+        boostFirstFiveMinutesSteps: selectedLanguageReference.provider === 'omnivoice',
         ttsSettings: {
-          provider: 'omnivoice',
-          reference_audio_filename: selectedLanguageReference.filename,
+          provider: selectedLanguageReference.provider,
+          reference_audio_filename: selectedLanguageReference.provider === 'omnivoice'
+            ? selectedLanguageReference.filename : undefined,
+          gemini: selectedLanguageReference.gemini,
           omniVoice: {
             referenceText: selectedLanguageReference.referenceText,
             language: selectedLanguageReference.language,
@@ -1068,7 +1089,8 @@ export async function POST(request: NextRequest) {
         originalAudioField: baserowFields.sceneOriginalAudioFieldKey ?? null,
         emptySentenceFieldForSilence:
           baserowFields.sceneReferenceSentenceFieldKey,
-        referenceAudioFilename: selectedLanguageReference.filename,
+        referenceAudioFilename: selectedLanguageReference.provider === 'omnivoice'
+          ? selectedLanguageReference.filename : undefined,
         referenceAudioReferenceId: selectedLanguageReference.id,
         referenceAudioSource: selectedLanguageReference.source,
         language: selectedLanguageReference.language,

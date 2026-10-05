@@ -156,7 +156,7 @@ Additional features require their corresponding services or credentials:
    OPENAI_API_KEY=your_openai_key
    KIE_API_KEY=your_kie_key
    FISH_TTS_API_KEY=your_fish_audio_key
-   # Gemini TTS API access; language-preset routing is not implemented yet.
+   # Gemini TTS for language presets configured to use the online provider.
    GEMINI_API_KEY=your_gemini_key
 
    # Optional notifications

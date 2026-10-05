@@ -4,6 +4,11 @@
       "id": "fa-default",
       "name": "Farsi Default Voice",
       "filename": "fa-mine-2.mp3",
+      "provider": "gemini",
+      "gemini": {
+        "voice": "voice_fq2rgu3usupa",
+        "style": ""
+      },
       "language": "fa",
       "youtubeLangCode": "fa-en-GB",
       "referenceText": "Ma nagyon szép az idő, ezért később elmegyek sétálni egyet a közeli parkba.",
@@ -29,12 +34,17 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "en-default",
       "name": "Chinese",
       "filename": "zh-mine-3.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "zh",
       "youtubeLangCode": "zh-Hans-en-GB",
       "referenceText": "这个周末我打算在家里安静地看电影，哪里都不去，只想好好休息",
@@ -60,12 +70,17 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
       "name": "Best english voice",
       "filename": "nice.wav",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "I guess It's a decent model, and the point of this is that you can mock up a design. So, I might make this video with Veo 3.1 Lite, and then once I get it right and sort of storyboard it, then I can use a better video generation model like Veo 3.1 Quality for the final product.",
@@ -86,12 +101,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
       "name": "Best english voice but short",
       "filename": "nice-shorter.wav",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "Today I will explain each step clearly, calmly, and at a steady pace.",
@@ -112,12 +132,17 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
       "name": "Best english voice but midium",
       "filename": "nice-msize.wav",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "Hi there, thanks for joining me today. I’ll explain each step clearly and keep the pace smooth, natural, and easy to follow.",
@@ -138,12 +163,17 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
       "name": "Best english voice but small",
       "filename": "nice-ssize.wav",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "Follow along as I explain each part with precise words and steady timing.",
@@ -164,12 +194,17 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
       "name": "Best english voice but x small",
       "filename": "nice-xssize.wav",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "I sound warm and friendly.",
@@ -190,12 +225,17 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
       "name": "Spanish",
       "filename": "es-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "es",
       "youtubeLangCode": "es-en-GB",
       "referenceText": "Hoy el clima está súper bonito, así que más tarde iré a caminar un rato por el parque.",
@@ -217,12 +257,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780723908215-kn74nfnb",
       "name": "Portuguese",
       "filename": "pt-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "pt",
       "youtubeLangCode": "pt-en-GB",
       "referenceText": "Hoje o tempo está muito bom, por isso vou dar uma caminhada pelo parque mais tarde.",
@@ -244,12 +289,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780803012962-je49hy9s",
       "name": "fr-mine.wav",
       "filename": "fr-mine.wav",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "fr",
       "youtubeLangCode": "fr-en-GB",
       "referenceText": "Dans cette section, vous apprendre de nouvelles choses.",
@@ -271,12 +321,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780884860880-hzmu5wcr",
       "name": "Best arabic voice",
       "filename": "ElevenLabs-ar.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "arb",
       "youtubeLangCode": "ar-en-GB",
       "referenceText": "في هذا القسم، ستتعرف على خيارات جديدة",
@@ -298,12 +353,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780978346902-mwx5yjxh",
       "name": "Russian",
       "filename": "ElevenLabs_2026-06-09T05_24_39_s6_ivc_sp120_s0_sb0_se0_b_m2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "ru",
       "youtubeLangCode": "ru-en-GB",
       "referenceText": "Сегодня, к сожалению, идет очень сильный дождь",
@@ -325,12 +385,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1780988034098-yy9342ub",
       "name": "Hindi",
       "filename": "hi-mine-4.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "hi",
       "youtubeLangCode": "hi-en-GB",
       "referenceText": "आज, मुझे महसूस हो रहा है कि हमें इस काम को मिलकर पूरा करना चाहिए",
@@ -352,12 +417,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781064644767-pqedhfks",
       "name": "Japanese",
       "filename": "ja-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "ja",
       "youtubeLangCode": "ja-en-GB",
       "referenceText": "今日は天気がとても良いので、外で元気に遊びたいと思ってます。",
@@ -379,12 +449,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781065130922-ldsb45we",
       "name": "Korean",
       "filename": "ko-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "ko",
       "youtubeLangCode": "ko-en-GB",
       "referenceText": "저는 매일 아침 일찍 일어나서, 따뜻한 차를 마셔요.",
@@ -406,12 +481,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781144218035-eyc5tvdz",
       "name": "German",
       "filename": "de-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "de",
       "youtubeLangCode": "de-en-GB",
       "referenceText": "Lernen macht viel mehr Spaß, wenn man jeden Tag ein kleines bisschen Zeit zum Üben findet.",
@@ -433,12 +513,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781152128771-crn2xbf8",
       "name": "Italian",
       "filename": "it-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "it",
       "youtubeLangCode": "it-en-GB",
       "referenceText": "Ieri sono andato al parco con i miei amici e ci siamo divertiti molto.",
@@ -460,12 +545,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781153930719-huah0y0g",
       "name": "Indonesian",
       "filename": "id-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "id",
       "youtubeLangCode": "id-en-GB",
       "referenceText": "Masakan Indonesia sangat enak, terutama nasi goreng dan sate ayam yang bumbunya sangat pas.",
@@ -487,12 +577,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781156102363-b6shelmd",
       "name": "Dutch (Netherlands)",
       "filename": "nl-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "nl",
       "youtubeLangCode": "nl-en-GB",
       "referenceText": "Het weer is vandaag echt prachtig, dus ik ga zometeen een lange wandeling in het park maken.",
@@ -514,12 +609,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781160451053-me6vuufm",
       "name": "Turkish",
       "filename": "tr-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "tr",
       "youtubeLangCode": "tr-en-GB",
       "referenceText": "Dün hava çok güzeldi, bu yüzden arkadaşımla parka gidip uzun bir yürüyüş yaptık.",
@@ -541,12 +641,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781234780021-o6tpyrsw",
       "name": "Thai",
       "filename": "th-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "th",
       "youtubeLangCode": "th-en-GB",
       "referenceText": "เมื่อวานนี้ฉันไปเดินเล่นที่สวนสาธารณะกับเพื่อนมา สนุกมากเลยค่ะ",
@@ -568,12 +673,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781236780182-nmelbsdb",
       "name": "Vietnamese",
       "filename": "vi-mine-3.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "vi",
       "youtubeLangCode": "vi-en-GB",
       "referenceText": "Học tiếng Việt tuy có hơi khó một chút nhưng mà nó rất là thú vị và hay.",
@@ -595,12 +705,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781240849711-d847gllu",
       "name": "Malayalam",
       "filename": "ml-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "ml",
       "youtubeLangCode": "ml-en-GB",
       "referenceText": "എനിക്ക് മലയാളം സംസാരിക്കാൻ വലിയ ഇഷ്ടമാണ്, പക്ഷേ അത് പഠിക്കാൻ കുറച്ച് പ്രയാസമാണ്.",
@@ -622,12 +737,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781246187580-cytr9876",
       "name": "Polish",
       "filename": "pl-mine-5.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "pl",
       "youtubeLangCode": "pl-en-GB",
       "referenceText": "Chciałbym zamówić dużą czarną kawę oraz kawałek sernika na deser.",
@@ -649,12 +769,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781246997812-sjiyrume",
       "name": "Tamil",
       "filename": "ta-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "ta",
       "youtubeLangCode": "ta-en-GB",
       "referenceText": "நேத்து நான் என்னோட நண்பர்களோட பூங்காவுக்கு போனேன், அங்க ரொம்ப ஜாலியா இருந்துச்சு.",
@@ -676,12 +801,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781327093132-f4c3imaz",
       "name": "Ukrainian",
       "filename": "uk-mine-3.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "uk",
       "youtubeLangCode": "uk-en-GB",
       "referenceText": "Мені потрібно купити декілька продуктів у магазині біля дому",
@@ -703,12 +833,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781328133907-s5dvmonf",
       "name": "Bengali",
       "filename": "bn-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "bn",
       "youtubeLangCode": "bn-en-GB",
       "referenceText": "আজকের আবহাওয়া খুব সুন্দর, তাই আমি বিকেলে পার্কে হাঁটতে যাবো।",
@@ -730,12 +865,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781330127647-2tuhlsqq",
       "name": "Telugu",
       "filename": "te-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "te",
       "youtubeLangCode": "te-en-GB",
       "referenceText": "ఈరోజు వాతావరణం చాలా బాగుంది, అందుకే నేను సాయంత్రం పార్కుకు వెళ్తాను.",
@@ -757,12 +897,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781331491876-qg91ugqj",
       "name": "Punjabi",
       "filename": "pa-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "pa",
       "youtubeLangCode": "pa-en-GB",
       "referenceText": "ਮੈਨੂੰ ਪੰਜਾਬੀ ਬੋਲਣਾ ਬਹੁਤ ਪਸੰਦ ਹੈ, ਪਰ ਇਸ ਨੂੰ ਸਿੱਖਣਾ ਮੇਰੇ ਲਈ ਥੋੜ੍ਹਾ ਜਿਹਾ ਔਖਾ ਹੈ।",
@@ -784,12 +929,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781332858843-irq4epkw",
       "name": "Serbian",
       "filename": "sr-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "sr",
       "youtubeLangCode": "sr-en-GB",
       "referenceText": "Danas je veoma lepo vreme, pa ću popodne ići u šetnju parkom.",
@@ -811,12 +961,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781409089366-3oxr7ipd",
       "name": "Urdu",
       "filename": "ur-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "ur",
       "youtubeLangCode": "ur-en-GB",
       "referenceText": "آج موسم بہت پیارا ہے، اس لیے میں شام کو پارک میں سیر کے لیے جاؤں گا۔",
@@ -838,12 +993,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781411785664-3fa5ao3j",
       "name": "Norwegian",
       "filename": "no-mine-3.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "no",
       "youtubeLangCode": "no-en-GB",
       "referenceText": "Været er veldig fint i dag, så jeg skal gå en tur i parken senere.",
@@ -865,12 +1025,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781413462044-60noxeqq",
       "name": "Catalan",
       "filename": "ca-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "ca",
       "youtubeLangCode": "ca-en-GB",
       "referenceText": "Avui fa molt bon temps, així que aniré a fer un tomb pel centre de la ciutat.",
@@ -892,12 +1057,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781414282222-2nup9b7d",
       "name": "Croatian",
       "filename": "hr-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "hr",
       "youtubeLangCode": "hr-en-GB",
       "referenceText": "Danas je jako lijepo vrijeme, pa ću popodne ići u šetnju parkom.",
@@ -919,12 +1089,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781415903239-3df9svpm",
       "name": "Lithuanian",
       "filename": "lt-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "lt",
       "youtubeLangCode": "lt-en-GB",
       "referenceText": "Šiandien lauke labai gražus oras, todėl vėliau eisiu pasivaikščioti į parką.",
@@ -946,12 +1121,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781500405774-qx7zt78v",
       "name": "Slovak",
       "filename": "sk-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "sk",
       "youtubeLangCode": "sk-en-GB",
       "referenceText": "Dnes je vonku veľmi pekne, preto sa pôjdem poobede prejsť do parku.",
@@ -973,12 +1153,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781501487260-7obleoet",
       "name": "Swedish",
       "filename": "sv-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "sv",
       "youtubeLangCode": "sv-en-GB",
       "referenceText": "Vädret är verkligen jättefint i dag, så jag tänkte gå på en promenad i parken.",
@@ -1000,12 +1185,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781502387868-34ft0kva",
       "name": "Greek",
       "filename": "el-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "el",
       "youtubeLangCode": "el-en-GB",
       "referenceText": "Ο καιρός είναι πολύ καλός σήμερα, οπότε θα πάω μια βόλτα στο πάρκο αργότερα.",
@@ -1027,12 +1217,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781503075838-w68o2ze5",
       "name": "Bulgarian",
       "filename": "bg-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "bg",
       "youtubeLangCode": "bg-en-GB",
       "referenceText": "Днес времето е много хубаво, затова ще отида на разходка в парка.",
@@ -1054,12 +1249,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781503851763-pcko9i0s",
       "name": "Kinyarwanda",
       "filename": "rw-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "rw",
       "youtubeLangCode": "rw-en-GB",
       "referenceText": "Uyu munsi kirashyushye cyane, niyo mpamvu nshaka kujya gutembera mu busitani.",
@@ -1081,12 +1281,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781504434727-y8kuwkna",
       "name": "Belarusian",
       "filename": "be-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "be",
       "youtubeLangCode": "be-en-GB",
       "referenceText": "Сёння вельмі добрае надвор'е, таму я пайду на шпацыр у парк.",
@@ -1108,12 +1313,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781504895973-zjdfj07e",
       "name": "Danish",
       "filename": "da-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "da",
       "youtubeLangCode": "da-en-GB",
       "referenceText": "Vejret er virkelig dejligt i dag, så jeg vil gå en tur i parken senere.",
@@ -1135,12 +1345,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781505361146-lc9ua33q",
       "name": "Kazakh",
       "filename": "kk-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "kk",
       "youtubeLangCode": "kk-en-GB",
       "referenceText": "Бүгін күн өте ашық, сондықтан мен кешке паркте серуендеймін.",
@@ -1162,12 +1377,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781506264954-wlaycc3i",
       "name": "Latvian",
       "filename": "lv-mine-3.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "lv",
       "youtubeLangCode": "lv-en-GB",
       "referenceText": "Šodien ir ļoti skaists laiks, tāpēc es vēlāk iešu pastaigāties pa parku.",
@@ -1189,12 +1409,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781506880605-jhxnqsur",
       "name": "Esperanto",
       "filename": "eo-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "eo",
       "youtubeLangCode": "eo-en-GB",
       "referenceText": "Hodiaŭ la vetero estas tre bela, do mi iros por promeni en la parko.",
@@ -1216,12 +1441,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781592164051-ejvqahl8",
       "name": "Slovenian",
       "filename": "sl-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "sl",
       "youtubeLangCode": "sl-en-GB",
       "referenceText": "Danes je zelo lepo vreme, zato bom šel popoldne na sprehod v park.",
@@ -1243,12 +1473,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781593715997-suguqm2p",
       "name": "Estonian",
       "filename": "et-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "et",
       "youtubeLangCode": "et-en-GB",
       "referenceText": "Täna on väga ilus ilm, seega ma lähen hiljem parki jalutama.",
@@ -1270,12 +1505,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781594590128-kfchedou",
       "name": "Bosnian",
       "filename": "bs-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "bs",
       "youtubeLangCode": "bs-en-GB",
       "referenceText": "Danas je jako lijepo vrijeme, pa ću popodne ići u šetnju parkom.",
@@ -1297,12 +1537,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781596205784-52m7jyuw",
       "name": "Icelandic",
       "filename": "is-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "is",
       "youtubeLangCode": "is-en-GB",
       "referenceText": "Værið er virkilega gott í dag, svo ég ætla að fara í smá göngutúr í garðinum.",
@@ -1324,12 +1569,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781597057481-o3nalzo9",
       "name": "Maltese",
       "filename": "mt-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "mt",
       "youtubeLangCode": "mt-en-GB",
       "referenceText": "Illum it-temp huwa sabiħ ħafna, għalhekk se mmur nagħmel mixja żgħira fil-ġnien.",
@@ -1351,12 +1601,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781598573850-bk9r2900",
       "name": "Basque",
       "filename": "eu-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "eu",
       "youtubeLangCode": "eu-en-GB",
       "referenceText": "Gaur eguraldi oso ona egiten du, beraz, arratsaldean parkera joango naiz buelta bat ematera.",
@@ -1378,12 +1633,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781599097389-rsvu1fwg",
       "name": "Finnish",
       "filename": "fi-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "fi",
       "youtubeLangCode": "fi-en-GB",
       "referenceText": "Tänään on todella kaunis sää, joten aion mennä myöhemmin puistoon kävelylle.",
@@ -1405,12 +1665,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781664542968-htfzi9jo",
       "name": "Ganda",
       "filename": "lg-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "lg",
       "youtubeLangCode": "lg-en-GB",
       "referenceText": "Lelo obudde bulungi nnyo, kyo kiva nnyagala okugendako mu kisaawe okutambulamu.",
@@ -1432,12 +1697,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781665436336-ibry9sms",
       "name": "Swahili",
       "filename": "sw-mine.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "sw",
       "youtubeLangCode": "sw-en-GB",
       "referenceText": "Leo hali ya hewa ni nzuri sana, kwa hivyo nitaenda kutembea bustanini baadaye.",
@@ -1459,12 +1729,17 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     },
     {
       "id": "audio-ref-local-1781666281406-hv3lrnr0",
       "name": "Hungarian",
       "filename": "hu-mine-2.mp3",
+      "provider": "omnivoice",
+      "gemini": {
+        "voice": "Charon",
+        "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
+      },
       "language": "hu",
       "youtubeLangCode": "hu-en-GB",
       "referenceText": "Ma nagyon szép az idő, ezért később elmegyek sétálni egyet a közeli parkba.",
@@ -1486,7 +1761,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-09-16T05:58:52.008Z"
+      "updatedAt": "2026-10-04T07:01:57.698Z"
     }
   ]
 }

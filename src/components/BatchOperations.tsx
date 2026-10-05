@@ -6329,7 +6329,7 @@ export default function BatchOperations({
                         ? 'Select an original video first'
                         : creatingDubbedFa
                           ? `Step 1/2 map language SRT into target sentence field. Step 2/2 generate OmniVoice TTS into dubbed field for ${activeDubbedLanguageLabel}...`
-                          : `Use language preset ${activeDubbedLanguageLabel} from Global TTS Settings → Manage Language Presets (Baserow fields + OmniVoice params)`
+                          : `Use language preset ${activeDubbedLanguageLabel} from Global TTS Settings → Manage Language Presets (Baserow fields + selected TTS provider)`
                     }
                   >
                     {creatingDubbedFa && (

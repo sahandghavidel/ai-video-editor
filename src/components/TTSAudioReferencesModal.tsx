@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
+import { DEFAULT_GEMINI_TTS_SETTINGS, GEMINI_TTS_VOICES, isSupportedGeminiVoice, normalizeGeminiTtsSettings, type GeminiTtsSettings, type LanguageTtsProvider } from '@/utils/geminiTtsSettings';
 
 type DeviceMap = 'mps' | 'cpu' | 'auto';
 type DType = 'float16' | 'float32' | 'bfloat16';
@@ -21,6 +22,8 @@ type AudioReferenceEntry = {
   id: string;
   name: string;
   filename: string;
+  provider: LanguageTtsProvider;
+  gemini: GeminiTtsSettings;
   language: string;
   youtubeLangCode?: string;
   referenceText: string;
@@ -72,7 +75,8 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
 
   const filename =
     typeof entry.filename === 'string' ? entry.filename.trim() : '';
-  if (!filename) return null;
+  const provider = entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
+  if (!filename && provider === 'omnivoice') return null;
 
   const id =
     typeof entry.id === 'string' && entry.id.trim().length > 0
@@ -163,6 +167,8 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
     id,
     name: nameRaw || filename,
     filename,
+    provider,
+    gemini: normalizeGeminiTtsSettings(entry.gemini),
     language: (languageRaw || 'und').toLowerCase(),
     youtubeLangCode,
     referenceText:
@@ -328,6 +334,8 @@ export function TTSAudioReferencesModal({
         id: createLocalEntryId(),
         name: '',
         filename: '',
+        provider: 'omnivoice',
+        gemini: { ...DEFAULT_GEMINI_TTS_SETTINGS },
         language: 'fa',
         referenceText: '',
         baserowFields: {
@@ -396,6 +404,10 @@ export function TTSAudioReferencesModal({
     setError(null);
 
     try {
+      for (const entry of normalizedEntries) {
+        if (entry.provider === 'omnivoice' && !entry.filename) throw new Error('Local presets require a reference filename');
+        if (entry.provider === 'gemini' && !isSupportedGeminiVoice(entry.gemini.voice)) throw new Error('Choose a Gemini voice or enter a valid extended or saved voice ID for each online preset');
+      }
       const response = await fetch('/api/tts-audio-references', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -452,14 +464,14 @@ export function TTSAudioReferencesModal({
         <div className='px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3'>
           <div>
             <h3 className='text-lg font-semibold text-gray-900'>
-              OmniVoice Language Presets
+              TTS Language Presets
             </h3>
             <p className='text-sm text-gray-600 mt-1'>
-              Manage per-language reference voices and generation settings.
+              Choose local or online speech generation and a voice for each language.
             </p>
             <p className='text-xs text-gray-500 mt-1'>
-              Editable fields: Language, Filename, Reference Text, Device,
-              DType, Num Step, Speed, and Baserow field mappings.
+              Saved settings apply to new dubbing jobs. Existing audio is skipped;
+              changing the provider does not replace recordings already generated.
             </p>
           </div>
           <button
@@ -519,6 +531,7 @@ export function TTSAudioReferencesModal({
                     />
                   </div>
 
+                  {entry.provider === 'omnivoice' && (
                   <div className='space-y-1'>
                     <label className='text-xs font-medium text-gray-700'>
                       Audio Filename
@@ -533,6 +546,8 @@ export function TTSAudioReferencesModal({
                       className='w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm'
                     />
                   </div>
+
+                  )}
 
                   <div className='space-y-1'>
                     <label className='text-xs font-medium text-gray-700'>
@@ -551,6 +566,41 @@ export function TTSAudioReferencesModal({
                     />
                   </div>
                 </div>
+
+                <div className='space-y-1'>
+                  <label className='text-xs font-medium text-gray-700'>TTS Provider</label>
+                  <select aria-label={`TTS provider for ${entry.language}`} value={entry.provider}
+                    onChange={(event) => updateEntry(entry.id, { provider: event.target.value as LanguageTtsProvider })}
+                    className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
+                    <option value='omnivoice'>OmniVoice — Local</option>
+                    <option value='gemini'>Google Gemini — Online</option>
+                  </select>
+                </div>
+                {entry.provider === 'gemini' && (
+                  <div className='rounded-md border border-blue-200 bg-blue-50 p-3 space-y-2'>
+                    <p className='text-xs text-blue-900'>Gemini 3.8 Flash TTS</p>
+                    <label className='block text-xs font-medium text-gray-700'>Narrator voice</label>
+                    <select aria-label={`Gemini voice for ${entry.language}`} value={GEMINI_TTS_VOICES.some(([voice]) => voice === entry.gemini.voice) ? entry.gemini.voice : ''}
+                      onChange={(event) => updateEntry(entry.id, { gemini: { ...entry.gemini, voice: event.target.value || 'voice_' } })}
+                      className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
+                      {GEMINI_TTS_VOICES.map(([voice, description]) => (
+                        <option key={voice} value={voice}>{voice} — {description}</option>
+                      ))}
+                      <option value=''>Other voice ID — extended, cloned or designed</option>
+                    </select>
+                    <label htmlFor={`gemini-voice-id-${entry.id}`} className='block text-xs font-medium text-gray-700'>Voice name or cloned voice ID</label>
+                    <input id={`gemini-voice-id-${entry.id}`} aria-label={`Gemini saved voice ID for ${entry.language}`} value={entry.gemini.voice}
+                      placeholder='e.g. en-us-ludo or voice_…' maxLength={206}
+                      onChange={(event) => updateEntry(entry.id, { gemini: { ...entry.gemini, voice: event.target.value.trim() } })}
+                      className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm' />
+                    <p className='text-xs text-gray-600'>Choose a voice above or paste an extended, cloned or designed voice ID here. Saved custom voices must belong to the Google project connected to this application.</p>
+                    <label className='block text-xs font-medium text-gray-700'>Delivery style</label>
+                    <textarea aria-label={`Gemini delivery style for ${entry.language}`} rows={3} maxLength={2000}
+                      value={entry.gemini.style}
+                      onChange={(event) => updateEntry(entry.id, { gemini: { ...entry.gemini, style: event.target.value } })}
+                      className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm' />
+                  </div>
+                )}
 
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
                   <div className='space-y-1'>
@@ -575,6 +625,7 @@ export function TTSAudioReferencesModal({
                   </div>
                 </div>
 
+                {entry.provider === 'omnivoice' && (<>
                 <div className='space-y-1'>
                   <label className='text-xs font-medium text-gray-700'>
                     Reference Text
@@ -670,6 +721,8 @@ export function TTSAudioReferencesModal({
                     />
                   </div>
                 </div>
+
+                </>)}
 
                 <div className='rounded-md border border-indigo-200 bg-indigo-50 p-3 space-y-2'>
                   <p className='text-xs font-medium text-indigo-900'>

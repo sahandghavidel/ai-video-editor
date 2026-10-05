@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { normalizeGeminiTtsSettings, type GeminiTtsSettings, type LanguageTtsProvider } from '@/utils/geminiTtsSettings';
 
 export type OmniVoiceDeviceMap = 'mps' | 'cpu' | 'auto';
 export type OmniVoiceDType = 'float16' | 'float32' | 'bfloat16';
@@ -20,6 +21,8 @@ export interface TtsAudioReferenceEntry {
   id: string;
   name: string;
   filename: string;
+  provider: LanguageTtsProvider;
+  gemini: GeminiTtsSettings;
   language: string;
   youtubeLangCode?: string;
   referenceText: string;
@@ -200,7 +203,9 @@ export function sanitizeTtsAudioReferenceEntries(
 
     const filename =
       typeof entry.filename === 'string' ? entry.filename.trim() : '';
-    if (!filename) continue;
+    const provider = entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
+    if (!filename && provider === 'omnivoice') continue;
+    const gemini = normalizeGeminiTtsSettings(entry.gemini);
 
     const id =
       typeof entry.id === 'string' && entry.id.trim().length > 0
@@ -212,7 +217,7 @@ export function sanitizeTtsAudioReferenceEntries(
     const language = languageRaw ? languageRaw.toLowerCase() : 'und';
 
     const nameRaw = typeof entry.name === 'string' ? entry.name.trim() : '';
-    const name = nameRaw || filename;
+    const name = nameRaw || filename || `${language.toUpperCase()} Gemini`;
 
     const referenceText =
       typeof entry.referenceText === 'string' ? entry.referenceText : '';
@@ -256,6 +261,8 @@ export function sanitizeTtsAudioReferenceEntries(
       id,
       name,
       filename,
+      provider,
+      gemini,
       language,
       youtubeLangCode,
       referenceText,

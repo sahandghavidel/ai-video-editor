@@ -223,7 +223,7 @@ async function resolveReferencePresetByAudioName(
     const { entries } = await loadTtsAudioReferencesStore();
 
     const enabledEntries = entries.filter(
-      (entry) => entry.enabled && entry.filename.trim().length > 0,
+      (entry) => entry.enabled && entry.provider === 'omnivoice' && entry.filename.trim().length > 0,
     );
 
     const matchedEntry = enabledEntries.find((entry) =>

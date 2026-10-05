@@ -103,6 +103,15 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
           </select>
         </div>
 
+            <button
+              onClick={() => setAudioReferencesModalOpen(true)}
+              className='inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-indigo-300 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 transition-colors text-xs font-medium'
+              title='Manage language-specific local and Gemini TTS presets'
+            >
+              <ListMusic className='w-4 h-4' />
+              Manage Language Presets
+            </button>
+
         {ttsSettings.provider === 'omnivoice' && (
           <>
             <div className='rounded-md border border-indigo-200 bg-indigo-50 p-2 text-[11px] text-indigo-800'>
@@ -110,14 +119,7 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
               your selected reference filename for voice cloning.
             </div>
 
-            <button
-              onClick={() => setAudioReferencesModalOpen(true)}
-              className='inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-indigo-300 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 transition-colors text-xs font-medium'
-              title='Manage language-specific OmniVoice presets'
-            >
-              <ListMusic className='w-4 h-4' />
-              Manage Language Presets
-            </button>
+
 
             <div className='flex gap-1 items-center justify-between'>
               <label className='text-xs font-medium text-gray-700'>

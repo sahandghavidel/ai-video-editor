@@ -949,7 +949,7 @@ export default function SceneCard({
         const filename =
           typeof entry.filename === 'string' ? entry.filename.trim() : '';
 
-        if (entry.enabled !== true || language !== 'en' || !filename) {
+        if (entry.enabled !== true || entry.provider === 'gemini' || language !== 'en' || !filename) {
           return [];
         }
 

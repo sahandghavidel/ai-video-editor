@@ -48,7 +48,7 @@ const LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC = 0.03;
 const LONGER_ADAPTIVE_UNDERSHOOT_RATIO = 0.05;
 const DEFAULT_EMPTY_SENTENCE_FIELD_KEY = 'field_6890';
 
-type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
+type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice' | 'gemini';
 type BaserowRow = Record<string, unknown>;
 
 type BaserowListResponse = {
@@ -329,7 +329,8 @@ function resolveProvider(value: unknown): TtsProvider {
   if (
     value === 'fish-s2-pro' ||
     value === 'omnivoice' ||
-    value === 'chatterbox'
+    value === 'chatterbox' ||
+    value === 'gemini'
   ) {
     return value;
   }
@@ -338,6 +339,7 @@ function resolveProvider(value: unknown): TtsProvider {
 }
 
 function resolveTtsPath(provider: TtsProvider): string {
+  if (provider === 'gemini') return '/api/generate-tts-gemini';
   if (provider === 'fish-s2-pro') {
     return '/api/generate-tts-fish';
   }
@@ -2367,7 +2369,7 @@ async function generateSceneTts(options: {
       const controller = new AbortController();
       const timeoutId = setTimeout(
         () => controller.abort(),
-        TTS_REQUEST_TIMEOUT_MS,
+        providerPath === '/api/generate-tts-gemini' ? 900_000 : TTS_REQUEST_TIMEOUT_MS,
       );
 
       const response = await fetch(`${origin}${providerPath}`, {
@@ -2387,7 +2389,7 @@ async function generateSceneTts(options: {
             ? json.error.trim()
             : `TTS provider failed (${response.status})`;
 
-        const retryable = isRetryableStatus(response.status);
+        const retryable = providerPath !== '/api/generate-tts-gemini' && isRetryableStatus(response.status);
         const statusError = new Error(message);
         lastError = statusError;
 
@@ -2419,7 +2421,7 @@ async function generateSceneTts(options: {
           'TTS provider returned empty audioUrl',
         );
         lastError = emptyAudioError;
-        if (attempt < MAX_TRANSIENT_RETRY_ATTEMPTS) {
+        if (providerPath !== '/api/generate-tts-gemini' && attempt < MAX_TRANSIENT_RETRY_ATTEMPTS) {
           const delayMs = getRetryDelayMs(attempt);
           await sleepMs(delayMs);
           continue;
@@ -2437,7 +2439,7 @@ async function generateSceneTts(options: {
       return audioUrl;
     } catch (error) {
       lastError = error;
-      const retryable = isRetryableNetworkError(error);
+      const retryable = providerPath !== '/api/generate-tts-gemini' && isRetryableNetworkError(error);
       if (retryable && attempt < MAX_TRANSIENT_RETRY_ATTEMPTS) {
         const delayMs = getRetryDelayMs(attempt);
         console.warn(
@@ -2732,6 +2734,7 @@ export async function POST(request: NextRequest) {
     let originalSavedCount = 0;
     let skippedOriginalSaveCount = 0;
     let abortedOnSaveFailure = false;
+    let abortedOnProviderFailure = false;
     let abortedSceneId: number | null = null;
 
     for (const scene of orderedScenes) {
@@ -3209,6 +3212,11 @@ export async function POST(request: NextRequest) {
           message,
           elapsedMs: Date.now() - sceneStartedAt,
         });
+        if (provider === 'gemini') {
+          abortedOnProviderFailure = true;
+          abortedSceneId = sceneId;
+          break;
+        }
       }
     }
 
@@ -3233,7 +3241,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      ok: failures.length === 0 && !abortedOnSaveFailure,
+      ok: failures.length === 0 && !abortedOnSaveFailure && !abortedOnProviderFailure,
+      abortedOnProviderFailure,
       videoId,
       provider,
       providerPath,
