@@ -685,6 +685,12 @@ export default function OriginalVideosList({
   const [openActionsMenuVideoId, setOpenActionsMenuVideoId] = useState<
     number | null
   >(null);
+  const [exportingEnglishDataset, setExportingEnglishDataset] = useState(false);
+  const [englishDatasetResult, setEnglishDatasetResult] = useState<{
+    videoId: number;
+    message: string;
+  } | null>(null);
+  const englishDatasetExportLock = useRef(false);
   const [reordering, setReordering] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [deletingScenesOnly, setDeletingScenesOnly] = useState<number | null>(
@@ -2435,6 +2441,38 @@ export default function OriginalVideosList({
     selectedOriginalVideo.ttsVoiceReference,
     setSelectedOriginalVideo,
   ]);
+
+  const handleExportEnglishDataset = async (videoId: number) => {
+    if (englishDatasetExportLock.current) return;
+    englishDatasetExportLock.current = true;
+    setExportingEnglishDataset(true);
+    setEnglishDatasetResult(null);
+    try {
+      const response = await fetch('/api/export-english-voice-dataset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Dataset export failed.');
+      const failures = (result.failures || [])
+        .map((failure: { sceneId: number; error: string }) =>
+          `Scene #${failure.sceneId}: ${failure.error}`,
+        ).join(' ');
+      setEnglishDatasetResult({
+        videoId,
+        message: `Added ${result.added} pairs; skipped ${result.duplicates} duplicates, ${result.emptySentences} empty sentences, ${result.missingAudio} missing audio; ${result.failed} failed. Saved to ${result.exportDir}.${failures ? ` ${failures}` : ''}`,
+      });
+    } catch (error) {
+      setEnglishDatasetResult({
+        videoId,
+        message: error instanceof Error ? error.message : 'Dataset export failed.',
+      });
+    } finally {
+      englishDatasetExportLock.current = false;
+      setExportingEnglishDataset(false);
+    }
+  };
 
   const handleRefresh = async () => {
     await fetchOriginalVideos(true);
@@ -15517,6 +15555,16 @@ export default function OriginalVideosList({
                 </div>
                 <div className='flex items-center gap-1'>
                   <button
+                    type='button'
+                    onClick={() => selectedOriginalVideo.id && handleExportEnglishDataset(selectedOriginalVideo.id)}
+                    disabled={exportingEnglishDataset}
+                    className='flex items-center gap-1.5 rounded border border-blue-300 bg-white px-2 py-1.5 text-xs text-blue-800 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                    title='Export reviewed Sentence and EN TTS pairs to the shared English voice dataset'
+                  >
+                    {exportingEnglishDataset ? <Loader2 className='w-4 h-4 animate-spin' /> : <Download className='w-4 h-4' />}
+                    {exportingEnglishDataset ? 'Exporting voice dataset...' : 'Export English voice dataset'}
+                  </button>
+                  <button
                     onClick={() => setIsVideoDetailsModalOpen(true)}
                     disabled={
                       deleting === selectedOriginalVideo.id ||
@@ -15582,6 +15630,12 @@ export default function OriginalVideosList({
                 </div>
               </div>
             </div>
+          )}
+
+          {englishDatasetResult?.videoId === selectedOriginalVideo.id && (
+            <p role='status' className='mb-4 break-words text-sm text-blue-900'>
+              {englishDatasetResult.message}
+            </p>
           )}
 
           <VideoDetailsModal
