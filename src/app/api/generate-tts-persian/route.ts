@@ -16,6 +16,8 @@ export const maxDuration = 900;
 
 export async function POST(request: NextRequest) {
   let tempDir: string | undefined;
+  let successful = false;
+  const startedAt = Date.now();
   beginPersianTtsRequest();
   try {
     const body = await request.json() as {
@@ -27,9 +29,11 @@ export async function POST(request: NextRequest) {
     if (!text || text.length > 12000) {
       return NextResponse.json({ error: 'Provide scene text between 1 and 12000 characters' }, { status: 400 });
     }
+    console.log(`[Persian TTS] Generation requested: sceneId=${body.sceneId ?? 'sample'} videoId=${body.videoId ?? 'sample'} textCharacters=${text.length}`);
     const referenceName = body.referenceAudioFilename || body.ttsSettings?.reference_audio_filename;
     const referenceAudio = referenceName ? resolveReferenceAudioPath({ filenameOrPath: referenceName,
       configuredDir: body.ttsSettings?.omniVoice?.referenceAudioDir }).fullPath : undefined;
+    console.log(`[Persian TTS] Voice reference: ${referenceAudio ? path.basename(referenceAudio) : 'default narrator'}`);
     await ensurePersianTtsRunning();
     const response = await fetch('http://127.0.0.1:9547/speech', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -41,6 +45,7 @@ export async function POST(request: NextRequest) {
           top_p: settings.topP, min_p: settings.minP, steps: settings.steps };
       })() }), signal: AbortSignal.timeout(90000),
     });
+    console.log(`[Persian TTS] Speech response: status=${response.status}, elapsed=${Date.now() - startedAt}ms`);
     if (!response.ok) return NextResponse.json({ error: 'Isolated Persian TTS generation failed' }, { status: response.status });
     const buffer = Buffer.from(await response.arrayBuffer());
     if (buffer.length < 44 || buffer.toString('ascii', 0, 4) !== 'RIFF') throw new Error('Invalid Persian WAV response');
@@ -56,14 +61,17 @@ export async function POST(request: NextRequest) {
       await writeFile(localPath, await readFile(adjusted));
     }
     const audioUrl = await uploadToMinio(localPath, filename, 'audio/wav');
+    successful = true;
+    console.log(`[Persian TTS] [${new Date().toISOString()}] ✅ TTS generation and upload completed successfully; bytes=${buffer.length}, elapsed=${Date.now() - startedAt}ms`);
     return NextResponse.json({ provider: 'chatterbox-persian', audioUrl, filename,
       generationParams: { model: 'Thomcles/Chatterbox-TTS-Persian-Farsi' } });
   } catch (error) {
+    console.error('[Persian TTS] ❌ Error generating TTS:', error);
     const rawMessage = error instanceof Error ? error.message : 'Persian TTS generation failed';
     const message = rawMessage;
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
-    finishPersianTtsRequest();
+    finishPersianTtsRequest(successful);
     if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }

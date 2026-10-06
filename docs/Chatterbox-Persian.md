@@ -68,3 +68,20 @@ Original API sentence chunking (chunk_size=50, split threshold=75 chars) is copi
 verbatim from original utils.py into original_chunking.py, ahead of engine policy.
 The Persian loader still loads on first speech request; original loads in background.
 No login service is installed; stopping the service triggers startup on next use.
+
+Persisted idle shutdown: successful Persian generation AND upload reset the
+15-minute deadline in `persian-tts-timeout-state.json` (ignored local runtime
+state). Checks run at most every 3 minutes with session IDs to reject stale
+timers. Active requests suspend checks; failed requests resume the previous
+deadline without resetting it. Shutdown resolves only the listener on 9547
+and verifies the isolated Persian command. State is re-armed when the runtime
+module loads after a Next.js restart. A stopped Next.js process cannot execute
+timers; the persisted file alone does not stop the Python service.
+
+Lifecycle logging follows the original Chatterbox route in the Next.js terminal,
+with [Persian TTS] prefixes and UTC timestamps: service status/startup/readiness,
+request start/completion/failure, prior countdown remaining, new 15-minute
+deadline/session ID, elapsed and remaining seconds on 3-minute checks, final
+check scheduling, active-generation pauses, stale timer rejection, listener/PID
+shutdown actions, and shutdown verification. Detailed Python chunk/memory logs
+remain in /Users/sahand/chatterbox-persian-tts/service-memory.log.
