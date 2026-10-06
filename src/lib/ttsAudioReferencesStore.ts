@@ -205,8 +205,8 @@ export function sanitizeTtsAudioReferenceEntries(
 
     const filename =
       typeof entry.filename === 'string' ? entry.filename.trim() : '';
-    const provider = entry.provider === 'chatterbox-persian' ? 'chatterbox-persian' : entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
-    if (!filename && provider === 'omnivoice') continue;
+    const provider = entry.provider === 'omnivoice-lora' ? 'omnivoice-lora' : entry.provider === 'chatterbox-persian' ? 'chatterbox-persian' : entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
+    if (!filename && (provider === 'omnivoice' || provider === 'omnivoice-lora')) continue;
     const gemini = normalizeGeminiTtsSettings(entry.gemini);
 
     const id =

@@ -48,7 +48,7 @@ const LONGER_ADAPTIVE_UNDERSHOOT_MAX_SEC = 0.03;
 const LONGER_ADAPTIVE_UNDERSHOOT_RATIO = 0.05;
 const DEFAULT_EMPTY_SENTENCE_FIELD_KEY = 'field_6890';
 
-type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice' | 'gemini' | 'chatterbox-persian';
+type TtsProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice' | 'omnivoice-lora' | 'gemini' | 'chatterbox-persian';
 type BaserowRow = Record<string, unknown>;
 
 type BaserowListResponse = {
@@ -328,7 +328,7 @@ function asFieldKey(value: unknown): string | null {
 function resolveProvider(value: unknown): TtsProvider {
   if (
     value === 'fish-s2-pro' ||
-    value === 'omnivoice' ||
+    value === 'omnivoice' || value === 'omnivoice-lora' ||
     value === 'chatterbox' ||
     value === 'gemini' || value === 'chatterbox-persian'
   ) {
@@ -339,6 +339,7 @@ function resolveProvider(value: unknown): TtsProvider {
 }
 
 function resolveTtsPath(provider: TtsProvider): string {
+  if (provider === 'omnivoice-lora') return '/api/generate-tts-omnivoice-lora';
   if (provider === 'chatterbox-persian') return '/api/generate-tts-persian';
   if (provider === 'gemini') return '/api/generate-tts-gemini';
   if (provider === 'fish-s2-pro') {

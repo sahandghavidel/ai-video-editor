@@ -45,8 +45,11 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Each language preset must be an object' }, { status: 400 });
       }
       const entry = value as Record<string, unknown>;
-      if (entry.provider !== undefined && entry.provider !== 'omnivoice' && entry.provider !== 'gemini' && entry.provider !== 'chatterbox-persian') {
+      if (entry.provider !== undefined && entry.provider !== 'omnivoice' && entry.provider !== 'omnivoice-lora' && entry.provider !== 'gemini' && entry.provider !== 'chatterbox-persian') {
         return NextResponse.json({ error: 'Unsupported language TTS provider' }, { status: 400 });
+      }
+      if (entry.provider === 'omnivoice-lora' && (entry.language !== 'en' || typeof entry.referenceText !== 'string' || !entry.referenceText.trim())) {
+        return NextResponse.json({ error: 'OmniVoice LoRA requires English and a reference transcript' }, { status: 400 });
       }
       if (entry.provider === 'chatterbox-persian' && entry.language !== 'fa') {
         return NextResponse.json({ error: 'Chatterbox Persian is only available for fa' }, { status: 400 });

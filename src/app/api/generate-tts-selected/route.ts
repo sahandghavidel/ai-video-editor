@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 900;
 
-type Provider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
+type Provider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice' | 'omnivoice-lora';
 
 interface BodyWithProvider {
   ttsSettings?: {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     const provider = body?.ttsSettings?.provider || 'chatterbox';
     const targetPath =
-      provider === 'fish-s2-pro'
+      provider === 'omnivoice-lora' ? '/api/generate-tts-omnivoice-lora' : provider === 'fish-s2-pro'
         ? '/api/generate-tts-fish'
         : provider === 'omnivoice'
           ? '/api/generate-tts-omnivoice'

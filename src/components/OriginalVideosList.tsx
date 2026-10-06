@@ -2163,12 +2163,14 @@ export default function OriginalVideosList({
         setGeneratingScriptTtsForVideo(video.id);
 
         try {
-          const voiceOverride = getVideoTtsVoiceReference(video);
+          const voiceOverride = ttsSettings.provider === 'omnivoice-lora'
+            ? ttsSettings.reference_audio_filename
+            : getVideoTtsVoiceReference(video);
 
           const ttsEndpoint =
             ttsSettings.provider === 'fish-s2-pro'
               ? '/api/generate-tts-fish'
-              : ttsSettings.provider === 'omnivoice'
+              : ttsSettings.provider === 'omnivoice' || ttsSettings.provider === 'omnivoice-lora'
                 ? '/api/generate-tts-omnivoice'
                 : '/api/generate-tts';
 
@@ -2260,12 +2262,14 @@ export default function OriginalVideosList({
     setError(null);
 
     try {
-      const voiceOverride = getVideoTtsVoiceReference(video);
+      const voiceOverride = ttsSettings.provider === 'omnivoice-lora'
+            ? ttsSettings.reference_audio_filename
+            : getVideoTtsVoiceReference(video);
 
       const ttsEndpoint =
         ttsSettings.provider === 'fish-s2-pro'
           ? '/api/generate-tts-fish'
-          : ttsSettings.provider === 'omnivoice'
+          : ttsSettings.provider === 'omnivoice' || ttsSettings.provider === 'omnivoice-lora'
             ? '/api/generate-tts-omnivoice'
             : '/api/generate-tts';
 

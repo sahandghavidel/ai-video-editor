@@ -1,6 +1,7 @@
 'use client';
 import { normalizePersianTtsSettings, DEFAULT_PERSIAN_TTS_SETTINGS, PERSIAN_CONTROL_RANGES, type PersianTtsSettings } from '@/utils/persianTtsSettings';
 
+import { useAppStore } from '@/store/useAppStore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { DEFAULT_GEMINI_TTS_SETTINGS, GEMINI_TTS_VOICES, isSupportedGeminiVoice, normalizeGeminiTtsSettings, type GeminiTtsSettings, type LanguageTtsProvider } from '@/utils/geminiTtsSettings';
@@ -77,8 +78,8 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
 
   const filename =
     typeof entry.filename === 'string' ? entry.filename.trim() : '';
-  const provider = entry.provider === 'chatterbox-persian' ? 'chatterbox-persian' : entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
-  if (!filename && provider === 'omnivoice') return null;
+  const provider = entry.provider === 'omnivoice-lora' ? 'omnivoice-lora' : entry.provider === 'chatterbox-persian' ? 'chatterbox-persian' : entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
+  if (!filename && (provider === 'omnivoice' || provider === 'omnivoice-lora')) return null;
 
   const id =
     typeof entry.id === 'string' && entry.id.trim().length > 0
@@ -409,7 +410,8 @@ export function TTSAudioReferencesModal({
 
     try {
       for (const entry of normalizedEntries) {
-        if (entry.provider === 'omnivoice' && !entry.filename) throw new Error('Local presets require a reference filename');
+        if ((entry.provider === 'omnivoice' || entry.provider === 'omnivoice-lora') && !entry.filename) throw new Error('Local presets require a reference filename');
+        if (entry.provider === 'omnivoice-lora' && (entry.language !== 'en' || !entry.referenceText.trim())) throw new Error('OmniVoice LoRA requires English and a reference transcript');
         if (entry.provider === 'gemini' && !isSupportedGeminiVoice(entry.gemini.voice)) throw new Error('Choose a Gemini voice or enter a valid extended or saved voice ID for each online preset');
       }
       const response = await fetch('/api/tts-audio-references', {
@@ -445,11 +447,24 @@ export function TTSAudioReferencesModal({
           savedEntries.length === 1 ? 'y' : 'ies'
         }.`,
       );
+      return true;
     } catch (saveError) {
       setError(getErrorMessage(saveError));
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleUseEnglishPreset = async (entry: AudioReferenceEntry) => {
+    if (!await handleSave()) return;
+    const current = useAppStore.getState();
+    if (entry.provider !== 'omnivoice' && entry.provider !== 'omnivoice-lora') return;
+    current.updateTTSSettings({ provider: entry.provider, reference_audio_filename: entry.filename,
+      omniVoice: { ...current.ttsSettings.omniVoice, referenceText: entry.referenceText, language: 'en',
+        deviceMap: entry.deviceMap, dtype: entry.provider === 'omnivoice-lora' ? 'float32' : entry.dtype,
+        numStep: entry.numStep, speed: entry.speed } });
+    setStatus(`Using ${entry.name || entry.filename} for English TTS. You can choose a different voice from the scene TTS menu.`);
   };
 
   if (!isOpen) return null;
@@ -519,6 +534,13 @@ export function TTSAudioReferencesModal({
                   </button>
                 </div>
 
+                {entry.language === 'en' && (entry.provider === 'omnivoice' || entry.provider === 'omnivoice-lora') && (
+                  <button type='button' disabled={isBusy || !entry.enabled}
+                    onClick={() => void handleUseEnglishPreset(entry)}
+                    className='px-3 py-2 rounded-md border border-indigo-300 text-indigo-800 text-sm disabled:opacity-50'>
+                    Use for English TTS
+                  </button>
+                )}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
                   <div className='space-y-1'>
                     <label className='text-xs font-medium text-gray-700'>
@@ -535,7 +557,7 @@ export function TTSAudioReferencesModal({
                     />
                   </div>
 
-                  {(entry.provider === 'omnivoice' || entry.provider === 'chatterbox-persian') && (
+                  {(entry.provider === 'omnivoice' || entry.provider === 'omnivoice-lora' || entry.provider === 'chatterbox-persian') && (
                   <div className='space-y-1'>
                     <label className='text-xs font-medium text-gray-700'>
                       Audio Filename
@@ -577,6 +599,7 @@ export function TTSAudioReferencesModal({
                     onChange={(event) => updateEntry(entry.id, { provider: event.target.value as LanguageTtsProvider })}
                     className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
                     <option value='omnivoice'>OmniVoice — Local</option>
+                    {entry.language === 'en' && <option value='omnivoice-lora'>OmniVoice LoRA — Local</option>}
                     <option value='gemini'>Google Gemini — Online</option>
                     {entry.language === 'fa' && <option value='chatterbox-persian'>Chatterbox Persian — Isolated Local</option>}
                   </select>
@@ -646,7 +669,7 @@ export function TTSAudioReferencesModal({
                   </div>
                 </div>
 
-                {(entry.provider === 'omnivoice' || entry.provider === 'chatterbox-persian') && (<>
+                {(entry.provider === 'omnivoice' || entry.provider === 'omnivoice-lora' || entry.provider === 'chatterbox-persian') && (<>
                 <div className='space-y-1'>
                   <label className='text-xs font-medium text-gray-700'>
                     Reference Text
@@ -691,8 +714,8 @@ export function TTSAudioReferencesModal({
                       DType
                     </label>
                     <select
-                      disabled={entry.provider === 'chatterbox-persian'}
-                      value={entry.provider === 'chatterbox-persian' ? 'float32' : entry.dtype}
+                      disabled={entry.provider === 'chatterbox-persian' || entry.provider === 'omnivoice-lora'}
+                      value={entry.provider === 'chatterbox-persian' || entry.provider === 'omnivoice-lora' ? 'float32' : entry.dtype}
                       onChange={(event) =>
                         updateEntry(entry.id, {
                           dtype: event.target.value as DType,

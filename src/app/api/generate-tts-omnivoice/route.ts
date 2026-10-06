@@ -1,3 +1,4 @@
+import { generateOmniVoiceLora } from '@/lib/omniVoiceLora';
 import { resolveReferenceAudioPath } from '@/lib/ttsReferenceAudio';
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile, spawn } from 'child_process';
@@ -42,6 +43,8 @@ interface RequestBody {
   referenceAudioFilename?: unknown;
   aggressiveEdgeTrim?: unknown;
   ttsSettings?: {
+    provider?: string;
+    seed?: number;
     reference_audio_filename?: string;
     omniVoice?: OmniVoiceTtsSettings;
   };
@@ -224,7 +227,7 @@ async function resolveReferencePresetByAudioName(
     const { entries } = await loadTtsAudioReferencesStore();
 
     const enabledEntries = entries.filter(
-      (entry) => entry.enabled && entry.provider === 'omnivoice' && entry.filename.trim().length > 0,
+      (entry) => entry.enabled && (entry.provider === 'omnivoice' || entry.provider === 'omnivoice-lora') && entry.filename.trim().length > 0,
     );
 
     const matchedEntry = enabledEntries.find((entry) =>
@@ -1927,6 +1930,14 @@ export async function POST(request: NextRequest) {
 
     const matchedReferencePreset =
       await resolveReferencePresetByAudioName(referenceAudioName);
+
+    if (matchedReferencePreset?.provider === 'omnivoice-lora') {
+      return await generateOmniVoiceLora({ text, preset: matchedReferencePreset,
+        sceneId: body.sceneId, videoId: body.videoId, seed: body.ttsSettings?.seed });
+    }
+    if (body.ttsSettings?.provider === 'omnivoice-lora') {
+      return NextResponse.json({ error: 'Choose an enabled OmniVoice LoRA preset' }, { status: 400 });
+    }
 
     const usePresetReferenceText =
       Boolean(matchedReferencePreset) &&

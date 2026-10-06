@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { BaserowRow } from '@/lib/baserow-actions';
 
 // TTS Settings interface
-export type TTSProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice';
+export type TTSProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice' | 'omnivoice-lora';
 
 export interface OmniVoiceTTSSettings {
   pythonPath: string;

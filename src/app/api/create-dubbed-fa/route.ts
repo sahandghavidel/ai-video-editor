@@ -856,7 +856,7 @@ export async function POST(request: NextRequest) {
         emptySentenceFieldKey: baserowFields.sceneTargetSentenceFieldKey,
         sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
         provider: selectedLanguageReference.provider,
-        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'chatterbox-persian')
+        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora' || selectedLanguageReference.provider === 'chatterbox-persian')
           ? selectedLanguageReference.filename : undefined,
         skipIfDestinationExists: true,
         failFastOnSaveError: false,
@@ -865,7 +865,7 @@ export async function POST(request: NextRequest) {
         boostFirstFiveMinutesSteps: selectedLanguageReference.provider === 'omnivoice',
         ttsSettings: {
           provider: selectedLanguageReference.provider,
-          reference_audio_filename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'chatterbox-persian')
+          reference_audio_filename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora' || selectedLanguageReference.provider === 'chatterbox-persian')
             ? selectedLanguageReference.filename : undefined,
           gemini: selectedLanguageReference.gemini,
           persian: selectedLanguageReference.persian,
@@ -1104,7 +1104,7 @@ export async function POST(request: NextRequest) {
         originalAudioField: baserowFields.sceneOriginalAudioFieldKey ?? null,
         emptySentenceFieldForSilence:
           baserowFields.sceneReferenceSentenceFieldKey,
-        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'chatterbox-persian')
+        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora' || selectedLanguageReference.provider === 'chatterbox-persian')
           ? selectedLanguageReference.filename : undefined,
         referenceAudioReferenceId: selectedLanguageReference.id,
         referenceAudioSource: selectedLanguageReference.source,

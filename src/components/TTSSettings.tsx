@@ -92,7 +92,8 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
                 provider: e.target.value as
                   | 'chatterbox'
                   | 'fish-s2-pro'
-                  | 'omnivoice',
+                  | 'omnivoice'
+                  | 'omnivoice-lora',
               })
             }
             className='w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-xs'
@@ -100,6 +101,7 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
             <option value='chatterbox'>Current TTS (Chatterbox)</option>
             <option value='fish-s2-pro'>Fish Audio S2 Pro</option>
             <option value='omnivoice'>OmniVoice (Apple Silicon)</option>
+            <option value='omnivoice-lora'>OmniVoice LoRA — Local</option>
           </select>
         </div>
 
@@ -112,6 +114,9 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
               Manage Language Presets
             </button>
 
+        {ttsSettings.provider === 'omnivoice-lora' && (
+          <p className='text-xs text-indigo-800'>Choose English — Nice LoRA v1 in Manage Language Presets and click Use for English TTS.</p>
+        )}
         {ttsSettings.provider === 'omnivoice' && (
           <>
             <div className='rounded-md border border-indigo-200 bg-indigo-50 p-2 text-[11px] text-indigo-800'>

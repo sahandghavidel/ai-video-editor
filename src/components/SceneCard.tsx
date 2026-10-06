@@ -289,6 +289,8 @@ type RemoveTTSOptions = {
 type TtsReferenceMenuEntry = {
   id: string;
   filename: string;
+  label: string;
+  provider: 'omnivoice' | 'omnivoice-lora';
 };
 
 type SceneSpeedUpVideoHandler = (
@@ -949,7 +951,7 @@ export default function SceneCard({
         const filename =
           typeof entry.filename === 'string' ? entry.filename.trim() : '';
 
-        if (entry.enabled !== true || entry.provider === 'gemini' || language !== 'en' || !filename) {
+        if (entry.enabled !== true || (entry.provider !== 'omnivoice' && entry.provider !== 'omnivoice-lora') || language !== 'en' || !filename) {
           return [];
         }
 
@@ -960,6 +962,8 @@ export default function SceneCard({
                 ? entry.id.trim()
                 : `english-reference-${index}`,
             filename,
+            provider: entry.provider as 'omnivoice' | 'omnivoice-lora',
+            label: entry.provider === 'omnivoice-lora' && typeof entry.name === 'string' ? entry.name : filename,
           },
         ];
       });
@@ -4913,6 +4917,7 @@ export default function SceneCard({
       opts?: {
         seedOverride?: number;
         referenceAudioFilename?: string;
+        referenceProvider?: 'omnivoice' | 'omnivoice-lora';
         throwOnError?: boolean;
         skipAutoSyncAfterTtsGeneration?: boolean;
         suppressRefreshes?: boolean;
@@ -4955,8 +4960,9 @@ export default function SceneCard({
           opts?.referenceAudioFilename?.trim() || undefined;
         const voiceOverride =
           selectedReferenceAudioFilename ??
-          sceneVoiceOverride ??
-          selectedVideoVoiceOverride;
+          (liveStoreState.ttsSettings.provider === 'omnivoice-lora'
+            ? liveStoreState.ttsSettings.reference_audio_filename
+            : sceneVoiceOverride ?? selectedVideoVoiceOverride);
 
         const currentTtsSettings = liveStoreState.ttsSettings;
         const effectiveTtsSettings =
@@ -4967,6 +4973,7 @@ export default function SceneCard({
         const ttsPayloadSettings = voiceOverride
           ? {
               ...effectiveTtsSettings,
+              provider: opts?.referenceProvider ?? effectiveTtsSettings.provider,
               reference_audio_filename: voiceOverride,
             }
           : effectiveTtsSettings;
@@ -4976,7 +4983,7 @@ export default function SceneCard({
             ? '/api/generate-tts-omnivoice'
             : currentTtsSettings.provider === 'fish-s2-pro'
               ? '/api/generate-tts-fish'
-              : currentTtsSettings.provider === 'omnivoice'
+              : currentTtsSettings.provider === 'omnivoice' || currentTtsSettings.provider === 'omnivoice-lora'
                 ? '/api/generate-tts-omnivoice'
                 : '/api/generate-tts';
 
@@ -9583,11 +9590,12 @@ export default function SceneCard({
                                     scene,
                                     {
                                       referenceAudioFilename: entry.filename,
+                                      referenceProvider: entry.provider,
                                     },
                                   );
                                 }}
                               >
-                                {entry.filename}
+                                {entry.label}
                               </button>
                             ))}
                           </div>
