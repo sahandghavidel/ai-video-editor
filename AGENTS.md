@@ -11,6 +11,10 @@ This file applies to the repository root. A more specific `AGENTS.md`, such as t
 - Do not commit `.env.local`, credentials, provider keys, generated media, or local runtime data.
 - Document any new environment variable, Baserow field, external service, or pipeline step in the relevant project documentation.
 
+## English OmniVoice LoRA
+
+Before collecting training data, creating a new LoRA, or changing LoRA integration/runtime behavior, read `docs/OmniVoice-LoRA.md` and `docs/English-Voice-Dataset.md`. The LoRA runbook records the approved v1 dataset, isolated training environment, adapter packaging, reference/audio settings, application routing, filename contract, worker lifecycle, and new-version procedure. Preserve ordinary OmniLocal and the frozen v1 adapter; a new preset alone does not select a new adapter version.
+
 ## Setup and running
 
 The project requires Node.js 20 or newer, npm, FFmpeg/FFprobe, Baserow, and MinIO. Install dependencies with:
