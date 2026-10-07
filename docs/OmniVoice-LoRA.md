@@ -39,6 +39,8 @@ Weights, virtual environments, training data, generated media, credentials, and 
 
 ## 1. Collect approved sentence/audio pairs
 
+For non-English collection, use the separate preset-driven dropdown described in [Language-Voice-Dataset.md](Language-Voice-Dataset.md). Each language has its own collection; the English procedure below remains independent.
+
 See [English-Voice-Dataset.md](English-Voice-Dataset.md) for the exporter contract. In the application, select an approved video and click **Export English voice dataset** in the selected-video section. The implementation is `src/app/api/export-english-voice-dataset/route.ts`, called from `src/components/OriginalVideosList.tsx`; its request is `POST /api/export-english-voice-dataset` with `{"videoId":1623}` (substitute the approved ID).
 
 The exact Baserow fields are:

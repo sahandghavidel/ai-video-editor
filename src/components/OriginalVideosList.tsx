@@ -691,6 +691,12 @@ export default function OriginalVideosList({
     message: string;
   } | null>(null);
   const englishDatasetExportLock = useRef(false);
+  const [exportLanguages, setExportLanguages] = useState<{ language: string; label: string; conflict: boolean }[]>([]);
+  const [loadingExportLanguages, setLoadingExportLanguages] = useState(false);
+  const [exportingLanguageDataset, setExportingLanguageDataset] = useState(false);
+  const [languageDatasetResult, setLanguageDatasetResult] = useState<{ videoId: number; message: string } | null>(null);
+  const languageDatasetExportLock = useRef(false);
+  const [languageExportMenuOpen, setLanguageExportMenuOpen] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [deletingScenesOnly, setDeletingScenesOnly] = useState<number | null>(
@@ -2475,6 +2481,45 @@ export default function OriginalVideosList({
     } finally {
       englishDatasetExportLock.current = false;
       setExportingEnglishDataset(false);
+    }
+  };
+
+  const openLanguageExportMenu = async () => {
+    if (languageExportMenuOpen) { setLanguageExportMenuOpen(false); return; }
+    setLanguageExportMenuOpen(true);
+    setLoadingExportLanguages(true);
+    setExportLanguages([]);
+    try {
+      const response = await fetch('/api/export-language-voice-dataset', { cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not load languages.');
+      setExportLanguages(result.languages);
+    } catch (error) {
+      setLanguageExportMenuOpen(false);
+      if (selectedOriginalVideo.id) setLanguageDatasetResult({ videoId: selectedOriginalVideo.id, message: error instanceof Error ? error.message : 'Could not load languages.' });
+    } finally { setLoadingExportLanguages(false); }
+  };
+
+  const handleExportLanguageDataset = async (videoId: number, language: string, label: string) => {
+    if (languageDatasetExportLock.current) return;
+    languageDatasetExportLock.current = true;
+    setLanguageExportMenuOpen(false);
+    setExportingLanguageDataset(true);
+    setLanguageDatasetResult(null);
+    try {
+      const response = await fetch('/api/export-language-voice-dataset', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId, language }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Dataset export failed.');
+      const failures = (result.failures || []).map((failure: { sceneId: number; error: string }) => `Scene #${failure.sceneId}: ${failure.error}`).join(' ');
+      setLanguageDatasetResult({ videoId, message: `${label}: added ${result.added} pairs (${result.originalAudioAdded} original, ${result.dubbedAudioAdded} dubbed); skipped ${result.duplicates} duplicates, ${result.emptySentences} empty sentences, ${result.missingAudio} missing audio; ${result.failed} failed. Saved to ${result.exportDir}.${failures ? ` ${failures}` : ''}` });
+    } catch (error) {
+      setLanguageDatasetResult({ videoId, message: error instanceof Error ? error.message : 'Dataset export failed.' });
+    } finally {
+      languageDatasetExportLock.current = false;
+      setExportingLanguageDataset(false);
     }
   };
 
@@ -15568,6 +15613,28 @@ export default function OriginalVideosList({
                     {exportingEnglishDataset ? <Loader2 className='w-4 h-4 animate-spin' /> : <Download className='w-4 h-4' />}
                     {exportingEnglishDataset ? 'Exporting voice dataset...' : 'Export English voice dataset'}
                   </button>
+                  <div className='relative'>
+                    <button
+                      type='button'
+                      onClick={openLanguageExportMenu}
+                      disabled={exportingLanguageDataset || loadingExportLanguages}
+                      aria-expanded={languageExportMenuOpen}
+                      aria-haspopup='menu'
+                      className='flex items-center gap-1.5 rounded border border-blue-300 bg-white px-2 py-1.5 text-xs text-blue-800 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                    >
+                      {exportingLanguageDataset || loadingExportLanguages ? <Loader2 className='w-4 h-4 animate-spin' /> : <Download className='w-4 h-4' />}
+                      {exportingLanguageDataset ? 'Exporting language dataset...' : 'Export language dataset ▾'}
+                    </button>
+                    {languageExportMenuOpen && (
+                      <div role='menu' aria-label='Export dataset language' onKeyDown={(event) => { if (event.key === 'Escape') setLanguageExportMenuOpen(false); }} className='absolute right-0 top-full z-50 mt-1 max-h-72 w-64 overflow-y-auto rounded border border-blue-200 bg-white p-1 shadow-lg'>
+                        {loadingExportLanguages ? <p className='p-2 text-xs'>Loading languages...</p> : exportLanguages.length === 0 ? <p className='p-2 text-xs'>No non-English languages configured.</p> : exportLanguages.map((entry) => (
+                          <button key={entry.language} type='button' role='menuitem' disabled={entry.conflict} title={entry.conflict ? 'Preset sentence/audio mappings disagree' : `Export approved ${entry.label} pairs for the selected video`} className='block w-full rounded px-3 py-2 text-left text-sm text-blue-900 hover:bg-blue-50 disabled:opacity-50' onClick={() => selectedOriginalVideo.id && handleExportLanguageDataset(selectedOriginalVideo.id, entry.language, entry.label)}>
+                            {entry.label} ({entry.language}){entry.conflict ? ' — mapping conflict' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => setIsVideoDetailsModalOpen(true)}
                     disabled={
@@ -15639,6 +15706,12 @@ export default function OriginalVideosList({
           {englishDatasetResult?.videoId === selectedOriginalVideo.id && (
             <p role='status' className='mb-4 break-words text-sm text-blue-900'>
               {englishDatasetResult.message}
+            </p>
+          )}
+
+          {languageDatasetResult?.videoId === selectedOriginalVideo.id && (
+            <p role='status' className='mb-4 break-words text-sm text-blue-900'>
+              {languageDatasetResult.message}
             </p>
           )}
 
