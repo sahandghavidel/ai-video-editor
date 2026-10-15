@@ -55,6 +55,32 @@ function approveFile(file: Omit<DeleteApproval, 'expires' | 'bucket' | 'baseUrl'
   return `${payload}.${approvalSignature(payload).toString('base64url')}`;
 }
 
+export class StorageApprovalExpiredError extends Error {
+  constructor() {
+    super('Deletion approval expired. Renew it before continuing.');
+  }
+}
+
+function readApproval(token: string): DeleteApproval {
+  const [payload, signature, extra] = token.split('.');
+  if (!payload || !signature || extra) throw new Error('Invalid deletion approval. Preview again.');
+  const expected = approvalSignature(payload);
+  const received = Buffer.from(signature, 'base64url');
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) throw new Error('Invalid deletion approval. Preview again.');
+  const file: DeleteApproval = JSON.parse(Buffer.from(payload, 'base64url').toString());
+  const config = getMinioConfig();
+  if (file.bucket !== config.bucket || file.baseUrl !== config.baseUrl) throw new Error('Storage configuration changed. Preview again.');
+  return file;
+}
+
+// A signed preview remains renewable after expiry. Preserve its exact file identity;
+// renewal must never rescan keywords or approve a replacement object's ETag/size.
+export function renewStorageApproval(token: string): { token: string; expiresAt: number } {
+  const file = readApproval(token);
+  const renewed = approveFile({ key: file.key, etag: file.etag, size: file.size, keyword: file.keyword });
+  return { token: renewed, expiresAt: readApproval(renewed).expires };
+}
+
 export async function previewStorage(input: string): Promise<StorageGroup[]> {
   const keywords = parseStorageKeywords(input);
   if (!keywords.length || keywords.length > 100 || input.length > 10_000) throw new Error('Enter between 1 and 100 comma-separated keywords.');
@@ -77,7 +103,8 @@ export async function previewStorage(input: string): Promise<StorageGroup[]> {
       const size = Number(entry.getElementsByTagName('Size').item(0)?.textContent);
       const etag = entry.getElementsByTagName('ETag').item(0)?.textContent || '';
       if (!key || !etag || !Number.isFinite(size)) throw new Error('MinIO returned an invalid file entry.');
-      group.files.push({ key, size, token: approveFile({ key, size, etag, keyword: group.keyword }) });
+      const token = approveFile({ key, size, etag, keyword: group.keyword });
+      group.files.push({ key, size, token, expiresAt: readApproval(token).expires });
     }
     const truncated = document.getElementsByTagName('IsTruncated').item(0)?.textContent === 'true';
     continuation = truncated ? document.getElementsByTagName('NextContinuationToken').item(0)?.textContent || '' : '';
@@ -88,14 +115,8 @@ export async function previewStorage(input: string): Promise<StorageGroup[]> {
 }
 
 export async function deletePreviewedFile(token: string): Promise<'deleted' | 'missing'> {
-  const [payload, signature, extra] = token.split('.');
-  if (!payload || !signature || extra) throw new Error('Invalid deletion approval. Preview again.');
-  const expected = approvalSignature(payload);
-  const received = Buffer.from(signature, 'base64url');
-  if (received.length !== expected.length || !timingSafeEqual(received, expected)) throw new Error('Invalid deletion approval. Preview again.');
-  const file: DeleteApproval = JSON.parse(Buffer.from(payload, 'base64url').toString());
-  const config = getMinioConfig();
-  if (file.expires < Date.now() || file.bucket !== config.bucket || file.baseUrl !== config.baseUrl) throw new Error('Preview expired or storage configuration changed. Preview again.');
+  const file = readApproval(token);
+  if (file.expires <= Date.now()) throw new StorageApprovalExpiredError();
   await ensureMinioRunning();
   const head = await storageRequest('HEAD', file.key);
   if (head.status === 404) return 'missing';

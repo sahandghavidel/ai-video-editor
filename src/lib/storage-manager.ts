@@ -2,6 +2,7 @@ export type StorageMatch = {
   key: string;
   size: number;
   token: string;
+  expiresAt?: number;
 };
 
 export type StorageGroup = {

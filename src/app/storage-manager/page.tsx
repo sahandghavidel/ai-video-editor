@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { formatStorageSize, type StorageGroup } from '@/lib/storage-manager';
 import { sendTelegramNotification } from '@/utils/notifications/telegram';
+import { deleteStorageMatch, requestStorage } from '@/utils/storage-manager-client';
 
 type Progress = {
   status: 'Waiting' | 'Deleting' | 'Completed' | 'Completed with errors' | 'Stopped';
@@ -11,15 +12,6 @@ type Progress = {
   missing: number;
   failures: { key: string; error: string }[];
 };
-
-async function requestStorage(body: Record<string, string>) {
-  const response = await fetch('/api/storage-manager', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Storage request failed.');
-  return data;
-}
 
 export default function StorageManagerPage() {
   const [keywords, setKeywords] = useState('');
@@ -100,8 +92,8 @@ export default function StorageManagerPage() {
         for (const file of groups[index].files) {
           if (stop.current) break;
           try {
-            const data = await requestStorage({ action: 'delete', token: file.token });
-            if (data.result === 'missing') result.missing++;
+            const deletion = await deleteStorageMatch(file);
+            if (deletion === 'missing') result.missing++;
             else result.deleted++;
           } catch (error) {
             result.failures.push({ key: file.key, error: error instanceof Error ? error.message : 'Deletion failed.' });
