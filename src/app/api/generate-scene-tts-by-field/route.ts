@@ -1,3 +1,4 @@
+import { runSceneTtsBatch } from '@/lib/sceneTtsBatch';
 import { NextRequest, NextResponse } from 'next/server';
 import { Agent } from 'undici';
 import { spawn } from 'child_process';
@@ -2739,7 +2740,7 @@ export async function POST(request: NextRequest) {
     let abortedOnProviderFailure = false;
     let abortedSceneId: number | null = null;
 
-    for (const scene of orderedScenes) {
+    const processScene = async (scene: BaserowRow): Promise<void> => {
       const sceneId = parsePositiveInt(scene.id);
       if (!sceneId) {
         skippedInvalidSceneIdCount += 1;
@@ -2747,7 +2748,7 @@ export async function POST(request: NextRequest) {
           fitDebugRunId,
           rawSceneId: scene.id,
         });
-        continue;
+        return;
       }
 
       const sceneStartedAt = Date.now();
@@ -2762,7 +2763,7 @@ export async function POST(request: NextRequest) {
           fitDebugRunId,
           sceneId,
         });
-        continue;
+        return;
       }
 
       const existingAudioUrl = extractUrl(scene[destinationAudioFieldKey]);
@@ -2774,7 +2775,7 @@ export async function POST(request: NextRequest) {
           destinationAudioFieldKey,
           existingAudioUrl,
         });
-        continue;
+        return;
       }
 
       const targetDurationSec = fitAudioToSceneDuration
@@ -2795,7 +2796,7 @@ export async function POST(request: NextRequest) {
           rawDuration: scene[sceneDurationFieldKey as string],
         });
 
-        continue;
+        return;
       }
 
       const text = String(scene[sourceTextFieldKey] ?? '').trim();
@@ -2820,7 +2821,7 @@ export async function POST(request: NextRequest) {
           emptySentenceTextLength: emptySentenceText.length,
           createSilenceForEmptySentence,
         });
-        continue;
+        return;
       }
 
       logFitInfo('post:scene-start', {
@@ -2948,11 +2949,11 @@ export async function POST(request: NextRequest) {
 
             if (failFastOnSaveError) {
               abortedOnSaveFailure = true;
-              abortedSceneId = sceneId;
+              abortedSceneId ??= sceneId;
               console.error(
                 `[generate-scene-tts-by-field] Fail-fast: stopping batch after silence save failure on scene ${sceneId}: ${saveMessage}`,
               );
-              break;
+              return;
             }
           }
         } catch (error) {
@@ -2975,7 +2976,7 @@ export async function POST(request: NextRequest) {
           await safeUnlink(fittedUnmutedAudioPath);
         }
 
-        continue;
+        return;
       }
 
       try {
@@ -3091,14 +3092,14 @@ export async function POST(request: NextRequest) {
 
             if (failFastOnSaveError) {
               abortedOnSaveFailure = true;
-              abortedSceneId = sceneId;
+              abortedSceneId ??= sceneId;
               console.error(
                 `[generate-scene-tts-by-field] Fail-fast: stopping batch after original save failure on scene ${sceneId}: ${saveMessage}`,
               );
-              break;
+              return;
             }
 
-            continue;
+            return;
           }
         } else {
           skippedOriginalSaveCount += 1;
@@ -3191,11 +3192,11 @@ export async function POST(request: NextRequest) {
 
           if (failFastOnSaveError) {
             abortedOnSaveFailure = true;
-            abortedSceneId = sceneId;
+            abortedSceneId ??= sceneId;
             console.error(
               `[generate-scene-tts-by-field] Fail-fast: stopping batch after save failure on scene ${sceneId}: ${saveMessage}`,
             );
-            break;
+            return;
           }
         }
       } catch (error) {
@@ -3216,9 +3217,29 @@ export async function POST(request: NextRequest) {
         });
         if (provider === 'gemini') {
           abortedOnProviderFailure = true;
-          abortedSceneId = sceneId;
-          break;
+          abortedSceneId ??= sceneId;
+          return;
         }
+      }
+    };
+
+    const attemptedScenes = new Set<number>();
+    await runSceneTtsBatch({
+      provider,
+      scenes: orderedScenes,
+      processScene: async (scene) => {
+        attemptedScenes.add(Number(scene.id));
+        await processScene(scene);
+      },
+      shouldStop: () => abortedOnSaveFailure || abortedOnProviderFailure,
+    });
+
+    if (provider === 'gemini' && failures.length) {
+      // Errors remain visible even when verbose fitting diagnostics are disabled.
+      for (const failure of failures) {
+        console.error('[Gemini TTS] Scene failed', JSON.stringify({
+          videoId, provider, ...failure,
+        }));
       }
     }
 
@@ -3274,7 +3295,15 @@ export async function POST(request: NextRequest) {
       skippedInvalidSceneIdCount,
       failureCount: failures.length,
       failures: failures.slice(0, 30),
-      failedSceneIds: failures.slice(0, 30).map((failure) => failure.sceneId),
+      failedSceneIds: provider === 'gemini'
+        ? [...new Set(failures.map((failure) => failure.sceneId))]
+        : failures.slice(0, 30).map((failure) => failure.sceneId),
+      unfinishedSceneIds: provider === 'gemini'
+        ? orderedScenes.map((scene) => Number(scene.id)).filter(
+            (id) => Number.isSafeInteger(id) && id > 0 && !attemptedScenes.has(id) &&
+              (!onlySceneIdSet || onlySceneIdSet.has(id)),
+          )
+        : undefined,
       failuresByCategory: failures.reduce<Record<string, number>>(
         (acc, failure) => {
           const key = failure.category || 'unknown';

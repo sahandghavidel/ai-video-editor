@@ -1,4 +1,5 @@
 import { GEMINI_TTS_MODEL, isSupportedGeminiVoice, type GeminiTtsSettings } from '@/utils/geminiTtsSettings';
+import { getGeminiTtsConcurrency, getGeminiTtsRequestIntervalMs } from '@/lib/geminiTtsLimits';
 
 export function validateGeminiTtsSettings(settings: GeminiTtsSettings): string | null {
   if (!isSupportedGeminiVoice(settings.voice)) {
@@ -8,29 +9,53 @@ export function validateGeminiTtsSettings(settings: GeminiTtsSettings): string |
   return null;
 }
 
-// Shared by route instances during development reloads. One active generation
-// at a time, with at least 10 seconds between request starts (at most 6 RPM).
+// Shared by route instances/jobs during development reloads. The queue now
+// serializes request admission only; generation holds a configurable permit.
 const quotaState = globalThis as typeof globalThis & {
   geminiTtsQueue?: Promise<void>;
   geminiTtsLastStart?: number;
   geminiTtsCooldownUntil?: number;
+  geminiTtsActive?: number;
+  geminiTtsWaiters?: Array<() => void>;
 };
 
 async function runQueued<T>(generate: () => Promise<T>): Promise<T> {
-  const previous = quotaState.geminiTtsQueue || Promise.resolve();
-  const request = previous.catch(() => {}).then(generate);
-  quotaState.geminiTtsQueue = request.then(() => {}, () => {});
-  return request;
+  await new Promise<void>((resolve) => {
+    const enter = () => {
+      quotaState.geminiTtsActive = (quotaState.geminiTtsActive || 0) + 1;
+      resolve();
+    };
+    if ((quotaState.geminiTtsActive || 0) < getGeminiTtsConcurrency()) enter();
+    else (quotaState.geminiTtsWaiters ??= []).push(enter);
+  });
+  try {
+    return await generate();
+  } finally {
+    quotaState.geminiTtsActive = (quotaState.geminiTtsActive || 1) - 1;
+    if (quotaState.geminiTtsActive < getGeminiTtsConcurrency())
+      quotaState.geminiTtsWaiters?.shift()?.();
+  }
 }
 
 async function waitForRequestSlot(): Promise<void> {
-  const nextStart = Math.max(
-    (quotaState.geminiTtsLastStart || 0) + 10_000,
-    quotaState.geminiTtsCooldownUntil || 0,
-  );
-  const delay = Math.max(0, nextStart - Date.now());
-  if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
-  quotaState.geminiTtsLastStart = Date.now();
+  const previous = quotaState.geminiTtsQueue || Promise.resolve();
+  const admission = previous.catch(() => {}).then(async () => {
+    for (;;) {
+      const nextStart = Math.max(
+        (quotaState.geminiTtsLastStart || 0) + getGeminiTtsRequestIntervalMs(),
+        quotaState.geminiTtsCooldownUntil || 0,
+      );
+      const delay = Math.max(0, nextStart - Date.now());
+      if (!delay) {
+        quotaState.geminiTtsLastStart = Date.now();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      // Another in-flight request may have extended the shared 429 cooldown.
+    }
+  });
+  quotaState.geminiTtsQueue = admission.then(() => {}, () => {});
+  await admission;
 }
 
 interface GeminiResult {
@@ -41,11 +66,12 @@ interface GeminiResult {
 }
 
 function rateLimitRecovery(attempt: number): boolean {
-  if (attempt >= 2) return false;
-  // Retry the exact same scene twice, one minute after each 429 response.
-  // Hold the shared queue so another scene cannot consume the recovery window.
-  quotaState.geminiTtsCooldownUntil = Date.now() + 60_000;
-  return true;
+  // Every 429 pauses all new starts, including when this scene has no retries
+  // left. Already-running requests can finish and save their own audio.
+  quotaState.geminiTtsCooldownUntil = Math.max(
+    quotaState.geminiTtsCooldownUntil || 0, Date.now() + 60_000,
+  );
+  return attempt < 2;
 }
 
 export class GeminiTtsError extends Error {

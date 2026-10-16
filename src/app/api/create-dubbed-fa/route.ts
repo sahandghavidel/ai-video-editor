@@ -1,3 +1,4 @@
+import { runWithGeminiSceneRecovery } from '@/lib/geminiSceneRecovery';
 import { ensurePersianTtsRunning } from '@/lib/persianTtsRuntime';
 import { normalizePersianTtsSettings, type PersianTtsSettings } from '@/utils/persianTtsSettings';
 import { NextRequest, NextResponse } from 'next/server';
@@ -882,17 +883,13 @@ export async function POST(request: NextRequest) {
       dispatcher: STEP2_FETCH_DISPATCHER,
     };
 
-    const step2Response = await fetch(
-      `${request.nextUrl.origin}${GENERATE_SCENE_TTS_BY_FIELD_ROUTE}`,
-      step2RequestInit,
-    );
-
-    const step2Payload = (await step2Response.json().catch(() => null)) as {
+    type Step2Payload = {
       ok?: unknown;
       error?: unknown;
       failureCount?: unknown;
       failures?: unknown;
       failedSceneIds?: unknown;
+      unfinishedSceneIds?: unknown;
       failuresByCategory?: unknown;
       generatedCount?: unknown;
       silentGeneratedCount?: unknown;
@@ -906,6 +903,31 @@ export async function POST(request: NextRequest) {
       provider?: unknown;
       providerPath?: unknown;
     } | null;
+    const { response: step2Response, payload: step2Payload } = await runWithGeminiSceneRecovery({
+      provider: selectedLanguageReference.provider,
+      send: async (sceneIds?: number[]) => {
+        const response = await fetch(
+          `${request.nextUrl.origin}${GENERATE_SCENE_TTS_BY_FIELD_ROUTE}`,
+          sceneIds ? {
+            ...step2RequestInit,
+            body: JSON.stringify({
+              ...JSON.parse(step2RequestInit.body as string),
+              onlySceneIds: sceneIds,
+              skipIfDestinationExists: true,
+            }),
+          } : step2RequestInit,
+        );
+        const payload = await response.json().catch(() => null) as Step2Payload;
+        return { response, payload };
+      },
+      onRetry: (round, sceneIds, payload) => {
+        console.error('[Gemini TTS] Scene recovery', JSON.stringify({
+          videoId, language: selectedLanguageReference.language,
+          retry: `${round}/2`, waitSeconds: 60, sceneIds,
+          failures: payload?.failures,
+        }));
+      },
+    });
 
     if (!step2Response.ok) {
       const failurePreview = Array.isArray(step2Payload?.failures)
@@ -948,14 +970,28 @@ export async function POST(request: NextRequest) {
         : [];
 
     if (step2FailureCount > 0 || step2Payload?.ok !== true) {
+      if (selectedLanguageReference.provider === 'gemini') {
+        console.error('[Gemini TTS] Dubbing incomplete; merge blocked', JSON.stringify({
+          videoId, language: selectedLanguageReference.language,
+          failureCount: step2FailureCount, failedSceneIds: step2FailedSceneIds,
+          failures: step2Payload?.failures,
+        }));
+      }
       return NextResponse.json(
         {
           error: `Step 2 ${selectedLanguageReference.language} TTS generation finished with ${step2FailureCount} failed scene(s). Merge skipped until all scenes succeed.`,
           step: 'step-2-generate-dubbed-audio',
           remediation: 'retry-failed-scenes',
+          stopLanguageBatch: selectedLanguageReference.provider === 'gemini',
+          failures: selectedLanguageReference.provider === 'gemini' ? step2Payload?.failures : undefined,
           details: [
             `Retry failed scene IDs: ${step2FailedSceneIds.slice(0, 20).join(', ') || 'n/a'}`,
-            'Transient database/provider errors are now auto-retried with backoff, but exhausted scenes still need retry.',
+            ...(selectedLanguageReference.provider === 'gemini'
+              ? ['Gemini automatic scene recovery did not complete all scenes. Completed scenes were preserved.',
+                ...((Array.isArray(step2Payload?.failures) ? step2Payload.failures : []).slice(0, 5).map(
+                  (failure: { sceneId?: unknown; error?: unknown }) => `Scene ${String(failure.sceneId)}: ${String(failure.error)}`,
+                ))]
+              : ['Transient database/provider errors are now auto-retried with backoff, but exhausted scenes still need retry.']),
           ],
           step2: {
             ok: false,

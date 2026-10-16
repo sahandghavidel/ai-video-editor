@@ -49,8 +49,13 @@ are reported without silently selecting a different voice.
 
 Changing a preset affects subsequent jobs; already-generated dubbed scenes are
 still skipped. Explicit regeneration is required to replace existing audio.
-Provider failures stop Gemini scene batches, with the failed scene reported;
-no fallback to another provider occurs. HTTP 429 rejections are retried
+Provider failures stop scheduling new Gemini scenes, with the failed scene reported;
+already-running scenes finish and save before the batch returns. The merge waits
+for all these scenes and is not started when the batch reports failure. Local
+providers, including Persian Chatterbox, OmniVoice and OmniVoice LoRA, keep their
+sequential scene generation/regeneration behavior.
+
+No fallback to another provider occurs. HTTP 429 rejections are retried
 inside the Gemini provider (at most twice, using the same text and voice).
 Network failures, timeouts, completed generations with invalid audio, and
 upload/save failures are not automatically regenerated. Re-running
@@ -58,22 +63,82 @@ skips scenes successfully saved earlier. This avoids unbounded billable retries,
 but a generation that succeeded before a failed upload/save can still be billed
 again on an explicit retry.
 
-Gemini generation is queued within this server process: only one Google
-request runs at a time, with at least 10 seconds between request starts (at
-most 6 requests/minute). Generation time counts toward those 10 seconds: a
-4-second generation leaves a 6-second wait before the next request; a
-12-second generation needs no extra wait. Every HTTP 429 pauses the shared
-queue for 60 seconds before retrying the same scene. If the first retry
-also returns 429, wait another 60 seconds and retry once more. After three
-unsuccessful attempts, generation stops and reports Google's original error.
+Gemini dubbing automatically uses a bounded scene pool. Each scene keeps its
+own audio file, original/fitted fields, and save result. This uses ordinary
+interactive API requests, not Google's asynchronous Batch API. Skipped scenes
+(existing audio, missing text/duration, or scene filters) retain their existing
+behavior. The scene pool drains before returning, so fitting/saves finish before
+the caller can proceed to merging.
+
+Gemini permits are shared across jobs and provider-route instances in the same
+server process. The default is **10 concurrent Gemini generations**, with at
+least **1 second between Google request starts** (at most 60 starts/minute).
+These server-only environment settings in `.env.local` can change the pacing:
+
+```dotenv
+GEMINI_TTS_MAX_CONCURRENT=10
+GEMINI_TTS_MIN_INTERVAL_MS=1000
+```
+
+Concurrency accepts positive safe integers; it has no fixed ceiling of five.
+The interval accepts integer milliseconds of at least 1000. Invalid/omitted
+values use the defaults above. Restart the Next.js server after changing these
+settings. Local providers do not read them. The settings are not stored in
+language presets or browser localStorage.
+
+Every HTTP 429 pauses all new Google request starts for 60 seconds, including
+retries and other jobs. Requests already sent can complete. Later 429s extend
+the cooldown, and waiting requests recheck it before starting. The affected
+scene retries at most twice, retaining its text, voice and delivery settings.
+After three unsuccessful attempts, it reports Google's original error and its
+batch stops scheduling new scenes. Other in-flight scenes are allowed to save.
+Permits are released on success or failure; a queued scene does not block all
+other scenes for its entire generation duration.
 Repeated 429s do not prove that a daily quota was reached; the error details
 identify the exhausted quota. Quotas are project-wide: other
 applications/processes (including AI Studio) share them. The
-observed Tier 1 quota in October 2026 was 10 requests/minute, 10,000 input
-tokens/minute, and 100 requests/day. Pacing does not reserve quota or lift the
+verified project quota on October 16, 2026 was Tier 2: 1,000 requests/minute,
+100,000 input tokens/minute, and 10,000 requests/day for Gemini 3.8 Flash TTS.
+Google applies the project's tier automatically; no API tier parameter or key
+replacement is needed. These are rate/token/day quotas, not a published limit
+on simultaneous requests. Pacing does not reserve quota or lift the
 daily limit or guarantee avoiding token limits for large inputs; an unresolved
 quota failure stops the job so it can be resumed later. Queue state is shared
-across development reloads, but resets when the server process restarts.
+across development reloads, but resets when the server process restarts. Separate
+server processes do not share these in-memory permits; their combined traffic
+and AI Studio still consume the same project quotas.
+
+Offline concurrency/retry/local-isolation checks (no external calls):
+
+```bash
+node --test scripts/checks/gemini-tts-concurrency.cjs
+```
 
 References: [Google TTS guide](https://ai.google.dev/gemini-api/docs/speech-generation)
 and [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
+
+### Gemini scene recovery and errors
+
+Configured-language dubbing adds two recovery rounds for Gemini only. After the
+scene batch drains all in-flight saves, it waits 60 seconds, then submits only
+failed and unattempted scene IDs with `skipIfDestinationExists: true`. Each round
+refetches scene records, preserving completed dubbed scenes and their audio.
+Original-only scenes are still incomplete and may require a new generation.
+The second round targets only the scenes still incomplete after the first.
+The existing global pacing, concurrency, and provider-level 429 cooldown remain
+in effect; those 429 retries can add further waiting inside a recovery round.
+
+If recovery is exhausted, final merging stays blocked and the multi-language
+Create Dubbed batch stops before advancing to another language. Other providers
+retain their existing behavior. The recovery scope and wait/retry count live in
+`src/lib/geminiSceneRecovery.ts`. Requests without identifiable failed/unfinished
+scene IDs are not blindly retried.
+
+Gemini request failures log video/scene ID, model, stage, HTTP status, elapsed
+time, and nested error causes. Provider keys are redacted. Scene failures and
+the final merge-blocking summary are logged even when verbose fitting logs are
+disabled. The response includes actual failure messages for the calling UI.
+
+These are bounded automatic retries, not durable background jobs: stopping the
+Next.js process interrupts recovery. Re-running dubbing retains saved completed
+scenes through the existing skip-completed behavior.

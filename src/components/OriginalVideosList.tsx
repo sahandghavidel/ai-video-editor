@@ -283,6 +283,7 @@ type AudioReferenceLanguageEntry = {
       setCreatingDubbedLanguageTotalVideos(processingVideos.length);
 
       const summaries: DubbedLanguageRunSummary[] = [];
+      let stoppedForGeminiFailure = false;
 
       for (
         let languageIndex = 0;
@@ -295,6 +296,7 @@ type AudioReferenceLanguageEntry = {
         setCreatingDubbedLanguageCurrentLanguage(languageCode);
         setCreatingDubbedLanguageCurrentLanguageIndex(languageIndex + 1);
 
+        let stopForGeminiFailure = false;
         const summary: DubbedLanguageRunSummary = {
           language: languageCode,
           attempted: 0,
@@ -353,9 +355,11 @@ type AudioReferenceLanguageEntry = {
             const payload = (await response.json().catch(() => null)) as {
               error?: unknown;
               details?: unknown;
+              stopLanguageBatch?: unknown;
             } | null;
 
             if (!response.ok) {
+              stopForGeminiFailure = payload?.stopLanguageBatch === true;
               const details = Array.isArray(payload?.details)
                 ? payload.details
                     .map((item) => String(item))
@@ -384,10 +388,16 @@ type AudioReferenceLanguageEntry = {
             );
           }
 
+          if (stopForGeminiFailure) break;
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
 
         summaries.push(summary);
+        if (stopForGeminiFailure) {
+          stoppedForGeminiFailure = true;
+          console.error(`Create Dubbed paused on ${languageLabel}: Gemini scenes remain incomplete; later languages were not started.`);
+          break;
+        }
       }
 
       await handleRefresh();
@@ -406,7 +416,7 @@ type AudioReferenceLanguageEntry = {
         0,
       );
 
-      if (playSound) {
+      if (playSound && !stoppedForGeminiFailure) {
         await playSuccessAndNotifyBatchCompletion(
           `Create Dubbed ${formatLanguageSelectionShortLabel(runnableLanguages)}`,
         );
@@ -4015,6 +4025,7 @@ export default function OriginalVideosList({
       setCreatingDubbedLanguageTotalVideos(processingVideos.length);
 
       const languageSummaries: DubbedLanguageRunSummary[] = [];
+      let stoppedForGeminiFailure = false;
 
       for (const [languageIndex, languageCode] of runnableLanguages.entries()) {
         const languageLabel = languageCode.toUpperCase();
@@ -4026,6 +4037,7 @@ export default function OriginalVideosList({
           `Create Dubbed ${languageLabel}: processing ${processingVideos.length} videos...`,
         );
 
+        let stopForGeminiFailure = false;
         const languageSummary: DubbedLanguageRunSummary = {
           language: languageCode,
           attempted: processingVideos.length,
@@ -4080,9 +4092,11 @@ export default function OriginalVideosList({
             const payload = (await response.json().catch(() => null)) as {
               error?: unknown;
               details?: unknown;
+              stopLanguageBatch?: unknown;
             } | null;
 
             if (!response.ok) {
+              stopForGeminiFailure = payload?.stopLanguageBatch === true;
               const details = Array.isArray(payload?.details)
                 ? payload.details
                     .map((item) => String(item))
@@ -4111,10 +4125,16 @@ export default function OriginalVideosList({
             );
           }
 
+          if (stopForGeminiFailure) break;
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
 
         languageSummaries.push(languageSummary);
+        if (stopForGeminiFailure) {
+          stoppedForGeminiFailure = true;
+          console.error(`Create Dubbed paused on ${languageLabel}: Gemini scenes remain incomplete; later languages were not started.`);
+          break;
+        }
       }
 
       await handleRefresh();
@@ -4139,7 +4159,7 @@ export default function OriginalVideosList({
         setError(`Create Dubbed completed with some failures. ${summaryText}`);
       }
 
-      if (playSound) {
+      if (playSound && !stoppedForGeminiFailure) {
         await playSuccessAndNotifyBatchCompletion(
           `Create Dubbed ${formatLanguageSelectionShortLabel(runnableLanguages)}`,
         );
