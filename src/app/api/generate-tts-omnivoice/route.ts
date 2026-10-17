@@ -1,4 +1,4 @@
-import { normalizePersianTtsDigits } from '@/utils/persianTtsDigits';
+import { normalizePersianTtsNumbers } from '@/utils/persianTtsNumbers';
 import { generateOmniVoiceLora } from '@/lib/omniVoiceLora';
 import { resolveReferenceAudioPath } from '@/lib/ttsReferenceAudio';
 import { NextRequest, NextResponse } from 'next/server';
@@ -1936,7 +1936,7 @@ export async function POST(request: NextRequest) {
       : matchedReferencePreset && (hasExplicitReferenceAudioOverride || !configuredLanguage)
         ? matchedReferencePreset.language
         : configuredLanguage;
-    text = normalizePersianTtsDigits(text, normalizationLanguage);
+    text = normalizePersianTtsNumbers(text, normalizationLanguage);
 
     console.info(
       `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} arabicNumbersConverted=${arabicNumbersConverted} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} replacedExclamations=${replacedExclamationCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,

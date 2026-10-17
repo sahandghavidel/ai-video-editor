@@ -144,7 +144,27 @@ test('outbound LoRA normalization follows the selected preset language rather th
       ttsSettings: { provider: 'omnivoice-lora', omniVoice: { language: language === 'fa' ? 'en' : 'fa' } } };
     const result = await POST({ url: 'http://localhost:9540/api/generate-tts-omnivoice', json: async () => body });
     assert.equal(result.status, 200);
-    assert.equal(calls.at(-1).text, language === 'fa' ? '123 456' : '۱۲۳ ٤٥٦');
+    assert.equal(calls.at(-1).text, language === 'fa' ? 'صد و بیست و سه چهارصد و پنجاه و شش' : '۱۲۳ ٤٥٦');
     assert.equal(body.text, '۱۲۳ ٤٥٦');
   }
+});
+
+
+test('Farsi quantities become spoken words, including percentages, grouping, signs and precise decimals', () => {
+  const { normalizePersianTtsNumbers: convert } = fixture().load('src/utils/persianTtsNumbers.ts');
+  for (const [input, expected] of [
+    ['۱۲۳', 'صد و بیست و سه'], ['١٢٣', 'صد و بیست و سه'], ['0', 'صفر'],
+    ['۲۵٪', 'بیست و پنج درصد'], ['25 %', 'بیست و پنج درصد'],
+    ['۱۲٫۵٪', 'دوازده ممیز پنج درصد'], ['12.5%', 'دوازده ممیز پنج درصد'],
+    ['۱٬۵۰۰', 'هزار و پانصد'], ['1,500', 'هزار و پانصد'],
+    ['−۵', 'منفی پنج'], ['-5.25', 'منفی پنج ممیز بیست و پنج'], ['+5', 'مثبت پنج'],
+    ['0.05', 'صفر ممیز صفر پنج'], ['12.50', 'دوازده ممیز پنج صفر'],
+    ['1000000', 'یک میلیون'], ['قیمت ۱۲۳ تومان است.', 'قیمت صد و بیست و سه تومان است.'],
+  ]) assert.equal(convert(input, 'fa'), expected, input);
+  const input = 'نسخه 3.8 و version 4.2 و 1.2.3؛ 1405/01/02 و 12:30؛ 09123456789؛ https://example.com/123؛ item123؛ 1,23؛ 9007199254740993';
+  assert.equal(convert(input, 'fa'), input);
+  for (const language of ['en', 'arb', 'ar', 'tr', 'ur', '']) {
+    assert.equal(convert('۱۲۳ و ٢٥٪ و -5.25', language), '۱۲۳ و ٢٥٪ و -5.25');
+  }
+  assert.equal(convert(convert('۱۲۳ و ۲۵٪', 'fa'), 'fa'), convert('۱۲۳ و ۲۵٪', 'fa'));
 });
