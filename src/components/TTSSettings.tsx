@@ -115,7 +115,7 @@ export default function TTSSettings({ className = '' }: TTSSettingsProps) {
             </button>
 
         {ttsSettings.provider === 'omnivoice-lora' && (
-          <p className='text-xs text-indigo-800'>Choose English — Nice LoRA v1 in Manage Language Presets and click Use for English TTS.</p>
+          <p className='text-xs text-indigo-800'>Choose English — Nice LoRA v1 in Manage Language Presets and click Use for English TTS. Persian — LoRA v1 is selected separately with Use for Persian TTS.</p>
         )}
         {ttsSettings.provider === 'omnivoice' && (
           <>

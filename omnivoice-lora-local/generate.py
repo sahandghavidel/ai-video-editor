@@ -16,6 +16,12 @@ parser.add_argument('--job', required=True)
 args = parser.parse_args()
 job = json.loads(Path(args.job).read_text())
 root = Path(job['runtime_root'])
+version = job.get('adapter_version', 'approved-v1')
+if version not in ('approved-v1', 'persian-v1'):
+    raise ValueError('Unsupported LoRA adapter version')
+language = 'fa' if version == 'persian-v1' else 'en'
+if job.get('language', language) != language:
+    raise ValueError('Job language does not match its adapter version')
 peak = {'driver': 0, 'tensor': 0}
 stop_monitor = threading.Event()
 def monitor_memory():
@@ -35,7 +41,7 @@ np.random.seed(seed % (2**32))
 torch.manual_seed(seed)
 if torch.backends.mps.is_available():
     torch.mps.manual_seed(seed)
-audio = np.asarray(model.generate(text=job['text'], language='en', voice_clone_prompt=prompt,
+audio = np.asarray(model.generate(text=job['text'], language=language, voice_clone_prompt=prompt,
     num_step=job['num_step'], speed=job['speed'], denoise=False, postprocess_output=False,
     fade_duration=0.0, pad_duration=0.0, audio_chunk_threshold=1e9)[0]).squeeze()
 if audio.size == 0 or not np.isfinite(audio).all() or np.max(np.abs(audio)) == 0:
@@ -43,7 +49,7 @@ if audio.size == 0 or not np.isfinite(audio).all() or np.max(np.abs(audio)) == 0
 sf.write(job['output'], audio, model.sampling_rate, subtype='PCM_16')
 stop_monitor.set()
 monitor.join()
-print(json.dumps({'sampled_peak_mps_driver_bytes': peak['driver'], 'sampled_peak_mps_tensor_bytes': peak['tensor'], 'duration_seconds': len(audio) / model.sampling_rate,
+print(json.dumps({'adapter_version': version, 'language': language, 'sampled_peak_mps_driver_bytes': peak['driver'], 'sampled_peak_mps_tensor_bytes': peak['tensor'], 'duration_seconds': len(audio) / model.sampling_rate,
     'sample_rate': model.sampling_rate, 'max_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
     'mps_driver_bytes': torch.mps.driver_allocated_memory() if job['device'] == 'mps' else 0,
     'mps_tensor_bytes': torch.mps.current_allocated_memory() if job['device'] == 'mps' else 0}), flush=True)

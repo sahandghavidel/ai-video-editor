@@ -23,6 +23,7 @@ export interface TtsAudioReferenceEntry {
   name: string;
   filename: string;
   provider: LanguageTtsProvider;
+  loraAdapterVersion?: string;
   gemini: GeminiTtsSettings;
   persian: PersianTtsSettings;
   language: string;
@@ -264,6 +265,8 @@ export function sanitizeTtsAudioReferenceEntries(
       name,
       filename,
       provider,
+      loraAdapterVersion: entry.loraAdapterVersion === undefined ? undefined
+        : typeof entry.loraAdapterVersion === 'string' ? entry.loraAdapterVersion.trim() : 'invalid',
       gemini,
       persian: normalizePersianTtsSettings(entry.persian),
       language,

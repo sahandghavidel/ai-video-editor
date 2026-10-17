@@ -1,11 +1,15 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { statSync } from 'fs';
+import { resolveOmniVoiceLoraPython } from '@/lib/omniVoiceLoraRuntime';
+import { OMNIVOICE_LORA_VERSIONS, type OmniVoiceLoraVersion } from '@/utils/omniVoiceLoraVersions';
 
-type Metrics = Record<string, number | boolean>;
+type Metrics = Record<string, number | boolean | string>;
 type Job = {
   text: string; output: string; reference_audio: string; reference_text: string;
   seed: number; num_step: number; speed: number;
+  language?: 'en' | 'fa';
 };
 type Worker = {
   child: ChildProcessWithoutNullStreams;
@@ -24,6 +28,13 @@ type Worker = {
 type State = { worker?: Worker; tail: Promise<void> };
 const shared = globalThis as typeof globalThis & { __omniVoiceLoraRuntime?: State };
 const state = shared.__omniVoiceLoraRuntime ??= { tail: Promise.resolve() };
+
+function scriptVersion(): string {
+  try {
+    const stat = statSync(path.join(process.cwd(), 'omnivoice-lora-local', 'worker.py'));
+    return `${stat.size}:${stat.mtimeMs}`;
+  } catch { return 'missing'; }
+}
 
 function setting(name: string, fallback: number, minimum: number): number {
   const value = Number(process.env[name] ?? fallback);
@@ -60,13 +71,14 @@ function armIdle(worker: Worker): void {
   worker.idleTimer.unref();
 }
 
-function start(root: string, device: string, key: string): Worker {
+function start(root: string, device: string, key: string, version: OmniVoiceLoraVersion): Worker {
   const limit = setting('OMNIVOICE_LORA_MAX_GENERATIONS_BEFORE_RELOAD',
     setting('OMNIVOICE_MAX_GENERATIONS_BEFORE_RELOAD', 100, 1), 1);
-  const child = spawn(path.join(root, 'env', 'bin', 'python'),
-    [path.join(process.cwd(), 'omnivoice-lora-local', 'worker.py'), '--root', root, '--device', device], {
+  const child = spawn(resolveOmniVoiceLoraPython(root),
+    [path.join(process.cwd(), 'omnivoice-lora-local', 'worker.py'), '--root', root, '--device', device, '--adapter-version', version], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', PYTORCH_ENABLE_MPS_FALLBACK: '0',
+        PYTHONPATH: path.join(root, 'source'),
         OMP_NUM_THREADS: '4', MKL_NUM_THREADS: '4', OMNIVOICE_LORA_MAX_GENERATIONS_BEFORE_RELOAD: String(limit),
         OMNIVOICE_LORA_PROMPT_CACHE_SIZE: String(setting('OMNIVOICE_LORA_PROMPT_CACHE_SIZE', 16, 1)) },
     });
@@ -96,7 +108,12 @@ function start(root: string, device: string, key: string): Worker {
       let message;
       try { message = JSON.parse(line); } catch { continue; }
       if (message.event === 'ready') {
-        console.info(`[OmniVoice LoRA] worker=ready pid=${child.pid} generationLimit=${limit}`);
+        const language = version === 'persian-v1' ? 'fa' : 'en';
+        if (message.adapter_version !== version || message.language !== language) {
+          fail(new Error('LoRA worker loaded an unexpected adapter/language'));
+          continue;
+        }
+        console.info(`[OmniVoice LoRA] worker=ready pid=${child.pid} adapterVersion=${version} language=${language} generationLimit=${limit}`);
         worker.resolveReady();
       } else if (message.event === 'fatal') {
         fail(new Error(message.error || 'LoRA worker initialization failed'));
@@ -120,17 +137,21 @@ function start(root: string, device: string, key: string): Worker {
   });
   child.stdin.on('error', (error) => { fail(error); });
   state.worker = worker;
-  console.info(`[OmniVoice LoRA] worker=starting pid=${child.pid} device=${device}`);
+  console.info(`[OmniVoice LoRA] worker=starting pid=${child.pid} device=${device} adapterVersion=${version}`);
   return worker;
 }
 
-async function execute(root: string, device: string, job: Job): Promise<Metrics> {
-  const key = [root, device, 'float32', 'approved-v1', 'protocol-1',
+async function execute(root: string, device: string, job: Job, version: OmniVoiceLoraVersion): Promise<Metrics> {
+  const binding = OMNIVOICE_LORA_VERSIONS.find((entry) => entry.id === version);
+  if (!binding || (job.language !== undefined && job.language !== binding.language)) {
+    throw new Error('LoRA job language does not match its adapter version');
+  }
+  const key = [root, resolveOmniVoiceLoraPython(root), device, 'float32', version, binding.language, 'protocol-2', scriptVersion(),
     process.env.OMNIVOICE_LORA_MAX_GENERATIONS_BEFORE_RELOAD ?? process.env.OMNIVOICE_MAX_GENERATIONS_BEFORE_RELOAD ?? '100',
     process.env.OMNIVOICE_LORA_PROMPT_CACHE_SIZE ?? '16'].join('|');
   let worker = state.worker;
   if (worker && (worker.key !== key || worker.dead)) { await stop(worker, 'config-changed'); worker = undefined; }
-  worker ??= start(root, device, key);
+  worker ??= start(root, device, key, version);
   if (worker.idleTimer) clearTimeout(worker.idleTimer);
   worker.idleVersion += 1;
   const current = worker;
@@ -143,7 +164,7 @@ async function execute(root: string, device: string, job: Job): Promise<Metrics>
       return new Promise<Metrics>((resolve, reject) => {
         const id = randomUUID();
         current.pending = { id, resolve, reject };
-        current.child.stdin.write(JSON.stringify({ ...job, id }) + '\n', (error) => {
+        current.child.stdin.write(JSON.stringify({ ...job, language: binding.language, id }) + '\n', (error) => {
           if (error) reject(error);
         });
       });
@@ -160,8 +181,8 @@ async function execute(root: string, device: string, job: Job): Promise<Metrics>
   } finally { if (timer) clearTimeout(timer); }
 }
 
-export function runOmniVoiceLoraJob(root: string, device: string, job: Job): Promise<Metrics> {
-  const result = state.tail.then(() => execute(root, device, job));
+export function runOmniVoiceLoraJob(root: string, device: string, job: Job, version: OmniVoiceLoraVersion = 'approved-v1'): Promise<Metrics> {
+  const result = state.tail.then(() => execute(root, device, job, version));
   state.tail = result.then(() => {}, () => {});
   return result;
 }

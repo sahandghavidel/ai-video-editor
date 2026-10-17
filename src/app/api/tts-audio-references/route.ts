@@ -6,6 +6,7 @@ import {
 
 import { normalizeGeminiTtsSettings } from '@/utils/geminiTtsSettings';
 import { validateGeminiTtsSettings } from '@/lib/geminiTts';
+import { validateOmniVoiceLoraPreset } from '@/utils/omniVoiceLoraVersions';
 
 export const runtime = 'nodejs';
 
@@ -48,8 +49,10 @@ export async function PUT(request: NextRequest) {
       if (entry.provider !== undefined && entry.provider !== 'omnivoice' && entry.provider !== 'omnivoice-lora' && entry.provider !== 'gemini' && entry.provider !== 'chatterbox-persian') {
         return NextResponse.json({ error: 'Unsupported language TTS provider' }, { status: 400 });
       }
-      if (entry.provider === 'omnivoice-lora' && (entry.language !== 'en' || typeof entry.referenceText !== 'string' || !entry.referenceText.trim())) {
-        return NextResponse.json({ error: 'OmniVoice LoRA requires English and a reference transcript' }, { status: 400 });
+      if (entry.provider === 'omnivoice-lora') {
+        const error = validateOmniVoiceLoraPreset({ language: typeof entry.language === 'string' ? entry.language.trim().toLowerCase() : '',
+          loraAdapterVersion: entry.loraAdapterVersion, referenceText: entry.referenceText });
+        if (error) return NextResponse.json({ error }, { status: 400 });
       }
       if (entry.provider === 'chatterbox-persian' && entry.language !== 'fa') {
         return NextResponse.json({ error: 'Chatterbox Persian is only available for fa' }, { status: 400 });

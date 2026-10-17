@@ -2,6 +2,7 @@
 import argparse
 from collections import OrderedDict
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -20,8 +21,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', required=True)
     parser.add_argument('--device', choices=['mps', 'cpu'], required=True)
+    parser.add_argument('--adapter-version', choices=['approved-v1', 'persian-v1'], default='approved-v1')
     args = parser.parse_args()
     root = Path(args.root)
+    language = 'fa' if args.adapter_version == 'persian-v1' else 'en'
+    if args.adapter_version == 'persian-v1':
+        approval = json.loads((root / 'approved-v1' / 'approval.json').read_text())
+        weights = root / 'approved-v1' / 'adapter' / 'adapter_model.safetensors'
+        if (approval.get('language') != language or approval.get('adapterVersion') != args.adapter_version
+                or approval.get('trainingStep') != 3000
+                or hashlib.sha256(weights.read_bytes()).hexdigest() != approval.get('weights_sha256')):
+            raise ValueError('Persian LoRA does not match the approved version/weights')
     # Advisory lock releases automatically on process exit, including crashes.
     lock = (root / 'application-worker.lock').open('a+')
     try:
@@ -51,13 +61,16 @@ def main():
     cache_limit = max(1, int(os.environ.get('OMNIVOICE_LORA_PROMPT_CACHE_SIZE', '16')))
     cache = OrderedDict()
     count = 0
-    respond({'event': 'ready', 'pid': os.getpid(), 'generation_limit': limit})
+    respond({'event': 'ready', 'pid': os.getpid(), 'generation_limit': limit,
+             'adapter_version': args.adapter_version, 'language': language})
     try:
         for line in sys.stdin:
             req = {}
             try:
                 req = json.loads(line)
                 job_id = req['id']
+                if req.get('language', language) != language:
+                    raise ValueError('Job language does not match the loaded LoRA adapter')
                 reference = Path(req['reference_audio']).resolve()
                 stat = reference.stat()
                 key = (str(reference), stat.st_size, stat.st_mtime_ns, req['reference_text'], False)
@@ -79,7 +92,7 @@ def main():
                 if torch.backends.mps.is_available():
                     torch.mps.manual_seed(seed)
                 start = time.perf_counter()
-                audio = np.asarray(model.generate(text=req['text'], language='en', voice_clone_prompt=prompt,
+                audio = np.asarray(model.generate(text=req['text'], language=language, voice_clone_prompt=prompt,
                     num_step=req['num_step'], speed=req['speed'], denoise=False, postprocess_output=False,
                     fade_duration=0.0, pad_duration=0.0, audio_chunk_threshold=1e9)[0]).squeeze()
                 generate_ms = (time.perf_counter() - start) * 1000
@@ -88,6 +101,7 @@ def main():
                 sf.write(req['output'], audio, model.sampling_rate, subtype='PCM_16')
                 count += 1
                 respond({'id': job_id, 'ok': True, 'pid': os.getpid(), 'generation_count': count,
+                    'adapter_version': args.adapter_version, 'language': language,
                     'reload_needed': count >= limit, 'cache_hit': hit, 'prompt_cache_size': len(cache),
                     'prompt_ms': round(prompt_ms, 3), 'generate_ms': round(generate_ms, 3),
                     'duration_seconds': len(audio) / model.sampling_rate, 'sample_rate': model.sampling_rate,

@@ -1,6 +1,8 @@
 # English OmniVoice LoRA: training and application runbook
 
-This is the handover for Sahand's approved English LoRA v1 and the procedure for making a later version. It records the dataset collection, isolated experiment, listening decisions, application integration, filename repair, and persistent worker. Read this document before retraining or changing LoRA inference. Last reviewed: 2026-10-06.
+This is the handover for Sahand's approved English LoRA v1 and the procedure for making a later version. It records the dataset collection, isolated experiment, listening decisions, application integration, filename repair, and persistent worker. Read this document before retraining or changing LoRA inference. Last reviewed: 2026-10-17.
+
+Persian v1 is now available as an optional, explicitly bound adapter. See [Persian-OmniVoice-LoRA.md](Persian-OmniVoice-LoRA.md) for approval, runtime roots, version validation, preset selection and integration checks. The English history and settings below remain the v1 reference.
 
 ## Current approved result and boundaries
 
@@ -314,17 +316,13 @@ For preflight tokenization, use the same extraction module as the full tokenizat
 
 Do not rerun into populated token/output directories without an intentional recovery plan. Persist logs and evaluate the process result; file existence alone does not prove success. The local environment must already contain the model dependencies/cache required by the pinned training source.
 
-### Important: v2 selection is not implemented yet
+### Explicit version selection (English and Persian v1)
 
-Currently every `omnivoice-lora` preset loads **the same hardcoded v1 adapter**. Duplicating a preset and naming it v2 does not select a new adapter.
+The application now binds saved `loraAdapterVersion` values to approved language/version pairs in `src/utils/omniVoiceLoraVersions.ts`: `approved-v1` is English update 400; `persian-v1` is Persian update 3000. Old English presets with no field remain English v1. Persian requires the explicit binding. The preset store/modal/API preserve and validate it, and server runtime resolution, Python arguments, returned metadata and worker identity all use that binding. The manager also reloads when the worker script changes.
 
-To keep v1 and v2 selectable together, add an explicit, validated adapter-version binding to presets and pass it through the server job. Resolve only approved version directories; include the selected version in the worker key so it reloads when changing adapter. Update the Python load path and returned metadata consistently. The current hardcoded locations are:
+`OMNIVOICE_LORA_ROOT` retains its English meaning; the new `OMNIVOICE_PERSIAN_LORA_ROOT` is separate. A corrected independent English `runtime-env/` copy works around a pre-existing SciPy import failure while preserving the original `env/`. Both original English adapter and ordinary OmniLocal remain intact. Details and evidence are in [Persian-OmniVoice-LoRA.md](Persian-OmniVoice-LoRA.md).
 
-- `omnivoice-lora-local/worker.py`: `approved-v1/adapter` loading.
-- `src/lib/omniVoiceLoraWorker.ts`: `approved-v1` worker identity.
-- `src/lib/omniVoiceLora.ts`: adapter validation and `adapterVersion: approved-v1` / `trainingStep: 400` metadata.
-
-Update the preset schema/store/API/UI and request propagation together if adding a version field. Keep old persisted presets backward compatible with v1 and preserve load/save/reset/default behavior. `OMNIVOICE_LORA_ROOT` is a single runtime root override, not per-preset adapter routing. Do not repoint the application to an experimental root as a substitute for keeping both versions.
+English v2 and future Persian versions still require deliberate registry/runtime entries and frozen packages. Duplicating a preset or naming it v2 does not choose new weights. Keep distinct reference filenames for versioned presets because reference lookup remains filename-based. Do not repoint the English runtime root at an experimental model as a substitute for version routing.
 
 ## 10. Improving the next version
 

@@ -2,6 +2,8 @@ import { runOmniVoiceLoraJob } from '@/lib/omniVoiceLoraWorker';
 import { access, mkdtemp, readFile, rm } from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { resolveOmniVoiceLoraRuntime } from '@/lib/omniVoiceLoraRuntime';
+import { validateOmniVoiceLoraPreset } from '@/utils/omniVoiceLoraVersions';
 import { NextResponse } from 'next/server';
 import { ensureMinioRunning } from '@/lib/minio-runtime';
 import { resolveReferenceAudioPath } from '@/lib/ttsReferenceAudio';
@@ -14,17 +16,17 @@ export async function generateOmniVoiceLora(input: {
   videoId?: unknown;
   seed?: unknown;
 }) {
-  if (input.preset.language !== 'en' || !input.preset.referenceText.trim()) {
-    return NextResponse.json({ error: 'OmniVoice LoRA requires an English preset and reference transcript' }, { status: 400 });
+  const presetError = validateOmniVoiceLoraPreset(input.preset);
+  if (presetError) {
+    return NextResponse.json({ error: presetError }, { status: 400 });
   }
   if (input.text.length > 12000) {
     return NextResponse.json({ error: 'LoRA scene text must be at most 12000 characters' }, { status: 400 });
   }
-  const root = process.env.OMNIVOICE_LORA_ROOT?.trim()
-    || path.join(os.homedir(), 'Documents', 'OmniVoice-LoRA-Test');
-  const python = path.join(root, 'env', 'bin', 'python');
+  const runtime = resolveOmniVoiceLoraRuntime(input.preset.language, input.preset.loraAdapterVersion);
+  const { root, python, language } = runtime;
   await Promise.all([access(python), access(path.join(root, 'base-model', 'config.json')),
-    access(path.join(root, 'approved-v1', 'adapter', 'adapter_model.safetensors'))]);
+    access(path.join(runtime.adapterPath, 'adapter_model.safetensors'))]);
   const reference = resolveReferenceAudioPath({ filenameOrPath: input.preset.filename }).fullPath;
   let tempDir: string | undefined;
   try {
@@ -35,7 +37,7 @@ export async function generateOmniVoiceLora(input: {
     const device = input.preset.deviceMap === 'cpu' ? 'cpu' : 'mps';
     const metrics = await runOmniVoiceLoraJob(root, device, { output, text: input.text,
       reference_audio: reference, reference_text: input.preset.referenceText,
-      seed, num_step: input.preset.numStep, speed: input.preset.speed });
+      seed, num_step: input.preset.numStep, speed: input.preset.speed, language }, runtime.id);
     const bytes = await readFile(output);
     if (bytes.length < 44 || bytes.toString('ascii', 0, 4) !== 'RIFF') throw new Error('Invalid LoRA WAV output');
     const id = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : 'sample';
@@ -44,15 +46,15 @@ export async function generateOmniVoiceLora(input: {
     const hasSceneId = input.sceneId !== undefined && input.sceneId !== null && String(input.sceneId).trim().length > 0;
     const filename = hasVideoId
       ? hasSceneId
-        ? `video_${id(input.videoId)}_tts_original_en_scene_${id(input.sceneId)}_${timestamp}.wav`
-        : `video_${id(input.videoId)}_tts_original_en_${timestamp}.wav`
-      : `scene_${id(input.sceneId)}_tts_original_en_${timestamp}.wav`;
+        ? `video_${id(input.videoId)}_tts_original_${language}_scene_${id(input.sceneId)}_${timestamp}.wav`
+        : `video_${id(input.videoId)}_tts_original_${language}_${timestamp}.wav`
+      : `scene_${id(input.sceneId)}_tts_original_${language}_${timestamp}.wav`;
     const { baseUrl, bucket } = await ensureMinioRunning();
     const audioUrl = `${baseUrl.replace(/\/+$/, '')}/${bucket}/${filename}`;
     const uploaded = await fetch(audioUrl, { method: 'PUT', headers: { 'Content-Type': 'audio/wav' }, body: new Uint8Array(bytes) });
     if (!uploaded.ok) throw new Error(`LoRA MinIO upload failed (${uploaded.status})`);
     return NextResponse.json({ provider: 'omnivoice-lora', audioUrl, filename,
-      generationParams: { adapterVersion: 'approved-v1', trainingStep: 400, referencePresetId: input.preset.id,
+      generationParams: { adapterVersion: runtime.id, language, trainingStep: runtime.trainingStep, referencePresetId: input.preset.id,
         referenceAudioFilename: input.preset.filename, numStep: input.preset.numStep, speed: input.preset.speed,
         dtype: 'float32', deviceMap: device, seed, denoise: false, postprocessOutput: false,
         preprocessPrompt: false, fadeDuration: 0, padDuration: 0, ...metrics } });

@@ -1,0 +1,150 @@
+/* eslint @typescript-eslint/no-require-imports: "off" -- Isolated regression harness. */
+// Offline checks: no Python models, Baserow, MinIO, or provider API calls.
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const ts = require('typescript');
+const { EventEmitter } = require('node:events');
+const root = path.resolve(__dirname, '../..');
+function fixture(mocks = {}, env = {}, globals = {}) {
+  const modules = new Map();
+  const context = vm.createContext({ Buffer, console: { info() {}, warn() {}, error() {} },
+    process: { env, cwd: () => root }, setTimeout, clearTimeout, Promise, Uint8Array, ...globals });
+  const load = (relative) => {
+    const filename = path.join(root, relative);
+    if (modules.has(filename)) return modules.get(filename).exports;
+    const loadedModule = { exports: {} }; modules.set(filename, loadedModule);
+    const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: {
+      module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true,
+    } }).outputText;
+    const localRequire = (name) => Object.hasOwn(mocks, name) ? mocks[name]
+      : name.startsWith('@/') ? load(`src/${name.slice(2)}.ts`) : require(name);
+    vm.runInContext(`(function(require,module,exports){${source}\n})`, context, { filename })(localRequire, loadedModule, loadedModule.exports);
+    return loadedModule.exports;
+  };
+  return { load };
+}
+
+test('old English presets stay on English v1; Persian requires an explicit matching binding', () => {
+  const api = fixture().load('src/utils/omniVoiceLoraVersions.ts');
+  assert.equal(api.resolveOmniVoiceLoraVersion('en', undefined).id, 'approved-v1');
+  assert.equal(api.resolveOmniVoiceLoraVersion('fa', 'persian-v1').trainingStep, 3000);
+  for (const [language, version] of [['fa', undefined], ['fa', 'approved-v1'], ['en', 'persian-v1'], ['tr', 'persian-v1'], ['fa', '../adapter'], ['en', '']]) {
+    assert.equal(api.resolveOmniVoiceLoraVersion(language, version), undefined);
+  }
+  assert.match(api.validateOmniVoiceLoraPreset({ language: 'fa', loraAdapterVersion: 'persian-v1', referenceText: ' ' }), /transcript/);
+});
+
+test('preset normalization retains the binding and never turns an invalid binding into legacy English', () => {
+  const api = fixture().load('src/lib/ttsAudioReferencesStore.ts');
+  const normalized = api.sanitizeTtsAudioReferenceEntries([
+    { id: 'fa', language: 'fa', filename: 'fa-lora-v1.wav', provider: 'omnivoice-lora', loraAdapterVersion: 'persian-v1' },
+    { id: 'en', language: 'en', filename: 'nice.wav', provider: 'omnivoice-lora' },
+    { id: 'bad', language: 'en', filename: 'bad.wav', provider: 'omnivoice-lora', loraAdapterVersion: 123 },
+  ]);
+  assert.equal(normalized[0].loraAdapterVersion, 'persian-v1');
+  assert.equal(normalized[1].loraAdapterVersion, undefined);
+  assert.equal(normalized[2].loraAdapterVersion, 'invalid');
+});
+
+test('upload wrapper binds the correct runtime, language, step and timestamp-at-end filename', async () => {
+  const jobs = [], uploads = [];
+  const wav = Buffer.alloc(44); wav.write('RIFF'); wav.write('WAVE', 8);
+  const generate = fixture({
+    '@/lib/omniVoiceLoraWorker': { runOmniVoiceLoraJob: async (...args) => {
+      jobs.push(args); await require('node:fs/promises').writeFile(args[2].output, wav); return {};
+    } },
+    'fs': { existsSync: () => false },
+    'fs/promises': { ...require('node:fs/promises'), access: async () => {} },
+    '@/lib/minio-runtime': { ensureMinioRunning: async () => ({ baseUrl: 'http://minio.test:9000', bucket: 'audio' }) },
+    '@/lib/ttsReferenceAudio': { resolveReferenceAudioPath: () => ({ fullPath: '/references/voice.wav' }) },
+    'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
+  }, { OMNIVOICE_LORA_ROOT: '/english', OMNIVOICE_PERSIAN_LORA_ROOT: '/persian' }, {
+    fetch: async (...args) => { uploads.push(args); return { ok: true }; },
+  }).load('src/lib/omniVoiceLora.ts').generateOmniVoiceLora;
+  for (const [language, version, expectedRoot, step] of [['en', undefined, '/english', 400], ['fa', 'persian-v1', '/persian', 3000]]) {
+    const result = await generate({ text: 'text', videoId: 1623, sceneId: 227095, preset: {
+      id: 'preset', language, loraAdapterVersion: version, referenceText: 'reference', filename: 'voice.wav', deviceMap: 'mps', numStep: 34, speed: 1,
+    } });
+    assert.equal(result.status, 200);
+    const last = jobs.at(-1); assert.equal(last[0], expectedRoot); assert.equal(last[2].language, language);
+    assert.equal(last[3], version ?? 'approved-v1');
+    assert.match(result.body.filename, new RegExp(`^video_1623_tts_original_${language}_scene_227095_\\d{13}\\.wav$`));
+    assert.equal(result.body.generationParams.trainingStep, step);
+  }
+  assert.equal(uploads.length, 2);
+  const bad = await generate({ text: 'text', preset: { language: 'fa', loraAdapterVersion: 'approved-v1', referenceText: 'ref' } });
+  assert.equal(bad.status, 400); assert.equal(uploads.length, 2);
+});
+
+function fakeProcesses() {
+  let pid = 100;
+  const calls = [], children = [], events = [];
+  return { calls, children, events, spawn(python, args) {
+    const child = new EventEmitter(); child.pid = ++pid; child.exitCode = null; child.signalCode = null;
+    child.stdout = new EventEmitter(); child.stdout.setEncoding = () => {};
+    child.stderr = new EventEmitter(); child.stderr.setEncoding = () => {};
+    child.stdin = new EventEmitter();
+    child.stdin.write = (text, done) => { const job = JSON.parse(text); calls.push(job); done?.(); setImmediate(() => {
+      child.stdout.emit('data', JSON.stringify({ id: job.id, ok: true, generation_count: 1, reload_needed: false, pid: child.pid }) + '\n');
+    }); };
+    child.kill = () => { events.push(`stop-${child.pid}`); setTimeout(() => { child.signalCode = 'SIGTERM'; events.push(`closed-${child.pid}`); child.emit('close', null, 'SIGTERM'); }, 5); return true; };
+    events.push(`start-${child.pid}`); children.push({ child, python, args });
+    setImmediate(() => child.stdout.emit('data', JSON.stringify({ event: 'ready', adapter_version: args.at(-1), language: args.at(-1) === 'persian-v1' ? 'fa' : 'en' }) + '\n'));
+    return child;
+  } };
+}
+
+test('shared queue waits for old worker close when changing language/version, reuses workers and idles out', async () => {
+  const procs = fakeProcesses();
+  const api = fixture({ 'child_process': procs, 'fs': { existsSync: () => false } }, { OMNIVOICE_LORA_IDLE_TIMEOUT_MS: '15' }).load('src/lib/omniVoiceLoraWorker.ts');
+  const job = { text: 'text', output: '/tmp/out.wav', reference_audio: '/ref.wav', reference_text: 'ref', seed: 173, num_step: 34, speed: 1 };
+  const results = await Promise.all([
+    api.runOmniVoiceLoraJob('/fa', 'mps', { ...job, language: 'fa' }, 'persian-v1'),
+    api.runOmniVoiceLoraJob('/fa', 'mps', { ...job, language: 'fa' }, 'persian-v1'),
+    api.runOmniVoiceLoraJob('/en', 'mps', job),
+  ]);
+  assert.equal(results[0].pid, results[1].pid); assert.notEqual(results[1].pid, results[2].pid);
+  assert.equal(procs.children.length, 2);
+  assert.ok(procs.events.indexOf('closed-101') < procs.events.indexOf('start-102'));
+  assert.equal(procs.calls[0].language, 'fa'); assert.equal(procs.calls[2].language, 'en');
+  assert.equal(procs.children[0].args.at(-1), 'persian-v1'); assert.equal(procs.children[1].args.at(-1), 'approved-v1');
+  await assert.rejects(api.runOmniVoiceLoraJob('/en', 'mps', { ...job, language: 'fa' }), /does not match/);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.ok(procs.events.includes('closed-102'));
+});
+
+
+test('Farsi digit shapes normalize while other languages and number punctuation stay unchanged', () => {
+  const { normalizePersianTtsDigits } = fixture().load('src/utils/persianTtsDigits.ts');
+  const mixed = 'سال ۱۴۰۵، ١٢٣ و 45؛ نسخه ۲.۵، ۱۲٫۵٪، ۱٬۰۰۰، ۰۱۲۳۴۵۶۷۸۹ ٠١٢٣٤٥٦٧٨٩';
+  const expected = 'سال 1405، 123 و 45؛ نسخه 2.5، 12٫5٪، 1٬000، 0123456789 0123456789';
+  assert.equal(normalizePersianTtsDigits(mixed, 'fa'), expected);
+  assert.equal(normalizePersianTtsDigits(mixed, ' FA '), expected);
+  for (const language of ['en', 'arb', 'ar', 'tr', 'ur', '']) {
+    assert.equal(normalizePersianTtsDigits(mixed, language), mixed);
+  }
+  assert.equal(normalizePersianTtsDigits(expected, 'fa'), expected);
+});
+
+test('outbound LoRA normalization follows the selected preset language rather than stale request settings', async () => {
+  const presets = ['fa', 'en'].map((language) => ({ id: language, name: language, tags: [],
+    filename: `${language}.wav`, enabled: true, provider: 'omnivoice-lora', language }));
+  const calls = [];
+  const { POST } = fixture({
+    '@/lib/omniVoiceLora': { generateOmniVoiceLora: async (input) => { calls.push(input); return { status: 200 }; } },
+    '@/lib/ttsAudioReferencesStore': { loadTtsAudioReferencesStore: async () => ({ entries: presets }) },
+    'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
+  }, {}, { fetch: async () => ({ ok: true, json: async () => ({ entries: [] }) }) })
+    .load('src/app/api/generate-tts-omnivoice/route.ts');
+  for (const language of ['fa', 'en']) {
+    const body = { text: '۱۲۳ ٤٥٦', sceneId: 1, referenceAudioFilename: `${language}.wav`,
+      ttsSettings: { provider: 'omnivoice-lora', omniVoice: { language: language === 'fa' ? 'en' : 'fa' } } };
+    const result = await POST({ url: 'http://localhost:9540/api/generate-tts-omnivoice', json: async () => body });
+    assert.equal(result.status, 200);
+    assert.equal(calls.at(-1).text, language === 'fa' ? '123 456' : '۱۲۳ ٤٥٦');
+    assert.equal(body.text, '۱۲۳ ٤٥٦');
+  }
+});

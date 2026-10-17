@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { DEFAULT_GEMINI_TTS_SETTINGS, GEMINI_TTS_VOICES, isSupportedGeminiVoice, normalizeGeminiTtsSettings, type GeminiTtsSettings, type LanguageTtsProvider } from '@/utils/geminiTtsSettings';
+import { OMNIVOICE_LORA_VERSIONS, validateOmniVoiceLoraPreset } from '@/utils/omniVoiceLoraVersions';
 
 type DeviceMap = 'mps' | 'cpu' | 'auto';
 type DType = 'float16' | 'float32' | 'bfloat16';
@@ -25,6 +26,7 @@ type AudioReferenceEntry = {
   name: string;
   filename: string;
   provider: LanguageTtsProvider;
+  loraAdapterVersion?: string;
   gemini: GeminiTtsSettings;
   persian: PersianTtsSettings;
   language: string;
@@ -171,6 +173,8 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
     name: nameRaw || filename,
     filename,
     provider,
+    loraAdapterVersion: entry.loraAdapterVersion === undefined ? undefined
+      : typeof entry.loraAdapterVersion === 'string' ? entry.loraAdapterVersion.trim() : 'invalid',
     gemini: normalizeGeminiTtsSettings(entry.gemini),
     persian: normalizePersianTtsSettings(entry.persian),
     language: (languageRaw || 'und').toLowerCase(),
@@ -403,22 +407,25 @@ export function TTSAudioReferencesModal({
     setError(null);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (entriesToSave = normalizedEntries) => {
     setSaving(true);
     setStatus(null);
     setError(null);
 
     try {
-      for (const entry of normalizedEntries) {
+      for (const entry of entriesToSave) {
         if ((entry.provider === 'omnivoice' || entry.provider === 'omnivoice-lora') && !entry.filename) throw new Error('Local presets require a reference filename');
-        if (entry.provider === 'omnivoice-lora' && (entry.language !== 'en' || !entry.referenceText.trim())) throw new Error('OmniVoice LoRA requires English and a reference transcript');
+        if (entry.provider === 'omnivoice-lora') {
+          const error = validateOmniVoiceLoraPreset(entry);
+          if (error) throw new Error(error);
+        }
         if (entry.provider === 'gemini' && !isSupportedGeminiVoice(entry.gemini.voice)) throw new Error('Choose a Gemini voice or enter a valid extended or saved voice ID for each online preset');
       }
       const response = await fetch('/api/tts-audio-references', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          entries: normalizedEntries,
+          entries: entriesToSave,
         }),
       });
 
@@ -465,6 +472,14 @@ export function TTSAudioReferencesModal({
         deviceMap: entry.deviceMap, dtype: entry.provider === 'omnivoice-lora' ? 'float32' : entry.dtype,
         numStep: entry.numStep, speed: entry.speed } });
     setStatus(`Using ${entry.name || entry.filename} for English TTS. You can choose a different voice from the scene TTS menu.`);
+  };
+
+  const handleUsePersianPreset = async (entry: AudioReferenceEntry) => {
+    const next = normalizedEntries.map((candidate) => candidate.language === 'fa'
+      ? { ...candidate, isDefault: candidate.id === entry.id } : candidate);
+    if (await handleSave(next)) {
+      setStatus(`Using ${entry.name || entry.filename} for Persian TTS. Your English TTS selection is unchanged.`);
+    }
   };
 
   if (!isOpen) return null;
@@ -541,6 +556,13 @@ export function TTSAudioReferencesModal({
                     Use for English TTS
                   </button>
                 )}
+                {entry.language === 'fa' && (
+                  <button type='button' disabled={isBusy || !entry.enabled}
+                    onClick={() => void handleUsePersianPreset(entry)}
+                    className='px-3 py-2 rounded-md border border-indigo-300 text-indigo-800 text-sm disabled:opacity-50'>
+                    Use for Persian TTS
+                  </button>
+                )}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
                   <div className='space-y-1'>
                     <label className='text-xs font-medium text-gray-700'>
@@ -585,6 +607,8 @@ export function TTSAudioReferencesModal({
                       onChange={(event) =>
                         updateEntry(entry.id, {
                           language: event.target.value.toLowerCase(),
+                          ...(entry.provider === 'omnivoice-lora' ? { loraAdapterVersion: OMNIVOICE_LORA_VERSIONS.find(
+                            (model) => model.language === event.target.value.trim().toLowerCase())?.id } : {}),
                         })
                       }
                       placeholder='fa'
@@ -596,14 +620,29 @@ export function TTSAudioReferencesModal({
                 <div className='space-y-1'>
                   <label className='text-xs font-medium text-gray-700'>TTS Provider</label>
                   <select aria-label={`TTS provider for ${entry.language}`} value={entry.provider}
-                    onChange={(event) => updateEntry(entry.id, { provider: event.target.value as LanguageTtsProvider })}
+                    onChange={(event) => updateEntry(entry.id, { provider: event.target.value as LanguageTtsProvider,
+                      ...(event.target.value === 'omnivoice-lora' ? { loraAdapterVersion: OMNIVOICE_LORA_VERSIONS.find(
+                        (model) => model.language === entry.language)?.id } : {}) })}
                     className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
                     <option value='omnivoice'>OmniVoice — Local</option>
-                    {entry.language === 'en' && <option value='omnivoice-lora'>OmniVoice LoRA — Local</option>}
+                    {(entry.language === 'en' || entry.language === 'fa') && <option value='omnivoice-lora'>OmniVoice LoRA — Local</option>}
                     <option value='gemini'>Google Gemini — Online</option>
                     {entry.language === 'fa' && <option value='chatterbox-persian'>Chatterbox Persian — Isolated Local</option>}
                   </select>
                 </div>
+                {entry.provider === 'omnivoice-lora' && (
+                  <label className='block space-y-1 text-xs font-medium text-gray-700'>LoRA model
+                    <select aria-label={`LoRA model for ${entry.language}`}
+                      value={entry.loraAdapterVersion ?? (entry.language === 'en' ? 'approved-v1' : '')}
+                      onChange={(event) => updateEntry(entry.id, { loraAdapterVersion: event.target.value })}
+                      className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
+                      <option value='' disabled>Choose a model for this language</option>
+                      {OMNIVOICE_LORA_VERSIONS.filter((model) => model.language === entry.language).map((model) => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 {entry.provider === 'chatterbox-persian' && (
                   <div className='space-y-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4'>
                     <div className='grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3'>
@@ -1005,7 +1044,7 @@ export function TTSAudioReferencesModal({
           </button>
 
           <button
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={isBusy}
             className='inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed'
             title='Save language presets to local JSON file'

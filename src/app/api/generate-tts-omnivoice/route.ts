@@ -1,3 +1,4 @@
+import { normalizePersianTtsDigits } from '@/utils/persianTtsDigits';
 import { generateOmniVoiceLora } from '@/lib/omniVoiceLora';
 import { resolveReferenceAudioPath } from '@/lib/ttsReferenceAudio';
 import { NextRequest, NextResponse } from 'next/server';
@@ -1861,8 +1862,9 @@ export async function POST(request: NextRequest) {
       removedSquareBracketCount,
     } = stripOmniVoiceSquareBracketChars(textWithoutArrows);
 
-    const { sanitizedText: text, removedParenthesisCount } =
+    const { sanitizedText: preparedText, removedParenthesisCount } =
       stripOmniVoiceParenthesisChars(textWithoutSquareBrackets);
+    let text = preparedText;
 
     if (!text) {
       return NextResponse.json(
@@ -1873,10 +1875,6 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-
-    console.info(
-      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} arabicNumbersConverted=${arabicNumbersConverted} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} replacedExclamations=${replacedExclamationCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
-    );
 
     const omniVoice = body.ttsSettings?.omniVoice || {};
 
@@ -1930,6 +1928,19 @@ export async function POST(request: NextRequest) {
 
     const matchedReferencePreset =
       await resolveReferencePresetByAudioName(referenceAudioName);
+
+    // LoRA always uses its bound preset language. Ordinary OmniVoice follows
+    // the same preset-vs-request precedence as its worker language below.
+    const normalizationLanguage = matchedReferencePreset?.provider === 'omnivoice-lora'
+      ? matchedReferencePreset.language
+      : matchedReferencePreset && (hasExplicitReferenceAudioOverride || !configuredLanguage)
+        ? matchedReferencePreset.language
+        : configuredLanguage;
+    text = normalizePersianTtsDigits(text, normalizationLanguage);
+
+    console.info(
+      `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} arabicNumbersConverted=${arabicNumbersConverted} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} replacedExclamations=${replacedExclamationCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
+    );
 
     if (matchedReferencePreset?.provider === 'omnivoice-lora') {
       return await generateOmniVoiceLora({ text, preset: matchedReferencePreset,
