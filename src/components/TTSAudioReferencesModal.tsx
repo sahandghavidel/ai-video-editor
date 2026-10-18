@@ -625,14 +625,14 @@ export function TTSAudioReferencesModal({
                         (model) => model.language === entry.language)?.id } : {}) })}
                     className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
                     <option value='omnivoice'>OmniVoice — Local</option>
-                    {(entry.language === 'en' || entry.language === 'fa') && <option value='omnivoice-lora'>OmniVoice LoRA — Local</option>}
+                    {(entry.language === 'en' || entry.language === 'fa') && <option value='omnivoice-lora'>{entry.loraAdapterVersion === 'persian-full-v1' ? 'OmniVoice Full Fine-tune — Local' : 'OmniVoice LoRA — Local'}</option>}
                     <option value='gemini'>Google Gemini — Online</option>
                     {entry.language === 'fa' && <option value='chatterbox-persian'>Chatterbox Persian — Isolated Local</option>}
                   </select>
                 </div>
                 {entry.provider === 'omnivoice-lora' && (
-                  <label className='block space-y-1 text-xs font-medium text-gray-700'>LoRA model
-                    <select aria-label={`LoRA model for ${entry.language}`}
+                  <label className='block space-y-1 text-xs font-medium text-gray-700'>{entry.loraAdapterVersion === 'persian-full-v1' ? 'Full fine-tuned model' : 'LoRA model'}
+                    <select aria-label={`${entry.loraAdapterVersion === 'persian-full-v1' ? 'Full fine-tuned model' : 'LoRA model'} for ${entry.language}`}
                       value={entry.loraAdapterVersion ?? (entry.language === 'en' ? 'approved-v1' : '')}
                       onChange={(event) => updateEntry(entry.id, { loraAdapterVersion: event.target.value })}
                       className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>

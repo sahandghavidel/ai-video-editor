@@ -26,7 +26,7 @@ export async function generateOmniVoiceLora(input: {
   const runtime = resolveOmniVoiceLoraRuntime(input.preset.language, input.preset.loraAdapterVersion);
   const { root, python, language } = runtime;
   await Promise.all([access(python), access(path.join(root, 'base-model', 'config.json')),
-    access(path.join(runtime.adapterPath, 'adapter_model.safetensors'))]);
+    access(path.join(runtime.adapterPath, runtime.modelType === 'full-finetune' ? 'model.safetensors' : 'adapter_model.safetensors'))]);
   const reference = resolveReferenceAudioPath({ filenameOrPath: input.preset.filename }).fullPath;
   let tempDir: string | undefined;
   try {
@@ -54,7 +54,7 @@ export async function generateOmniVoiceLora(input: {
     const uploaded = await fetch(audioUrl, { method: 'PUT', headers: { 'Content-Type': 'audio/wav' }, body: new Uint8Array(bytes) });
     if (!uploaded.ok) throw new Error(`LoRA MinIO upload failed (${uploaded.status})`);
     return NextResponse.json({ provider: 'omnivoice-lora', audioUrl, filename,
-      generationParams: { adapterVersion: runtime.id, language, trainingStep: runtime.trainingStep, referencePresetId: input.preset.id,
+      generationParams: { adapterVersion: runtime.id, modelType: runtime.modelType, language, trainingStep: runtime.trainingStep, referencePresetId: input.preset.id,
         referenceAudioFilename: input.preset.filename, numStep: input.preset.numStep, speed: input.preset.speed,
         dtype: 'float32', deviceMap: device, seed, denoise: false, postprocessOutput: false,
         preprocessPrompt: false, fadeDuration: 0, padDuration: 0, ...metrics } });

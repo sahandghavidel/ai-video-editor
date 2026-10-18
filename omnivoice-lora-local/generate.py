@@ -22,6 +22,7 @@ versions = {
     'persian-v1': ('fa', 'approved-v1'),
     'persian-v2-pass-2': ('fa', 'application-v2/pass-2'),
     'persian-v2-pass-8': ('fa', 'application-v2/pass-8'),
+    'persian-full-v1': ('fa', 'application-v1'),
 }
 if version not in versions:
     raise ValueError('Unsupported LoRA adapter version')
@@ -38,8 +39,11 @@ def monitor_memory():
         stop_monitor.wait(0.1)
 monitor = threading.Thread(target=monitor_memory, daemon=True)
 monitor.start()
-model = OmniVoice.from_pretrained(str(root / 'base-model'), device_map=job['device'], dtype=torch.float32)
-model = load_lora_adapter(model, str(root / package_name / 'adapter'))
+if version == 'persian-full-v1':
+    model = OmniVoice.from_pretrained(str(root / package_name / 'model'), device_map=job['device'], dtype=torch.float32)
+else:
+    model = OmniVoice.from_pretrained(str(root / 'base-model'), device_map=job['device'], dtype=torch.float32)
+    model = load_lora_adapter(model, str(root / package_name / 'adapter'))
 prompt = model.create_voice_clone_prompt(job['reference_audio'], ref_text=job['reference_text'], preprocess_prompt=False)
 seed = job['seed']
 random.seed(seed)

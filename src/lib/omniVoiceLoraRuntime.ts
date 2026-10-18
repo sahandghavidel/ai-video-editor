@@ -12,7 +12,11 @@ export function resolveOmniVoiceLoraRuntime(language: string, version: unknown) 
   const binding = resolveOmniVoiceLoraVersion(language, version);
   if (!binding) throw new Error('Unsupported OmniVoice LoRA language/model binding');
   const isPersianV2 = binding.id === 'persian-v2-pass-2' || binding.id === 'persian-v2-pass-8';
-  const root = isPersianV2
+  const isFullModel = binding.id === 'persian-full-v1';
+  const root = isFullModel
+    ? process.env.OMNIVOICE_PERSIAN_FULL_ROOT?.trim()
+      || path.join(os.homedir(), 'Documents', 'OmniVoice-Persian-Full-Finetune-v1')
+    : isPersianV2
     ? process.env.OMNIVOICE_PERSIAN_LORA_V2_ROOT?.trim()
       || path.join(os.homedir(), 'Documents', 'OmniVoice-Persian-LoRA-v2')
     : binding.id === 'persian-v1'
@@ -22,8 +26,9 @@ export function resolveOmniVoiceLoraRuntime(language: string, version: unknown) 
       || path.join(os.homedir(), 'Documents', 'OmniVoice-LoRA-Test');
   // A corrected copy can be used without modifying the original experiment environment.
   return { ...binding, root,
+    modelType: isFullModel ? 'full-finetune' : 'lora',
     python: resolveOmniVoiceLoraPython(root),
-    adapterPath: isPersianV2
+    adapterPath: isFullModel ? path.join(root, 'application-v1', 'model') : isPersianV2
       ? path.join(root, 'application-v2', binding.id === 'persian-v2-pass-2' ? 'pass-2' : 'pass-8', 'adapter')
       : path.join(root, 'approved-v1', 'adapter') };
 }

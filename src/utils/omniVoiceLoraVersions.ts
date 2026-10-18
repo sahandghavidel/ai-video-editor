@@ -4,6 +4,7 @@ export const OMNIVOICE_LORA_VERSIONS = [
   { id: 'persian-v1', language: 'fa', name: 'Persian v1', trainingStep: 3000 },
   { id: 'persian-v2-pass-2', language: 'fa', name: 'Persian v2 — 2 passes', trainingStep: 4700 },
   { id: 'persian-v2-pass-8', language: 'fa', name: 'Persian v2 — 8 passes', trainingStep: 18799 },
+  { id: 'persian-full-v1', language: 'fa', name: 'Persian full fine-tune v1', trainingStep: 2348 },
 ] as const;
 
 export type OmniVoiceLoraVersion = typeof OMNIVOICE_LORA_VERSIONS[number]['id'];

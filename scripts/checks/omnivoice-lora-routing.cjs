@@ -61,10 +61,10 @@ test('upload wrapper binds the correct runtime, language, step and timestamp-at-
     '@/lib/minio-runtime': { ensureMinioRunning: async () => ({ baseUrl: 'http://minio.test:9000', bucket: 'audio' }) },
     '@/lib/ttsReferenceAudio': { resolveReferenceAudioPath: () => ({ fullPath: '/references/voice.wav' }) },
     'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
-  }, { OMNIVOICE_LORA_ROOT: '/english', OMNIVOICE_PERSIAN_LORA_ROOT: '/persian', OMNIVOICE_PERSIAN_LORA_V2_ROOT: '/persian-v2' }, {
+  }, { OMNIVOICE_LORA_ROOT: '/english', OMNIVOICE_PERSIAN_LORA_ROOT: '/persian', OMNIVOICE_PERSIAN_LORA_V2_ROOT: '/persian-v2', OMNIVOICE_PERSIAN_FULL_ROOT: '/persian-full' }, {
     fetch: async (...args) => { uploads.push(args); return { ok: true }; },
   }).load('src/lib/omniVoiceLora.ts').generateOmniVoiceLora;
-  for (const [language, version, expectedRoot, step] of [['en', undefined, '/english', 400], ['fa', 'persian-v1', '/persian', 3000], ['fa', 'persian-v2-pass-2', '/persian-v2', 4700], ['fa', 'persian-v2-pass-8', '/persian-v2', 18799]]) {
+  for (const [language, version, expectedRoot, step] of [['en', undefined, '/english', 400], ['fa', 'persian-v1', '/persian', 3000], ['fa', 'persian-v2-pass-2', '/persian-v2', 4700], ['fa', 'persian-v2-pass-8', '/persian-v2', 18799], ['fa', 'persian-full-v1', '/persian-full', 2348]]) {
     const result = await generate({ text: 'text', videoId: 1623, sceneId: 227095, preset: {
       id: 'preset', language, loraAdapterVersion: version, referenceText: 'reference', filename: 'voice.wav', deviceMap: 'mps', numStep: 34, speed: 1,
     } });
@@ -73,10 +73,11 @@ test('upload wrapper binds the correct runtime, language, step and timestamp-at-
     assert.equal(last[3], version ?? 'approved-v1');
     assert.match(result.body.filename, new RegExp(`^video_1623_tts_original_${language}_scene_227095_\\d{13}\\.wav$`));
     assert.equal(result.body.generationParams.trainingStep, step);
+    assert.equal(result.body.generationParams.modelType, version === 'persian-full-v1' ? 'full-finetune' : 'lora');
   }
-  assert.equal(uploads.length, 4);
+  assert.equal(uploads.length, 5);
   const bad = await generate({ text: 'text', preset: { language: 'fa', loraAdapterVersion: 'approved-v1', referenceText: 'ref' } });
-  assert.equal(bad.status, 400); assert.equal(uploads.length, 4);
+  assert.equal(bad.status, 400); assert.equal(uploads.length, 5);
 });
 
 function fakeProcesses() {
@@ -196,4 +197,25 @@ test('switching v2 checkpoints within one language/root closes the old worker be
   assert.ok(procs.events.indexOf('closed-101') < procs.events.indexOf('start-102'));
   assert.equal(procs.children[1].args.at(-1), 'persian-v2-pass-8');
   await new Promise((resolve) => setTimeout(resolve, 45));
+});
+
+
+test('full Persian model has an isolated package and switches away from LoRA through the same queue', async () => {
+  const runtime = fixture({}, { OMNIVOICE_PERSIAN_FULL_ROOT: '/full' }).load('src/lib/omniVoiceLoraRuntime.ts');
+  const bound = runtime.resolveOmniVoiceLoraRuntime('fa', 'persian-full-v1');
+  assert.equal(bound.root, '/full'); assert.equal(bound.adapterPath, '/full/application-v1/model');
+  assert.equal(bound.modelType, 'full-finetune'); assert.equal(bound.trainingStep, 2348);
+  assert.throws(() => runtime.resolveOmniVoiceLoraRuntime('en', 'persian-full-v1'));
+  const procs = fakeProcesses();
+  const api = fixture({ child_process: procs, fs: { existsSync: () => false } }, { OMNIVOICE_LORA_IDLE_TIMEOUT_MS: '15' }).load('src/lib/omniVoiceLoraWorker.ts');
+  const job = { text: 'متن', output: '/tmp/out.wav', reference_audio: '/ref.wav', reference_text: 'مرجع', language: 'fa', seed: 173, num_step: 34, speed: 1 };
+  const results = await Promise.all([
+    api.runOmniVoiceLoraJob('/v2', 'mps', job, 'persian-v2-pass-2'),
+    api.runOmniVoiceLoraJob('/full', 'mps', job, 'persian-full-v1'),
+    api.runOmniVoiceLoraJob('/full', 'mps', job, 'persian-full-v1'),
+  ]);
+  assert.notEqual(results[0].pid, results[1].pid); assert.equal(results[1].pid, results[2].pid);
+  assert.ok(procs.events.indexOf('closed-101') < procs.events.indexOf('start-102'));
+  assert.equal(procs.children[1].args.at(-1), 'persian-full-v1');
+  await new Promise(resolve => setTimeout(resolve, 45));
 });

@@ -1,5 +1,7 @@
 # English OmniVoice LoRA: training and application runbook
 
+Persian full fine-tuning is also available as a separate optional checkpoint; see [the full-model integration runbook](Persian-OmniVoice-Full-Finetune.md). It reuses the versioned worker lifecycle while loading full weights directly. Existing LoRA packages remain separate.
+
 This is the handover for Sahand's approved English LoRA v1 and the procedure for making a later version. It records the dataset collection, isolated experiment, listening decisions, application integration, filename repair, and persistent worker. Read this document before retraining or changing LoRA inference. Last reviewed: 2026-10-17.
 
 Persian v1 is now available as an optional, explicitly bound adapter. See [Persian-OmniVoice-LoRA.md](Persian-OmniVoice-LoRA.md) for approval, runtime roots, version validation, preset selection and integration checks. The English history and settings below remain the v1 reference.
