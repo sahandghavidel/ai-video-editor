@@ -1,5 +1,7 @@
 'use client';
 
+import { normalizeSeedMode, validTtsSeed, type TtsSeedMode } from '@/utils/ttsPresetSeed';
+
 import { useAppStore } from '@/store/useAppStore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
@@ -26,6 +28,8 @@ type AudioReferenceEntry = {
   filename: string;
   provider: LanguageTtsProvider;
   loraAdapterVersion?: string;
+  seedMode?: TtsSeedMode;
+  seed?: number;
   gemini: GeminiTtsSettings;
   language: string;
   youtubeLangCode?: string;
@@ -173,6 +177,8 @@ function normalizeEntry(raw: unknown): AudioReferenceEntry | null {
     provider,
     loraAdapterVersion: entry.loraAdapterVersion === undefined ? undefined
       : typeof entry.loraAdapterVersion === 'string' ? entry.loraAdapterVersion.trim() : 'invalid',
+    seedMode: normalizeSeedMode(entry.seedMode, provider),
+    seed: validTtsSeed(entry.seed) ? entry.seed : undefined,
     gemini: normalizeGeminiTtsSettings(entry.gemini),
     language: (languageRaw || 'und').toLowerCase(),
     youtubeLangCode,
@@ -365,6 +371,21 @@ export function TTSAudioReferencesModal({
     ]);
     setStatus(null);
     setError(null);
+  };
+
+  const handleDuplicate = async (entry: AudioReferenceEntry) => {
+    setError(null);
+    try {
+      const response = await fetch('/api/tts-audio-references/duplicate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not duplicate preset');
+      const copy = normalizeEntry(result.entry);
+      if (!copy) throw new Error('Invalid duplicated preset');
+      setEntries(previous => previous.flatMap(item => item.id === entry.id ? [item, copy] : [item]));
+      setStatus('Preset duplicated. Edit the copy and save presets.');
+    } catch (error) { setError(getErrorMessage(error)); }
   };
 
   const updateEntry = (id: string, updates: Partial<AudioReferenceEntry>) => {
@@ -783,6 +804,22 @@ export function TTSAudioReferencesModal({
                   </div>
                 </div>
 
+                {entry.provider === 'omnivoice-lora' && <div className='grid grid-cols-2 gap-2'>
+                  <label className='text-xs font-medium text-gray-700'>Seed mode
+                    <select aria-label={`Seed mode for ${entry.name}`} value={normalizeSeedMode(entry.seedMode, entry.provider)}
+                      onChange={event => updateEntry(entry.id, { seedMode: event.target.value as TtsSeedMode })}
+                      className='block w-full px-3 py-2 rounded-md border border-gray-300'>
+                      <option value='random'>Random — new take each generation</option>
+                      <option value='fixed'>Fixed — repeatable takes</option>
+                    </select>
+                  </label>
+                  {normalizeSeedMode(entry.seedMode, entry.provider) === 'fixed' && <label className='text-xs font-medium text-gray-700'>Fixed seed
+                    <input type='number' min='0' max='2147483647' step='1' aria-label={`Fixed seed for ${entry.name}`}
+                      value={entry.seed ?? useAppStore.getState().ttsSettings.seed}
+                      onChange={event => updateEntry(entry.id, { seed: validTtsSeed(Number(event.target.value)) ? Number(event.target.value) : undefined })}
+                      className='block w-full px-3 py-2 rounded-md border border-gray-300' />
+                  </label>}
+                </div>}
                 </>)}
 
                 <div className='rounded-md border border-indigo-200 bg-indigo-50 p-3 space-y-2'>
@@ -985,6 +1022,11 @@ export function TTSAudioReferencesModal({
                     Default for this language
                   </label>
                 </div>
+                <button type='button' disabled={isBusy} onClick={() => void handleDuplicate(entry)}
+                  className='px-3 py-2 rounded-md border border-gray-300 text-gray-700 text-sm disabled:opacity-50'
+                  aria-label={`Duplicate ${entry.name || 'preset'}`}>
+                  Duplicate preset
+                </button>
               </div>
             ))
           )}

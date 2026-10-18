@@ -1,3 +1,5 @@
+
+import { normalizeSeedMode, validTtsSeed, type TtsSeedMode } from '@/utils/ttsPresetSeed';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -23,6 +25,8 @@ export interface TtsAudioReferenceEntry {
   filename: string;
   provider: LanguageTtsProvider;
   loraAdapterVersion?: string;
+  seedMode?: TtsSeedMode;
+  seed?: number;
   gemini: GeminiTtsSettings;
   language: string;
   youtubeLangCode?: string;
@@ -265,6 +269,8 @@ export function sanitizeTtsAudioReferenceEntries(
       provider,
       loraAdapterVersion: entry.loraAdapterVersion === undefined ? undefined
         : typeof entry.loraAdapterVersion === 'string' ? entry.loraAdapterVersion.trim() : 'invalid',
+      seedMode: normalizeSeedMode(entry.seedMode, provider),
+      seed: validTtsSeed(entry.seed) ? entry.seed : undefined,
       gemini,
       language,
       youtubeLangCode,

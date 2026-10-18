@@ -1,3 +1,4 @@
+import { resolvePresetSeed, normalizeSeedMode } from '@/utils/ttsPresetSeed';
 import { runOmniVoiceLoraJob } from '@/lib/omniVoiceLoraWorker';
 import { access, mkdtemp, readFile, rm } from 'fs/promises';
 import path from 'path';
@@ -15,6 +16,7 @@ export async function generateOmniVoiceLora(input: {
   sceneId?: unknown;
   videoId?: unknown;
   seed?: unknown;
+  seedOverride?: unknown;
 }) {
   const presetError = validateOmniVoiceLoraPreset(input.preset);
   if (presetError) {
@@ -32,8 +34,7 @@ export async function generateOmniVoiceLora(input: {
   try {
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'omnivoice-lora-'));
     const output = path.join(tempDir, 'output.wav');
-    const seed = typeof input.seed === 'number' && Number.isSafeInteger(input.seed) && input.seed >= 0
-      ? input.seed : 1212;
+    const seed = resolvePresetSeed({ ...input.preset, provider: 'omnivoice-lora' }, input.seed, input.seedOverride);
     const device = input.preset.deviceMap === 'cpu' ? 'cpu' : 'mps';
     const metrics = await runOmniVoiceLoraJob(root, device, { output, text: input.text,
       reference_audio: reference, reference_text: input.preset.referenceText,
@@ -56,7 +57,7 @@ export async function generateOmniVoiceLora(input: {
     return NextResponse.json({ provider: 'omnivoice-lora', audioUrl, filename,
       generationParams: { adapterVersion: runtime.id, modelType: runtime.modelType, language, trainingStep: runtime.trainingStep, referencePresetId: input.preset.id,
         referenceAudioFilename: input.preset.filename, numStep: input.preset.numStep, speed: input.preset.speed,
-        dtype: 'float32', deviceMap: device, seed, denoise: false, postprocessOutput: false,
+        dtype: 'float32', deviceMap: device, seed, seedMode: normalizeSeedMode(input.preset.seedMode, 'omnivoice-lora'), denoise: false, postprocessOutput: false,
         preprocessPrompt: false, fadeDuration: 0, padDuration: 0, ...metrics } });
   } finally {
     if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});

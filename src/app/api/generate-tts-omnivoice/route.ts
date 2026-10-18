@@ -46,6 +46,7 @@ interface RequestBody {
   ttsSettings?: {
     provider?: string;
     seed?: number;
+    seedOverride?: number;
     reference_audio_filename?: string;
     omniVoice?: OmniVoiceTtsSettings;
   };
@@ -1944,7 +1945,7 @@ export async function POST(request: NextRequest) {
 
     if (matchedReferencePreset?.provider === 'omnivoice-lora') {
       return await generateOmniVoiceLora({ text, preset: matchedReferencePreset,
-        sceneId: body.sceneId, videoId: body.videoId, seed: body.ttsSettings?.seed });
+        sceneId: body.sceneId, videoId: body.videoId, seed: body.ttsSettings?.seed, seedOverride: body.ttsSettings?.seedOverride });
     }
     if (body.ttsSettings?.provider === 'omnivoice-lora') {
       return NextResponse.json({ error: 'Choose an enabled OmniVoice LoRA preset' }, { status: 400 });
@@ -2227,7 +2228,7 @@ export async function POST(request: NextRequest) {
         referenceAudio: path.basename(referenceAudioResolution.fullPath),
         referencePresetMatched: Boolean(matchedReferencePreset),
         referencePresetId: matchedReferencePreset?.id || null,
-        referencePresetName: matchedReferencePreset?.name || null,
+          referencePresetName: matchedReferencePreset?.name || null,
         referencePresetLanguage: matchedReferencePreset?.language || null,
         referencePresetDeviceMap: matchedReferencePreset?.deviceMap || null,
         referencePresetDType: matchedReferencePreset?.dtype || null,

@@ -4967,7 +4967,7 @@ export default function SceneCard({
         const currentTtsSettings = liveStoreState.ttsSettings;
         const effectiveTtsSettings =
           typeof opts?.seedOverride === 'number'
-            ? { ...currentTtsSettings, seed: opts.seedOverride }
+            ? { ...currentTtsSettings, seed: opts.seedOverride, seedOverride: opts.seedOverride }
             : currentTtsSettings;
 
         const ttsPayloadSettings = voiceOverride

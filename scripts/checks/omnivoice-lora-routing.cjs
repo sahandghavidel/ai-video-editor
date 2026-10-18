@@ -280,3 +280,33 @@ test('persisted TTS load, update, save and reset remove retired settings while p
   assert.equal(useAppStore.getState().ttsSettings.provider, 'omnivoice');
   assert.equal('fish' in JSON.parse(storage.get('ttsSettings')), false);
 });
+
+test('preset seed modes preserve legacy defaults, use explicit preset seeds and allow retry overrides', () => {
+  const { resolvePresetSeed, normalizeSeedMode } = fixture().load('src/utils/ttsPresetSeed.ts');
+  assert.equal(normalizeSeedMode(undefined, 'omnivoice-lora'), 'fixed');
+  assert.equal(normalizeSeedMode(undefined, 'omnivoice'), 'random');
+  assert.equal(resolvePresetSeed({ provider: 'omnivoice-lora' }, 829), 829);
+  assert.equal(resolvePresetSeed({ provider: 'omnivoice-lora', seed: 0 }, 829), 0);
+  assert.equal(resolvePresetSeed({ provider: 'omnivoice-lora', seed: 173 }, 829), 173);
+  assert.equal(resolvePresetSeed({ provider: 'omnivoice-lora', seed: 173 }, 829, 2401), 2401);
+  const seeds = new Set(Array.from({ length: 12 }, () => resolvePresetSeed({ provider: 'omnivoice-lora', seedMode: 'random', seed: 173 }, 829)));
+  assert.ok(seeds.size > 1); assert.ok([...seeds].every(seed => Number.isSafeInteger(seed) && seed >= 0));
+});
+
+test('duplicate preset keeps model settings, uses a separate reference and never changes a language default', async () => {
+  const copies = [];
+  const { POST } = fixture({
+    'fs/promises': { mkdir: async () => {}, copyFile: async (...args) => copies.push(args) },
+    '@/lib/ttsReferenceAudio': { resolveReferenceAudioPath: () => ({ fullPath: '/references/nice.wav' }) },
+    'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
+  }).load('src/app/api/tts-audio-references/duplicate/route.ts');
+  const original = { id: 'original', name: 'Nice', filename: 'nice.wav', provider: 'omnivoice-lora', language: 'en', seedMode: 'random', seed: 173, referenceText: 'Reference', isDefault: true, enabled: true, tags: ['english'] };
+  const result = await POST({ json: async () => ({ entry: original }) });
+  assert.equal(result.status, 200); assert.notEqual(result.body.entry.id, original.id);
+  assert.notEqual(result.body.entry.filename, original.filename); assert.equal(result.body.entry.isDefault, false);
+  assert.equal(result.body.entry.seedMode, 'random'); assert.equal(result.body.entry.seed, 173);
+  assert.equal(result.body.entry.tags[0], 'english'); assert.equal(result.body.entry.name, 'Nice (copy)');
+  assert.equal(copies.length, 1); assert.equal(original.isDefault, true);
+  const gemini = await POST({ json: async () => ({ entry: { ...original, id: 'gemini', provider: 'gemini', filename: '', language: 'fa' } }) });
+  assert.equal(gemini.status, 200); assert.equal(copies.length, 1);
+});
