@@ -2175,12 +2175,7 @@ export default function OriginalVideosList({
             ? ttsSettings.reference_audio_filename
             : getVideoTtsVoiceReference(video);
 
-          const ttsEndpoint =
-            ttsSettings.provider === 'fish-s2-pro'
-              ? '/api/generate-tts-fish'
-              : ttsSettings.provider === 'omnivoice' || ttsSettings.provider === 'omnivoice-lora'
-                ? '/api/generate-tts-omnivoice'
-                : '/api/generate-tts';
+          const ttsEndpoint = '/api/generate-tts-omnivoice';
 
           const ttsRes = await fetch(ttsEndpoint, {
             method: 'POST',
@@ -2274,12 +2269,7 @@ export default function OriginalVideosList({
             ? ttsSettings.reference_audio_filename
             : getVideoTtsVoiceReference(video);
 
-      const ttsEndpoint =
-        ttsSettings.provider === 'fish-s2-pro'
-          ? '/api/generate-tts-fish'
-          : ttsSettings.provider === 'omnivoice' || ttsSettings.provider === 'omnivoice-lora'
-            ? '/api/generate-tts-omnivoice'
-            : '/api/generate-tts';
+      const ttsEndpoint = '/api/generate-tts-omnivoice';
 
       const ttsRes = await fetch(ttsEndpoint, {
         method: 'POST',

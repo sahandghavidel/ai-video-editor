@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 900;
 
-type Provider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice' | 'omnivoice-lora';
+type Provider = 'omnivoice' | 'omnivoice-lora';
 
 interface BodyWithProvider {
   ttsSettings?: {
@@ -16,13 +16,13 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as BodyWithProvider &
       Record<string, unknown>;
 
-    const provider = body?.ttsSettings?.provider || 'chatterbox';
-    const targetPath =
-      provider === 'omnivoice-lora' ? '/api/generate-tts-omnivoice-lora' : provider === 'fish-s2-pro'
-        ? '/api/generate-tts-fish'
-        : provider === 'omnivoice'
-          ? '/api/generate-tts-omnivoice'
-          : '/api/generate-tts';
+    const provider = body?.ttsSettings?.provider || 'omnivoice';
+    if (provider !== 'omnivoice' && provider !== 'omnivoice-lora') {
+      return NextResponse.json({ error: 'Unsupported TTS provider' }, { status: 400 });
+    }
+    const targetPath = provider === 'omnivoice-lora'
+      ? '/api/generate-tts-omnivoice-lora'
+      : '/api/generate-tts-omnivoice';
 
     const targetUrl = `${request.nextUrl.origin}${targetPath}`;
     const forwardResponse = await fetch(targetUrl, {

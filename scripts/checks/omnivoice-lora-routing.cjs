@@ -10,7 +10,7 @@ const { EventEmitter } = require('node:events');
 const root = path.resolve(__dirname, '../..');
 function fixture(mocks = {}, env = {}, globals = {}) {
   const modules = new Map();
-  const context = vm.createContext({ Buffer, console: { info() {}, warn() {}, error() {} },
+  const context = vm.createContext({ Buffer, console: { info() {}, warn() {}, error() {}, log() {} },
     process: { env, cwd: () => root }, setTimeout, clearTimeout, Promise, Uint8Array, ...globals });
   const load = (relative) => {
     const filename = path.join(root, relative);
@@ -218,4 +218,65 @@ test('full Persian model has an isolated package and switches away from LoRA thr
   assert.ok(procs.events.indexOf('closed-101') < procs.events.indexOf('start-102'));
   assert.equal(procs.children[1].args.at(-1), 'persian-full-v1');
   await new Promise(resolve => setTimeout(resolve, 45));
+});
+
+test('retired TTS settings migrate to OmniVoice without changing current OmniVoice/LoRA references', () => {
+  const { normalizeTtsSettings } = fixture().load('src/utils/ttsProviderSettings.ts');
+  for (const provider of ['chatterbox', 'fish-s2-pro']) {
+    const input = { provider, seed: 173, reference_audio_filename: 'nice.wav', omniVoice: { speed: 1.1 }, fish: { apiKey: 'retired' }, temperature: .8, exaggeration: .6, cfg_weight: .5 };
+    const result = normalizeTtsSettings(input);
+    assert.equal(result.provider, 'omnivoice'); assert.equal(result.seed, 173);
+    assert.equal(result.reference_audio_filename, 'nice.wav'); assert.equal(result.omniVoice.speed, 1.1);
+    for (const key of ['fish', 'temperature', 'exaggeration', 'cfg_weight']) assert.equal(key in result, false);
+    assert.equal(input.fish.apiKey, 'retired');
+  }
+  for (const provider of ['omnivoice', 'omnivoice-lora']) {
+    const input = { provider, reference_audio_filename: 'nice.wav', seed: 1212, omniVoice: { language: 'en' } };
+    assert.equal(JSON.stringify(normalizeTtsSettings(input)), JSON.stringify(input));
+  }
+});
+
+test('TTS dispatcher rejects retired providers and keeps the two supported local routes', async () => {
+  const calls = [];
+  const { POST } = fixture({ 'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } } }, {}, {
+    fetch: async (url) => { calls.push(url); return { status: 200, headers: { get: () => 'application/json' }, json: async () => ({ ok: true }) }; },
+  }).load('src/app/api/generate-tts-selected/route.ts');
+  for (const provider of ['chatterbox', 'fish-s2-pro']) {
+    const result = await POST({ json: async () => ({ ttsSettings: { provider } }) });
+    assert.equal(result.status, 400);
+  }
+  assert.equal(calls.length, 0);
+  for (const provider of ['omnivoice', 'omnivoice-lora']) {
+    const result = await POST({ json: async () => ({ ttsSettings: { provider } }), nextUrl: { origin: 'http://localhost:9540' } });
+    assert.equal(result.status, 200);
+    assert.equal(calls.at(-1), `http://localhost:9540/api/generate-tts-${provider}`);
+  }
+});
+
+
+test('persisted TTS load, update, save and reset remove retired settings while preserving OmniVoice options', () => {
+  const storage = new Map([
+    ['ttsSettings', JSON.stringify({ provider: 'chatterbox', seed: 173, reference_audio_filename: 'nice.wav', omniVoice: { speed: 1.1 }, fish: { apiKey: 'retired' } })],
+    ['video-editor-settings', JSON.stringify({ ttsSettings: { provider: 'fish-s2-pro', fish: { apiKey: 'retired' } } })],
+  ]);
+  const localStorage = { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
+  const create = builder => {
+    let state; const set = update => { state = { ...state, ...(typeof update === 'function' ? update(state) : update) }; };
+    state = builder(set, () => state); return { getState: () => state };
+  };
+  const { useAppStore } = fixture({ zustand: { create } }, {}, { localStorage }).load('src/store/useAppStore.ts');
+  useAppStore.getState().loadSettingsFromLocalStorage();
+  let current = useAppStore.getState();
+  assert.equal(current.ttsSettings.provider, 'omnivoice');
+  assert.equal(current.ttsSettings.reference_audio_filename, 'nice.wav');
+  assert.equal(current.ttsSettings.omniVoice.speed, 1.1);
+  assert.equal(current.ttsSettings.seed, 173);
+  for (const key of ['ttsSettings', 'video-editor-settings']) assert.equal(storage.get(key).includes('retired'), false);
+  current.updateTTSSettings({ seed: 321 });
+  assert.equal(JSON.parse(storage.get('ttsSettings')).seed, 321);
+  useAppStore.getState().saveSettingsToLocalStorage();
+  assert.equal(JSON.parse(storage.get('video-editor-settings')).ttsSettings.provider, 'omnivoice');
+  useAppStore.getState().resetTTSSettings();
+  assert.equal(useAppStore.getState().ttsSettings.provider, 'omnivoice');
+  assert.equal('fish' in JSON.parse(storage.get('ttsSettings')), false);
 });

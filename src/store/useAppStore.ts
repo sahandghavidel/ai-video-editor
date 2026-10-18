@@ -1,8 +1,9 @@
+import { normalizeTtsSettings } from '@/utils/ttsProviderSettings';
 import { create } from 'zustand';
 import { BaserowRow } from '@/lib/baserow-actions';
 
 // TTS Settings interface
-export type TTSProvider = 'chatterbox' | 'fish-s2-pro' | 'omnivoice' | 'omnivoice-lora';
+export type TTSProvider = 'omnivoice' | 'omnivoice-lora';
 
 export interface OmniVoiceTTSSettings {
   pythonPath: string;
@@ -16,28 +17,10 @@ export interface OmniVoiceTTSSettings {
   speed: number;
 }
 
-export interface FishTTSSettings {
-  apiBaseUrl: string;
-  apiKey: string;
-  referenceId: string;
-  format: 'wav' | 'mp3' | 'opus' | 'pcm';
-  latency: 'normal' | 'balanced';
-  chunk_length: number;
-  max_new_tokens: number;
-  top_p: number;
-  repetition_penalty: number;
-  temperature: number;
-  use_memory_cache: 'on' | 'off';
-}
-
 export interface TTSSettings {
   provider: TTSProvider;
-  temperature: number;
-  exaggeration: number;
-  cfg_weight: number;
   seed: number;
   reference_audio_filename: string;
-  fish: FishTTSSettings;
   omniVoice: OmniVoiceTTSSettings;
 }
 
@@ -591,29 +574,9 @@ interface AppState {
 
 // Default TTS settings
 const defaultTTSSettings: TTSSettings = {
-  provider: 'chatterbox',
-  temperature: 0.8,
-  exaggeration: 0.6,
-  cfg_weight: 0.5,
+  provider: 'omnivoice',
   seed: 1212,
   reference_audio_filename: 'calmS5wave.wav',
-  fish: {
-    apiBaseUrl:
-      typeof process !== 'undefined' &&
-      process.env.NEXT_PUBLIC_FISH_TTS_BASE_URL
-        ? process.env.NEXT_PUBLIC_FISH_TTS_BASE_URL
-        : 'http://127.0.0.1:8080',
-    apiKey: '',
-    referenceId: '',
-    format: 'wav',
-    latency: 'normal',
-    chunk_length: 500,
-    max_new_tokens: 4096,
-    top_p: 0.8,
-    repetition_penalty: 1.1,
-    temperature: 0.8,
-    use_memory_cache: 'on',
-  },
   omniVoice: {
     pythonPath: '',
     modelId: 'k2-fsa/OmniVoice',
@@ -1026,16 +989,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   // TTS Settings Actions
   updateTTSSettings: (updates) =>
     set((state) => {
-      const newSettings = {
+      const newSettings = normalizeTtsSettings({
         ...state.ttsSettings,
         ...updates,
-        fish: updates.fish
-          ? { ...state.ttsSettings.fish, ...updates.fish }
-          : state.ttsSettings.fish,
         omniVoice: updates.omniVoice
           ? { ...state.ttsSettings.omniVoice, ...updates.omniVoice }
           : state.ttsSettings.omniVoice,
-      };
+      });
       // Save to localStorage whenever updated
       localStorage.setItem('ttsSettings', JSON.stringify(newSettings));
       return { ttsSettings: newSettings };
@@ -2012,7 +1972,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   saveSettingsToLocalStorage: () => {
     const state = get();
     const settingsToSave = {
-      ttsSettings: state.ttsSettings,
+      ttsSettings: normalizeTtsSettings(state.ttsSettings),
       videoSettings: state.videoSettings,
       transcriptionSettings: state.transcriptionSettings,
       deletionSettings: state.deletionSettings,
@@ -2057,6 +2017,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
 
+        if (settings?.ttsSettings) {
+          settings.ttsSettings = normalizeTtsSettings(settings.ttsSettings);
+          localStorage.setItem('video-editor-settings', JSON.stringify(settings));
+        }
         const persistedTTSSettings =
           (settings?.ttsSettings as Partial<TTSSettings> | undefined) || {};
         const persistedModelSelection =
@@ -2067,11 +2031,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set((state) => ({
           ttsSettings: {
             ...defaultTTSSettings,
-            ...persistedTTSSettings,
-            fish: {
-              ...defaultTTSSettings.fish,
-              ...(persistedTTSSettings.fish || {}),
-            },
+            ...normalizeTtsSettings(persistedTTSSettings),
             omniVoice: {
               ...defaultTTSSettings.omniVoice,
               ...(persistedTTSSettings.omniVoice || {}),
@@ -2425,17 +2385,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       const savedTTSSettings = localStorage.getItem('ttsSettings');
       if (savedTTSSettings) {
         try {
-          const settings = JSON.parse(savedTTSSettings);
+          const settings = normalizeTtsSettings(JSON.parse(savedTTSSettings));
+          localStorage.setItem('ttsSettings', JSON.stringify(settings));
           const parsed =
             (settings as Partial<TTSSettings> | undefined) || undefined;
           set({
             ttsSettings: {
               ...defaultTTSSettings,
-              ...(parsed || {}),
-              fish: {
-                ...defaultTTSSettings.fish,
-                ...((parsed && parsed.fish) || {}),
-              },
+              ...normalizeTtsSettings(parsed || {}),
               omniVoice: {
                 ...defaultTTSSettings.omniVoice,
                 ...((parsed && parsed.omniVoice) || {}),

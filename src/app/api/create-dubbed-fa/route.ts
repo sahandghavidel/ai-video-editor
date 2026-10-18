@@ -1,6 +1,4 @@
 import { runWithGeminiSceneRecovery } from '@/lib/geminiSceneRecovery';
-import { ensurePersianTtsRunning } from '@/lib/persianTtsRuntime';
-import { normalizePersianTtsSettings, type PersianTtsSettings } from '@/utils/persianTtsSettings';
 import { NextRequest, NextResponse } from 'next/server';
 import { Agent } from 'undici';
 import path from 'path';
@@ -73,7 +71,6 @@ type ResolvedAudioReference = {
   filename: string;
   provider: LanguageTtsProvider;
   gemini: GeminiTtsSettings;
-  persian: PersianTtsSettings;
   language: string;
   youtubeLangCode?: string;
   referenceText: string;
@@ -254,7 +251,7 @@ async function resolveLanguageAudioReference(
       (entry) =>
         entry.enabled &&
         entry.language.toLowerCase() === normalizedLanguage &&
-        (entry.provider === 'gemini' || entry.provider === 'chatterbox-persian' || entry.filename.trim().length > 0),
+        (entry.provider === 'gemini' || entry.filename.trim().length > 0),
     );
 
     if (languageEntries.length > 0) {
@@ -265,7 +262,6 @@ async function resolveLanguageAudioReference(
           filename: defaultEntry.filename,
           provider: defaultEntry.provider,
           gemini: defaultEntry.gemini,
-          persian: defaultEntry.persian,
           language: defaultEntry.language,
           youtubeLangCode: defaultEntry.youtubeLangCode,
           referenceText: defaultEntry.referenceText,
@@ -284,7 +280,6 @@ async function resolveLanguageAudioReference(
         filename: firstEntry.filename,
         provider: firstEntry.provider,
         gemini: firstEntry.gemini,
-        persian: firstEntry.persian,
         language: firstEntry.language,
         youtubeLangCode: firstEntry.youtubeLangCode,
         referenceText: firstEntry.referenceText,
@@ -308,7 +303,6 @@ async function resolveLanguageAudioReference(
     filename: DEFAULT_REFERENCE_AUDIO_FILENAME,
     provider: 'omnivoice',
     gemini: { ...DEFAULT_GEMINI_TTS_SETTINGS },
-    persian: normalizePersianTtsSettings(undefined),
     language: normalizedLanguage,
     referenceText: DEFAULT_REFERENCE_TEXT,
     baserowFields: FALLBACK_LANGUAGE_BASEROW_FIELDS,
@@ -457,14 +451,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (selectedLanguageReference.provider === 'chatterbox-persian') {
-      if (requestedLanguage !== 'fa') return NextResponse.json({ error: 'Persian provider requires fa' }, { status: 400 });
-      try {
-        await ensurePersianTtsRunning();
-      } catch {
-        return NextResponse.json({ error: 'Could not automatically start the isolated Persian service; check its service-memory.log' }, { status: 503 });
-      }
-    }
     if (selectedLanguageReference.provider === 'gemini') {
       const settingsError = validateGeminiTtsSettings(selectedLanguageReference.gemini);
       if (settingsError) return NextResponse.json({ error: settingsError }, { status: 400 });
@@ -857,7 +843,7 @@ export async function POST(request: NextRequest) {
         emptySentenceFieldKey: baserowFields.sceneTargetSentenceFieldKey,
         sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
         provider: selectedLanguageReference.provider,
-        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora' || selectedLanguageReference.provider === 'chatterbox-persian')
+        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora')
           ? selectedLanguageReference.filename : undefined,
         skipIfDestinationExists: true,
         failFastOnSaveError: false,
@@ -866,10 +852,9 @@ export async function POST(request: NextRequest) {
         boostFirstFiveMinutesSteps: selectedLanguageReference.provider === 'omnivoice',
         ttsSettings: {
           provider: selectedLanguageReference.provider,
-          reference_audio_filename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora' || selectedLanguageReference.provider === 'chatterbox-persian')
+          reference_audio_filename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora')
             ? selectedLanguageReference.filename : undefined,
           gemini: selectedLanguageReference.gemini,
-          persian: selectedLanguageReference.persian,
           omniVoice: {
             referenceText: selectedLanguageReference.referenceText,
             language: selectedLanguageReference.language,
@@ -1140,7 +1125,7 @@ export async function POST(request: NextRequest) {
         originalAudioField: baserowFields.sceneOriginalAudioFieldKey ?? null,
         emptySentenceFieldForSilence:
           baserowFields.sceneReferenceSentenceFieldKey,
-        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora' || selectedLanguageReference.provider === 'chatterbox-persian')
+        referenceAudioFilename: (selectedLanguageReference.provider === 'omnivoice' || selectedLanguageReference.provider === 'omnivoice-lora')
           ? selectedLanguageReference.filename : undefined,
         referenceAudioReferenceId: selectedLanguageReference.id,
         referenceAudioSource: selectedLanguageReference.source,

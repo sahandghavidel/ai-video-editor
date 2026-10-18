@@ -131,7 +131,7 @@ test('Gemini concurrency is configurable above five; invalid settings use safe d
   assert.equal(limits.getGeminiTtsConcurrency(), 10); assert.equal(limits.getGeminiTtsRequestIntervalMs(), 1000);
 });
 
-for (const provider of ['chatterbox', 'chatterbox-persian', 'omnivoice', 'omnivoice-lora', 'fish-s2-pro']) {
+for (const provider of ['omnivoice', 'omnivoice-lora']) {
   test(`${provider} scene processing remains sequential and preserves fail-fast`, async () => {
     const batch = fixture({ GEMINI_TTS_MAX_CONCURRENT: '20' }).load('src/lib/sceneTtsBatch.ts');
     const started = [], gates = [deferred(), deferred()]; let stop = false;
@@ -290,7 +290,7 @@ test('Gemini scene recovery is bounded to two rounds and returns the final actua
   assert.equal(result.payload.failures[0].error, 'Google error');
 });
 
-for (const provider of ['omnivoice', 'omnivoice-lora', 'chatterbox', 'chatterbox-persian', 'fish-s2-pro']) {
+for (const provider of ['omnivoice', 'omnivoice-lora']) {
   test(`${provider} never enters Gemini scene recovery even with failed IDs`, async () => {
     const f = fixture(); let attempts = 0;
     const result = await f.load('src/lib/geminiSceneRecovery.ts').runWithGeminiSceneRecovery({ provider,

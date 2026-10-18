@@ -9,17 +9,6 @@
         "voice": "voice_m6akmssqy2ay",
         "style": ""
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 20
-      },
       "language": "fa",
       "youtubeLangCode": "fa-en-GB",
       "referenceText": "Ma nagyon szép az idő, ezért később elmegyek sétálni egyet a közeli parkba.",
@@ -55,17 +44,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "zh",
       "youtubeLangCode": "zh-Hans-en-GB",
@@ -103,17 +81,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "I guess It's a decent model, and the point of this is that you can mock up a design. So, I might make this video with Veo 3.1 Lite, and then once I get it right and sort of storyboard it, then I can use a better video generation model like Veo 3.1 Quality for the final product.",
@@ -144,17 +111,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "en",
       "youtubeLangCode": "en",
@@ -187,17 +143,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "Hi there, thanks for joining me today. I’ll explain each step clearly and keep the pace smooth, natural, and easy to follow.",
@@ -228,17 +173,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "en",
       "youtubeLangCode": "en",
@@ -271,17 +205,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "en",
       "youtubeLangCode": "en",
       "referenceText": "I sound warm and friendly.",
@@ -312,17 +235,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "es",
       "youtubeLangCode": "es-en-GB",
@@ -356,17 +268,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "pt",
       "youtubeLangCode": "pt-en-GB",
       "referenceText": "Hoje o tempo está muito bom, por isso vou dar uma caminhada pelo parque mais tarde.",
@@ -398,17 +299,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "fr",
       "youtubeLangCode": "fr-en-GB",
@@ -442,17 +332,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "arb",
       "youtubeLangCode": "ar-en-GB",
       "referenceText": "في هذا القسم، ستتعرف على خيارات جديدة",
@@ -484,17 +363,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "ru",
       "youtubeLangCode": "ru-en-GB",
@@ -528,17 +396,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "hi",
       "youtubeLangCode": "hi-en-GB",
       "referenceText": "आज, मुझे महसूस हो रहा है कि हमें इस काम को मिलकर पूरा करना चाहिए",
@@ -570,17 +427,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "ja",
       "youtubeLangCode": "ja-en-GB",
@@ -614,17 +460,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "ko",
       "youtubeLangCode": "ko-en-GB",
       "referenceText": "저는 매일 아침 일찍 일어나서, 따뜻한 차를 마셔요.",
@@ -656,17 +491,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "de",
       "youtubeLangCode": "de-en-GB",
@@ -700,17 +524,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "it",
       "youtubeLangCode": "it-en-GB",
       "referenceText": "Ieri sono andato al parco con i miei amici e ci siamo divertiti molto.",
@@ -742,17 +555,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "id",
       "youtubeLangCode": "id-en-GB",
@@ -786,17 +588,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "nl",
       "youtubeLangCode": "nl-en-GB",
       "referenceText": "Het weer is vandaag echt prachtig, dus ik ga zometeen een lange wandeling in het park maken.",
@@ -828,17 +619,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "tr",
       "youtubeLangCode": "tr-en-GB",
@@ -872,17 +652,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "th",
       "youtubeLangCode": "th-en-GB",
       "referenceText": "เมื่อวานนี้ฉันไปเดินเล่นที่สวนสาธารณะกับเพื่อนมา สนุกมากเลยค่ะ",
@@ -914,17 +683,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "vi",
       "youtubeLangCode": "vi-en-GB",
@@ -958,17 +716,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "ml",
       "youtubeLangCode": "ml-en-GB",
       "referenceText": "എനിക്ക് മലയാളം സംസാരിക്കാൻ വലിയ ഇഷ്ടമാണ്, പക്ഷേ അത് പഠിക്കാൻ കുറച്ച് പ്രയാസമാണ്.",
@@ -1000,17 +747,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "pl",
       "youtubeLangCode": "pl-en-GB",
@@ -1044,17 +780,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "ta",
       "youtubeLangCode": "ta-en-GB",
       "referenceText": "நேத்து நான் என்னோட நண்பர்களோட பூங்காவுக்கு போனேன், அங்க ரொம்ப ஜாலியா இருந்துச்சு.",
@@ -1086,17 +811,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "uk",
       "youtubeLangCode": "uk-en-GB",
@@ -1130,17 +844,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "bn",
       "youtubeLangCode": "bn-en-GB",
       "referenceText": "আজকের আবহাওয়া খুব সুন্দর, তাই আমি বিকেলে পার্কে হাঁটতে যাবো।",
@@ -1172,17 +875,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "te",
       "youtubeLangCode": "te-en-GB",
@@ -1216,17 +908,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "pa",
       "youtubeLangCode": "pa-en-GB",
       "referenceText": "ਮੈਨੂੰ ਪੰਜਾਬੀ ਬੋਲਣਾ ਬਹੁਤ ਪਸੰਦ ਹੈ, ਪਰ ਇਸ ਨੂੰ ਸਿੱਖਣਾ ਮੇਰੇ ਲਈ ਥੋੜ੍ਹਾ ਜਿਹਾ ਔਖਾ ਹੈ।",
@@ -1258,17 +939,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "sr",
       "youtubeLangCode": "sr-en-GB",
@@ -1302,17 +972,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "ur",
       "youtubeLangCode": "ur-en-GB",
       "referenceText": "آج موسم بہت پیارا ہے، اس لیے میں شام کو پارک میں سیر کے لیے جاؤں گا۔",
@@ -1344,17 +1003,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "no",
       "youtubeLangCode": "no-en-GB",
@@ -1388,17 +1036,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "ca",
       "youtubeLangCode": "ca-en-GB",
       "referenceText": "Avui fa molt bon temps, així que aniré a fer un tomb pel centre de la ciutat.",
@@ -1430,17 +1067,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "hr",
       "youtubeLangCode": "hr-en-GB",
@@ -1474,17 +1100,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "lt",
       "youtubeLangCode": "lt-en-GB",
       "referenceText": "Šiandien lauke labai gražus oras, todėl vėliau eisiu pasivaikščioti į parką.",
@@ -1516,17 +1131,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "sk",
       "youtubeLangCode": "sk-en-GB",
@@ -1560,17 +1164,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "sv",
       "youtubeLangCode": "sv-en-GB",
       "referenceText": "Vädret är verkligen jättefint i dag, så jag tänkte gå på en promenad i parken.",
@@ -1602,17 +1195,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "el",
       "youtubeLangCode": "el-en-GB",
@@ -1646,17 +1228,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "bg",
       "youtubeLangCode": "bg-en-GB",
       "referenceText": "Днес времето е много хубаво, затова ще отида на разходка в парка.",
@@ -1688,17 +1259,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "rw",
       "youtubeLangCode": "rw-en-GB",
@@ -1732,17 +1292,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "be",
       "youtubeLangCode": "be-en-GB",
       "referenceText": "Сёння вельмі добрае надвор'е, таму я пайду на шпацыр у парк.",
@@ -1774,17 +1323,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "da",
       "youtubeLangCode": "da-en-GB",
@@ -1818,17 +1356,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "kk",
       "youtubeLangCode": "kk-en-GB",
       "referenceText": "Бүгін күн өте ашық, сондықтан мен кешке паркте серуендеймін.",
@@ -1860,17 +1387,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "lv",
       "youtubeLangCode": "lv-en-GB",
@@ -1904,17 +1420,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "eo",
       "youtubeLangCode": "eo-en-GB",
       "referenceText": "Hodiaŭ la vetero estas tre bela, do mi iros por promeni en la parko.",
@@ -1946,17 +1451,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "sl",
       "youtubeLangCode": "sl-en-GB",
@@ -1990,17 +1484,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "et",
       "youtubeLangCode": "et-en-GB",
       "referenceText": "Täna on väga ilus ilm, seega ma lähen hiljem parki jalutama.",
@@ -2032,17 +1515,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "bs",
       "youtubeLangCode": "bs-en-GB",
@@ -2076,17 +1548,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "is",
       "youtubeLangCode": "is-en-GB",
       "referenceText": "Værið er virkilega gott í dag, svo ég ætla að fara í smá göngutúr í garðinum.",
@@ -2118,17 +1579,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "mt",
       "youtubeLangCode": "mt-en-GB",
@@ -2162,17 +1612,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "eu",
       "youtubeLangCode": "eu-en-GB",
       "referenceText": "Gaur eguraldi oso ona egiten du, beraz, arratsaldean parkera joango naiz buelta bat ematera.",
@@ -2204,17 +1643,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "fi",
       "youtubeLangCode": "fi-en-GB",
@@ -2248,17 +1676,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "lg",
       "youtubeLangCode": "lg-en-GB",
       "referenceText": "Lelo obudde bulungi nnyo, kyo kiva nnyagala okugendako mu kisaawe okutambulamu.",
@@ -2290,17 +1707,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "sw",
       "youtubeLangCode": "sw-en-GB",
@@ -2334,17 +1740,6 @@
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
-      },
       "language": "hu",
       "youtubeLangCode": "hu-en-GB",
       "referenceText": "Ma nagyon szép az idő, ezért később elmegyek sétálni egyet a közeli parkba.",
@@ -2376,17 +1771,6 @@
       "gemini": {
         "voice": "Charon",
         "style": "Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly."
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 10
       },
       "language": "en",
       "youtubeLangCode": "en",
@@ -2422,17 +1806,6 @@
       "gemini": {
         "voice": "voice_m6akmssqy2ay",
         "style": ""
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 20
       },
       "language": "fa",
       "youtubeLangCode": "fa-en-GB",
@@ -2471,17 +1844,6 @@
         "voice": "voice_m6akmssqy2ay",
         "style": ""
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 20
-      },
       "language": "fa",
       "youtubeLangCode": "fa-en-GB",
       "referenceText": "ما هم حاشیه و هم فاصله بین عناصر (padding) را روی ۰ تنظیم خواهیم کرد.",
@@ -2519,17 +1881,6 @@
         "voice": "voice_m6akmssqy2ay",
         "style": ""
       },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 20
-      },
       "language": "fa",
       "youtubeLangCode": "fa-en-GB",
       "referenceText": "ما هم حاشیه و هم فاصله بین عناصر (padding) را روی ۰ تنظیم خواهیم کرد.",
@@ -2566,17 +1917,6 @@
       "gemini": {
         "voice": "voice_m6akmssqy2ay",
         "style": ""
-      },
-      "persian": {
-        "referenceAudio": "",
-        "seed": 42,
-        "exaggeration": 0.5,
-        "cfgWeight": 0.5,
-        "temperature": 0.8,
-        "repetitionPenalty": 2,
-        "topP": 1,
-        "minP": 0.05,
-        "steps": 20
       },
       "language": "fa",
       "youtubeLangCode": "fa-en-GB",

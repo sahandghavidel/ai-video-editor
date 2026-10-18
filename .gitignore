@@ -42,7 +42,6 @@ yarn-error.log*
 next-env.d.ts
 
 # runtime state files
-tts-timeout-state.json
 src/data/tts-word-replacements.json
 src/data/tts-audio-references.json
 public/sounds/*
@@ -71,6 +70,3 @@ src/data/tts-audio-references.json
 !.cache/youtube-cookies/
 !.cache/youtube-cookies/README.md
 public/sound-effects/*
-# Isolated Persian TTS idle shutdown runtime state
-persian-tts-timeout-state.json
-persian-tts-timeout-state.json.tmp

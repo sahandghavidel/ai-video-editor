@@ -4978,14 +4978,7 @@ export default function SceneCard({
             }
           : effectiveTtsSettings;
 
-        const ttsEndpoint =
-          selectedReferenceAudioFilename
-            ? '/api/generate-tts-omnivoice'
-            : currentTtsSettings.provider === 'fish-s2-pro'
-              ? '/api/generate-tts-fish'
-              : currentTtsSettings.provider === 'omnivoice' || currentTtsSettings.provider === 'omnivoice-lora'
-                ? '/api/generate-tts-omnivoice'
-                : '/api/generate-tts';
+        const ttsEndpoint = '/api/generate-tts-omnivoice';
 
         // Call provider-specific TTS API route directly to avoid double-hop timeouts
         const response = await fetch(ttsEndpoint, {

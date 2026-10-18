@@ -1,4 +1,3 @@
-import { normalizePersianTtsSettings, type PersianTtsSettings } from '@/utils/persianTtsSettings';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -25,7 +24,6 @@ export interface TtsAudioReferenceEntry {
   provider: LanguageTtsProvider;
   loraAdapterVersion?: string;
   gemini: GeminiTtsSettings;
-  persian: PersianTtsSettings;
   language: string;
   youtubeLangCode?: string;
   referenceText: string;
@@ -206,7 +204,7 @@ export function sanitizeTtsAudioReferenceEntries(
 
     const filename =
       typeof entry.filename === 'string' ? entry.filename.trim() : '';
-    const provider = entry.provider === 'omnivoice-lora' ? 'omnivoice-lora' : entry.provider === 'chatterbox-persian' ? 'chatterbox-persian' : entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
+    const provider = entry.provider === 'omnivoice-lora' ? 'omnivoice-lora' : entry.provider === 'gemini' ? 'gemini' : 'omnivoice';
     if (!filename && (provider === 'omnivoice' || provider === 'omnivoice-lora')) continue;
     const gemini = normalizeGeminiTtsSettings(entry.gemini);
 
@@ -268,7 +266,6 @@ export function sanitizeTtsAudioReferenceEntries(
       loraAdapterVersion: entry.loraAdapterVersion === undefined ? undefined
         : typeof entry.loraAdapterVersion === 'string' ? entry.loraAdapterVersion.trim() : 'invalid',
       gemini,
-      persian: normalizePersianTtsSettings(entry.persian),
       language,
       youtubeLangCode,
       referenceText,
