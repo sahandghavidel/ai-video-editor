@@ -61,10 +61,10 @@ test('upload wrapper binds the correct runtime, language, step and timestamp-at-
     '@/lib/minio-runtime': { ensureMinioRunning: async () => ({ baseUrl: 'http://minio.test:9000', bucket: 'audio' }) },
     '@/lib/ttsReferenceAudio': { resolveReferenceAudioPath: () => ({ fullPath: '/references/voice.wav' }) },
     'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
-  }, { OMNIVOICE_LORA_ROOT: '/english', OMNIVOICE_PERSIAN_LORA_ROOT: '/persian' }, {
+  }, { OMNIVOICE_LORA_ROOT: '/english', OMNIVOICE_PERSIAN_LORA_ROOT: '/persian', OMNIVOICE_PERSIAN_LORA_V2_ROOT: '/persian-v2' }, {
     fetch: async (...args) => { uploads.push(args); return { ok: true }; },
   }).load('src/lib/omniVoiceLora.ts').generateOmniVoiceLora;
-  for (const [language, version, expectedRoot, step] of [['en', undefined, '/english', 400], ['fa', 'persian-v1', '/persian', 3000]]) {
+  for (const [language, version, expectedRoot, step] of [['en', undefined, '/english', 400], ['fa', 'persian-v1', '/persian', 3000], ['fa', 'persian-v2-pass-2', '/persian-v2', 4700], ['fa', 'persian-v2-pass-8', '/persian-v2', 18799]]) {
     const result = await generate({ text: 'text', videoId: 1623, sceneId: 227095, preset: {
       id: 'preset', language, loraAdapterVersion: version, referenceText: 'reference', filename: 'voice.wav', deviceMap: 'mps', numStep: 34, speed: 1,
     } });
@@ -74,9 +74,9 @@ test('upload wrapper binds the correct runtime, language, step and timestamp-at-
     assert.match(result.body.filename, new RegExp(`^video_1623_tts_original_${language}_scene_227095_\\d{13}\\.wav$`));
     assert.equal(result.body.generationParams.trainingStep, step);
   }
-  assert.equal(uploads.length, 2);
+  assert.equal(uploads.length, 4);
   const bad = await generate({ text: 'text', preset: { language: 'fa', loraAdapterVersion: 'approved-v1', referenceText: 'ref' } });
-  assert.equal(bad.status, 400); assert.equal(uploads.length, 2);
+  assert.equal(bad.status, 400); assert.equal(uploads.length, 4);
 });
 
 function fakeProcesses() {
@@ -92,7 +92,7 @@ function fakeProcesses() {
     }); };
     child.kill = () => { events.push(`stop-${child.pid}`); setTimeout(() => { child.signalCode = 'SIGTERM'; events.push(`closed-${child.pid}`); child.emit('close', null, 'SIGTERM'); }, 5); return true; };
     events.push(`start-${child.pid}`); children.push({ child, python, args });
-    setImmediate(() => child.stdout.emit('data', JSON.stringify({ event: 'ready', adapter_version: args.at(-1), language: args.at(-1) === 'persian-v1' ? 'fa' : 'en' }) + '\n'));
+    setImmediate(() => child.stdout.emit('data', JSON.stringify({ event: 'ready', adapter_version: args.at(-1), language: args.at(-1).startsWith('persian-') ? 'fa' : 'en' }) + '\n'));
     return child;
   } };
 }
@@ -167,4 +167,33 @@ test('Farsi quantities become spoken words, including percentages, grouping, sig
     assert.equal(convert('۱۲۳ و ٢٥٪ و -5.25', language), '۱۲۳ و ٢٥٪ و -5.25');
   }
   assert.equal(convert(convert('۱۲۳ و ۲۵٪', 'fa'), 'fa'), convert('۱۲۳ و ۲۵٪', 'fa'));
+});
+
+
+test('v2 resolves distinct frozen packages without changing v1 roots or allowing cross-language fallback', () => {
+  const runtime = fixture({}, { OMNIVOICE_LORA_ROOT: '/english', OMNIVOICE_PERSIAN_LORA_ROOT: '/v1', OMNIVOICE_PERSIAN_LORA_V2_ROOT: '/v2' }).load('src/lib/omniVoiceLoraRuntime.ts');
+  assert.equal(runtime.resolveOmniVoiceLoraRuntime('fa', 'persian-v1').adapterPath, '/v1/approved-v1/adapter');
+  assert.equal(runtime.resolveOmniVoiceLoraRuntime('en', undefined).adapterPath, '/english/approved-v1/adapter');
+  for (const pass of [2, 8]) {
+    const bound = runtime.resolveOmniVoiceLoraRuntime('fa', `persian-v2-pass-${pass}`);
+    assert.equal(bound.adapterPath, `/v2/application-v2/pass-${pass}/adapter`);
+    assert.equal(bound.trainingStep, pass === 2 ? 4700 : 18799);
+    assert.throws(() => runtime.resolveOmniVoiceLoraRuntime('en', `persian-v2-pass-${pass}`));
+  }
+});
+
+test('switching v2 checkpoints within one language/root closes the old worker before loading the next', async () => {
+  const procs = fakeProcesses();
+  const api = fixture({ child_process: procs, fs: { existsSync: () => false } }, { OMNIVOICE_LORA_IDLE_TIMEOUT_MS: '15' }).load('src/lib/omniVoiceLoraWorker.ts');
+  const job = { text: 'متن', output: '/tmp/out.wav', reference_audio: '/ref.wav', reference_text: 'مرجع', language: 'fa', seed: 173, num_step: 34, speed: 1 };
+  const results = await Promise.all([
+    api.runOmniVoiceLoraJob('/v2', 'mps', job, 'persian-v2-pass-2'),
+    api.runOmniVoiceLoraJob('/v2', 'mps', job, 'persian-v2-pass-2'),
+    api.runOmniVoiceLoraJob('/v2', 'mps', job, 'persian-v2-pass-8'),
+  ]);
+  assert.equal(results[0].pid, results[1].pid);
+  assert.notEqual(results[1].pid, results[2].pid);
+  assert.ok(procs.events.indexOf('closed-101') < procs.events.indexOf('start-102'));
+  assert.equal(procs.children[1].args.at(-1), 'persian-v2-pass-8');
+  await new Promise((resolve) => setTimeout(resolve, 45));
 });

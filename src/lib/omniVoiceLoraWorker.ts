@@ -108,7 +108,7 @@ function start(root: string, device: string, key: string, version: OmniVoiceLora
       let message;
       try { message = JSON.parse(line); } catch { continue; }
       if (message.event === 'ready') {
-        const language = version === 'persian-v1' ? 'fa' : 'en';
+        const language = OMNIVOICE_LORA_VERSIONS.find((entry) => entry.id === version)?.language;
         if (message.adapter_version !== version || message.language !== language) {
           fail(new Error('LoRA worker loaded an unexpected adapter/language'));
           continue;

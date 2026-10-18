@@ -21,15 +21,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', required=True)
     parser.add_argument('--device', choices=['mps', 'cpu'], required=True)
-    parser.add_argument('--adapter-version', choices=['approved-v1', 'persian-v1'], default='approved-v1')
+    parser.add_argument('--adapter-version', choices=['approved-v1', 'persian-v1', 'persian-v2-pass-2', 'persian-v2-pass-8'], default='approved-v1')
     args = parser.parse_args()
     root = Path(args.root)
-    language = 'fa' if args.adapter_version == 'persian-v1' else 'en'
-    if args.adapter_version == 'persian-v1':
-        approval = json.loads((root / 'approved-v1' / 'approval.json').read_text())
-        weights = root / 'approved-v1' / 'adapter' / 'adapter_model.safetensors'
+    versions = {
+        'approved-v1': ('en', 'approved-v1', 400),
+        'persian-v1': ('fa', 'approved-v1', 3000),
+        'persian-v2-pass-2': ('fa', 'application-v2/pass-2', 4700),
+        'persian-v2-pass-8': ('fa', 'application-v2/pass-8', 18799),
+    }
+    language, package_name, training_step = versions[args.adapter_version]
+    package = root / package_name
+    if language == 'fa':
+        approval = json.loads((package / 'approval.json').read_text())
+        weights = package / 'adapter' / 'adapter_model.safetensors'
         if (approval.get('language') != language or approval.get('adapterVersion') != args.adapter_version
-                or approval.get('trainingStep') != 3000
+                or approval.get('trainingStep') != training_step
                 or hashlib.sha256(weights.read_bytes()).hexdigest() != approval.get('weights_sha256')):
             raise ValueError('Persian LoRA does not match the approved version/weights')
     # Advisory lock releases automatically on process exit, including crashes.
@@ -56,7 +63,7 @@ def main():
     monitor = threading.Thread(target=monitor_memory, daemon=True)
     monitor.start()
     model = OmniVoice.from_pretrained(str(root / 'base-model'), device_map=args.device, dtype=torch.float32)
-    model = load_lora_adapter(model, str(root / 'approved-v1' / 'adapter'))
+    model = load_lora_adapter(model, str(package / 'adapter'))
     limit = max(1, int(os.environ.get('OMNIVOICE_LORA_MAX_GENERATIONS_BEFORE_RELOAD', '100')))
     cache_limit = max(1, int(os.environ.get('OMNIVOICE_LORA_PROMPT_CACHE_SIZE', '16')))
     cache = OrderedDict()

@@ -17,9 +17,15 @@ args = parser.parse_args()
 job = json.loads(Path(args.job).read_text())
 root = Path(job['runtime_root'])
 version = job.get('adapter_version', 'approved-v1')
-if version not in ('approved-v1', 'persian-v1'):
+versions = {
+    'approved-v1': ('en', 'approved-v1'),
+    'persian-v1': ('fa', 'approved-v1'),
+    'persian-v2-pass-2': ('fa', 'application-v2/pass-2'),
+    'persian-v2-pass-8': ('fa', 'application-v2/pass-8'),
+}
+if version not in versions:
     raise ValueError('Unsupported LoRA adapter version')
-language = 'fa' if version == 'persian-v1' else 'en'
+language, package_name = versions[version]
 if job.get('language', language) != language:
     raise ValueError('Job language does not match its adapter version')
 peak = {'driver': 0, 'tensor': 0}
@@ -33,7 +39,7 @@ def monitor_memory():
 monitor = threading.Thread(target=monitor_memory, daemon=True)
 monitor.start()
 model = OmniVoice.from_pretrained(str(root / 'base-model'), device_map=job['device'], dtype=torch.float32)
-model = load_lora_adapter(model, str(root / 'approved-v1' / 'adapter'))
+model = load_lora_adapter(model, str(root / package_name / 'adapter'))
 prompt = model.create_voice_clone_prompt(job['reference_audio'], ref_text=job['reference_text'], preprocess_prompt=False)
 seed = job['seed']
 random.seed(seed)

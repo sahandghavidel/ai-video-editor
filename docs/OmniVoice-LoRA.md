@@ -322,7 +322,7 @@ The application now binds saved `loraAdapterVersion` values to approved language
 
 `OMNIVOICE_LORA_ROOT` retains its English meaning; the new `OMNIVOICE_PERSIAN_LORA_ROOT` is separate. A corrected independent English `runtime-env/` copy works around a pre-existing SciPy import failure while preserving the original `env/`. Both original English adapter and ordinary OmniLocal remain intact. Details and evidence are in [Persian-OmniVoice-LoRA.md](Persian-OmniVoice-LoRA.md).
 
-English v2 and future Persian versions still require deliberate registry/runtime entries and frozen packages. Duplicating a preset or naming it v2 does not choose new weights. Keep distinct reference filenames for versioned presets because reference lookup remains filename-based. Do not repoint the English runtime root at an experimental model as a substitute for version routing.
+Persian v2 now has separate optional bindings for two and eight passes; see [Persian v2 integration](Persian-OmniVoice-LoRA-v2.md) for exact IDs, packages, environment override and selection instructions. English v2 and future versions still require deliberate registry/runtime entries and frozen packages. Duplicating a preset or naming it v2 does not choose new weights. Keep distinct reference filenames for versioned presets because reference lookup remains filename-based. Do not repoint the English runtime root at an experimental model as a substitute for version routing.
 
 ## 10. Improving the next version
 
@@ -341,7 +341,7 @@ Include technical terms, numbers, dates, abbreviations, questions, and different
 | First request slow, later faster | Expected load and prepared-reference cache; verify PID/cache hit before diagnosing |
 | Worker lock file remains | OS advisory ownership/process, not file existence; do not delete a live worker's lock |
 | Sync cannot extract timestamp | Trailing `_<13 digits>.wav`, no provider/version/UUID suffix |
-| Selected v2 sounds like v1 | No per-preset version binding currently; inspect actual worker path/key and generation metadata |
+| Selected v2 sounds like v1 | Inspect saved `loraAdapterVersion`, actual worker version/path/key and generation metadata; a preset name alone does not select weights |
 | Export skips corrected sentence | Expected first-pair-wins rule; arrange a deliberate targeted replacement |
 | Memory concern | Sample both MPS tensor and driver allocation, queue/recycle and cache bounds; short tests do not prove endurance |
 

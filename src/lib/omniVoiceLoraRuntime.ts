@@ -11,7 +11,11 @@ export function resolveOmniVoiceLoraPython(root: string): string {
 export function resolveOmniVoiceLoraRuntime(language: string, version: unknown) {
   const binding = resolveOmniVoiceLoraVersion(language, version);
   if (!binding) throw new Error('Unsupported OmniVoice LoRA language/model binding');
-  const root = binding.id === 'persian-v1'
+  const isPersianV2 = binding.id === 'persian-v2-pass-2' || binding.id === 'persian-v2-pass-8';
+  const root = isPersianV2
+    ? process.env.OMNIVOICE_PERSIAN_LORA_V2_ROOT?.trim()
+      || path.join(os.homedir(), 'Documents', 'OmniVoice-Persian-LoRA-v2')
+    : binding.id === 'persian-v1'
     ? process.env.OMNIVOICE_PERSIAN_LORA_ROOT?.trim()
       || path.join(os.homedir(), 'Documents', 'OmniVoice-Persian-LoRA-v1')
     : process.env.OMNIVOICE_LORA_ROOT?.trim()
@@ -19,5 +23,7 @@ export function resolveOmniVoiceLoraRuntime(language: string, version: unknown) 
   // A corrected copy can be used without modifying the original experiment environment.
   return { ...binding, root,
     python: resolveOmniVoiceLoraPython(root),
-    adapterPath: path.join(root, 'approved-v1', 'adapter') };
+    adapterPath: isPersianV2
+      ? path.join(root, 'application-v2', binding.id === 'persian-v2-pass-2' ? 'pass-2' : 'pass-8', 'adapter')
+      : path.join(root, 'approved-v1', 'adapter') };
 }
