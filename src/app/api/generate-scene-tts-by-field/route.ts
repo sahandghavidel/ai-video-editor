@@ -2686,9 +2686,16 @@ export async function POST(request: NextRequest) {
 
     let token = await getBaserowToken();
 
+    const batchJobId = typeof body?.geminiBatchJobId === 'string' ? body.geminiBatchJobId : null;
+    const batchStore = batchJobId ? await import('@/lib/geminiBatchStore') : null;
+    const batchProcessing = batchJobId ? await import('@/lib/geminiBatchProcessing') : null;
+    const loadScenes = async () => batchJobId && onlySceneIdSet?.size
+      ? Promise.all([...onlySceneIdSet].map(sceneId => batchStore!.fetchBatchScene(videoId, sceneId)))
+      : fetchAllScenesForVideo(baserowUrl, token, videoId);
+
     let scenes: BaserowRow[];
     try {
-      scenes = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+      scenes = await loadScenes();
     } catch (error) {
       if (!isBaserowAuthError(error)) {
         throw error;
@@ -2699,7 +2706,7 @@ export async function POST(request: NextRequest) {
       );
 
       token = await getBaserowToken(true);
-      scenes = await fetchAllScenesForVideo(baserowUrl, token, videoId);
+      scenes = await loadScenes();
     }
 
     if (scenes.length === 0) {
@@ -2734,11 +2741,9 @@ export async function POST(request: NextRequest) {
     let abortedOnProviderFailure = false;
     let abortedSceneId: number | null = null;
 
-    const batchJobId = typeof body?.geminiBatchJobId === 'string' ? body.geminiBatchJobId : null;
-    const batchStore = batchJobId ? await import('@/lib/geminiBatchStore') : null;
     const verifyBatchSceneFresh = async (sceneId: number) => {
       if (!batchJobId) return;
-      const row = (await batchStore!.fetchBatchScenes(videoId)).find(item => Number(item.id) === sceneId);
+      const row = await batchStore!.fetchBatchScene(videoId, sceneId);
       if (!row) throw new Error(`Batch scene ${sceneId} no longer belongs to this video`);
       await batchStore!.validateBatchImport(batchJobId, body as Record<string, unknown>, row);
     };
@@ -2846,146 +2851,150 @@ export async function POST(request: NextRequest) {
       });
 
       if (shouldCreateSilenceForScene && targetDurationSec) {
-        let fittedUnmutedAudioPath: string | null = null;
-        try {
-          logFitInfo('post:scene-silence-fit-start', {
-            fitDebugRunId,
-            sceneId,
-            targetDurationSec,
-            targetSamples: secondsToSamples(
-              targetDurationSec,
-              AUDIO_SAMPLE_RATE,
-            ),
-            emptySentenceFieldKey,
-          });
-
-          const finalVideoUrl = extractUrl(scene[FINAL_VIDEO_FIELD_KEY]);
-          if (
-            finalVideoUrl &&
-            parseSpeedUpVideoMetadata(finalVideoUrl)?.muteAudio === false &&
-            (await hasAudioStream(finalVideoUrl))
-          ) {
-            // The processed video already has its selected playback speed.
-            // Reuse HF fitting and the existing silent-base overlay mix.
-            fittedUnmutedAudioPath = await stretchHyperFramesAudioToDurationLocal({
-              sceneId,
-              videoId,
-              inputAudioUrl: finalVideoUrl,
-              targetDurationSec,
-            });
-            logFitInfo('post:scene-unmuted-video-audio-prepared', {
+        const processSilence = async () => {
+          let fittedUnmutedAudioPath: string | null = null;
+          try {
+            logFitInfo('post:scene-silence-fit-start', {
               fitDebugRunId,
               sceneId,
-              finalVideoUrl,
               targetDurationSec,
+              targetSamples: secondsToSamples(
+                targetDurationSec,
+                AUDIO_SAMPLE_RATE,
+              ),
+              emptySentenceFieldKey,
             });
-          }
 
-          const preparedEffects = fittedUnmutedAudioPath
-            ? { audioUrl: fittedUnmutedAudioPath, token }
-            : includeHyperFramesSoundEffects
-            ? await prepareFittedHyperFramesAudio({
-                baserowUrl,
-                token,
-                scene,
+            const finalVideoUrl = extractUrl(scene[FINAL_VIDEO_FIELD_KEY]);
+            if (
+              finalVideoUrl &&
+              parseSpeedUpVideoMetadata(finalVideoUrl)?.muteAudio === false &&
+              (await hasAudioStream(finalVideoUrl))
+            ) {
+              // The processed video already has its selected playback speed.
+              // Reuse HF fitting and the existing silent-base overlay mix.
+              fittedUnmutedAudioPath = await stretchHyperFramesAudioToDurationLocal({
                 sceneId,
                 videoId,
+                inputAudioUrl: finalVideoUrl,
                 targetDurationSec,
-              })
-            : { audioUrl: null, token };
-          token = preparedEffects.token;
+              });
+              logFitInfo('post:scene-unmuted-video-audio-prepared', {
+                fitDebugRunId,
+                sceneId,
+                finalVideoUrl,
+                targetDurationSec,
+              });
+            }
 
-          const silentFitted = await createAndUploadSilentSceneAudio({
-            fittedHyperFramesAudioUrl: preparedEffects.audioUrl,
-            sceneId,
-            videoId,
-            targetDurationSec,
-            language,
-          });
+            const preparedEffects = fittedUnmutedAudioPath
+              ? { audioUrl: fittedUnmutedAudioPath, token }
+              : includeHyperFramesSoundEffects
+              ? await prepareFittedHyperFramesAudio({
+                  baserowUrl,
+                  token,
+                  scene,
+                  sceneId,
+                  videoId,
+                  targetDurationSec,
+                })
+              : { audioUrl: null, token };
+            token = preparedEffects.token;
 
-          fittedCount += 1;
-          skippedOriginalSaveCount += 1;
-
-          logFitInfo('post:scene-silence-fit-done', {
-            fitDebugRunId,
-            sceneId,
-            fittedUploadUrl: silentFitted.uploadUrl,
-            inputDurationSec: silentFitted.inputDurationSec,
-            outputDurationSec: silentFitted.outputDurationSec,
-            targetDurationSec,
-            durationDeltaSec: roundDurationSeconds(
-              silentFitted.outputDurationSec - targetDurationSec,
-            ),
-            speedApplied: silentFitted.speedApplied,
-          });
-
-          try {
-            await verifyBatchSceneFresh(sceneId);
-            token = await patchSceneAudioWithAuthRetry({
-              baserowUrl,
-              token,
+            const silentFitted = await createAndUploadSilentSceneAudio({
+              fittedHyperFramesAudioUrl: preparedEffects.audioUrl,
               sceneId,
-              destinationAudioFieldKey,
-              audioUrl: silentFitted.uploadUrl,
+              videoId,
+              targetDurationSec,
+              language,
             });
 
-            generatedCount += 1;
-            silentGeneratedCount += 1;
+            fittedCount += 1;
+            skippedOriginalSaveCount += 1;
 
-            logFitInfo('post:scene-silence-save-success', {
+            logFitInfo('post:scene-silence-fit-done', {
               fitDebugRunId,
               sceneId,
-              destinationAudioFieldKey,
-              savedAudioUrl: silentFitted.uploadUrl,
-              elapsedMs: Date.now() - sceneStartedAt,
+              fittedUploadUrl: silentFitted.uploadUrl,
+              inputDurationSec: silentFitted.inputDurationSec,
+              outputDurationSec: silentFitted.outputDurationSec,
+              targetDurationSec,
+              durationDeltaSec: roundDurationSeconds(
+                silentFitted.outputDurationSec - targetDurationSec,
+              ),
+              speedApplied: silentFitted.speedApplied,
             });
-          } catch (saveError) {
-            const saveMessage =
-              saveError instanceof Error ? saveError.message : 'Unknown error';
+
+            try {
+              await verifyBatchSceneFresh(sceneId);
+              token = await patchSceneAudioWithAuthRetry({
+                baserowUrl,
+                token,
+                sceneId,
+                destinationAudioFieldKey,
+                audioUrl: silentFitted.uploadUrl,
+              });
+
+              generatedCount += 1;
+              silentGeneratedCount += 1;
+
+              logFitInfo('post:scene-silence-save-success', {
+                fitDebugRunId,
+                sceneId,
+                destinationAudioFieldKey,
+                savedAudioUrl: silentFitted.uploadUrl,
+                elapsedMs: Date.now() - sceneStartedAt,
+              });
+            } catch (saveError) {
+              const saveMessage =
+                saveError instanceof Error ? saveError.message : 'Unknown error';
+
+              failures.push({
+                sceneId,
+                error: saveMessage,
+                category: 'baserow_save',
+              });
+
+              logFitError('post:scene-silence-save-error', {
+                fitDebugRunId,
+                sceneId,
+                destinationAudioFieldKey,
+                message: saveMessage,
+                elapsedMs: Date.now() - sceneStartedAt,
+              });
+
+              if (failFastOnSaveError) {
+                abortedOnSaveFailure = true;
+                abortedSceneId ??= sceneId;
+                console.error(
+                  `[generate-scene-tts-by-field] Fail-fast: stopping batch after silence save failure on scene ${sceneId}: ${saveMessage}`,
+                );
+                return;
+              }
+            }
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : 'Unknown error';
 
             failures.push({
               sceneId,
-              error: saveMessage,
-              category: 'baserow_save',
+              error: `Silent audio generation failed: ${message}`,
+              category: 'silent_audio_generation',
             });
 
-            logFitError('post:scene-silence-save-error', {
+            logFitError('post:scene-silence-error', {
               fitDebugRunId,
               sceneId,
-              destinationAudioFieldKey,
-              message: saveMessage,
+              message,
               elapsedMs: Date.now() - sceneStartedAt,
             });
-
-            if (failFastOnSaveError) {
-              abortedOnSaveFailure = true;
-              abortedSceneId ??= sceneId;
-              console.error(
-                `[generate-scene-tts-by-field] Fail-fast: stopping batch after silence save failure on scene ${sceneId}: ${saveMessage}`,
-              );
-              return;
-            }
+          } finally {
+            await safeUnlink(fittedUnmutedAudioPath);
           }
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : 'Unknown error';
 
-          failures.push({
-            sceneId,
-            error: `Silent audio generation failed: ${message}`,
-            category: 'silent_audio_generation',
-          });
-
-          logFitError('post:scene-silence-error', {
-            fitDebugRunId,
-            sceneId,
-            message,
-            elapsedMs: Date.now() - sceneStartedAt,
-          });
-        } finally {
-          await safeUnlink(fittedUnmutedAudioPath);
-        }
-
+        };
+        if (batchProcessing) await batchProcessing.withBatchFitSlot(processSilence);
+        else await processSilence();
         return;
       }
 
@@ -3020,8 +3029,9 @@ export async function POST(request: NextRequest) {
               }
             : ttsSettings;
 
+        if (batchJobId) await batchStore!.validateBatchImport(batchJobId, body as Record<string, unknown>, scene);
         const generatedAudioUrl = batchJobId
-          ? (await batchStore!.validateBatchImport(batchJobId, body as Record<string, unknown>, scene))!
+          ? await batchProcessing!.getBatchLocalAudio(batchJobId, sceneId)
           : await generateSceneTts({
           origin: request.nextUrl.origin,
           providerPath,
@@ -3066,26 +3076,95 @@ export async function POST(request: NextRequest) {
           audioUrl: generatedAudioUrl,
         });
 
+        const fitGeneratedAudio = async () => {
+          const started = Date.now();
+          let audioUrl = generatedAudioUrl;
+          if (fitAudioToSceneDuration && targetDurationSec) {
+            logFitInfo('post:scene-fit-start', {
+              fitDebugRunId,
+              sceneId,
+              targetDurationSec,
+              targetSamples: secondsToSamples(
+                targetDurationSec,
+                AUDIO_SAMPLE_RATE,
+              ),
+            });
+
+            const preparedEffects = includeHyperFramesSoundEffects
+              ? await prepareFittedHyperFramesAudio({
+                  baserowUrl,
+                  token,
+                  scene,
+                  sceneId,
+                  videoId,
+                  targetDurationSec,
+                })
+              : { audioUrl: null, token };
+            token = preparedEffects.token;
+
+            const fitted = await fitAndUploadSceneAudio({
+              audioUrl,
+              fittedHyperFramesAudioUrl: preparedEffects.audioUrl,
+              sceneId,
+              videoId,
+              targetDurationSec,
+              language,
+            });
+
+            audioUrl = fitted.uploadUrl;
+            fittedCount += 1;
+
+            logFitInfo('post:scene-fit-done', {
+              fitDebugRunId,
+              sceneId,
+              fittedUploadUrl: fitted.uploadUrl,
+              inputDurationSec: fitted.inputDurationSec,
+              outputDurationSec: fitted.outputDurationSec,
+              targetDurationSec,
+              durationDeltaSec: roundDurationSeconds(
+                fitted.outputDurationSec - targetDurationSec,
+              ),
+              speedApplied: fitted.speedApplied,
+            });
+          }
+
+          if (batchJobId) console.info('[Gemini Batch] Stage timing', JSON.stringify({ jobId: batchJobId, sceneId, stage: 'fit-and-upload-dubbed', elapsedMs: Date.now() - started }));
+          return batchJobId && !(fitAudioToSceneDuration && targetDurationSec)
+            ? batchProcessing!.ensureBatchOriginalUploaded(batchJobId, sceneId) : audioUrl;
+        };
+        // Both promises have immediate rejection handlers. Original-save failure
+        // drains the fitting work before the scene can be retried.
+        const originalUpload = batchJobId
+          ? batchProcessing!.ensureBatchOriginalUploaded(batchJobId, sceneId).then(value => ({ value }), error => ({ error })) : null;
+        const batchFitting = batchJobId
+          ? batchProcessing!.withBatchFitSlot(fitGeneratedAudio).then(value => ({ value }), error => ({ error })) : null;
+
         if (saveOriginalAudioBeforeFit && originalAudioFieldKey) {
           try {
+            const upload = originalUpload ? await originalUpload : null;
+            if (upload && 'error' in upload) throw upload.error;
+            const originalAudioUrl = upload ? upload.value : generatedAudioUrl;
+            const saveStarted = Date.now();
             await verifyBatchSceneFresh(sceneId);
             token = await patchSceneAudioWithAuthRetry({
               baserowUrl,
               token,
               sceneId,
               destinationAudioFieldKey: originalAudioFieldKey,
-              audioUrl: generatedAudioUrl,
+              audioUrl: originalAudioUrl,
             });
 
             originalSavedCount += 1;
+            if (batchJobId) console.info('[Gemini Batch] Stage timing', JSON.stringify({ jobId: batchJobId, sceneId, stage: 'save-original-baserow', elapsedMs: Date.now() - saveStarted }));
 
             logFitInfo('post:scene-save-original-success', {
               fitDebugRunId,
               sceneId,
               originalAudioFieldKey,
-              savedAudioUrl: generatedAudioUrl,
+              savedAudioUrl: originalAudioUrl,
             });
           } catch (saveError) {
+            if (batchFitting) await batchFitting;
             const saveMessage =
               saveError instanceof Error ? saveError.message : 'Unknown error';
 
@@ -3118,56 +3197,18 @@ export async function POST(request: NextRequest) {
           skippedOriginalSaveCount += 1;
         }
 
-        if (fitAudioToSceneDuration && targetDurationSec) {
-          logFitInfo('post:scene-fit-start', {
-            fitDebugRunId,
-            sceneId,
-            targetDurationSec,
-            targetSamples: secondsToSamples(
-              targetDurationSec,
-              AUDIO_SAMPLE_RATE,
-            ),
-          });
-
-          const preparedEffects = includeHyperFramesSoundEffects
-            ? await prepareFittedHyperFramesAudio({
-                baserowUrl,
-                token,
-                scene,
-                sceneId,
-                videoId,
-                targetDurationSec,
-              })
-            : { audioUrl: null, token };
-          token = preparedEffects.token;
-
-          const fitted = await fitAndUploadSceneAudio({
-            audioUrl,
-            fittedHyperFramesAudioUrl: preparedEffects.audioUrl,
-            sceneId,
-            videoId,
-            targetDurationSec,
-            language,
-          });
-
-          audioUrl = fitted.uploadUrl;
-          fittedCount += 1;
-
-          logFitInfo('post:scene-fit-done', {
-            fitDebugRunId,
-            sceneId,
-            fittedUploadUrl: fitted.uploadUrl,
-            inputDurationSec: fitted.inputDurationSec,
-            outputDurationSec: fitted.outputDurationSec,
-            targetDurationSec,
-            durationDeltaSec: roundDurationSeconds(
-              fitted.outputDurationSec - targetDurationSec,
-            ),
-            speedApplied: fitted.speedApplied,
-          });
+        if (originalUpload) {
+          const outcome = await originalUpload;
+          if ('error' in outcome) throw outcome.error;
         }
+        if (batchFitting) {
+          const outcome = await batchFitting;
+          if ('error' in outcome) throw outcome.error;
+          audioUrl = outcome.value;
+        } else audioUrl = await fitGeneratedAudio();
 
         try {
+          const saveStarted = Date.now();
           await verifyBatchSceneFresh(sceneId);
           token = await patchSceneAudioWithAuthRetry({
             baserowUrl,
@@ -3178,6 +3219,7 @@ export async function POST(request: NextRequest) {
           });
 
           generatedCount += 1;
+          if (batchJobId) console.info('[Gemini Batch] Stage timing', JSON.stringify({ jobId: batchJobId, sceneId, stage: 'save-dubbed-baserow', elapsedMs: Date.now() - saveStarted }));
 
           logFitInfo('post:scene-save-success', {
             fitDebugRunId,

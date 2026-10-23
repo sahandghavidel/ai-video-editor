@@ -1,13 +1,13 @@
 import { randomUUID } from 'crypto';
-import { writeFile, rename, access } from 'fs/promises';
+import { writeFile, rename } from 'fs/promises';
 import path from 'path';
 import { Agent } from 'undici';
-import { uploadToMinio } from '@/utils/ffmpeg-direct';
+import { GEMINI_BATCH_POLL_INTERVAL_MS, getBatchProcessingConcurrency, readBatchOriginalUrl } from '@/lib/geminiBatchProcessing';
 import { BatchApiError, createGeminiBatch, decodeBatchAudio, googleBatchRequest, validateOperationName } from '@/lib/geminiBatchApi';
 import {
   assertBatchPreset, assertBatchScene, batchJobDirectory, fetchBatchScenes, isTerminal,
   listBatchJobs, readBatchJob, saveBatchJob, withBatchLock,
-  type GeminiBatchJob,
+  type GeminiBatchJob, type BatchScene,
 } from '@/lib/geminiBatchStore';
 
 const dispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 });
@@ -65,10 +65,52 @@ async function reconcileSubmission(job: GeminiBatchJob) {
   job.nextAttemptAt = Date.now() + 60_000;
   await saveBatchJob(job);
 }
+function createScenePipeline(job: GeminiBatchJob, checkpoint: () => Promise<void>) {
+  const limit = getBatchProcessingConcurrency();
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const scheduled = new Set<number>();
+  const tasks: Promise<void>[] = [];
+  const errors: unknown[] = [];
+  const enqueue = (scene: BatchScene) => {
+    if (scene.existing || scene.done || (scene.attempts || 0) >= 3 || scheduled.has(scene.id) || (scene.text && !scene.rawFile && !scene.rawUrl)) return;
+    scheduled.add(scene.id);
+    tasks.push((async () => {
+      if (active >= limit) await new Promise<void>(resolve => waiting.push(resolve));
+      else active++;
+      const started = Date.now();
+      try {
+        const result = await localPost(job, '/api/generate-scene-tts-by-field', {
+          ...job.step2, geminiBatchJobId: job.id, onlySceneIds: [scene.id], skipIfDestinationExists: false,
+        });
+        if (Number(result.generatedCount || 0) + Number(result.silentGeneratedCount || 0) + Number(result.skippedExistingCount || 0) < 1) throw new Error('Scene was not saved');
+        scene.done = true; scene.error = undefined;
+        log(job, 'Scene saved', { sceneId: scene.id, elapsedMs: Date.now() - started });
+      } catch (error) {
+        scene.attempts = (scene.attempts || 0) + 1; scene.error = safeError(error);
+        log(job, 'Scene processing failed', { sceneId: scene.id, attempt: scene.attempts, error: scene.error });
+      } finally {
+        try {
+          if (scene.text && !scene.rawUrl) scene.rawUrl = await readBatchOriginalUrl(job.id, scene.id);
+          await checkpoint();
+        } finally {
+          const next = waiting.shift();
+          if (next) next(); else active--;
+        }
+      }
+    })().catch(error => { errors.push(error); }));
+  };
+  return { enqueue, drain: async () => {
+    await Promise.all(tasks);
+    if (errors.length) throw errors[0];
+  } };
+}
 export async function advanceBatchJob(job: GeminiBatchJob) {
   if (job.nextAttemptAt && Date.now() < job.nextAttemptAt) return;
   job.nextAttemptAt = undefined;
-  await validateCurrentJob(job);
+  // Poll Google first: full Baserow snapshots are only needed before paid
+  // submission, result import, processing recovery, and final merge.
+  if (job.state === 'queued') await validateCurrentJob(job);
   if (job.state === 'submitting') { await reconcileSubmission(job); return; }
   if (job.state === 'queued') {
     const pending = job.scenes.filter(scene => !scene.existing && !scene.done && scene.text && !scene.rawFile);
@@ -98,76 +140,72 @@ export async function advanceBatchJob(job: GeminiBatchJob) {
       await saveBatchJob(job); return;
     }
   }
-  if (job.state === 'waiting') {
+  if (job.state === 'waiting' || (job.state === 'processing' && job.operation)) {
+    const fetchStarted = Date.now();
     const operation = await googleBatchRequest(validateOperationName(job.operation));
     const state = operation.metadata?.state || operation.state;
     if (!operation.done && !['BATCH_STATE_SUCCEEDED', 'BATCH_STATE_FAILED', 'BATCH_STATE_CANCELLED', 'BATCH_STATE_EXPIRED'].includes(state)) return;
+    const finishedAt = Date.parse(operation.metadata?.endTime || '');
+    log(job, 'Results received', { stage: 'status-and-result-download', elapsedMs: Date.now() - fetchStarted,
+      ...(Number.isFinite(finishedAt) ? { detectionLagMs: Math.max(0, Date.now() - finishedAt) } : {}) });
     const results = operation.response?.inlinedResponses?.inlinedResponses
       || operation.metadata?.output?.inlinedResponses?.inlinedResponses || [];
     const expected = new Set(job.roundKeys || []);
-    const seen = new Set<string>();
-    // Validate every key before importing anything. Google order is irrelevant.
+    const byKey = new Map<string, (typeof results)[number]>();
     for (const result of results) {
       const key = result.metadata?.key;
-      if (!expected.has(key) || seen.has(key)) throw new Error('Google Batch returned unknown or duplicate scene keys; import blocked.');
-      seen.add(key);
+      if (!expected.has(key) || byKey.has(key)) throw new Error('Google Batch returned unknown or duplicate scene keys; import blocked.');
+      byKey.set(key, result);
     }
-    for (const scene of job.scenes.filter(scene => expected.has(scene.key))) {
-      if (scene.rawFile) continue;
-      const result = results.find((item: { metadata?: { key?: string } }) => item.metadata?.key === scene.key);
-      try {
-        if (!result?.response || result.error) throw new Error(String(result?.error?.message || operation.error?.message || 'Missing audio result'));
-        const buffer = decodeBatchAudio(result.response);
+    await validateCurrentJob(job);
+    job.state = 'processing';
+    await saveBatchJob(job);
+    let writes = Promise.resolve();
+    const checkpoint = () => (writes = writes.then(() => saveBatchJob(job)));
+    const pipeline = createScenePipeline(job, checkpoint);
+    // Resume cached successes and silence immediately, including after a crash.
+    for (const scene of job.scenes) pipeline.enqueue(scene);
+    try {
+      for (const scene of job.scenes.filter(scene => expected.has(scene.key))) {
+        if (scene.rawFile || scene.rawUrl) continue;
+        const result = byKey.get(scene.key);
+        let buffer: Buffer;
+        try {
+          if (!result?.response || result.error) throw new Error(String(result?.error?.message || operation.error?.message || 'Missing audio result'));
+          buffer = decodeBatchAudio(result.response);
+        } catch (error) { scene.error = safeError(error); continue; }
+        const started = Date.now();
         const filename = `scene-${scene.id}.wav`;
         const target = path.join(batchJobDirectory(job.id), filename);
         await writeFile(`${target}.tmp`, buffer, { mode: 0o600 });
         await rename(`${target}.tmp`, target);
         scene.rawFile = filename; scene.error = undefined;
-        await saveBatchJob(job);
-      } catch (error) { scene.error = safeError(error); }
-    }
+        await checkpoint();
+        log(job, 'WAV ready', { sceneId: scene.id, stage: 'decode-and-save-wav', elapsedMs: Date.now() - started });
+        // No full-video barrier: uploads/fitting start while later WAVs are saved.
+        pipeline.enqueue(scene);
+      }
+    } finally { await pipeline.drain(); }
     job.operation = undefined;
-    const missing = job.scenes.filter(scene => expected.has(scene.key) && !scene.rawFile);
+    const exhausted = job.scenes.filter(scene => !scene.done && !scene.existing && (scene.attempts || 0) >= 3);
+    if (exhausted.length) throw new Error(`Batch scene processing failed after two retries: ${exhausted.map(scene => `${scene.id}: ${scene.error}`).join('; ')}`);
+    const missing = job.scenes.filter(scene => expected.has(scene.key) && !scene.rawFile && !scene.rawUrl);
     if (missing.length) {
       log(job, 'Generation failed; retrying only missing scenes after 60 seconds', { sceneIds: missing.map(scene => scene.id), failures: missing.map(scene => scene.error) });
       if (job.round >= 2) throw new Error(`Batch generation failed after two recovery rounds: ${missing.map(scene => `${scene.id}: ${scene.error}`).join('; ')}`);
       job.round++; job.state = 'queued'; job.nextAttemptAt = Date.now() + 60_000;
-      await saveBatchJob(job); return;
+      await checkpoint(); return;
     }
-    job.state = 'processing'; await saveBatchJob(job);
-  }
-  if (job.state === 'processing') {
-    // Keep FFmpeg/MinIO work bounded, independent of Standard Gemini concurrency.
-    const configured = Number(process.env.GEMINI_TTS_BATCH_PROCESSING_CONCURRENCY || 2);
-    const concurrency = Number.isInteger(configured) ? Math.max(1, Math.min(4, configured)) : 2;
-    const pending = job.scenes.filter(scene => !scene.existing && !scene.done);
-    let cursor = 0;
+    await checkpoint();
+  } else if (job.state === 'processing') {
+    await validateCurrentJob(job);
     let writes = Promise.resolve();
     const checkpoint = () => (writes = writes.then(() => saveBatchJob(job)));
-    await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, async () => {
-      while (cursor < pending.length) {
-        const scene = pending[cursor++];
-        try {
-          if (scene.text && !scene.rawUrl) {
-            if (!scene.rawFile) throw new Error('Generated audio is missing');
-            const local = path.join(batchJobDirectory(job.id), scene.rawFile);
-            await access(local);
-            scene.rawUrl = await uploadToMinio(local, `video_${job.videoId}_scene_${scene.id}_tts_batch_${job.id}.wav`, 'audio/wav');
-            await checkpoint();
-          }
-          const result = await localPost(job, '/api/generate-scene-tts-by-field', {
-            ...job.step2, geminiBatchJobId: job.id, onlySceneIds: [scene.id], skipIfDestinationExists: false,
-          });
-          if (Number(result.generatedCount || 0) + Number(result.silentGeneratedCount || 0) + Number(result.skippedExistingCount || 0) < 1) throw new Error('Scene was not saved');
-          scene.done = true; scene.error = undefined;
-          log(job, 'Scene saved', { sceneId: scene.id });
-        } catch (error) {
-          scene.attempts = (scene.attempts || 0) + 1; scene.error = safeError(error);
-          log(job, 'Scene processing failed', { sceneId: scene.id, attempt: scene.attempts, error: scene.error });
-        }
-        await checkpoint();
-      }
-    }));
+    const pipeline = createScenePipeline(job, checkpoint);
+    for (const scene of job.scenes) pipeline.enqueue(scene);
+    await pipeline.drain();
+  }
+  if (job.state === 'processing') {
     const failed = job.scenes.filter(scene => !scene.existing && !scene.done);
     if (failed.length) {
       if (failed.some(scene => (scene.attempts || 0) >= 3)) throw new Error(`Batch scene processing failed after two retries: ${failed.map(scene => `${scene.id}: ${scene.error}`).join('; ')}`);
@@ -213,7 +251,7 @@ export function scheduleBatchJob(id: string, delay = 0) {
       timers.delete(id);
       try {
         const job = await readBatchJob(id);
-        if (!isTerminal(job)) scheduleBatchJob(id, Math.max(15_000, (job.nextAttemptAt || 0) - Date.now()));
+        if (!isTerminal(job)) scheduleBatchJob(id, Math.max(GEMINI_BATCH_POLL_INTERVAL_MS, (job.nextAttemptAt || 0) - Date.now()));
       } catch { /* Removed/incomplete runtime record; no new paid work. */ }
     }
   }, delay);

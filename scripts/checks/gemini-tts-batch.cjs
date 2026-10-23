@@ -30,7 +30,7 @@ function fixture(t) {
   const job = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', videoId: 123, language: 'tr', presetId: 'tr', presetSnapshot: 'saved', origin: 'http://offline', state: 'queued', round: 0,
     step2: { sourceTextFieldKey: 'field_1', sceneDurationFieldKey: 'field_2', ttsSettings: { gemini: { voice: 'voice_test', style: 'Natural Turkish', mode: 'batch' } } },
     merge: { requireAudioForDurationScenes: true }, scenes: [1, 2, 3].map(id => ({ id, key: `scene-${id}`, text: id === 3 ? '' : `Sentence ${id}`, duration: 3, inputs: {}, existing: false })) };
-  const calls = { creates: [], statuses: [], imports: [], merges: [], uploads: [], saves: 0, active: 0, peak: 0 };
+  const calls = { creates: [], statuses: [], imports: [], merges: [], uploads: [], saves: 0, active: 0, peak: 0, readyAtImport: [] };
   let operation;
   const store = {
     assertBatchPreset: async () => {}, assertBatchScene: (_job, scene, row) => { if (row.text !== scene.text) throw new Error('stale scene'); },
@@ -46,7 +46,12 @@ function fixture(t) {
     if (url.includes('batchGenerateContent')) { calls.creates.push(body); return { ok: true, json: async () => ({ name: 'batches/operation1' }) }; }
     if (url.includes('generativelanguage')) { calls.statuses.push(url); return { ok: true, json: async () => operation }; }
     if (url.endsWith('generate-scene-tts-by-field')) {
-      calls.imports.push(body); calls.active++; calls.peak = Math.max(calls.peak, calls.active); await new Promise(resolve => setTimeout(resolve, 1)); calls.active--;
+      calls.readyAtImport.push(job.scenes.filter(scene => scene.rawFile).length);
+      calls.imports.push(body); calls.active++; calls.peak = Math.max(calls.peak, calls.active);
+      try {
+        if (job.scenes.find(scene => scene.id === body.onlySceneIds[0])?.text) await load('@/lib/geminiBatchProcessing').ensureBatchOriginalUploaded(job.id, body.onlySceneIds[0]);
+        await new Promise(resolve => setTimeout(resolve, 20));
+      } finally { calls.active--; }
       return { ok: true, status: 200, json: async () => ({ ok: true, generatedCount: 1 }) };
     }
     if (url.endsWith('merge-dubbed-audio-by-field')) { calls.merges.push(body); return { ok: true, json: async () => ({ ok: true, finalDubbedAudioUrl: 'https://offline/final.wav' }) }; }
@@ -75,7 +80,7 @@ test('out-of-order results save correct per-scene WAVs, reuse existing fitting, 
   f.setOperation({ done: true, response: { inlinedResponses: { inlinedResponses: [2, 1].map(id => ({ metadata: { key: `scene-${id}` }, response: audio })) } } });
   await f.advance(f.job);
   assert.equal(f.job.state, 'completed'); assert.equal(f.calls.uploads.length, 2); assert.equal(f.calls.imports.length, 3);
-  assert.ok(f.calls.peak <= 2); assert.equal(f.calls.merges.length, 1);
+  assert.ok(f.calls.peak <= 6); assert.equal(f.calls.merges.length, 1);
   for (const body of f.calls.imports) { assert.equal(body.geminiBatchJobId, f.job.id); assert.equal(body.onlySceneIds.length, 1); assert.equal(body.skipIfDestinationExists, false); }
   assert.equal(f.calls.merges[0].requireAudioForDurationScenes, true);
 });
@@ -156,4 +161,66 @@ test('real manifest store survives reload, validates preset/scene inputs and enf
   await store.withBatchLock(job.id, async () => { blocked = await reloaded.withBatchLock(job.id, async () => 'wrong worker'); });
   assert.equal(blocked, undefined); assert.equal(await reloaded.withBatchLock(job.id, async () => 'released'), 'released');
   await assert.rejects(store.withBatchLock('../bad', async () => {}), /Invalid Batch lock/);
+});
+
+
+test('pending Google checks skip full Baserow lookups and use a ten-second interval', async t => {
+  const f = fixture(t); f.job.state = 'waiting'; f.job.operation = 'batches/pending';
+  f.store.fetchBatchScenes = async () => { throw new Error('Polling must not fetch Baserow scenes'); };
+  f.setOperation({ done: false, metadata: { state: 'BATCH_STATE_RUNNING' } });
+  await f.advance(f.job); assert.equal(f.calls.statuses.length, 1); assert.equal(f.calls.imports.length, 0);
+  assert.equal(f.load('@/lib/geminiBatchProcessing').GEMINI_BATCH_POLL_INTERVAL_MS, 10000);
+});
+test('six processing workers begin importing before all WAVs have been written', async t => {
+  const f = fixture(t);
+  f.job.scenes = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, key: `scene-${i + 1}`, text: `Sentence ${i + 1}`, duration: 3, inputs: {}, existing: false }));
+  await f.advance(f.job);
+  f.setOperation({ done: true, response: { inlinedResponses: { inlinedResponses: f.job.scenes.map(scene => ({ metadata: { key: scene.key }, response: audio })) } } });
+  await f.advance(f.job);
+  assert.equal(f.job.state, 'completed'); assert.ok(f.calls.peak <= 6); assert.ok(f.calls.peak > 2);
+  assert.ok(f.calls.readyAtImport[0] < 12, 'first import starts before the final WAV is ready');
+  assert.equal(f.calls.imports.length, 12); assert.equal(f.calls.merges.length, 1);
+});
+test('fitting permits are shared globally and bound simultaneous work to three', async t => {
+  const f = fixture(t), processing = f.load('@/lib/geminiBatchProcessing');
+  let active = 0, peak = 0;
+  await Promise.all(Array.from({ length: 12 }, () => processing.withBatchFitSlot(async () => {
+    active++; peak = Math.max(peak, active); await new Promise(resolve => setTimeout(resolve, 1)); active--;
+  })));
+  assert.equal(peak, 3); assert.equal(active, 0);
+  await assert.rejects(processing.withBatchFitSlot(async () => { throw new Error('fit failed'); }), /fit failed/);
+  assert.equal(await processing.withBatchFitSlot(async () => 'released'), 'released');
+});
+test('original upload is deduplicated and its checkpoint survives a module reload', async t => {
+  const f = fixture(t), scene = f.job.scenes[0];
+  f.job.state = 'processing'; scene.rawFile = 'scene-1.wav';
+  fs.writeFileSync(path.join(f.store.batchJobDirectory(), scene.rawFile), wav);
+  const processing = f.load('@/lib/geminiBatchProcessing');
+  const [first, second] = await Promise.all([processing.ensureBatchOriginalUploaded(f.job.id, 1), processing.ensureBatchOriginalUploaded(f.job.id, 1)]);
+  assert.equal(first, second); assert.equal(f.calls.uploads.length, 1);
+  const reloaded = loader({ '@/lib/geminiBatchStore': f.store, '@/utils/ffmpeg-direct': { uploadToMinio: async () => { throw new Error('must reuse upload'); } } })('@/lib/geminiBatchProcessing');
+  assert.equal(await reloaded.ensureBatchOriginalUploaded(f.job.id, 1), first);
+  assert.equal(await reloaded.getBatchLocalAudio(f.job.id, 1), path.join(f.store.batchJobDirectory(), scene.rawFile));
+  scene.rawFile = '../wrong.wav'; await assert.rejects(reloaded.getBatchLocalAudio(f.job.id, 1), /Invalid Batch WAV path/);
+});
+test('an interrupted result import resumes the same Google operation without a new submission', async t => {
+  const f = fixture(t); f.job.state = 'processing'; f.job.operation = 'batches/existing'; f.job.roundKeys = ['scene-1', 'scene-2'];
+  f.job.scenes[0].rawFile = 'scene-1.wav'; fs.writeFileSync(path.join(f.store.batchJobDirectory(), 'scene-1.wav'), wav);
+  f.setOperation({ done: true, response: { inlinedResponses: { inlinedResponses: [1, 2].map(id => ({ metadata: { key: `scene-${id}` }, response: audio })) } } });
+  await f.advance(f.job); assert.equal(f.job.state, 'completed'); assert.equal(f.calls.creates.length, 0); assert.equal(f.calls.statuses.length, 1);
+});
+test('targeted scene lookup accepts the live numeric Videos ID field and rejects wrong-video rows', async () => {
+  let row = { id: 7, field_6889: '123' }; const urls = [];
+  const store = loader({ '@/lib/baserow-auth': { getBaserowToken: async () => 'offline', buildAuthHeader: () => ({}) }, '@/lib/ttsAudioReferencesStore': {} }, {
+    process: { ...process, env: { BASEROW_API_URL: 'https://offline' } },
+    fetch: async url => { urls.push(url); return { ok: true, json: async () => row }; },
+  })('@/lib/geminiBatchStore');
+  assert.equal((await store.fetchBatchScene(123, 7)).id, 7); assert.equal(urls[0], 'https://offline/database/rows/table/714/7/');
+  row = { id: 7, field_6889: 123 }; assert.equal((await store.fetchBatchScene(123, 7)).id, 7);
+  for (const value of ['999', 999, '', null, [{ id: 123 }], '123oops', '123.5']) {
+    row = { id: 7, field_6889: value };
+    await assert.rejects(store.fetchBatchScene(123, 7), /no longer belongs/);
+  }
+  row = { id: 8, field_6889: '123' };
+  await assert.rejects(store.fetchBatchScene(123, 7), /no longer belongs/);
 });

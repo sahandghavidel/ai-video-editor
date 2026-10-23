@@ -190,7 +190,8 @@ function sceneRouteFixture(scenes, options = {}) {
     undici: { Agent: class {} },
     '@/lib/baserow-auth': { getBaserowToken: async () => 'offline-token', buildAuthHeader: () => ({}) },
     '@/utils/ffmpeg-direct': { uploadToMinio: async () => { throw new Error('External uploads prohibited in test'); } },
-    '@/lib/geminiBatchStore': options.batchImport || { validateBatchImport: async () => { throw new Error('Unexpected Batch import in Standard test'); } },
+    '@/lib/geminiBatchProcessing': { getBatchLocalAudio: async (_id, sceneId) => `/offline-cache/batch_scene_${sceneId}.wav`, ensureBatchOriginalUploaded: async (_id, sceneId) => `https://offline-audio.invalid/batch_scene_${sceneId}.wav`, withBatchFitSlot: run => run() },
+    '@/lib/geminiBatchStore': options.batchImport ? { ...options.batchImport, fetchBatchScene: async (_videoId, sceneId) => scenes.find(scene => scene.id === sceneId) } : { validateBatchImport: async () => { throw new Error('Unexpected Batch import in Standard test'); } },
   });
   const route = f.load('src/app/api/generate-scene-tts-by-field/route.ts');
   const body = { videoId: 1623, provider: options.provider || 'gemini', language: 'fa',

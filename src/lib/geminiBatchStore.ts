@@ -92,6 +92,30 @@ export async function fetchBatchScenes(videoId: number): Promise<Record<string, 
     if (!payload.next) return scenes;
   }
 }
+export async function fetchBatchScene(videoId: number, sceneId: number): Promise<Record<string, unknown>> {
+  if (!Number.isSafeInteger(sceneId) || sceneId <= 0) throw new Error('Invalid Batch scene ID');
+  const base = process.env.BASEROW_API_URL;
+  if (!base) throw new Error('Missing BASEROW_API_URL');
+  let token = await getBaserowToken();
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(`${base.replace(/\/$/, '')}/database/rows/table/714/${sceneId}/`, {
+      headers: buildAuthHeader(token), cache: 'no-store', signal: AbortSignal.timeout(60_000),
+    });
+    if (response.status === 401 && attempt === 0) { token = await getBaserowToken(true); continue; }
+    if (!response.ok) throw new Error(`Batch scene ${sceneId} lookup failed (${response.status})`);
+    const row = await response.json();
+    // Baserow field 6889 (Videos ID) is a number field, returned as a
+    // numeric string by the live API. It is not a linked-row array.
+    const rawVideoId = row.field_6889;
+    const rowVideoId = typeof rawVideoId === 'number' ? rawVideoId
+      : typeof rawVideoId === 'string' && /^[1-9]\d*$/.test(rawVideoId.trim())
+        ? Number(rawVideoId.trim()) : NaN;
+    if (Number(row.id) !== sceneId || !Number.isSafeInteger(rowVideoId) || rowVideoId !== videoId) {
+      throw new Error(`Batch scene ${sceneId} no longer belongs to video ${videoId}`);
+    }
+    return row;
+  }
+}
 export function sceneBatchInputs(row: Record<string, unknown>) {
   return Object.fromEntries(['order', 'field_6890', 'field_6886', 'field_7368'].map(key => [key, row[key] ?? null]));
 }
@@ -113,14 +137,14 @@ export async function assertBatchPreset(job: GeminiBatchJob) {
 export async function validateBatchImport(id: string, body: Record<string, unknown>, row: Record<string, unknown>) {
   const job = await readBatchJob(id);
   if (job.state !== 'processing' || body.provider !== 'gemini' || Number(body.videoId) !== job.videoId) throw new Error('Invalid Batch import');
-  for (const key of ['sourceTextFieldKey', 'destinationAudioFieldKey', 'originalAudioFieldKey', 'sceneDurationFieldKey', 'language', 'includeHyperFramesSoundEffects', 'ttsSettings']) {
+  for (const key of ['sourceTextFieldKey', 'destinationAudioFieldKey', 'originalAudioFieldKey', 'sceneDurationFieldKey', 'language', 'includeHyperFramesSoundEffects', 'ttsSettings', 'fitAudioToSceneDuration', 'createSilenceForEmptySentence', 'emptySentenceFieldKey']) {
     if (JSON.stringify(body[key]) !== JSON.stringify(job.step2[key])) throw new Error(`Batch import configuration mismatch: ${key}`);
   }
   const scene = job.scenes.find(item => item.id === Number(row.id));
   if (!scene) throw new Error('Scene is not part of this Batch job');
   await assertBatchPreset(job);
   assertBatchScene(job, scene, row);
-  if (scene.text && !scene.rawUrl) throw new Error(`Batch audio not ready for scene ${scene.id}`);
+  if (scene.text && !scene.rawUrl && !scene.rawFile) throw new Error(`Batch audio not ready for scene ${scene.id}`);
   return scene.rawUrl;
 }
 export function publicBatchJob(job: GeminiBatchJob) {
