@@ -1,5 +1,6 @@
 'use client';
 
+import { fetchDubbedWithBatch } from '@/utils/geminiBatchClient';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BaserowRow, getSceneById } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
@@ -4833,7 +4834,7 @@ export default function BatchOperations({
 
     setCreatingDubbedFa(true);
     try {
-      const res = await fetch('/api/create-dubbed-fa', {
+      const res = await fetchDubbedWithBatch('/api/create-dubbed-fa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

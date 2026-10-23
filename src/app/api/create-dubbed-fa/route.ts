@@ -1,3 +1,5 @@
+import { createOrResumeBatchJob, scheduleBatchJob } from '@/lib/geminiBatchRunner';
+import { fetchBatchScenes, isTerminal, listBatchJobs, presetBatchSnapshot, publicBatchJob, sceneBatchInputs } from '@/lib/geminiBatchStore';
 import { runWithGeminiSceneRecovery } from '@/lib/geminiSceneRecovery';
 import { NextRequest, NextResponse } from 'next/server';
 import { Agent } from 'undici';
@@ -459,6 +461,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // A refresh/repeated click attaches to the durable job before touching SRTs.
+    if (selectedLanguageReference.provider === 'gemini' && selectedLanguageReference.gemini.mode === 'batch') {
+      const pending = (await listBatchJobs()).find(job => job.videoId === videoId && job.language === selectedLanguageReference.language && !isTerminal(job));
+      if (pending) {
+        scheduleBatchJob(pending.id);
+        return NextResponse.json({ pending: true, jobId: pending.id, job: publicBatchJob(pending) }, { status: 202 });
+      }
+    }
+
     const baserowFields = selectedLanguageReference.baserowFields;
 
     const baserowUrl = process.env.BASEROW_API_URL;
@@ -867,6 +878,37 @@ export async function POST(request: NextRequest) {
       }),
       dispatcher: STEP2_FETCH_DISPATCHER,
     };
+
+    if (selectedLanguageReference.provider === 'gemini' && selectedLanguageReference.gemini.mode === 'batch') {
+      const finalField = baserowFields.videoFinalDubbedAudioFieldKey?.trim()
+        || (selectedLanguageReference.language === DEFAULT_DUBBED_LANGUAGE ? VIDEO_FINAL_DUBBED_FA_FIELD_KEY : '');
+      if (!finalField || !selectedLanguageReference.id) {
+        return NextResponse.json({ error: 'Batch requires a saved language preset with a final dubbed audio field.' }, { status: 400 });
+      }
+      // Refetch after Step 1 so the manifest contains exactly the text now in Baserow.
+      const currentScenes = await fetchBatchScenes(videoId);
+      if (!currentScenes.length) return NextResponse.json({ error: 'No scenes found for Batch dubbing.' }, { status: 400 });
+      const batchScenes = currentScenes.map(scene => ({
+        id: Number(scene.id), key: `video-${videoId}-scene-${Number(scene.id)}`,
+        text: String(scene[baserowFields.sceneTargetSentenceFieldKey] ?? '').trim(),
+        duration: scene[SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT],
+        inputs: sceneBatchInputs(scene), existing: Boolean(extractUrl(scene[baserowFields.sceneDubbedAudioFieldKey]))
+          && (!baserowFields.sceneOriginalAudioFieldKey || !String(scene[baserowFields.sceneTargetSentenceFieldKey] ?? '').trim()
+            || Boolean(extractUrl(scene[baserowFields.sceneOriginalAudioFieldKey]))),
+      }));
+      const invalid = batchScenes.filter(scene => !Number.isSafeInteger(scene.id) || scene.id <= 0 || !(Number(scene.duration) > 0) || scene.text.length > 12000);
+      if (invalid.length) return NextResponse.json({ error: 'Batch scenes require valid IDs, positive durations, and text within 12000 characters.', sceneIds: invalid.map(scene => scene.id), stopLanguageBatch: true }, { status: 400 });
+      const job = await createOrResumeBatchJob({
+        videoId, language: selectedLanguageReference.language, presetId: selectedLanguageReference.id,
+        presetSnapshot: presetBatchSnapshot(selectedLanguageReference), origin: request.nextUrl.origin,
+        step2: JSON.parse(step2RequestInit.body as string),
+        merge: { videoId, sourceSceneAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
+          destinationVideoAudioFieldKey: finalField, sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
+          requireAudioForDurationScenes: true, language: selectedLanguageReference.language, saveFinalAudioAsWav },
+        scenes: batchScenes,
+      });
+      return NextResponse.json({ pending: true, jobId: job.id, job: publicBatchJob(job) }, { status: 202 });
+    }
 
     type Step2Payload = {
       ok?: unknown;

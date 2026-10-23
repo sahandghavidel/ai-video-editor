@@ -190,6 +190,7 @@ function sceneRouteFixture(scenes, options = {}) {
     undici: { Agent: class {} },
     '@/lib/baserow-auth': { getBaserowToken: async () => 'offline-token', buildAuthHeader: () => ({}) },
     '@/utils/ffmpeg-direct': { uploadToMinio: async () => { throw new Error('External uploads prohibited in test'); } },
+    '@/lib/geminiBatchStore': options.batchImport || { validateBatchImport: async () => { throw new Error('Unexpected Batch import in Standard test'); } },
   });
   const route = f.load('src/app/api/generate-scene-tts-by-field/route.ts');
   const body = { videoId: 1623, provider: options.provider || 'gemini', language: 'fa',
@@ -352,4 +353,27 @@ test('actual Gemini scene route recovery preserves saved scenes and resumes scen
     assert.equal(f.patches.filter(patch => patch.id === id && patch.patch.field_7111).length, 1);
   }
   assert.ok(scenes.every(scene => f.patches.some(patch => patch.id === scene.id && patch.patch.field_7111)));
+});
+
+
+test('actual scene route imports Batch WAV without invoking the realtime provider and saves both scene fields', async () => {
+  const scenes = [{ id: 1, order: '1', field_7110: 'first' }, { id: 2, order: '2', field_7110: 'second' }];
+  const validations = [];
+  const f = sceneRouteFixture(scenes, { batchImport: {
+    fetchBatchScenes: async () => scenes,
+    validateBatchImport: async (id, body, row) => { validations.push({ id, videoId: body.videoId, sceneId: row.id }); return `https://offline-audio.invalid/batch_scene_${row.id}.wav`; },
+  } });
+  const { status, data } = await f.run({ geminiBatchJobId: 'offline-job', onlySceneIds: [2], skipIfDestinationExists: false });
+  assert.equal(status, 200); assert.equal(data.ok, true); assert.equal(f.starts.length, 0);
+  assert.equal(f.patches.length, 2); assert.ok(f.patches.every(patch => patch.id === 2));
+  assert.ok(f.patches.every(patch => Object.values(patch.patch)[0].endsWith('batch_scene_2.wav')));
+  assert.ok(validations.length >= 4, 'validate initial scene, raw import, original save and dubbed save');
+});
+
+test('actual scene route refuses stale Batch imports before writing audio fields', async () => {
+  const f = sceneRouteFixture([{ id: 1, order: '1', field_7110: 'edited' }], { batchImport: {
+    fetchBatchScenes: async () => [], validateBatchImport: async () => { throw new Error('Batch scene changed since submission'); },
+  } });
+  const { status } = await f.run({ geminiBatchJobId: 'offline-job', onlySceneIds: [1] });
+  assert.equal(status, 500); assert.equal(f.patches.length, 0); assert.equal(f.starts.length, 0);
 });

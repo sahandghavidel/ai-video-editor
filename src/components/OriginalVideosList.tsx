@@ -1,5 +1,6 @@
 'use client';
 
+import { fetchDubbedWithBatch } from '@/utils/geminiBatchClient';
 import React, {
   useState,
   useEffect,
@@ -343,7 +344,7 @@ type AudioReferenceLanguageEntry = {
           summary.attempted += 1;
 
           try {
-            const response = await fetch('/api/create-dubbed-fa', {
+            const response = await fetchDubbedWithBatch('/api/create-dubbed-fa', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -4067,7 +4068,7 @@ export default function OriginalVideosList({
           }
 
           try {
-            const response = await fetch('/api/create-dubbed-fa', {
+            const response = await fetchDubbedWithBatch('/api/create-dubbed-fa', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

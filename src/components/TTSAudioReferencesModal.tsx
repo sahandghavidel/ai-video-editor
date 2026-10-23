@@ -662,6 +662,14 @@ export function TTSAudioReferencesModal({
                 {entry.provider === 'gemini' && (
                   <div className='rounded-md border border-blue-200 bg-blue-50 p-3 space-y-2'>
                     <p className='text-xs text-blue-900'>Gemini 3.8 Flash TTS</p>
+                    <label className='block text-xs font-medium text-gray-700'>Generation mode</label>
+                    <select aria-label={`Gemini generation mode for ${entry.language}`} value={entry.gemini.mode || 'standard'}
+                      onChange={(event) => updateEntry(entry.id, { gemini: { ...entry.gemini, mode: event.target.value === 'batch' ? 'batch' : 'standard' } })}
+                      className='w-full px-3 py-2 rounded-md border border-gray-300 text-sm'>
+                      <option value='standard'>Standard — faster response, regular price</option>
+                      <option value='batch'>Batch — 50% cheaper, variable waiting time</option>
+                    </select>
+                    <p className='text-xs text-gray-600'>Batch applies to Create Dubbed. Each scene stays separate. Google may take up to 24 hours; the language waits until all audio is saved. Individual scene regeneration uses Standard.</p>
                     <label className='block text-xs font-medium text-gray-700'>Narrator voice</label>
                     <select aria-label={`Gemini voice for ${entry.language}`} value={GEMINI_TTS_VOICES.some(([voice]) => voice === entry.gemini.voice) ? entry.gemini.voice : ''}
                       onChange={(event) => updateEntry(entry.id, { gemini: { ...entry.gemini, voice: event.target.value || 'voice_' } })}

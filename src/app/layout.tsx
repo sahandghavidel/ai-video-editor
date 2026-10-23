@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import GeminiBatchJobs from '@/components/GeminiBatchJobs';
+import { visibleBatchJobs } from '@/lib/geminiBatchStore';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -31,11 +33,12 @@ export const viewport = {
   themeColor: '#2563eb',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialBatchJobs = await visibleBatchJobs().catch(() => []);
   return (
     <html lang='en'>
       <head>
@@ -62,6 +65,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <GeminiBatchJobs initialJobs={initialBatchJobs} />
       </body>
     </html>
   );

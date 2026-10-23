@@ -1,12 +1,14 @@
 export type LanguageTtsProvider = 'omnivoice' | 'omnivoice-lora' | 'gemini';
 
 export interface GeminiTtsSettings {
+  mode?: 'standard' | 'batch';
   voice: string;
   style: string;
 }
 
 export const GEMINI_TTS_MODEL = 'gemini-3.8-flash-tts';
 export const DEFAULT_GEMINI_TTS_SETTINGS: GeminiTtsSettings = {
+  mode: 'standard',
   voice: 'Charon',
   style: 'Clear, steady, friendly tutorial narration at a natural pace. Pronounce technical terms clearly.',
 };
@@ -36,6 +38,7 @@ export function normalizeGeminiTtsSettings(value: unknown): GeminiTtsSettings {
   const settings = value && typeof value === 'object'
     ? value as Record<string, unknown> : {};
   return {
+    mode: settings.mode === 'batch' ? 'batch' : 'standard',
     voice: typeof settings.voice === 'string'
       ? settings.voice.trim() : DEFAULT_GEMINI_TTS_SETTINGS.voice,
     style: typeof settings.style === 'string'

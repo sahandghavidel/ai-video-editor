@@ -40,6 +40,7 @@ _Generate and compare thumbnail variants, select or export the final artwork, an
 - Transcribe source or final media with Parakeet, Cohere Local, Whisper-family, WhisperX, or MLX WhisperX options.
 - Generate timed subtitles and English SRT files.
 - Produce and merge dubbed audio for one or more configured languages.
+- Choose optional [Gemini TTS Batch mode](docs/Gemini-TTS-Batch.md) per language preset; Standard remains the default.
 - Detect and repair flagged TTS, intro-silence, and transcription issues.
 
 ### Video and audio processing

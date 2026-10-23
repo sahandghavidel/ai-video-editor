@@ -2475,6 +2475,7 @@ export async function POST(request: NextRequest) {
       fitAudioToSceneDuration?: unknown;
       includeHyperFramesSoundEffects?: unknown;
       onlySceneIds?: unknown;
+      geminiBatchJobId?: unknown;
     } | null;
 
     const videoId = parsePositiveInt(body?.videoId);
@@ -2733,6 +2734,21 @@ export async function POST(request: NextRequest) {
     let abortedOnProviderFailure = false;
     let abortedSceneId: number | null = null;
 
+    const batchJobId = typeof body?.geminiBatchJobId === 'string' ? body.geminiBatchJobId : null;
+    const batchStore = batchJobId ? await import('@/lib/geminiBatchStore') : null;
+    const verifyBatchSceneFresh = async (sceneId: number) => {
+      if (!batchJobId) return;
+      const row = (await batchStore!.fetchBatchScenes(videoId)).find(item => Number(item.id) === sceneId);
+      if (!row) throw new Error(`Batch scene ${sceneId} no longer belongs to this video`);
+      await batchStore!.validateBatchImport(batchJobId, body as Record<string, unknown>, row);
+    };
+    if (batchJobId) {
+      if (provider !== 'gemini' || !onlySceneIdSet?.size) throw new Error('Batch import requires explicit Gemini scene IDs');
+      for (const row of orderedScenes.filter(row => onlySceneIdSet.has(Number(row.id)))) {
+        await batchStore!.validateBatchImport(batchJobId, body as Record<string, unknown>, row);
+      }
+    }
+
     const processScene = async (scene: BaserowRow): Promise<void> => {
       const sceneId = parsePositiveInt(scene.id);
       if (!sceneId) {
@@ -2904,6 +2920,7 @@ export async function POST(request: NextRequest) {
           });
 
           try {
+            await verifyBatchSceneFresh(sceneId);
             token = await patchSceneAudioWithAuthRetry({
               baserowUrl,
               token,
@@ -3003,7 +3020,9 @@ export async function POST(request: NextRequest) {
               }
             : ttsSettings;
 
-        const generatedAudioUrl = await generateSceneTts({
+        const generatedAudioUrl = batchJobId
+          ? (await batchStore!.validateBatchImport(batchJobId, body as Record<string, unknown>, scene))!
+          : await generateSceneTts({
           origin: request.nextUrl.origin,
           providerPath,
           text,
@@ -3049,6 +3068,7 @@ export async function POST(request: NextRequest) {
 
         if (saveOriginalAudioBeforeFit && originalAudioFieldKey) {
           try {
+            await verifyBatchSceneFresh(sceneId);
             token = await patchSceneAudioWithAuthRetry({
               baserowUrl,
               token,
@@ -3148,6 +3168,7 @@ export async function POST(request: NextRequest) {
         }
 
         try {
+          await verifyBatchSceneFresh(sceneId);
           token = await patchSceneAudioWithAuthRetry({
             baserowUrl,
             token,
