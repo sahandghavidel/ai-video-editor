@@ -26,6 +26,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
   eu: 'Basque',
   fa: 'Persian',
   fi: 'Finnish',
+  fil: 'Filipino',
   fr: 'French',
   ga: 'Irish',
   gl: 'Galician',
