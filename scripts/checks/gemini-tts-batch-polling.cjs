@@ -33,8 +33,8 @@ test('idle initial load and development remount make zero Batch API requests', a
     const page = mount([]); await flush(); assert.equal(page.requests(), 0); assert.equal(page.timers.size, 0); page.cleanup();
   }
 });
-test('completed and failed server records do not start polling', async () => {
-  const page = mount([{ state: 'completed' }, { state: 'failed' }]); await flush();
+test('completed, failed and cancelled server records do not start polling', async () => {
+  const page = mount([{ state: 'completed' }, { state: 'failed' }, { state: 'cancelled' }]); await flush();
   assert.equal(page.requests(), 0); assert.equal(page.timers.size, 0); page.cleanup();
 });
 test('server-provided pending job resumes polling and completion stops it', async () => {

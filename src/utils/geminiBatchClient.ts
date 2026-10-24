@@ -22,6 +22,7 @@ export async function fetchDubbedWithBatch(url: string, init: RequestInit): Prom
       if (!status.ok || !payload.job) return Response.json({ error: payload.error || 'Unable to find Batch job', stopLanguageBatch: true }, { status: 502 });
       const job: GeminiBatchProgress = payload.job;
       if (job.state === 'completed') return Response.json({ ...job.result, ok: true });
+      if (job.state === 'cancelled') return Response.json({ error: job.error || 'Gemini Batch was cancelled', stopLanguageBatch: true, jobId: job.id }, { status: 409 });
       if (job.state === 'failed') return Response.json({ error: job.error || 'Gemini Batch failed', stopLanguageBatch: true, jobId: job.id }, { status: 502 });
     } catch {
       // Server restart / temporary offline period: keep this language pending.

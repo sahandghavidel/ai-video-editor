@@ -14,13 +14,13 @@ export type BatchScene = {
 export type GeminiBatchJob = {
   id: string; videoId: number; language: string; presetId: string;
   presetSnapshot: string; origin: string; createdAt: string; updatedAt: string;
-  state: 'queued' | 'submitting' | 'waiting' | 'processing' | 'merging' | 'completed' | 'failed';
+  state: 'queued' | 'submitting' | 'waiting' | 'processing' | 'merging' | 'completed' | 'failed' | 'cancelled';
   step2: Record<string, unknown>; merge: Record<string, unknown>;
   scenes: BatchScene[]; round: number; operation?: string; displayName?: string;
   roundKeys?: string[]; mergeAttempts?: number; nextAttemptAt?: number; error?: string;
-  result?: Record<string, unknown>; submissionUnknown?: boolean;
+  result?: Record<string, unknown>; submissionUnknown?: boolean; lookupRetryCount?: number;
 };
-export const isTerminal = (job: GeminiBatchJob) => job.state === 'completed' || job.state === 'failed';
+export const isTerminal = (job: GeminiBatchJob) => job.state === 'completed' || job.state === 'failed' || job.state === 'cancelled';
 export function batchJobDirectory(id: string) {
   if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('Invalid Batch job ID');
   return path.join(BATCH_ROOT, id);
@@ -75,18 +75,35 @@ export async function withBatchLock<T>(name: string, fn: () => Promise<T>): Prom
 export function presetBatchSnapshot(preset: { provider: string; gemini: unknown; baserowFields: unknown }) {
   return JSON.stringify({ provider: preset.provider, gemini: normalizeGeminiTtsSettings(preset.gemini), fields: preset.baserowFields });
 }
+export class BatchSceneLookupError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+  get retryable() { return this.status === 0 || this.status === 408 || this.status === 429 || this.status >= 500; }
+}
+async function fetchBatchSceneResponse(url: string, token: string): Promise<Response> {
+  try {
+    return await fetch(url, { headers: buildAuthHeader(token), cache: 'no-store', signal: AbortSignal.timeout(60_000) });
+  } catch (error) {
+    throw new BatchSceneLookupError(`Batch scene lookup connection failed: ${error instanceof Error ? error.message : 'Network error'}`, 0);
+  }
+}
+async function readBatchSceneJson(response: Response) {
+  try { return await response.json(); }
+  catch { throw new BatchSceneLookupError('Batch scene lookup returned an unreadable response', 502); }
+}
 export async function fetchBatchScenes(videoId: number): Promise<Record<string, unknown>[]> {
   const base = process.env.BASEROW_API_URL;
   if (!base) throw new Error('Missing BASEROW_API_URL');
-  const token = await getBaserowToken();
+  let token = await getBaserowToken();
+  let authRefreshed = false;
   const scenes: Record<string, unknown>[] = [];
   for (let page = 1; ; page++) {
     const params = new URLSearchParams({ filter__field_6889__equal: String(videoId), size: '200', page: String(page) });
-    const response = await fetch(`${base.replace(/\/$/, '')}/database/rows/table/714/?${params}`, {
-      headers: buildAuthHeader(token), cache: 'no-store', signal: AbortSignal.timeout(60_000),
-    });
-    if (!response.ok) throw new Error(`Batch scene lookup failed (${response.status})`);
-    const payload = await response.json();
+    const response = await fetchBatchSceneResponse(`${base.replace(/\/$/, '')}/database/rows/table/714/?${params}`, token);
+    if (response.status === 401 && !authRefreshed) {
+      token = await getBaserowToken(true); authRefreshed = true; page--; continue;
+    }
+    if (!response.ok) throw new BatchSceneLookupError(`Batch scene lookup failed (${response.status})`, response.status);
+    const payload = await readBatchSceneJson(response);
     if (!Array.isArray(payload.results)) throw new Error('Invalid Batch scene lookup');
     scenes.push(...payload.results);
     if (!payload.next) return scenes;
@@ -98,12 +115,10 @@ export async function fetchBatchScene(videoId: number, sceneId: number): Promise
   if (!base) throw new Error('Missing BASEROW_API_URL');
   let token = await getBaserowToken();
   for (let attempt = 0; ; attempt++) {
-    const response = await fetch(`${base.replace(/\/$/, '')}/database/rows/table/714/${sceneId}/`, {
-      headers: buildAuthHeader(token), cache: 'no-store', signal: AbortSignal.timeout(60_000),
-    });
+    const response = await fetchBatchSceneResponse(`${base.replace(/\/$/, '')}/database/rows/table/714/${sceneId}/`, token);
     if (response.status === 401 && attempt === 0) { token = await getBaserowToken(true); continue; }
-    if (!response.ok) throw new Error(`Batch scene ${sceneId} lookup failed (${response.status})`);
-    const row = await response.json();
+    if (!response.ok) throw new BatchSceneLookupError(`Batch scene ${sceneId} lookup failed (${response.status})`, response.status);
+    const row = await readBatchSceneJson(response);
     // Baserow field 6889 (Videos ID) is a number field, returned as a
     // numeric string by the live API. It is not a linked-row array.
     const rawVideoId = row.field_6889;

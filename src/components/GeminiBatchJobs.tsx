@@ -6,7 +6,7 @@ export default function GeminiBatchJobs({ initialJobs }: { initialJobs: GeminiBa
   useEffect(() => {
     let active = true;
     let loading = false;
-    let hasPendingJobs = initialJobs.some(job => job.state !== 'completed' && job.state !== 'failed');
+    let hasPendingJobs = initialJobs.some(job => job.state !== 'completed' && job.state !== 'failed' && job.state !== 'cancelled');
     let refreshRequested = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
@@ -19,7 +19,7 @@ export default function GeminiBatchJobs({ initialJobs }: { initialJobs: GeminiBa
         if (response.ok) {
           const payload = await response.json();
           const nextJobs: GeminiBatchProgress[] = Array.isArray(payload.jobs) ? payload.jobs : [];
-          hasPendingJobs = nextJobs.some(job => job.state !== 'completed' && job.state !== 'failed');
+          hasPendingJobs = nextJobs.some(job => job.state !== 'completed' && job.state !== 'failed' && job.state !== 'cancelled');
         }
       } catch { /* Retry connectivity failures only while a known job is pending. */ }
       finally {

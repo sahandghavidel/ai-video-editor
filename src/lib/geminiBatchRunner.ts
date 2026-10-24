@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
+import { isDeepStrictEqual } from 'util';
 import { writeFile, rename } from 'fs/promises';
 import path from 'path';
 import { Agent } from 'undici';
 import { GEMINI_BATCH_POLL_INTERVAL_MS, getBatchProcessingConcurrency, readBatchOriginalUrl } from '@/lib/geminiBatchProcessing';
 import { BatchApiError, createGeminiBatch, decodeBatchAudio, googleBatchRequest, validateOperationName } from '@/lib/geminiBatchApi';
 import {
-  assertBatchPreset, assertBatchScene, batchJobDirectory, fetchBatchScenes, isTerminal,
+  assertBatchPreset, assertBatchScene, BatchSceneLookupError, batchJobDirectory, fetchBatchScenes, isTerminal,
   listBatchJobs, readBatchJob, saveBatchJob, withBatchLock,
   type GeminiBatchJob, type BatchScene,
 } from '@/lib/geminiBatchStore';
@@ -42,6 +43,7 @@ async function validateCurrentJob(job: GeminiBatchJob) {
     if (!row) throw new Error(`Batch scene ${scene.id} no longer belongs to video ${job.videoId}`);
     assertBatchScene(job, scene, row);
   }
+  job.lookupRetryCount = 0;
   return byId;
 }
 async function reconcileSubmission(job: GeminiBatchJob) {
@@ -113,7 +115,7 @@ export async function advanceBatchJob(job: GeminiBatchJob) {
   if (job.state === 'queued') await validateCurrentJob(job);
   if (job.state === 'submitting') { await reconcileSubmission(job); return; }
   if (job.state === 'queued') {
-    const pending = job.scenes.filter(scene => !scene.existing && !scene.done && scene.text && !scene.rawFile);
+    const pending = job.scenes.filter(scene => !scene.existing && !scene.done && scene.text && !scene.rawFile && !scene.rawUrl);
     if (!pending.length) { job.state = 'processing'; await saveBatchJob(job); }
     else {
       job.roundKeys = pending.map(scene => scene.key);
@@ -144,6 +146,11 @@ export async function advanceBatchJob(job: GeminiBatchJob) {
     const fetchStarted = Date.now();
     const operation = await googleBatchRequest(validateOperationName(job.operation));
     const state = operation.metadata?.state || operation.state;
+    if (state === 'BATCH_STATE_CANCELLED' || state === 'JOB_STATE_CANCELLED' || (operation.done && Number(operation.error?.code) === 1)) {
+      job.state = 'cancelled'; job.nextAttemptAt = undefined;
+      job.error = 'Google Batch was cancelled. Automatic generation retries were stopped.';
+      await saveBatchJob(job); log(job, 'Cancelled by Google; no automatic retry'); return;
+    }
     if (!operation.done && !['BATCH_STATE_SUCCEEDED', 'BATCH_STATE_FAILED', 'BATCH_STATE_CANCELLED', 'BATCH_STATE_EXPIRED'].includes(state)) return;
     const finishedAt = Date.parse(operation.metadata?.endTime || '');
     log(job, 'Results received', { stage: 'status-and-result-download', elapsedMs: Date.now() - fetchStarted,
@@ -238,12 +245,7 @@ export function scheduleBatchJob(id: string, delay = 0) {
         if (isTerminal(job)) return;
         try { await advanceBatchJob(job); }
         catch (error) {
-          const message = safeError(error);
-          // Temporary status/lookup failures retain the operation; POSTs are never repeated blindly.
-          if ((job.state === 'waiting' || job.state === 'submitting') && (error instanceof TypeError || (error instanceof Error && error.name === 'TimeoutError') || (error instanceof BatchApiError && (error.status === 429 || error.status >= 500)))) {
-            job.error = message; job.nextAttemptAt = Date.now() + 60_000;
-          } else { job.state = 'failed'; job.error = message; }
-          await saveBatchJob(job); log(job, 'Job error', { error: message });
+          await handleBatchJobError(job, error);
         }
       });
     } catch (error) { console.error('[Gemini Batch] Worker error:', safeError(error)); }
@@ -260,10 +262,83 @@ export function scheduleBatchJob(id: string, delay = 0) {
 export async function resumeBatchJobs() {
   for (const job of await listBatchJobs()) if (!isTerminal(job)) scheduleBatchJob(job.id);
 }
-export async function createOrResumeBatchJob(input: Omit<GeminiBatchJob, 'id' | 'state' | 'createdAt' | 'updatedAt' | 'round'>) {
+// Only transport/temporary lookup failures are retryable. Changed scenes,
+// changed presets and incorrect video identities remain hard failures.
+export async function handleBatchJobError(job: GeminiBatchJob, error: unknown) {
+  const message = safeError(error);
+  if (error instanceof BatchSceneLookupError && error.retryable) {
+    job.lookupRetryCount = (job.lookupRetryCount || 0) + 1;
+    if (job.lookupRetryCount <= 2) job.nextAttemptAt = Date.now() + 60_000;
+    else { job.state = 'failed'; job.nextAttemptAt = undefined; }
+  } else if ((job.state === 'waiting' || job.state === 'submitting' || (job.state === 'processing' && job.operation))
+      && (error instanceof TypeError || (error instanceof Error && error.name === 'TimeoutError')
+        || (error instanceof BatchApiError && (error.status === 429 || error.status >= 500)))) {
+    job.nextAttemptAt = Date.now() + 60_000;
+  } else { job.state = 'failed'; job.nextAttemptAt = undefined; }
+  job.error = message;
+  await saveBatchJob(job);
+  log(job, 'Job error', { error: message, lookupRetryCount: job.lookupRetryCount,
+    ...(job.nextAttemptAt ? { waitSeconds: 60 } : {}) });
+}
+
+type BatchJobInput = Omit<GeminiBatchJob, 'id' | 'state' | 'createdAt' | 'updatedAt' | 'round'>;
+function sameSavedValue(first: unknown, second: unknown) {
+  return isDeepStrictEqual(JSON.parse(JSON.stringify(first)), JSON.parse(JSON.stringify(second)));
+}
+function canResumeFailedJob(job: GeminiBatchJob, input: BatchJobInput) {
+  if (job.state !== 'failed' || job.presetId !== input.presetId || job.presetSnapshot !== input.presetSnapshot
+      || !sameSavedValue(job.step2, input.step2) || !sameSavedValue(job.merge, input.merge)) return false;
+  const identity = (scene: BatchScene) => ({ id: scene.id, key: scene.key, text: scene.text, duration: scene.duration, inputs: scene.inputs });
+  const expected = [...job.scenes].sort((a, b) => a.id - b.id).map(identity);
+  const current = [...input.scenes].sort((a, b) => a.id - b.id).map(identity);
+  return sameSavedValue(expected, current);
+}
+async function resetFailedJob(job: GeminiBatchJob, input?: BatchJobInput) {
+  if (job.state !== 'failed') throw new Error('Only failed Batch jobs can be retried');
+  await assertBatchPreset(job);
+  if (input) {
+    // The current Baserow snapshot decides what remains saved. If the user
+    // cleared a destination, refit its cached original rather than skipping it.
+    const current = new Map(input.scenes.map(scene => [scene.id, scene]));
+    for (const scene of job.scenes) {
+      scene.existing = current.get(scene.id)!.existing;
+      if (!scene.existing) scene.done = false;
+    }
+    job.origin = input.origin;
+  }
+  job.state = job.submissionUnknown ? 'submitting' : job.operation ? 'waiting'
+    : job.scenes.some(scene => !scene.existing && !scene.done && scene.text && !scene.rawFile && !scene.rawUrl) ? 'queued' : 'processing';
+  job.round = 0; job.mergeAttempts = 0; job.lookupRetryCount = 0;
+  job.nextAttemptAt = undefined; job.error = undefined;
+  for (const scene of job.scenes) { scene.attempts = 0; scene.error = undefined; }
+  await saveBatchJob(job);
+  log(job, 'Resuming failed job with existing audio and operation checkpoints');
+  return job;
+}
+export async function retryFailedBatchJob(id: string) {
+  const job = await withBatchLock(id, async () => resetFailedJob(await readBatchJob(id)));
+  if (!job) throw new Error('Job is busy. Try again shortly.');
+  scheduleBatchJob(job.id); return job;
+}
+export async function createOrResumeBatchJob(input: BatchJobInput) {
   const result = await withBatchLock(`video-${input.videoId}-${input.language}`, async () => {
-    const existing = (await listBatchJobs()).find(job => job.videoId === input.videoId && job.language === input.language && !isTerminal(job));
+    const jobs = (await listBatchJobs()).filter(job => job.videoId === input.videoId && job.language === input.language)
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const existing = jobs.find(job => !isTerminal(job));
     if (existing) { scheduleBatchJob(existing.id); return existing; }
+    const latest = jobs[0];
+    if (latest && canResumeFailedJob(latest, input)) {
+      const resumed = await withBatchLock(latest.id, async () => {
+        const current = await readBatchJob(latest.id);
+        if (!isTerminal(current)) return current; // Another explicit retry won the race.
+        if (!canResumeFailedJob(current, input)) throw new Error('Batch job changed during recovery. Please retry.');
+        return resetFailedJob(current, input);
+      });
+      if (!resumed) throw new Error('Job is busy. Try again shortly.');
+      scheduleBatchJob(resumed.id); return resumed;
+    }
+    // Changed inputs/settings require a new job. Cancelled jobs are never
+    // automatically resumed; a new Create Dubbed click is an explicit new run.
     const now = new Date().toISOString();
     const job: GeminiBatchJob = { ...input, id: randomUUID(), state: 'queued', createdAt: now, updatedAt: now, round: 0 };
     await saveBatchJob(job); scheduleBatchJob(job.id); return job;

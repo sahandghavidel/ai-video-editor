@@ -33,9 +33,10 @@ function fixture(t) {
   const calls = { creates: [], statuses: [], imports: [], merges: [], uploads: [], saves: 0, active: 0, peak: 0, readyAtImport: [] };
   let operation;
   const store = {
+    BatchSceneLookupError: loader({ '@/lib/baserow-auth': {}, '@/lib/ttsAudioReferencesStore': {} })('@/lib/geminiBatchStore').BatchSceneLookupError,
     assertBatchPreset: async () => {}, assertBatchScene: (_job, scene, row) => { if (row.text !== scene.text) throw new Error('stale scene'); },
     batchJobDirectory: () => directory, fetchBatchScenes: async () => job.scenes.map(scene => ({ id: scene.id, text: scene.text })),
-    isTerminal: j => ['completed', 'failed'].includes(j.state), listBatchJobs: async () => [job], readBatchJob: async () => job,
+    isTerminal: j => ['completed', 'failed', 'cancelled'].includes(j.state), listBatchJobs: async () => [job], readBatchJob: async () => job,
     saveBatchJob: async () => { calls.saves++; }, withBatchLock: async (_id, fn) => fn(),
   };
   const load = loader({
@@ -223,4 +224,119 @@ test('targeted scene lookup accepts the live numeric Videos ID field and rejects
   }
   row = { id: 8, field_6889: '123' };
   await assert.rejects(store.fetchBatchScene(123, 7), /no longer belongs/);
+});
+
+
+function rerunInput(job) {
+  const input = { ...job, scenes: job.scenes.map(({ id, key, text, duration, inputs, existing }) => ({ id, key, text, duration, inputs, existing })) };
+  delete input.id; delete input.state; delete input.round;
+  return input;
+}
+async function waitForWorker(job) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (['completed', 'failed', 'cancelled'].includes(job.state)) return;
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  throw new Error('Offline worker did not settle');
+}
+test('Create Dubbed rerun resumes a matching failed job and reuses cached WAVs without Google', async t => {
+  const f = fixture(t); f.job.state = 'failed'; f.job.lookupRetryCount = 3;
+  for (const scene of f.job.scenes.filter(scene => scene.text)) {
+    scene.rawFile = `scene-${scene.id}.wav`; scene.attempts = 3;
+    fs.writeFileSync(path.join(f.store.batchJobDirectory(), scene.rawFile), wav);
+  }
+  const resumed = await f.load('@/lib/geminiBatchRunner').createOrResumeBatchJob(rerunInput(f.job));
+  assert.equal(resumed.id, f.job.id); assert.equal(resumed.state, 'processing'); assert.equal(resumed.lookupRetryCount, 0);
+  await waitForWorker(f.job);
+  assert.equal(f.job.state, 'completed'); assert.equal(f.calls.creates.length, 0); assert.equal(f.calls.imports.length, 3);
+});
+test('cleared scene destination is refitted from cache on rerun rather than incorrectly skipped', async t => {
+  const f = fixture(t); f.job.state = 'failed';
+  for (const scene of f.job.scenes) {
+    scene.done = true;
+    if (scene.text) { scene.rawFile = `scene-${scene.id}.wav`; fs.writeFileSync(path.join(f.store.batchJobDirectory(), scene.rawFile), wav); }
+  }
+  const resumed = await f.load('@/lib/geminiBatchRunner').createOrResumeBatchJob(rerunInput(f.job));
+  assert.ok(resumed.scenes.every(scene => !scene.done)); await waitForWorker(f.job);
+  assert.equal(f.job.state, 'completed'); assert.equal(f.calls.creates.length, 0);
+});
+test('changed text or voice settings never reuse a failed job with stale audio', async t => {
+  for (const change of ['text', 'preset']) {
+    const f = fixture(t); f.job.state = 'failed'; f.job.scenes[0].rawFile = 'scene-1.wav';
+    const input = rerunInput(f.job);
+    if (change === 'text') input.scenes[0].text = 'Changed sentence'; else input.presetSnapshot = 'Changed voice';
+    const fresh = await f.load('@/lib/geminiBatchRunner').createOrResumeBatchJob(input);
+    assert.notEqual(fresh.id, f.job.id); assert.equal(fresh.scenes[0].rawFile, undefined);
+    await new Promise(resolve => setTimeout(resolve, 10)); // Fixture keeps the old failed record; no work is submitted.
+  }
+});
+test('temporary Baserow 503 preserves completed Google operation and recovers after 60 seconds', async t => {
+  const f = fixture(t); await f.advance(f.job);
+  const operationName = f.job.operation;
+  f.setOperation({ done: true, response: { inlinedResponses: { inlinedResponses: [1, 2].map(id => ({ metadata: { key: `scene-${id}` }, response: audio })) } } });
+  const fetchRows = f.store.fetchBatchScenes;
+  f.store.fetchBatchScenes = async () => { throw new f.store.BatchSceneLookupError('Batch scene lookup failed (503)', 503); };
+  try { await f.advance(f.job); assert.fail('expected Baserow failure'); }
+  catch (error) { await f.load('@/lib/geminiBatchRunner').handleBatchJobError(f.job, error); }
+  assert.equal(f.job.state, 'waiting'); assert.equal(f.job.operation, operationName); assert.ok(f.job.nextAttemptAt >= Date.now() + 59000);
+  await f.advance(f.job); assert.equal(f.calls.creates.length, 1);
+  f.job.nextAttemptAt = Date.now() - 1; f.store.fetchBatchScenes = fetchRows;
+  await f.advance(f.job); assert.equal(f.job.state, 'completed'); assert.equal(f.job.lookupRetryCount, 0); assert.equal(f.calls.creates.length, 1);
+});
+test('Baserow lookup retries are bounded and do not consume Google generation recovery rounds', async t => {
+  const f = fixture(t); f.job.state = 'waiting'; f.job.operation = 'batches/existing'; f.job.round = 1;
+  const runner = f.load('@/lib/geminiBatchRunner');
+  for (let retry = 1; retry <= 3; retry++) {
+    await runner.handleBatchJobError(f.job, new f.store.BatchSceneLookupError('Temporary lookup failure', 503));
+    assert.equal(f.job.lookupRetryCount, retry); assert.equal(f.job.round, 1); assert.equal(f.job.operation, 'batches/existing');
+    assert.equal(f.job.state, retry <= 2 ? 'waiting' : 'failed');
+  }
+  assert.equal(f.calls.creates.length, 0);
+});
+test('scene mismatch remains a hard failure instead of being retried as an outage', async t => {
+  const f = fixture(t); f.job.state = 'processing';
+  await f.load('@/lib/geminiBatchRunner').handleBatchJobError(f.job, new Error('Batch scene changed since submission'));
+  assert.equal(f.job.state, 'failed'); assert.equal(f.job.nextAttemptAt, undefined);
+});
+test('cancelled Google operation becomes terminal with no generation or merge retry', async t => {
+  for (const result of [{ done: true, metadata: { state: 'BATCH_STATE_CANCELLED' } }, { done: true, error: { code: 1, message: 'Cancelled' } }]) {
+    const f = fixture(t); f.job.state = 'waiting'; f.job.operation = 'batches/cancelled'; f.job.roundKeys = ['scene-1', 'scene-2'];
+    f.setOperation(result); await f.advance(f.job);
+    assert.equal(f.job.state, 'cancelled'); assert.equal(f.job.nextAttemptAt, undefined); assert.equal(f.job.round, 0);
+    assert.equal(f.calls.creates.length, 0); assert.equal(f.calls.imports.length, 0); assert.equal(f.calls.merges.length, 0);
+  }
+});
+test('cancelled jobs stop the client wait and block following languages', async () => {
+  const client = loader({}, {
+    Response, Event: class {}, window: { dispatchEvent() {} }, setTimeout: callback => { callback(); return 0; },
+    fetch: async (_url, init) => init?.method === 'POST'
+      ? Response.json({ jobId: 'cancelled' }, { status: 202 })
+      : Response.json({ job: { id: 'cancelled', state: 'cancelled', error: 'Cancelled at Google' } }),
+  })('@/utils/geminiBatchClient');
+  const response = await client.fetchDubbedWithBatch('/api/create-dubbed-fa', { method: 'POST' });
+  assert.equal(response.status, 409); assert.equal((await response.json()).stopLanguageBatch, true);
+});
+test('real Baserow lookup errors carry retryable status while wrong-video validation stays strict', async () => {
+  let status = 503;
+  const store = loader({ '@/lib/baserow-auth': { getBaserowToken: async () => 'offline', buildAuthHeader: () => ({}) }, '@/lib/ttsAudioReferencesStore': {} }, {
+    process: { ...process, env: { BASEROW_API_URL: 'https://offline' } },
+    fetch: async () => ({ ok: status === 200, status, json: async () => ({ results: [], next: null }) }),
+  })('@/lib/geminiBatchStore');
+  await assert.rejects(store.fetchBatchScenes(123), error => error instanceof store.BatchSceneLookupError && error.status === 503 && error.retryable);
+  status = 403;
+  await assert.rejects(store.fetchBatchScenes(123), error => error instanceof store.BatchSceneLookupError && !error.retryable);
+});
+
+test('rerunning a failed job with a known Google operation retrieves that operation without resubmission', async t => {
+  const f = fixture(t); f.job.state = 'failed'; f.job.operation = 'batches/already-paid'; f.job.roundKeys = ['scene-1', 'scene-2'];
+  f.setOperation({ done: true, response: { inlinedResponses: { inlinedResponses: [1, 2].map(id => ({ metadata: { key: `scene-${id}` }, response: audio })) } } });
+  const resumed = await f.load('@/lib/geminiBatchRunner').createOrResumeBatchJob(rerunInput(f.job));
+  assert.equal(resumed.id, f.job.id); assert.equal(resumed.state, 'waiting');
+  await waitForWorker(f.job);
+  assert.equal(f.job.state, 'completed'); assert.equal(f.calls.creates.length, 0); assert.equal(f.calls.statuses.length, 1);
+});
+test('explicit failed-job retry API helper refuses a cancelled job', async t => {
+  const f = fixture(t); f.job.state = 'cancelled'; f.job.operation = 'batches/cancelled';
+  await assert.rejects(f.load('@/lib/geminiBatchRunner').retryFailedBatchJob(f.job.id), /Only failed/);
+  assert.equal(f.job.state, 'cancelled'); assert.equal(f.calls.creates.length, 0);
 });
