@@ -26,6 +26,25 @@ test('verification accepts exact hashes, fractional order and silent scenes', ()
   assert.deepEqual(core.verify(before, after, schema, report([{ id: 9, sentenceHash: core.hash(after[0].field_6890) }]), 1628), { reviewedScenes: 2, changedScenes: 1, verified: true, issues: [] });
   assert.equal(core.verify(before, before, schema, report([]), 1628).changedScenes, 0);
 });
+for (const empty of [null, '', '  \t\n']) {
+  test(`originally empty scenes stay exactly unchanged: ${JSON.stringify(empty)}`, () => {
+    const before = rows(), after = rows();
+    before[1].field_6890 = empty; after[1].field_6890 = empty;
+    assert.equal(core.verify(before, after, schema, report([]), 1628).verified, true);
+    for (const replacement of ['Unexpected narration.', ...(empty === '' ? [] : [''])]) {
+      after[1].field_6890 = replacement;
+      const claimedSuccess = report([{ id: 4, sentenceHash: core.hash(replacement) }]);
+      assert.throws(() => core.verify(before, after, schema, claimedSuccess, 1628), /Originally empty Sentence changed for scene IDs: 4/);
+      assert.equal(after[1].field_6890, replacement, 'verification must not roll back saved data');
+    }
+  });
+}
+test('empty-scene guard reports all affected scene IDs even without claimed changes', () => {
+  const before = rows(), after = rows();
+  before[0].field_6890 = null;
+  after[0].field_6890 = 'Filled first'; after[1].field_6890 = 'Filled second';
+  assert.throws(() => core.verify(before, after, schema, report([]), 1628), /scene IDs: 9, 4/);
+});
 for (const [name, mutate] of [
   ['other writable field', (a, r) => { a[0].field_6891 = ''; return r; }],
   ['membership', (a, r) => { a.pop(); return r; }],
@@ -55,8 +74,9 @@ const fs=require('node:fs/promises'),crypto=require('node:crypto');
  const changed=[];
  if(mode!=='noop'){
    const text='Learn "JavaScript".';
-   await fetch(base+'/database/rows/table/714/batch/',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[{id:9,field_6890:text,...(mode==='other-field'?{field_6891:''}:{})}]})});
-   changed.push({id:9,sentenceHash:crypto.createHash('sha256').update(mode==='bad-hash'?'wrong':text).digest('hex')});
+   const id=mode==='fill-empty'?4:9;
+   await fetch(base+'/database/rows/table/714/batch/',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[{id,field_6890:text,...(mode==='other-field'?{field_6891:''}:{})}]})});
+   changed.push({id,sentenceHash:crypto.createHash('sha256').update(mode==='bad-hash'?'wrong':text).digest('hex')});
  }
  if(mode==='partial-failure'){process.exitCode=2;return;}
  const result={videoId:1628,status:'completed',verified:true,totalScenes:data.results.length,changed,issues:[]};
@@ -110,7 +130,7 @@ async function waitJob(root, id, condition = j => core.terminal(j.state)) {
   }
   throw new Error('Fixture worker did not finish');
 }
-for (const mode of ['success', 'noop', 'bad-hash', 'other-field', 'partial-failure', 'timeout']) {
+for (const mode of ['success', 'noop', 'bad-hash', 'other-field', 'partial-failure', 'timeout', 'fill-empty']) {
   test(`standalone worker: ${mode}`, async () => fixture(mode, async ({ root, requests, getRows }) => {
     const [started, duplicate] = await Promise.all([core.startJob(root, 1628), core.startJob(root, 1628)]);
     assert.equal(duplicate.id, started.id);
@@ -124,6 +144,10 @@ for (const mode of ['success', 'noop', 'bad-hash', 'other-field', 'partial-failu
     } else {
       assert.equal(job.state, 'failed');
       assert.ok(job.error);
+      if (mode === 'fill-empty') {
+        assert.match(job.error, /Originally empty Sentence changed for scene IDs: 4/);
+        assert.equal(getRows()[1].field_6890, 'Learn \"JavaScript\".', 'saved data is retained for user review');
+      }
       assert.equal((await core.startJob(root, 1628)).id, started.id, 'uncertain job cannot be blindly restarted');
     }
     const args = JSON.parse(await fs.readFile(path.join(root, 'received-args.json'), 'utf8'));

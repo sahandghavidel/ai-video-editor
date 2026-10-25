@@ -134,6 +134,15 @@ function verify(before, after, schema, report, idVideo) {
   if (!report || report.videoId !== idVideo || report.status !== 'completed' || report.verified !== true || report.totalScenes !== before.length || !Array.isArray(report.changed) || !Array.isArray(report.issues) || report.issues.some(i => typeof i !== 'string')) throw new Error('Codex did not report a complete verified review');
   before = orderedRows(before, idVideo); after = orderedRows(after, idVideo);
   if (before.length !== after.length) throw new Error('Scene membership changed');
+  const changedEmptySceneIds = [];
+  for (let i = 0; i < before.length; i++) {
+    const a = before[i], b = after[i];
+    if (a.id !== b.id || orderKey(a.order) !== orderKey(b.order)) throw new Error('Scene membership or order changed');
+    if (String(a.field_6890 ?? '').trim() === '' && a.field_6890 !== b.field_6890) changedEmptySceneIds.push(a.id);
+  }
+  if (changedEmptySceneIds.length) {
+    throw new Error(`Originally empty Sentence changed for scene IDs: ${changedEmptySceneIds.join(', ')}. Pipeline stopped; review these scenes. Saved values were not rolled back`);
+  }
   const expected = new Map();
   for (const item of report.changed) {
     if (!Number.isSafeInteger(item.id) || expected.has(item.id) || !/^[a-f0-9]{64}$/.test(item.sentenceHash)) throw new Error('Invalid or duplicate changed-scene report');
@@ -142,7 +151,6 @@ function verify(before, after, schema, report, idVideo) {
   let changes = 0;
   for (let i = 0; i < before.length; i++) {
     const a = before[i], b = after[i];
-    if (a.id !== b.id || orderKey(a.order) !== orderKey(b.order)) throw new Error('Scene membership or order changed');
     const changed = a.field_6890 !== b.field_6890;
     if (changed) {
       changes++;
