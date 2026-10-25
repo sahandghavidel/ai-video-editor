@@ -1,5 +1,6 @@
 'use client';
 
+import { runCodexFixEnglish } from '@/utils/codexFixEnglishClient';
 import { fetchDubbedWithBatch } from '@/utils/geminiBatchClient';
 import React, {
   useState,
@@ -11776,6 +11777,33 @@ export default function OriginalVideosList({
         console.log('⊘ Skipping Step: Fix Language All (disabled in config)');
       }
 
+      // Independent, video-ID-only Codex step. Failures must propagate to the pipeline.
+      if (pipelineConfig.codexFixEnglish) {
+        stepNumber++;
+        const freshVideos = await getOriginalVideosData();
+        const targets = getTargetVideosForAllVideosOps(freshVideos).filter(
+          (video) =>
+            !videoSettings.skipVideosWithoutUploadedUrl6881InAllVideosBatch ||
+            videoHasUploadedUrl6881(video),
+        ).sort((a, b) =>
+          (Number(a.field_6902) || a.id) - (Number(b.field_6902) || b.id),
+        );
+        if (!targets.length) {
+          setPipelineStep(`Step ${stepNumber}: Codex Fix English — no eligible videos`);
+        }
+        for (let index = 0; index < targets.length; index++) {
+          const videoId = targets[index].id;
+          await runCodexFixEnglish(videoId, (job) => {
+            setCurrentProcessingVideoId(videoId);
+            setPipelineStep(
+              `Step ${stepNumber}: Codex Fix English · Video ${index + 1}/${targets.length} (#${videoId}) · ${job.phase}`,
+            );
+          });
+        }
+        setCurrentProcessingVideoId(null);
+        await handleRefresh();
+      }
+
       // Step: Improve All
       if (pipelineConfig.improve) {
         stepNumber++;
@@ -12667,6 +12695,7 @@ export default function OriginalVideosList({
       setPipelineStep('');
     } finally {
       pipelineTargetStatusRef.current = null;
+      if (pipelineConfig.codexFixEnglish) setCurrentProcessingVideoId(null);
       setRunningFullPipeline(false);
     }
   };

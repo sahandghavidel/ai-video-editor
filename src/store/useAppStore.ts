@@ -286,6 +286,7 @@ export interface PipelineConfig {
   speedUpSpeed: number;
   speedUpMuteAudio: boolean;
   fixLanguageAll: boolean;
+  codexFixEnglish: boolean;
   improve: boolean;
   generateTTS: boolean;
   sync: boolean;
@@ -752,6 +753,7 @@ const defaultPipelineConfig: PipelineConfig = {
   speedUpSpeed: 4,
   speedUpMuteAudio: true,
   fixLanguageAll: true,
+  codexFixEnglish: false,
   improve: true,
   generateTTS: true,
   sync: true,
@@ -832,6 +834,7 @@ function normalizePipelineConfig(
   return {
     ...defaultPipelineConfig,
     ...config,
+    codexFixEnglish: config?.codexFixEnglish === true,
     speedUpSpeed: pipelineSpeedUpSpeed,
     speedUpMuteAudio: pipelineSpeedUpMuteAudio,
     selectedDubbedLanguagesForPipeline,

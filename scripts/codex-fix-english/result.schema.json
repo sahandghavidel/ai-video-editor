@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["videoId", "status", "verified", "totalScenes", "changed", "issues"],
+  "properties": {
+    "videoId": {"type": "integer"},
+    "status": {"type": "string", "enum": ["completed", "failed", "needs_attention"]},
+    "verified": {"type": "boolean"},
+    "totalScenes": {"type": "integer"},
+    "changed": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "sentenceHash"],
+      "properties": {"id": {"type": "integer"}, "sentenceHash": {"type": "string"}}
+    }},
+    "issues": {"type": "array", "items": {"type": "string"}}
+  }
+}

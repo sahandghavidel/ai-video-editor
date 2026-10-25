@@ -1,5 +1,6 @@
 'use client';
 
+import CodexFixEnglishStatus from './CodexFixEnglishStatus';
 import { useAppStore } from '@/store/useAppStore';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 import {
@@ -392,6 +393,11 @@ export default function PipelineConfig({
       key: 'fixLanguageAll' as const,
       label: 'Fix Language All',
       color: 'text-emerald-500',
+    },
+    {
+      key: 'codexFixEnglish' as const,
+      label: 'Codex Fix English',
+      color: 'text-violet-500',
     },
     { key: 'improve' as const, label: 'Improve', color: 'text-pink-500' },
     {
@@ -1253,6 +1259,8 @@ export default function PipelineConfig({
                 </div>
               );
             })}
+
+            <CodexFixEnglishStatus />
 
             {/* Pipeline override: Dubbed language multi-select */}
             {pipelineConfig.createDubbedLanguage && (
