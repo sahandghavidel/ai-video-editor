@@ -47,7 +47,7 @@ export default function CodexFixEnglishStatus() {
   return <div className='col-span-full mt-3 rounded border border-purple-200 bg-white p-3 text-sm' role='status'>
     {job && <>
       <p>Codex Fix English · Video #{job.videoId} · {job.phase}</p>
-      {job.result && <p>Reviewed {job.result.reviewedScenes} scenes · Changed {job.result.changedScenes} · Saved and verified</p>}
+      {job.result && <p>Reviewed {job.result.reviewedScenes} scenes · Changed {job.result.changedScenes} · Flagged {job.result.flaggedScenes ?? 0} scenes for English review · Saved and verified</p>}
       {job.result?.issues.map((issue, i) => <p key={i} className='text-amber-700'>{issue}</p>)}
       {job.error && <p className='text-red-600'>{job.error}</p>}
       <button type='button' disabled={busy} onClick={() => { void acknowledge(); }} className='mt-2 rounded border px-2 py-1 disabled:opacity-50'>

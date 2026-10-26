@@ -36,7 +36,83 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
+    },
+    {
+      "id": "audio-ref-copy-061592f3-cb47-459b-bc34-17283b8ce9e5",
+      "name": "Czech",
+      "filename": "",
+      "provider": "gemini",
+      "seedMode": "random",
+      "gemini": {
+        "mode": "batch",
+        "voice": "voice_4q6lejvf52dr",
+        "style": ""
+      },
+      "language": "cs",
+      "youtubeLangCode": "cs-en-GB",
+      "referenceText": "Ma nagyon szép az idő, ezért később elmegyek sétálni egyet a közeli parkba.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7429",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7431",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7423",
+        "sceneDubbedAudioFieldKey": "field_7425",
+        "sceneOriginalAudioFieldKey": "field_7427"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 22,
+      "speed": 1,
+      "description": "Default Persian reference voice used for FA dubbing.",
+      "tags": [
+        "fa",
+        "persian",
+        "default"
+      ],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-10-26T01:13:33.913Z"
+    },
+    {
+      "id": "audio-ref-copy-7fd5aaa2-20f6-4f48-9702-b06b1f80dd5e",
+      "name": "Amharic",
+      "filename": "",
+      "provider": "gemini",
+      "seedMode": "random",
+      "gemini": {
+        "mode": "batch",
+        "voice": "voice_s9fg1s5ya12t",
+        "style": ""
+      },
+      "language": "am",
+      "youtubeLangCode": "am-en-GB",
+      "referenceText": "Ma nagyon szép az idő, ezért később elmegyek sétálni egyet a közeli parkba.",
+      "baserowFields": {
+        "videoSrtFieldKey": "field_7430",
+        "videoReferenceSrtFieldKey": "field_6872",
+        "videoFinalDubbedAudioFieldKey": "field_7432",
+        "sceneDurationFieldKey": "field_7107",
+        "sceneReferenceSentenceFieldKey": "field_6890",
+        "sceneTargetSentenceFieldKey": "field_7424",
+        "sceneDubbedAudioFieldKey": "field_7426",
+        "sceneOriginalAudioFieldKey": "field_7428"
+      },
+      "deviceMap": "mps",
+      "dtype": "float32",
+      "numStep": 22,
+      "speed": 1,
+      "description": "Default Persian reference voice used for FA dubbing.",
+      "tags": [
+        "fa",
+        "persian",
+        "default"
+      ],
+      "isDefault": true,
+      "enabled": true,
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-copy-3a44b6fa-cfed-4cf5-91ed-5aec801b596d",
@@ -74,7 +150,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-copy-115785d9-fa27-439a-b678-5d2834132ae9",
@@ -112,7 +188,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "en-default",
@@ -150,7 +226,7 @@
       ],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780026550517-h1zb4v7e",
@@ -183,7 +259,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780026828239-v5e6497h",
@@ -216,7 +292,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780034310693-oxerpe2d",
@@ -249,7 +325,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780035086218-80nf7ni6",
@@ -282,7 +358,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780035965933-kphossuu",
@@ -315,7 +391,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780323772536-1414dpon",
@@ -349,7 +425,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780723908215-kn74nfnb",
@@ -383,7 +459,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780803012962-je49hy9s",
@@ -417,7 +493,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780884860880-hzmu5wcr",
@@ -451,7 +527,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780978346902-mwx5yjxh",
@@ -485,7 +561,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1780988034098-yy9342ub",
@@ -519,7 +595,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781064644767-pqedhfks",
@@ -553,7 +629,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781065130922-ldsb45we",
@@ -587,7 +663,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781144218035-eyc5tvdz",
@@ -621,7 +697,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781152128771-crn2xbf8",
@@ -655,7 +731,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781153930719-huah0y0g",
@@ -689,7 +765,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781156102363-b6shelmd",
@@ -723,7 +799,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781160451053-me6vuufm",
@@ -757,7 +833,7 @@
       "tags": [],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-copy-9dabe682-bce0-46d6-99b2-56b8d0e39c25",
@@ -791,7 +867,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781234780021-o6tpyrsw",
@@ -825,7 +901,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781236780182-nmelbsdb",
@@ -859,7 +935,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781240849711-d847gllu",
@@ -893,7 +969,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781246187580-cytr9876",
@@ -927,7 +1003,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781246997812-sjiyrume",
@@ -961,7 +1037,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781327093132-f4c3imaz",
@@ -995,7 +1071,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781328133907-s5dvmonf",
@@ -1029,7 +1105,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781330127647-2tuhlsqq",
@@ -1063,7 +1139,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781331491876-qg91ugqj",
@@ -1097,7 +1173,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781332858843-irq4epkw",
@@ -1131,7 +1207,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781409089366-3oxr7ipd",
@@ -1165,7 +1241,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781411785664-3fa5ao3j",
@@ -1199,7 +1275,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781413462044-60noxeqq",
@@ -1233,7 +1309,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781414282222-2nup9b7d",
@@ -1267,7 +1343,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781415903239-3df9svpm",
@@ -1301,7 +1377,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781500405774-qx7zt78v",
@@ -1335,7 +1411,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781501487260-7obleoet",
@@ -1369,7 +1445,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781502387868-34ft0kva",
@@ -1403,7 +1479,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781503075838-w68o2ze5",
@@ -1437,7 +1513,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781503851763-pcko9i0s",
@@ -1471,7 +1547,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781504434727-y8kuwkna",
@@ -1505,7 +1581,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781504895973-zjdfj07e",
@@ -1539,7 +1615,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781505361146-lc9ua33q",
@@ -1573,7 +1649,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781506264954-wlaycc3i",
@@ -1607,7 +1683,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781506880605-jhxnqsur",
@@ -1641,7 +1717,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781592164051-ejvqahl8",
@@ -1675,7 +1751,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781593715997-suguqm2p",
@@ -1709,7 +1785,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781594590128-kfchedou",
@@ -1743,7 +1819,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781596205784-52m7jyuw",
@@ -1777,7 +1853,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781597057481-o3nalzo9",
@@ -1811,7 +1887,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781598573850-bk9r2900",
@@ -1845,7 +1921,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781599097389-rsvu1fwg",
@@ -1879,7 +1955,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781664542968-htfzi9jo",
@@ -1913,7 +1989,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781665436336-ibry9sms",
@@ -1947,7 +2023,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-local-1781666281406-hv3lrnr0",
@@ -1981,7 +2057,7 @@
       "tags": [],
       "isDefault": true,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "english-nice-lora-v1",
@@ -2017,7 +2093,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "audio-ref-copy-245b6233-51fe-4765-98e9-0706d03fa311",
@@ -2053,7 +2129,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "persian-lora-v1",
@@ -2092,7 +2168,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "persian-v2-pass-2",
@@ -2131,7 +2207,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "persian-v2-pass-8",
@@ -2170,7 +2246,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     },
     {
       "id": "persian-full-v1",
@@ -2209,7 +2285,7 @@
       ],
       "isDefault": false,
       "enabled": true,
-      "updatedAt": "2026-10-24T05:01:17.208Z"
+      "updatedAt": "2026-10-26T01:13:33.913Z"
     }
   ]
 }

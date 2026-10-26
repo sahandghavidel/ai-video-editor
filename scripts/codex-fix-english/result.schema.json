@@ -1,17 +1,78 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["videoId", "status", "verified", "totalScenes", "changed", "issues"],
+  "required": [
+    "videoId",
+    "status",
+    "verified",
+    "totalScenes",
+    "changed",
+    "issues",
+    "flagged"
+  ],
   "properties": {
-    "videoId": {"type": "integer"},
-    "status": {"type": "string", "enum": ["completed", "failed", "needs_attention"]},
-    "verified": {"type": "boolean"},
-    "totalScenes": {"type": "integer"},
-    "changed": {"type": "array", "items": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "sentenceHash"],
-      "properties": {"id": {"type": "integer"}, "sentenceHash": {"type": "string"}}
-    }},
-    "issues": {"type": "array", "items": {"type": "string"}}
+    "videoId": {
+      "type": "integer"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed",
+        "needs_attention"
+      ]
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "totalScenes": {
+      "type": "integer"
+    },
+    "changed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "sentenceHash"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "sentenceHash": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Only rows whose Sentence text actually changed in this run. Exclude flag-only updates; those belong in flagged."
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "flagged": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "English review flags verified on scoped rows, including flag-only rows with unchanged Sentence."
+    }
   }
 }

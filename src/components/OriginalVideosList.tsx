@@ -73,6 +73,7 @@ import {
   hasSceneTtsAudioForFixTts,
   isSceneWithinFirstFiveMinutes,
   isSceneFlaggedForFixTts,
+  hasCodexEnglishReview,
   parseFixTtsStatus,
   type TtsComparisonAliasEntry,
   withSceneVoiceOverride,
@@ -7058,7 +7059,7 @@ export default function OriginalVideosList({
           .slice(0, 1000);
 
         const latest = await fetchFreshScene(sceneId);
-        if (latest && parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
+        if (!latest || hasCodexEnglishReview(latest) || parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
           return;
         }
 
@@ -7088,7 +7089,7 @@ export default function OriginalVideosList({
 
       const clearSceneFlagged = async (sceneId: number) => {
         const latest = await fetchFreshScene(sceneId);
-        if (latest && parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
+        if (!latest || hasCodexEnglishReview(latest) || parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
           return;
         }
 
@@ -7439,6 +7440,7 @@ export default function OriginalVideosList({
             (await fetchFreshScene(scene.id)) || sceneWithVoiceOverride;
 
           if (
+            hasCodexEnglishReview(latestBeforeAttempts) ||
             parseFixTtsStatus(latestBeforeAttempts['field_7096']) ===
             'confirmed'
           ) {

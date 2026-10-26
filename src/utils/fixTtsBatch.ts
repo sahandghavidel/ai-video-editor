@@ -12,6 +12,9 @@ export type FixTtsAutoFixOptions = {
   comparisonAliases?: TtsComparisonAliasEntry[];
 };
 
+export const hasCodexEnglishReview = (scene: Record<string, unknown>): boolean =>
+  typeof scene['field_7106'] === 'string' && /\[Codex English\]/i.test(scene['field_7106']);
+
 export type FixTtsStatus = 'true' | 'confirmed' | null;
 
 const normalizeFixTtsStatus = (raw: unknown): FixTtsStatus => {
@@ -134,7 +137,7 @@ export const isFixTtsEligibleScene = (scene: BaserowRow): boolean => {
     String(scene['field_6886']).trim().length > 0;
   const hasText = String(scene['field_6890'] ?? '').trim().length > 0;
 
-  return hasFinalVideo && hasText;
+  return hasFinalVideo && hasText && !hasCodexEnglishReview(scene);
 };
 
 const FIX_TTS_INTRO_WINDOW_SECONDS = 5 * 60;

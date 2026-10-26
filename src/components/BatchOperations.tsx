@@ -18,6 +18,7 @@ import {
   hasSceneTtsAudioForFixTts,
   isSceneWithinFirstFiveMinutes,
   isSceneFlaggedForFixTts,
+  hasCodexEnglishReview,
   parseFixTtsStatus,
   withSceneVoiceOverride,
 } from '@/utils/fixTtsBatch';
@@ -3040,7 +3041,7 @@ export default function BatchOperations({
         .slice(0, 1000);
 
       const latest = await fetchFreshScene(sceneId);
-      if (latest && parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
+      if (!latest || hasCodexEnglishReview(latest) || parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
         return;
       }
 
@@ -3074,7 +3075,7 @@ export default function BatchOperations({
     ) => {
       void _diagnostics;
       const latest = await fetchFreshScene(sceneId);
-      if (latest && parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
+      if (!latest || hasCodexEnglishReview(latest) || parseFixTtsStatus(latest['field_7096']) === 'confirmed') {
         return;
       }
 
@@ -3484,6 +3485,7 @@ export default function BatchOperations({
           const latestBeforeAttempts =
             (await fetchFreshScene(scene.id)) || sceneWithVoiceOverride;
           if (
+            hasCodexEnglishReview(latestBeforeAttempts) ||
             parseFixTtsStatus(latestBeforeAttempts['field_7096']) ===
             'confirmed'
           ) {

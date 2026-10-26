@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseFixTtsStatus } from '@/utils/fixTtsBatch';
+import { hasCodexEnglishReview, parseFixTtsStatus } from '@/utils/fixTtsBatch';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
 export const runtime = 'nodejs';
@@ -49,7 +49,7 @@ const hasNonEmptyTextLikeValue = (value: unknown): boolean => {
 function isFixTtsEligibleScene(scene: BaserowSceneRow): boolean {
   const hasFinalVideo = hasNonEmptyTextLikeValue(scene.field_6886);
   const hasText = String(scene.field_6890 ?? '').trim().length > 0;
-  return hasFinalVideo && hasText;
+  return hasFinalVideo && hasText && !hasCodexEnglishReview(scene);
 }
 
 async function fetchScenesForVideo(

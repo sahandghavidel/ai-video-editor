@@ -14,16 +14,18 @@ const schema = [
   { id: 6889, name: 'Videos ID', type: 'number', read_only: false },
   { id: 6891, name: 'TTS', type: 'text', read_only: false },
   { id: 7105, name: 'Fixed Sentence', type: 'text', read_only: false },
+  { id: 7096, name: 'Flagged', type: 'single_select', read_only: false, select_options: [{ id: 73, value: 'true' }, { id: 74, value: 'confirmed' }] },
+  { id: 7106, name: 'Mismatch Reason', type: 'text', read_only: false },
   { id: 9999, name: 'Modified', type: 'last_modified', read_only: true },
 ];
 const rows = () => [
-  { id: 9, order: '1.00000000000000000001', field_6889: '1628', field_6890: 'Learn JavaScript.', field_6891: 'keep-audio', field_7105: 'keep-confirmation' },
-  { id: 4, order: '1.00000000000000000002', field_6889: '1628', field_6890: '', field_6891: '', field_7105: '' },
+  { id: 9, order: '1.00000000000000000001', field_6889: '1628', field_6890: 'Learn JavaScript.', field_6891: 'keep-audio', field_7105: 'keep-confirmation', field_7096: null, field_7106: 'Existing TTS reason' },
+  { id: 4, order: '1.00000000000000000002', field_6889: '1628', field_6890: '', field_6891: '', field_7105: '', field_7096: null, field_7106: '' },
 ];
-const report = changed => ({ videoId: 1628, status: 'completed', verified: true, totalScenes: 2, changed, issues: [] });
+const report = changed => ({ videoId: 1628, status: 'completed', verified: true, totalScenes: 2, changed, flagged: [], issues: [] });
 test('verification accepts exact hashes, fractional order and silent scenes', () => {
   const before = rows(), after = rows(); after[0].field_6890 = 'Learn "JavaScript".';
-  assert.deepEqual(core.verify(before, after, schema, report([{ id: 9, sentenceHash: core.hash(after[0].field_6890) }]), 1628), { reviewedScenes: 2, changedScenes: 1, verified: true, issues: [] });
+  assert.deepEqual(core.verify(before, after, schema, report([{ id: 9, sentenceHash: core.hash(after[0].field_6890) }]), 1628), { reviewedScenes: 2, changedScenes: 1, flaggedScenes: 0, verified: true, issues: [] });
   assert.equal(core.verify(before, before, schema, report([]), 1628).changedScenes, 0);
 });
 for (const empty of [null, '', '  \t\n']) {
@@ -61,6 +63,66 @@ test('video ID and local-origin guards reject invalid inputs', () => {
   assert.throws(() => core.assertLocalRequest(new Request('http://localhost:9540/api/codex-fix-english', { headers: { origin: 'https://external.example' } })));
   assert.throws(() => core.assertLocalRequest(new Request('http://remote.example/api/codex-fix-english')));
 });
+function reviewFixture(reason = 'Check exact command flags against the recording.') {
+  const before = rows(), after = rows();
+  after[0].field_7096 = { id: 73, value: 'true' };
+  after[0].field_7106 = core.mergeEnglishReviewReason(before[0].field_7106, reason);
+  return { before, after, claimed: { ...report([]), flagged: [{ id: 9, reason }] } };
+}
+test('flag-only review preserves earlier reasons and verifies the resolved option ID', () => {
+  const { before, after, claimed } = reviewFixture();
+  const result = core.verify(before, after, schema, claimed, 1628);
+  assert.equal(result.changedScenes, 0); assert.equal(result.flaggedScenes, 1);
+  assert.match(after[0].field_7106, /^Existing TTS reason\n\[Codex English\]/);
+});
+test('flag-only rows reported as changed are accepted only with verified flags and exact hashes', () => {
+  const { before, after, claimed } = reviewFixture();
+  claimed.changed = [{ id: 9, sentenceHash: core.hash(after[0].field_6890) }];
+  const result = core.verify(before, after, schema, claimed, 1628);
+  assert.equal(result.changedScenes, 0); assert.equal(result.flaggedScenes, 1);
+  claimed.changed[0].sentenceHash = core.hash('Wrong text');
+  assert.throws(() => core.verify(before, after, schema, claimed, 1628), /Saved sentence does not match/);
+});
+test('reported unchanged rows still fail without a matching declared review flag', () => {
+  const { before, after, claimed } = reviewFixture();
+  claimed.flagged = [];
+  // No flag updates at all: a plain fabricated Sentence change must still fail.
+  after[0] = structuredClone(before[0]);
+  claimed.changed = [{ id: 9, sentenceHash: core.hash(after[0].field_6890) }];
+  assert.throws(() => core.verify(before, after, schema, claimed, 1628), /Sentence change that was not saved/);
+});
+test('repeated review keeps existing notes byte-for-byte without duplicates', () => {
+  const { after, claimed } = reviewFixture();
+  const before = structuredClone(after);
+  const existing = before[0].field_7106;
+  assert.equal(core.mergeEnglishReviewReason(existing, claimed.flagged[0].reason.toUpperCase()), existing);
+  assert.equal(core.verify(before, after, schema, claimed, 1628).flaggedScenes, 1);
+});
+test('a new English reason reopens a confirmed scene; the same confirmed reason does not', () => {
+  const { before, after, claimed } = reviewFixture();
+  before[0].field_7096 = { id: 74, value: 'confirmed' };
+  assert.equal(core.verify(before, after, schema, claimed, 1628).flaggedScenes, 1);
+  before[0].field_7106 = after[0].field_7106;
+  assert.throws(() => core.verify(before, after, schema, claimed, 1628), /cannot be reopened/);
+});
+for (const [name, change] of [
+  ['missing flag', (f) => { f.after[0].field_7096 = null; }],
+  ['wrong status', (f) => { f.after[0].field_7096 = { id: 74, value: 'confirmed' }; }],
+  ['lost existing reason', (f) => { f.after[0].field_7106 = '[Codex English] ' + f.claimed.flagged[0].reason; }],
+  ['missing new reason', (f) => { f.after[0].field_7106 = f.before[0].field_7106; }],
+  ['unreported flag change', (f) => { f.claimed.flagged = []; }],
+  ['unrelated reason overwrite', (f) => { f.after[1].field_7106 = 'Other'; }],
+  ['unknown scene', (f) => { f.claimed.flagged[0].id = 555; }],
+  ['duplicate reported scene', (f) => { f.claimed.flagged.push(f.claimed.flagged[0]); }],
+  ['flagging a silent scene', (f) => { f.before[0].field_6890 = ''; f.after[0].field_6890 = ''; }],
+]) test('flag verification blocks ' + name, () => {
+  const f = reviewFixture(); change(f);
+  assert.throws(() => core.verify(f.before, f.after, schema, f.claimed, 1628));
+});
+test('review reasons must be concise separate notes, and preserve trailing newlines', () => {
+  for (const reason of ['', '  ', 'two\nlines', '[Codex English] already prefixed']) assert.throws(() => core.mergeEnglishReviewReason('', reason));
+  assert.equal(core.mergeEnglishReviewReason('Previous\n', 'New issue'), 'Previous\n[Codex English] New issue');
+});
 const fakeCodex = `#!/usr/bin/env node
 const fs=require('node:fs/promises'),crypto=require('node:crypto');
 (async()=>{
@@ -71,15 +133,18 @@ const fs=require('node:fs/promises'),crypto=require('node:crypto');
  if(mode==='wait'){setInterval(()=>{},1000);return;}
  const base=process.env.BASEROW_API_URL;
  const data=await(await fetch(base+'/database/rows/table/714/?filter__field_6889__equal=1628')).json();
- const changed=[];
+ const changed=[],flagged=[];
+ const reviewReason='Check exact command flags against the recording.';
  if(mode!=='noop'){
-   const text='Learn "JavaScript".';
+   const text=mode==='flag-only-reported'?data.results[0].field_6890:'Learn "JavaScript".';
    const id=mode==='fill-empty'?4:9;
-   await fetch(base+'/database/rows/table/714/batch/',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[{id,field_6890:text,...(mode==='other-field'?{field_6891:''}:{})}]})});
+   const review=mode.startsWith('flag-')&&mode!=='flag-missing'?{field_7096:{id:73,value:'true'},field_7106:(mode==='flag-overwrite'?'':data.results[0].field_7106+'\\n')+'[Codex English] '+reviewReason}:{};
+   if(mode.startsWith('flag-'))flagged.push({id:9,reason:reviewReason});
+   await fetch(base+'/database/rows/table/714/batch/',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[{id,field_6890:text,...review,...(mode==='other-field'?{field_6891:''}:{})}]})});
    changed.push({id,sentenceHash:crypto.createHash('sha256').update(mode==='bad-hash'?'wrong':text).digest('hex')});
  }
  if(mode==='partial-failure'){process.exitCode=2;return;}
- const result={videoId:1628,status:'completed',verified:true,totalScenes:data.results.length,changed,issues:[]};
+ const result={videoId:1628,status:'completed',verified:true,totalScenes:data.results.length,changed,flagged,issues:[]};
  await fs.writeFile(args[args.indexOf('--output-last-message')+1],JSON.stringify(result));
 })().catch(()=>{process.exitCode=1;});
 `;
@@ -130,15 +195,16 @@ async function waitJob(root, id, condition = j => core.terminal(j.state)) {
   }
   throw new Error('Fixture worker did not finish');
 }
-for (const mode of ['success', 'noop', 'bad-hash', 'other-field', 'partial-failure', 'timeout', 'fill-empty']) {
+for (const mode of ['success', 'noop', 'bad-hash', 'other-field', 'partial-failure', 'timeout', 'fill-empty', 'flag-review', 'flag-missing', 'flag-overwrite', 'flag-only-reported']) {
   test(`standalone worker: ${mode}`, async () => fixture(mode, async ({ root, requests, getRows }) => {
     const [started, duplicate] = await Promise.all([core.startJob(root, 1628), core.startJob(root, 1628)]);
     assert.equal(duplicate.id, started.id);
     const job = await waitJob(root, started.id);
-    if (['success', 'noop'].includes(mode)) {
+    if (['success', 'noop', 'flag-review', 'flag-only-reported'].includes(mode)) {
       assert.equal(job.state, 'completed', job.error);
       assert.equal(job.result.verified, true);
-      assert.equal(job.result.changedScenes, mode === 'success' ? 1 : 0);
+      assert.equal(job.result.flaggedScenes, mode.startsWith('flag-') ? 1 : 0);
+      assert.equal(job.result.changedScenes, ['noop', 'flag-only-reported'].includes(mode) ? 0 : 1);
       assert.equal(getRows()[0].field_6891, 'keep-audio');
       assert.equal(getRows()[0].field_7105, 'keep-confirmation');
     } else {
@@ -228,3 +294,64 @@ test('a leftover completed lock starts a fresh review instead of reusing old app
   assert.notEqual(job.id, id);
   assert.equal((await waitJob(root, job.id)).state, 'completed');
 }));
+
+async function ttsReviewHelpers() {
+  const source = ts.transpileModule(await fs.readFile(path.join(repo, 'src/utils/fixTtsBatch.ts'), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const loaded = { exports: {} };
+  vm.runInNewContext(source, { module: loaded, exports: loaded.exports });
+  return loaded.exports;
+}
+test('TTS and intro eligibility skips English review notes but keeps ordinary mismatch flags', async () => {
+  const helpers = await ttsReviewHelpers();
+  const scene = { id: 1, order: '1', field_6886: 'video.mp4', field_6890: 'Hello', field_7096: { value: 'true' } };
+  const english = { ...scene, field_7106: 'Existing TTS reason\n[Codex English] Check the command.' };
+  const ordinary = { ...scene, id: 2, field_7106: 'TTS transcript mismatch' };
+  assert.equal(helpers.isFixTtsEligibleScene(english), false);
+  assert.equal(helpers.isFixTtsEligibleScene(ordinary), true);
+  assert.deepEqual(Array.from(helpers.getFixTtsEligibleScenes([english, ordinary]), row => row.id), [2]);
+  assert.equal(helpers.isSceneFlaggedForFixTts(english), true, 'shared flag remains filterable');
+  assert.equal(helpers.isFixTtsEligibleScene({ ...english, field_7106: '' }), true, 'manual review can release the hold');
+});
+test('fresh-read SceneCard guard stops before any TTS actions even when supplied scene data is stale', async () => {
+  const helpers = await ttsReviewHelpers();
+  const source = await fs.readFile(path.join(repo, 'src/components/SceneCard.tsx'), 'utf8');
+  const parsed = ts.createSourceFile('SceneCard.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(parsed) === 'handleAutoFixMismatch') callback = node.initializer.arguments[0];
+    ts.forEachChild(node, visit);
+  }
+  visit(parsed); assert.ok(callback);
+  const code = ts.transpileModule('module.exports = ' + callback.getText(parsed), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const loaded = { exports: {} }, statuses = [], lock = { current: false };
+  let sideEffects = 0;
+  const latest = { id: 9, field_6890: 'Hello', field_7106: '[Codex English] Check exact command.' };
+  vm.runInNewContext(code, {
+    module: loaded, autoFixingMismatchLockRef: lock,
+    setAutoFixingMismatchSceneId: () => {}, setAutoFixMismatchStatus: update => { statuses.push(update({})[9]); },
+    getSceneById: async () => latest, dataRef: { current: [] }, hasCodexEnglishReview: helpers.hasCodexEnglishReview,
+    handleTTSProduce: () => { sideEffects++; }, handleVideoGenerate: () => { sideEffects++; },
+    handleTranscribeScene: () => { sideEffects++; }, updateSceneRow: () => { sideEffects++; },
+    console: { error: error => { throw error; } },
+  });
+  await loaded.exports(9, { id: 9, field_7106: '' });
+  assert.match(statuses.at(-1), /English review pending/);
+  assert.equal(sideEffects, 0); assert.equal(lock.current, false);
+});
+test('flagged-scenes API excludes English review scenes while leaving other flagged scenes eligible', async () => {
+  const helpers = await ttsReviewHelpers();
+  const source = ts.transpileModule(await fs.readFile(path.join(repo, 'src/app/api/fix-tts-flagged-scenes/route.ts'), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const loaded = { exports: {} };
+  const base = { order: '1', field_6890: 'Hello', field_6886: 'video.mp4', field_7096: { value: 'true' } };
+  vm.runInNewContext(source, {
+    module: loaded, exports: loaded.exports, URLSearchParams, process: { env: { BASEROW_API_URL: 'http://fixture' } },
+    require: id => id === 'next/server' ? { NextResponse: { json: value => value } } : id.includes('fixTtsBatch') ? helpers : { getBaserowToken: async () => 'fixture', buildAuthHeader: () => ({}) },
+    fetch: async () => ({ ok: true, json: async () => ({ next: null, results: [
+      { ...base, id: 1, field_7106: '[Codex English] Check spelling.' },
+      { ...base, id: 2, field_7106: 'TTS mismatch' },
+    ] }) }),
+    console,
+  });
+  const result = await loaded.exports.POST({ json: async () => ({ videoId: 1628 }) });
+  assert.deepEqual(Array.from(result.flaggedSceneIds), [2]);
+});

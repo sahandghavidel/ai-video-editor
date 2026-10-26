@@ -8,7 +8,7 @@ export type CodexFixEnglishJob = {
   createdAt: string;
   updatedAt: string;
   error?: string;
-  result?: { reviewedScenes: number; changedScenes: number; verified: boolean; issues: string[] };
+  result?: { reviewedScenes: number; changedScenes: number; flaggedScenes?: number; verified: boolean; issues: string[] };
 };
 type JobCore = {
   assertLocalRequest(request: Request): void;

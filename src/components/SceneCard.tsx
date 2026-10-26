@@ -14,6 +14,7 @@ import { useAppStore } from '@/store/useAppStore';
 import {
   type FixTtsAutoFixOptions,
   type FixTtsStatus,
+  hasCodexEnglishReview,
   parseFixTtsStatus,
   type TtsComparisonAliasEntry,
 } from '@/utils/fixTtsBatch';
@@ -5865,6 +5866,8 @@ export default function SceneCard({
                   .trim()
                   .slice(0, 1000);
 
+          const latestForFlag = await getSceneById(sceneId);
+          if (!latestForFlag || hasCodexEnglishReview(latestForFlag)) return;
           const payload: Record<string, unknown> = { field_7096: status };
           if (normalizedReason !== undefined) {
             payload.field_7106 = normalizedReason;
@@ -5914,6 +5917,10 @@ export default function SceneCard({
           string,
           unknown
         > | null;
+        if (hasCodexEnglishReview(initialFromApi ?? initialScene ?? {})) {
+          setStatus('English review pending — skipping Fix TTS. Review the Codex English reason first.');
+          return;
+        }
         const initialFixTtsStatus = parseFixTtsStatus(
           initialFromApi?.['field_7096'] ?? initialScene?.field_7096,
         );
@@ -10057,15 +10064,14 @@ export default function SceneCard({
                       </button>
                     )}
 
-                  {/* Image Overlay Button */}
-                  {typeof scene['field_6886'] === 'string' &&
-                    scene['field_6886'] && (
-                      <>
+                  {/* Scene review status is visible before final video generation. */}
                         <button
                           onClick={() => {
-                            // Keep auto-fix blocked while a confirmation update
-                            // or another auto-fix workflow is in progress.
+                            // Viewing flags and confirming review do not require video.
+                            // Automatic mismatch fixing still requires a final video.
                             if (
+                              typeof scene['field_6886'] !== 'string' ||
+                              !scene['field_6886'] ||
                               addingImageOverlay === scene.id ||
                               autoFixingMismatchSceneId !== null ||
                               confirmingFixTtsSceneId !== null
@@ -10099,7 +10105,7 @@ export default function SceneCard({
                               ? 'Updating confirmation (saving)'
                               : autoFixingMismatchSceneId === scene.id
                               ? 'Fix mismatch (running)'
-                              : `Fix mismatch (${getFixTtsStatusLabel(
+                              : `${scene['field_6886'] ? 'Fix mismatch' : 'Scene review'} (${getFixTtsStatusLabel(
                                   parseFixTtsStatus(scene['field_7096']),
                                 )})`
                           }
@@ -10132,7 +10138,11 @@ export default function SceneCard({
                                     scene as BaserowRow,
                                   );
                                   if (storedReason) {
-                                    return `Fix mismatch (saved reason): ${storedReason}`;
+                                    return `Scene review (saved reason): ${storedReason}`;
+                                  }
+
+                                  if (!scene['field_6886']) {
+                                    return 'Scene review status. Generate a final video to enable Fix mismatch. Right-click to toggle confirmation.';
                                   }
 
                                   return 'Fix mismatch: compare scene text vs transcription; if different, regenerate TTS + sync + retranscribe (max 2 tries). Right-click or press 2 while Final is playing to toggle confirmation.';
@@ -10148,6 +10158,10 @@ export default function SceneCard({
                           )}
                         </button>
 
+                  {/* Image Overlay Button */}
+                  {typeof scene['field_6886'] === 'string' &&
+                    scene['field_6886'] && (
+                      <>
                         <button
                           onClick={() =>
                             handleOpenImageOverlayModal(
