@@ -1,3 +1,4 @@
+import { saveTranslatedAsset } from '@/lib/local-video-export';
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
@@ -917,6 +918,13 @@ export async function POST(request: NextRequest) {
       audioUrl: finalDubbedAudioUrl,
     });
 
+    const localAudio = typeof body?.language === 'string' && body.language.trim()
+      ? await saveTranslatedAsset(videoId, videoRow.field_6870, body.language.trim(), {
+          audioPath: finalAudioPath,
+          extension: finalAudioExtension,
+        })
+      : undefined;
+
     const expectedMergedDurationSec = roundDurationSeconds(
       samplesToSeconds(expectedMergedSamples, AUDIO_SAMPLE_RATE),
     );
@@ -945,6 +953,7 @@ export async function POST(request: NextRequest) {
       audioCodec: saveFinalAudioAsWav ? 'pcm_s16le' : 'aac',
       audioBitrate: saveFinalAudioAsWav ? null : '192k',
       finalDubbedAudioUrl,
+      localAudio,
     });
   } catch (error) {
     console.error('[merge-dubbed-audio-by-field] error:', error);

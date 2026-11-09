@@ -1,4 +1,4 @@
-import { access } from 'fs/promises';
+import { access, writeFile } from 'fs/promises';
 import path from 'path';
 
 import {
@@ -11,7 +11,7 @@ import {
 import {
   resolveNamedVideoExportDir,
   sanitizeExportFileName,
-  writeBufferToResolvedVideoExportDir,
+  saveMediaIfMissing,
 } from '@/lib/local-video-export';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 
@@ -169,22 +169,15 @@ async function saveTranslatedThumbnail(
   exportDir: string,
   languageName: string,
   imageUrl: string,
-): Promise<SavedLanguage> {
+) {
   const asset = await fetchAsset(imageUrl);
   const ext = getExtensionFromUrlOrType(imageUrl, asset.contentType);
-  const fileName = `${languageName} - Thumbnail${ext}`;
-  const filePath = await writeBufferToResolvedVideoExportDir(
-    exportDir,
-    fileName,
-    asset.data,
+  const fileName = sanitizeExportFileName(`${languageName} - Thumbnail${ext}`);
+  const result = await saveMediaIfMissing(exportDir, fileName, tempPath =>
+    writeFile(tempPath, Buffer.from(asset.data)),
   );
+  return { fileName, filePath: result.path, status: result.status };
 
-  return {
-    languageCode: '',
-    languageName,
-    fileName: sanitizeExportFileName(fileName),
-    filePath,
-  };
 }
 
 export async function POST(req: Request) {
@@ -347,10 +340,9 @@ export async function POST(req: Request) {
                   poll.task.languageName,
                   poll.pollResult.imageUrl,
                 );
-                saved.push({
-                  ...savedLanguage,
-                  languageCode: poll.task.languageCode,
-                });
+                const item = { ...savedLanguage, languageCode: poll.task.languageCode, languageName: poll.task.languageName };
+                if (item.status === 'present') skipped.push({ ...item, reason: 'already exists' });
+                else saved.push(item);
                 failedByLanguage.delete(poll.task.languageCode);
               } catch (error) {
                 const failed = {

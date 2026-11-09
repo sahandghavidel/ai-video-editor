@@ -1,3 +1,4 @@
+import { recoverTranslatedFile, saveTranslatedAsset } from '@/lib/local-video-export';
 import { createOrResumeBatchJob, scheduleBatchJob } from '@/lib/geminiBatchRunner';
 import { fetchBatchScenes, isTerminal, listBatchJobs, presetBatchSnapshot, publicBatchJob, sceneBatchInputs } from '@/lib/geminiBatchStore';
 import { runWithGeminiSceneRecovery } from '@/lib/geminiSceneRecovery';
@@ -401,7 +402,7 @@ async function fetchAllScenesForVideo(
   return all;
 }
 
-async function fetchTextFromUrl(url: string): Promise<string> {
+async function fetchSrtBytes(url: string): Promise<ArrayBuffer> {
   const response = await fetch(url, {
     method: 'GET',
     cache: 'no-store',
@@ -414,12 +415,14 @@ async function fetchTextFromUrl(url: string): Promise<string> {
     );
   }
 
-  return await response.text();
+  return response.arrayBuffer();
 }
 
 export async function POST(request: NextRequest) {
+  let localSubtitle: Awaited<ReturnType<typeof saveTranslatedAsset>> | undefined;
   try {
     const body = (await request.json().catch(() => null)) as {
+      recoveryMode?: unknown;
       videoId?: unknown;
       language?: unknown;
       saveFinalAudioAsWav?: unknown;
@@ -453,16 +456,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (selectedLanguageReference.provider === 'gemini') {
-      const settingsError = validateGeminiTtsSettings(selectedLanguageReference.gemini);
-      if (settingsError) return NextResponse.json({ error: settingsError }, { status: 400 });
-      if (!process.env.GEMINI_API_KEY?.trim()) {
-        return NextResponse.json({ error: 'GEMINI_API_KEY is not configured on the server' }, { status: 400 });
-      }
-    }
-
     // A refresh/repeated click attaches to the durable job before touching SRTs.
-    if (selectedLanguageReference.provider === 'gemini' && selectedLanguageReference.gemini.mode === 'batch') {
+    if (body?.recoveryMode !== 'only' && selectedLanguageReference.provider === 'gemini' && selectedLanguageReference.gemini.mode === 'batch') {
       const pending = (await listBatchJobs()).find(job => job.videoId === videoId && job.language === selectedLanguageReference.language && !isTerminal(job));
       if (pending) {
         scheduleBatchJob(pending.id);
@@ -487,6 +482,29 @@ export async function POST(request: NextRequest) {
       token,
       `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
     );
+
+    const recoveryOnly = body?.recoveryMode === 'only';
+    if (recoveryOnly || body?.recoveryMode === 'if-existing') {
+      const finalField = baserowFields.videoFinalDubbedAudioFieldKey ||
+        (requestedLanguage === DEFAULT_DUBBED_LANGUAGE ? VIDEO_FINAL_DUBBED_FA_FIELD_KEY : '');
+      const audioUrl = extractUrl(videoRow[finalField]);
+      if (audioUrl || recoveryOnly) {
+        const [localSubtitle, localAudio] = await Promise.all([
+          recoverTranslatedFile(videoId, videoRow.field_6870, requestedLanguage, 'subtitle',
+            extractUrl(videoRow[baserowFields.videoSrtFieldKey])),
+          recoverTranslatedFile(videoId, videoRow.field_6870, requestedLanguage, 'audio', audioUrl),
+        ]);
+        return NextResponse.json({ ok: true, recoveryOnly: true, localSubtitle, localAudio });
+      }
+    }
+
+    if (selectedLanguageReference.provider === 'gemini') {
+      const settingsError = validateGeminiTtsSettings(selectedLanguageReference.gemini);
+      if (settingsError) return NextResponse.json({ error: settingsError }, { status: 400 });
+      if (!process.env.GEMINI_API_KEY?.trim()) {
+        return NextResponse.json({ error: 'GEMINI_API_KEY is not configured on the server' }, { status: 400 });
+      }
+    }
 
     /* ── Step 0: Auto-fetch missing target SRT from YouTube ── */
 
@@ -667,13 +685,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [srtEnContent, srtFaContent] = await Promise.all([
-      fetchTextFromUrl(srtReferenceUrl),
-      fetchTextFromUrl(srtTargetUrl),
+    const [referenceSrt, targetSrt] = await Promise.all([
+      fetchSrtBytes(srtReferenceUrl),
+      fetchSrtBytes(srtTargetUrl),
     ]);
 
-    const enCues = parseSrtSegments(srtEnContent);
-    const faCues = parseSrtSegments(srtFaContent);
+    const enCues = parseSrtSegments(new TextDecoder().decode(referenceSrt));
+    const faCues = parseSrtSegments(new TextDecoder().decode(targetSrt));
 
     if (enCues.length === 0) {
       return NextResponse.json(
@@ -722,6 +740,10 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    localSubtitle = await saveTranslatedAsset(
+      videoId, videoRow.field_6870, selectedLanguageReference.language, { srt: targetSrt },
+    );
 
     const scenes = await fetchAllScenesForVideo(baserowUrl, token, videoId);
     if (scenes.length === 0) {
@@ -907,7 +929,7 @@ export async function POST(request: NextRequest) {
           requireAudioForDurationScenes: true, language: selectedLanguageReference.language, saveFinalAudioAsWav },
         scenes: batchScenes,
       });
-      return NextResponse.json({ pending: true, jobId: job.id, job: publicBatchJob(job) }, { status: 202 });
+      return NextResponse.json({ pending: true, jobId: job.id, job: publicBatchJob(job), localSubtitle }, { status: 202 });
     }
 
     type Step2Payload = {
@@ -1008,6 +1030,7 @@ export async function POST(request: NextRequest) {
         {
           error: `Step 2 ${selectedLanguageReference.language} TTS generation finished with ${step2FailureCount} failed scene(s). Merge skipped until all scenes succeed.`,
           step: 'step-2-generate-dubbed-audio',
+          localSubtitle,
           remediation: 'retry-failed-scenes',
           stopLanguageBatch: selectedLanguageReference.provider === 'gemini',
           failures: selectedLanguageReference.provider === 'gemini' ? step2Payload?.failures : undefined,
@@ -1067,6 +1090,7 @@ export async function POST(request: NextRequest) {
     if (!finalDubbedAudioFieldKey) {
       return NextResponse.json(
         {
+          localSubtitle,
           error: `Missing final dubbed audio destination field for language '${selectedLanguageReference.language}'. Set Video Final Dubbed Audio Field in Global TTS Settings → Manage Language Presets.`,
         },
         { status: 400 },
@@ -1102,6 +1126,7 @@ export async function POST(request: NextRequest) {
       mergeCorrectionPasses?: unknown;
       finalDubbedAudioUrl?: unknown;
       destinationVideoAudioFieldKey?: unknown;
+      localAudio?: unknown;
       finalAudioFormat?: unknown;
     } | null;
 
@@ -1144,6 +1169,8 @@ export async function POST(request: NextRequest) {
       step: 'step-1-map-target-srt-and-step-2-generate-dubbed-audio-and-step-3-merge-save-final-dubbed-audio',
       videoId,
       language: selectedLanguageReference.language,
+      localSubtitle,
+      localAudio: step3Payload?.localAudio,
       step1: {
         referenceSrtField: baserowFields.videoReferenceSrtFieldKey,
         targetSrtField: baserowFields.videoSrtFieldKey,
@@ -1230,6 +1257,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
+        localSubtitle,
         error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 },

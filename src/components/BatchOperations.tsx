@@ -1,6 +1,6 @@
 'use client';
 
-import { fetchDubbedWithBatch } from '@/utils/geminiBatchClient';
+import { runDubbedBatchItem, type DubbedBatchItem } from '@/utils/dubbedBatchItem';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BaserowRow, getSceneById } from '@/lib/baserow-actions';
 import { useAppStore } from '@/store/useAppStore';
@@ -223,6 +223,7 @@ export default function BatchOperations({
   const [generatingDurationSrt, setGeneratingDurationSrt] = useState(false);
   const [creatingEnSrt, setCreatingEnSrt] = useState(false);
   const [creatingDubbedEn, setCreatingDubbedEn] = useState(false);
+  const [dubbedResult, setDubbedResult] = useState<DubbedBatchItem | null>(null);
   const [creatingDubbedFa, setCreatingDubbedFa] = useState(false);
   const [dubbingLanguage, setDubbingLanguage] = useState('fa');
   const [availableDubbingLanguages, setAvailableDubbingLanguages] = useState<
@@ -1010,6 +1011,7 @@ export default function BatchOperations({
       });
       const payload = (await response.json().catch(() => null)) as {
         error?: string;
+        status?: string;
       } | null;
 
       if (!response.ok) {
@@ -1018,8 +1020,10 @@ export default function BatchOperations({
         );
       }
 
+      setSaveToDbMessage(payload?.status === 'present' ? 'Already present in the video folder' : 'Merged video saved');
       playSuccessSound();
     } catch (error) {
+      setSaveToDbMessage('Merged video export failed');
       console.error('Failed to export merged video:', error);
     } finally {
       setExportingMergedVideo(false);
@@ -4836,79 +4840,13 @@ export default function BatchOperations({
 
     setCreatingDubbedFa(true);
     try {
-      const res = await fetchDubbedWithBatch('/api/create-dubbed-fa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoId: selectedVideoId,
-          language: activeDubbedLanguage,
-          includeHyperFramesSoundEffects:
-            pipelineConfig.includeHyperFramesSoundEffectsInDubbedAudio,
-        }),
+      setDubbedResult(null);
+      const result = await runDubbedBatchItem(selectedVideoId, activeDubbedLanguage, false, {
+        includeHyperFramesSoundEffects: pipelineConfig.includeHyperFramesSoundEffectsInDubbedAudio,
       });
-
-      const payload = (await res.json().catch(() => null)) as {
-        error?: unknown;
-        details?: unknown;
-        failureCount?: unknown;
-        failedSceneIds?: unknown;
-        step?: unknown;
-      } | null;
-
-      if (!res.ok) {
-        const detailEntries = Array.isArray(payload?.details)
-          ? payload.details
-              .map((item) => String(item))
-              .filter(Boolean)
-              .slice(0, 5)
-          : [];
-
-        const failureCountRaw =
-          typeof payload?.failureCount === 'number'
-            ? payload.failureCount
-            : typeof payload?.failureCount === 'string'
-              ? Number(payload.failureCount)
-              : Number.NaN;
-
-        const failureCount = Number.isFinite(failureCountRaw)
-          ? Math.max(0, Math.trunc(failureCountRaw))
-          : 0;
-
-        const failedSceneIds = Array.isArray(payload?.failedSceneIds)
-          ? payload.failedSceneIds
-              .map((value) => Number(value))
-              .filter((value) => Number.isFinite(value) && value > 0)
-              .slice(0, 20)
-          : [];
-
-        if (failureCount > 0) {
-          detailEntries.unshift(`failed scenes: ${failureCount}`);
-        }
-
-        if (failedSceneIds.length > 0) {
-          detailEntries.push(`scene IDs: ${failedSceneIds.join(', ')}`);
-        }
-
-        if (typeof payload?.step === 'string' && payload.step.trim()) {
-          detailEntries.push(`step: ${payload.step.trim()}`);
-        }
-
-        const details = detailEntries.join(' | ');
-        const message =
-          typeof payload?.error === 'string' && payload.error.trim()
-            ? payload.error.trim()
-            : `Create Dubbed ${activeDubbedLanguageLabel} failed (${res.status})`;
-
-        throw new Error(details ? `${message} — ${details}` : message);
-      }
-
+      setDubbedResult(result);
       onRefresh?.();
-      playBatchDoneSound();
-    } catch (error) {
-      console.error(
-        `Create Dubbed ${activeDubbedLanguageLabel} failed:`,
-        error,
-      );
+      if (!result.warnings.length) playBatchDoneSound();
     } finally {
       setCreatingDubbedFa(false);
     }
@@ -6345,6 +6283,14 @@ export default function BatchOperations({
                         : `Create Dubbed ${activeDubbedLanguageLabel}`}
                     </span>
                   </button>
+                  {dubbedResult?.videoId === Number(selectedOriginalVideo.id) &&
+                    dubbedResult.language === activeDubbedLanguage && (
+                    <p role="status" className="mt-2 text-xs">
+                      #{dubbedResult.videoId} · {dubbedResult.language.toUpperCase()} · {dubbedResult.outcome}
+                      {[...dubbedResult.files, ...dubbedResult.warnings].map((line, index) =>
+                        <span key={index} className="block">{line}</span>)}
+                    </p>
+                  )}
                 </div>
 
                 {/* Speed Up Videos */}

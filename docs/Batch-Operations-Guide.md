@@ -119,7 +119,7 @@ Existing completion names include:
 - `Titles All`
 - `Timestamps All`
 - `Create En Srt` measures Videos (6886) and saves the result in Final Video Duration (7107). For scenes without a video, it uses a positive 7107 first, then Duration (6884) if positive. When it uses 6884, it copies that duration into 7107 before generating subtitles.
-- `Create Dubbed <LANG...>` (for example `Create Dubbed FA+ES`)
+- `Create Dubbed <LANG...>` (for example `Create Dubbed FA+ES`) automatically copies each validated translated SRT and finished dubbed audio into the same named video folder as Export All. MinIO and Baserow retain the saved assets. Local media exports skip an existing final filename, including manually edited SRTs. Export All reports saved files, files already present, and failures. The all-videos batch checks previously dubbed items and restores missing files from their stored URLs. Its per-video, per-language report lists saved, present, and recovered files and any local warnings. Queued subtitle downloads wait for the retry window. A failed Gemini job stops later items.
 - `Thumbs All`
 - `Script From Title`
 - `Improve All`

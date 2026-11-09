@@ -1,7 +1,7 @@
 'use client';
 
 import { runCodexFixEnglish } from '@/utils/codexFixEnglishClient';
-import { fetchDubbedWithBatch } from '@/utils/geminiBatchClient';
+import { runDubbedBatchItem, type DubbedBatchItem } from '@/utils/dubbedBatchItem';
 import React, {
   useState,
   useEffect,
@@ -465,14 +465,6 @@ type DubbedLanguagesMetadata = {
   finalAudioFieldByLanguage: Record<string, string>;
 };
 
-type DubbedLanguageRunSummary = {
-  language: string;
-  attempted: number;
-  skippedExisting: number;
-  succeeded: number;
-  failed: number;
-};
-
 function normalizeLanguageCode(value: unknown): string {
   if (typeof value !== 'string') return '';
   return value.trim().toLowerCase();
@@ -637,6 +629,9 @@ export default function OriginalVideosList({
 }: OriginalVideosListProps) {
   const [originalVideos, setOriginalVideos] = useState<BaserowRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportReport, setExportReport] = useState<string[]>([]);
+  const [dubbedReport, setDubbedReport] = useState<DubbedBatchItem[]>([]);
+  const [dubbedBatchNotice, setDubbedBatchNotice] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -3968,7 +3963,10 @@ export default function OriginalVideosList({
       includeHyperFramesSoundEffects?: boolean;
     },
   ) => {
-    if (creatingDubbedLanguageAllVideos) return;
+    if (creatingDubbedLanguageAllVideos) {
+      if (options?.updatePipelineProgress) throw new Error('A dubbing batch is already running');
+      return;
+    }
 
     try {
       setCreatingDubbedLanguageAllVideos(true);
@@ -3979,6 +3977,8 @@ export default function OriginalVideosList({
       setCreatingDubbedLanguageCurrentVideoIndex(0);
       setCreatingDubbedLanguageTotalVideos(0);
       setError(null);
+      setDubbedReport([]);
+      setDubbedBatchNotice('');
 
       const metadata = await loadDubbedLanguagesAllVideos();
 
@@ -4017,7 +4017,7 @@ export default function OriginalVideosList({
       setCreatingDubbedLanguageTotalLanguages(runnableLanguages.length);
       setCreatingDubbedLanguageTotalVideos(processingVideos.length);
 
-      const languageSummaries: DubbedLanguageRunSummary[] = [];
+      const results: DubbedBatchItem[] = [];
       let stoppedForGeminiFailure = false;
 
       for (const [languageIndex, languageCode] of runnableLanguages.entries()) {
@@ -4029,15 +4029,6 @@ export default function OriginalVideosList({
         console.log(
           `Create Dubbed ${languageLabel}: processing ${processingVideos.length} videos...`,
         );
-
-        let stopForGeminiFailure = false;
-        const languageSummary: DubbedLanguageRunSummary = {
-          language: languageCode,
-          attempted: processingVideos.length,
-          skippedExisting: 0,
-          succeeded: 0,
-          failed: 0,
-        };
 
         const destinationFieldKey =
           metadata.finalAudioFieldByLanguage[languageCode] ||
@@ -4059,116 +4050,42 @@ export default function OriginalVideosList({
             );
           }
 
-          if (
-            hasStoredDubbedFinalAudioForLanguage(video, destinationFieldKey)
-          ) {
-            languageSummary.skippedExisting += 1;
-            console.log(
-              `Create Dubbed ${languageLabel}: skipping video #${video.id} (existing final dubbed audio in ${destinationFieldKey})`,
-            );
-            continue;
+          const result = await runDubbedBatchItem(
+            video.id, languageCode, hasStoredDubbedFinalAudioForLanguage(video, destinationFieldKey),
+            { saveFinalAudioAsWav: options?.saveDubbedAudioAsWav,
+              includeHyperFramesSoundEffects: options?.includeHyperFramesSoundEffects },
+          );
+          results.push(result);
+          setDubbedReport([...results]);
+          if (result.stop) {
+            stoppedForGeminiFailure = true;
+            break;
           }
-
-          try {
-            const response = await fetchDubbedWithBatch('/api/create-dubbed-fa', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                videoId: video.id,
-                language: languageCode,
-                saveFinalAudioAsWav: options?.saveDubbedAudioAsWav === true,
-                includeHyperFramesSoundEffects:
-                  options?.includeHyperFramesSoundEffects === true,
-              }),
-            });
-
-            const payload = (await response.json().catch(() => null)) as {
-              error?: unknown;
-              details?: unknown;
-              stopLanguageBatch?: unknown;
-            } | null;
-
-            if (!response.ok) {
-              stopForGeminiFailure = payload?.stopLanguageBatch === true;
-              const details = Array.isArray(payload?.details)
-                ? payload.details
-                    .map((item) => String(item))
-                    .filter(Boolean)
-                    .slice(0, 5)
-                    .join(' | ')
-                : '';
-
-              const message =
-                typeof payload?.error === 'string' && payload.error.trim()
-                  ? payload.error.trim()
-                  : `Create Dubbed ${languageLabel} failed (${response.status})`;
-
-              throw new Error(details ? `${message} — ${details}` : message);
-            }
-
-            languageSummary.succeeded += 1;
-            console.log(
-              `Create Dubbed ${languageLabel} complete for video #${video.id}`,
-            );
-          } catch (error) {
-            languageSummary.failed += 1;
-            console.error(
-              `Create Dubbed ${languageLabel} failed for video #${video.id}:`,
-              error,
-            );
-          }
-
-          if (stopForGeminiFailure) break;
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
 
-        languageSummaries.push(languageSummary);
-        if (stopForGeminiFailure) {
-          stoppedForGeminiFailure = true;
-          console.error(`Create Dubbed paused on ${languageLabel}: Gemini scenes remain incomplete; later languages were not started.`);
-          break;
-        }
+        if (stoppedForGeminiFailure) break;
       }
 
       await handleRefresh();
-
-      const summaryText = languageSummaries
-        .map(
-          (summary) =>
-            `${summary.language.toUpperCase()} ok:${summary.succeeded} skip:${summary.skippedExisting} fail:${summary.failed}`,
-        )
-        .join(' | ');
-
-      if (summaryText) {
-        console.log(`Create Dubbed summary: ${summaryText}`);
-      }
-
-      const totalFailures = languageSummaries.reduce(
-        (total, summary) => total + summary.failed,
-        0,
-      );
-
-      if (totalFailures > 0) {
-        setError(`Create Dubbed completed with some failures. ${summaryText}`);
-      }
-
-      if (playSound && !stoppedForGeminiFailure) {
+      const failed = results.filter(item => item.outcome === 'Failed').length;
+      const warnings = results.filter(item => item.outcome !== 'Failed' && item.warnings.length).length;
+      const remaining = processingVideos.length * runnableLanguages.length - results.length;
+      if (failed || warnings || remaining) {
+        const message = `Create Dubbed: ${failed} failed, ${warnings} with local file warnings, ${remaining} not started.`;
+        setDubbedBatchNotice(message);
+        if (options?.updatePipelineProgress) throw new Error(message);
+        if (playSound) playErrorSound();
+      } else if (playSound) {
         await playSuccessAndNotifyBatchCompletion(
           `Create Dubbed ${formatLanguageSelectionShortLabel(runnableLanguages)}`,
         );
       }
     } catch (error) {
-      console.error('Create Dubbed all failed:', error);
-
-      if (playSound) {
-        playErrorSound();
-      }
-
-      setError(
-        `Failed to create dubbed languages for all videos: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      setDubbedBatchNotice(message);
+      if (options?.updatePipelineProgress) throw error;
+      if (playSound) playErrorSound();
     } finally {
       setCreatingDubbedLanguageVideoId(null);
       setCreatingDubbedLanguageCurrentLanguage(null);
@@ -5249,6 +5166,8 @@ export default function OriginalVideosList({
 
     const payload = (await response.json().catch(() => null)) as {
       error?: string;
+      filePath?: string;
+      status?: string;
     } | null;
 
     if (!response.ok) {
@@ -5256,6 +5175,7 @@ export default function OriginalVideosList({
         payload?.error || `Failed to export file (${response.status})`,
       );
     }
+    setExportReport([`#${videoId} · ${payload?.status === 'present' ? 'Already present' : 'Saved'} · ${payload?.filePath || fileName}`]);
   };
 
   const exportTextFileForVideo = async (
@@ -5293,7 +5213,9 @@ export default function OriginalVideosList({
     });
 
     const payload = (await response.json().catch(() => null)) as {
-      exportDir?: string;
+      writtenFiles?: string[];
+      existingFiles?: string[];
+      skippedAssets?: string[];
       error?: string;
     } | null;
 
@@ -5304,13 +5226,16 @@ export default function OriginalVideosList({
       );
     }
 
-    console.log(
-      `Exported assets for video #${videoId} to ${payload?.exportDir || 'local folder'}`,
-    );
+    setExportReport(previous => [...previous,
+      ...(payload?.writtenFiles ?? []).map(file => `#${videoId} · Saved · ${file}`),
+      ...(payload?.existingFiles ?? []).map(file => `#${videoId} · Already present · ${file}`),
+      ...(payload?.skippedAssets ?? []).map(reason => `#${videoId} · Failed · ${reason}`),
+    ]);
   };
 
   const handleDownloadAssetsZip = async (videoId: number) => {
     try {
+      setExportReport([]);
       setDownloadingAssetsZipVideoId(videoId);
       setError(null);
 
@@ -5339,6 +5264,7 @@ export default function OriginalVideosList({
     if (downloadingAssetsZipAll) return;
 
     try {
+      setExportReport([]);
       setDownloadingAssetsZipAll(true);
       setDownloadingAssetsZipVideoId(null);
       setError(null);
@@ -5368,7 +5294,7 @@ export default function OriginalVideosList({
             `Failed to export assets folder for video #${video.id}:`,
             error,
           );
-          // Continue with the next video.
+          setExportReport(previous => [...previous, `#${video.id} · Failed · ${error instanceof Error ? error.message : String(error)}`]);
         }
 
         await new Promise((resolve) => setTimeout(resolve, 150));
@@ -12928,6 +12854,26 @@ export default function OriginalVideosList({
     }
   };
 
+  const exportResults = exportReport.length > 0 && (
+    <details className="my-3 rounded border p-2 text-sm">
+      <summary>Export results ({exportReport.length})</summary>
+      <ul className="max-h-64 overflow-auto">{exportReport.map((line, index) => <li key={index}>{line}</li>)}</ul>
+    </details>
+  );
+  const dubbedBatchReport = (dubbedReport.length > 0 || dubbedBatchNotice) && (
+    <details className="my-3 rounded border p-2 text-sm" open={dubbedBatchNotice ? true : undefined}>
+      <summary>Dubbing results · {dubbedReport.filter(item => item.outcome === 'Dubbed').length} dubbed · {dubbedReport.filter(item => item.outcome === 'Previously dubbed').length} previously dubbed · {dubbedReport.reduce((n, item) => n + item.recovered, 0)} files recovered</summary>
+      {dubbedBatchNotice && <p role="status">{dubbedBatchNotice}</p>}
+      <ul>{dubbedReport.map(item => (
+        <li key={`${item.videoId}-${item.language}`}>
+          #{item.videoId} · {item.language.toUpperCase()} · {item.outcome}
+          {item.files.length > 0 && ` · ${item.files.join(', ')}`}
+          {item.warnings.map((warning, index) => <div key={index} className="text-amber-800">{warning}</div>)}
+        </li>
+      ))}</ul>
+    </details>
+  );
+
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
@@ -12942,6 +12888,8 @@ export default function OriginalVideosList({
   if (error) {
     return (
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
+        {exportResults}
+      {dubbedBatchReport}
         <div className='flex items-center justify-between'>
           <div className='flex items-center text-red-600'>
             <AlertCircle className='w-5 h-5 mr-2' />
@@ -12960,6 +12908,8 @@ export default function OriginalVideosList({
 
   return (
     <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8'>
+      {exportResults}
+      {dubbedBatchReport}
       {/* Header - Clickable to expand/collapse */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}

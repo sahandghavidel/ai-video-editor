@@ -2,37 +2,11 @@ import {
   parseVideoExportId,
   resolveNamedVideoExportDir,
   sanitizeExportFileName,
-  writeBufferToResolvedVideoExportDir,
-  writeBufferToVideoExportDir,
+  ensureVideoExportDir,
+  exportRemoteMedia,
 } from '@/lib/local-video-export';
 
 export const runtime = 'nodejs';
-
-function getExtensionFromUrlOrType(url: string, contentType: string): string {
-  const lowerType = contentType.toLowerCase();
-  if (lowerType.includes('audio/mp4')) return '.m4a';
-  if (lowerType.includes('audio/mpeg')) return '.mp3';
-  if (lowerType.includes('audio/wav')) return '.wav';
-  if (lowerType.includes('video/mp4')) return '.mp4';
-  if (lowerType.includes('video/webm')) return '.webm';
-  if (lowerType.includes('video/quicktime')) return '.mov';
-  if (lowerType.includes('image/png')) return '.png';
-  if (lowerType.includes('image/jpeg')) return '.jpg';
-  if (lowerType.includes('image/webp')) return '.webp';
-
-  try {
-    const pathname = new URL(url).pathname;
-    const dot = pathname.lastIndexOf('.');
-    if (dot > -1 && dot < pathname.length - 1) {
-      const ext = pathname.slice(dot);
-      if (/^\.[a-zA-Z0-9]+$/.test(ext)) return ext.toLowerCase();
-    }
-  } catch {
-    // Use the fallback extension below if URL parsing fails.
-  }
-
-  return '.bin';
-}
 
 function hasExtension(fileName: string): boolean {
   return /\.[a-zA-Z0-9]+$/.test(fileName);
@@ -67,32 +41,11 @@ export async function POST(req: Request) {
     const rawFileName =
       typeof body?.fileName === 'string' ? body.fileName.trim() : 'exported-file';
 
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) {
-      const t = await response.text().catch(() => '');
-      return Response.json(
-        { error: `Failed to fetch file (${response.status}): ${t}` },
-        { status: 502 },
-      );
-    }
-
-    const contentType =
-      response.headers.get('content-type') || 'application/octet-stream';
-    const safeBaseName = sanitizeExportFileName(rawFileName);
-    const fileName = hasExtension(safeBaseName)
-      ? safeBaseName
-      : `${safeBaseName}${getExtensionFromUrlOrType(url, contentType)}`;
+    const name = sanitizeExportFileName(rawFileName);
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
-    const data = await response.arrayBuffer();
-    const filePath = title
-      ? await writeBufferToResolvedVideoExportDir(
-          await resolveNamedVideoExportDir(videoId, title),
-          fileName,
-          data,
-        )
-      : await writeBufferToVideoExportDir(videoId, fileName, data);
-
-    return Response.json({ ok: true, filePath });
+    const dir = title ? await resolveNamedVideoExportDir(videoId, title) : await ensureVideoExportDir(videoId);
+    const result = await exportRemoteMedia(dir, name, url, !hasExtension(name));
+    return Response.json({ ok: true, filePath: result.path, status: result.status });
   } catch (error) {
     console.error('Error exporting URL file:', error);
     return Response.json(

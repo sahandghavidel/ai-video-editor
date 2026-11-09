@@ -3,11 +3,11 @@ import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
 import {
   parseVideoExportId,
   resolveNamedVideoExportDir,
-  sanitizeExportFileName,
-  writeBufferToResolvedVideoExportDir,
+  getVideoExportTitle,
+  getLanguageExportName,
+  exportRemoteMedia,
   writeTextToResolvedVideoExportDir,
 } from '@/lib/local-video-export';
-import { getLanguageDisplayName } from '@/utils/languageNames';
 
 export const runtime = 'nodejs';
 
@@ -204,78 +204,8 @@ function buildMetadataText(row: BaserowRow): string {
     .join('\n\n');
 }
 
-function cleanTitleLine(line: string): string {
-  return line
-    .replace(/^\s*\d+\)\s*/, '')
-    .replace(/^\s*[-*•]\s*/, '')
-    .trim();
-}
-
-function pickTitleFromField(rawTitleField: unknown, videoId: number): string {
-  const raw = typeof rawTitleField === 'string' ? rawTitleField : '';
-  const candidates = raw.split('\n').map(cleanTitleLine).filter(Boolean);
-
-  return candidates[0] || `video_${videoId}`;
-}
-
 function withEnglishPrefix(fileName: string): string {
   return fileName.startsWith('English - ') ? fileName : `English - ${fileName}`;
-}
-
-function formatLanguageNameForFile(languageCode: string): string {
-  const displayName = getLanguageDisplayName(languageCode);
-  const regionMatch = displayName.match(/^(.+?)\s+-\s+(.+)$/);
-
-  if (regionMatch) {
-    return `${regionMatch[1].trim()} (${regionMatch[2].trim()})`;
-  }
-
-  return displayName;
-}
-
-function getExtensionFromUrlOrType(url: string, contentType: string): string {
-  const lowerType = contentType.toLowerCase();
-  if (lowerType.includes('audio/wav')) return '.wav';
-  if (lowerType.includes('audio/mpeg')) return '.mp3';
-  if (lowerType.includes('audio/mp3')) return '.mp3';
-  if (lowerType.includes('audio/mp4')) return '.m4a';
-  if (lowerType.includes('audio/x-m4a')) return '.m4a';
-  if (lowerType.includes('video/mp4')) return '.mp4';
-  if (lowerType.includes('video/webm')) return '.webm';
-  if (lowerType.includes('video/quicktime')) return '.mov';
-  if (lowerType.includes('image/png')) return '.png';
-  if (lowerType.includes('image/jpeg')) return '.jpg';
-  if (lowerType.includes('image/webp')) return '.webp';
-
-  try {
-    const pathname = new URL(url).pathname;
-    const dot = pathname.lastIndexOf('.');
-    if (dot > -1 && dot < pathname.length - 1) {
-      const ext = pathname.slice(dot);
-      if (/^\.[a-zA-Z0-9]+$/.test(ext)) return ext.toLowerCase();
-    }
-  } catch {
-    // Keep the generic extension if URL parsing fails.
-  }
-
-  return '.bin';
-}
-
-async function fetchAsset(url: string): Promise<{
-  data: ArrayBuffer;
-  contentType: string;
-}> {
-  const res = await fetch(url, { cache: 'no-store' });
-
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch asset (${res.status}): ${t}`);
-  }
-
-  return {
-    data: await res.arrayBuffer(),
-    contentType: res.headers.get('content-type') || 'application/octet-stream',
-  };
 }
 
 export async function POST(req: Request) {
@@ -305,74 +235,31 @@ export async function POST(req: Request) {
     const { entries: audioReferenceEntries } =
       await loadTtsAudioReferencesStore();
 
-    const title = sanitizeExportFileName(
-      pickTitleFromField(row.field_6870, videoId),
-      `video_${videoId}`,
-    );
+    const title = getVideoExportTitle(row.field_6870, videoId);
     const exportDir = await resolveNamedVideoExportDir(videoId, title);
     const sentenceText = buildSentencesText(sceneRows);
     const metadataText = buildMetadataText(row);
     const writtenFiles: string[] = [];
     const skippedAssets: string[] = [];
 
-    const selectedThumbnailUrl = extractUrlFromField(row.field_7100);
-    if (selectedThumbnailUrl) {
+    const existingFiles: string[] = [];
+    async function exportMedia(name: string, url: string, inferExtension = false) {
       try {
-        const asset = await fetchAsset(selectedThumbnailUrl);
-        const ext = getExtensionFromUrlOrType(
-          selectedThumbnailUrl,
-          asset.contentType,
-        );
-        const filePath = await writeBufferToResolvedVideoExportDir(
-          exportDir,
-          withEnglishPrefix(`thumbnail${ext}`),
-          asset.data,
-        );
-        writtenFiles.push(filePath);
+        const result = await exportRemoteMedia(exportDir, name, url, inferExtension);
+        (result.status === 'present' ? existingFiles : writtenFiles).push(result.path);
       } catch (error) {
-        const reason =
-          error instanceof Error ? error.message : 'Unknown thumbnail error';
-        skippedAssets.push(`thumbnail: ${reason}`);
+        skippedAssets.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    const finalVideoUrl = extractUrlFromField(row.field_6858);
-    if (finalVideoUrl) {
-      try {
-        const finalAsset = await fetchAsset(finalVideoUrl);
-        const finalExt = getExtensionFromUrlOrType(
-          finalVideoUrl,
-          finalAsset.contentType,
-        );
-        const filePath = await writeBufferToResolvedVideoExportDir(
-          exportDir,
-          withEnglishPrefix(`${title}${finalExt}`),
-          finalAsset.data,
-        );
-        writtenFiles.push(filePath);
-      } catch (error) {
-        const reason =
-          error instanceof Error ? error.message : 'Unknown final video error';
-        skippedAssets.push(`final_video: ${reason}`);
-      }
-    }
+    const thumbnail = extractUrlFromField(row.field_7100);
+    if (thumbnail) await exportMedia(withEnglishPrefix('thumbnail'), thumbnail, true);
 
-    const englishSrtUrl = extractUrlFromField(row.field_6872);
-    if (englishSrtUrl) {
-      try {
-        const srtAsset = await fetchAsset(englishSrtUrl);
-        const filePath = await writeBufferToResolvedVideoExportDir(
-          exportDir,
-          'English - United Kingdom.srt',
-          srtAsset.data,
-        );
-        writtenFiles.push(filePath);
-      } catch (error) {
-        const reason =
-          error instanceof Error ? error.message : 'Unknown English SRT error';
-        skippedAssets.push(`english_srt: ${reason}`);
-      }
-    }
+    const video = extractUrlFromField(row.field_6858);
+    if (video) await exportMedia(withEnglishPrefix(title), video, true);
+
+    const englishSrt = extractUrlFromField(row.field_6872);
+    if (englishSrt) await exportMedia('English - United Kingdom.srt', englishSrt);
 
     const seenTranslatedSrtFields = new Set<string>();
     const seenTranslatedSrtLanguages = new Set<string>();
@@ -396,34 +283,10 @@ export async function POST(req: Request) {
       seenTranslatedSrtFields.add(fieldKey);
       seenTranslatedSrtLanguages.add(languageCode);
 
-      const languageName = sanitizeExportFileName(
-        formatLanguageNameForFile(languageCode),
-        languageCode.toUpperCase(),
-      );
+      const languageName = getLanguageExportName(languageCode);
       const translatedSrtUrl = extractUrlFromField(row[fieldKey]);
 
-      if (!translatedSrtUrl) {
-        skippedAssets.push(
-          `translated_srt_${languageCode}: no SRT URL in ${fieldKey}`,
-        );
-        continue;
-      }
-
-      try {
-        const srtAsset = await fetchAsset(translatedSrtUrl);
-        const filePath = await writeBufferToResolvedVideoExportDir(
-          exportDir,
-          `${languageName}.srt`,
-          srtAsset.data,
-        );
-        writtenFiles.push(filePath);
-      } catch (error) {
-        const reason =
-          error instanceof Error
-            ? error.message
-            : 'Unknown translated SRT error';
-        skippedAssets.push(`translated_srt_${languageCode}: ${reason}`);
-      }
+      await exportMedia(`${languageName}.srt`, translatedSrtUrl);
     }
 
     const seenDubbedAudioFields = new Set<string>();
@@ -440,29 +303,8 @@ export async function POST(req: Request) {
       const dubbedAudioUrl = extractUrlFromField(row[fieldKey]);
       if (!dubbedAudioUrl) continue;
 
-      try {
-        const dubbedAudioAsset = await fetchAsset(dubbedAudioUrl);
-        const audioExt = getExtensionFromUrlOrType(
-          dubbedAudioUrl,
-          dubbedAudioAsset.contentType,
-        );
-        const languageName = sanitizeExportFileName(
-          formatLanguageNameForFile(languageCode),
-          languageCode.toUpperCase(),
-        );
-        const filePath = await writeBufferToResolvedVideoExportDir(
-          exportDir,
-          `${languageName} - audio${audioExt}`,
-          dubbedAudioAsset.data,
-        );
-        writtenFiles.push(filePath);
-      } catch (error) {
-        const reason =
-          error instanceof Error
-            ? error.message
-            : 'Unknown dubbed audio error';
-        skippedAssets.push(`dubbed_audio_${languageCode}: ${reason}`);
-      }
+      const languageName = getLanguageExportName(languageCode);
+      await exportMedia(`${languageName} - audio`, dubbedAudioUrl, true);
     }
 
     if (sentenceText.trim()) {
@@ -495,7 +337,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (writtenFiles.length === 0) {
+    if (writtenFiles.length === 0 && existingFiles.length === 0) {
       writtenFiles.push(
         await writeTextToResolvedVideoExportDir(
           exportDir,
@@ -509,6 +351,7 @@ export async function POST(req: Request) {
       ok: true,
       exportDir,
       writtenFiles,
+      existingFiles,
       skippedAssets,
     });
   } catch (error) {

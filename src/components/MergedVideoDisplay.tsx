@@ -19,6 +19,7 @@ export default function MergedVideoDisplay({
   onClear,
 }: MergedVideoDisplayProps) {
   const [showPlayer, setShowPlayer] = useState(false);
+  const [exportStatus, setExportStatus] = useState('');
   const [exporting, setExporting] = useState(false);
   console.log('MergedVideoDisplay rendering with:', mergedVideo);
 
@@ -99,6 +100,7 @@ export default function MergedVideoDisplay({
                 if (!exportVideoId || !mergedVideo.url) return;
 
                 try {
+                  setExportStatus('');
                   setExporting(true);
                   const response = await fetch('/api/export-video-url-file', {
                     method: 'POST',
@@ -115,6 +117,7 @@ export default function MergedVideoDisplay({
                   });
                   const payload = (await response.json().catch(() => null)) as {
                     error?: string;
+                    status?: string;
                   } | null;
 
                   if (!response.ok) {
@@ -123,7 +126,9 @@ export default function MergedVideoDisplay({
                         `Failed to export merged video (${response.status})`,
                     );
                   }
+                  setExportStatus(payload?.status === 'present' ? 'Already present' : 'Saved');
                 } catch (error) {
+                  setExportStatus('Export failed');
                   console.error('Failed to export merged video:', error);
                 } finally {
                   setExporting(false);
@@ -139,6 +144,7 @@ export default function MergedVideoDisplay({
               <Download className='w-4 h-4' />
               {exporting ? 'Exporting...' : 'Export'}
             </button>
+            {exportStatus && <span role="status">{exportStatus}</span>}
             <a
               href={mergedVideo.url}
               target='_blank'
