@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sceneIds }),
+          body: JSON.stringify({ sceneIds, allowOriginalDurationFallback: true }),
           cache: 'no-store',
           dispatcher: durationRequestDispatcher,
         },
@@ -112,15 +112,17 @@ export async function POST(request: NextRequest) {
         .json()
         .catch(() => null)) as Record<string, unknown> | null;
 
-      // Abort if any scene has no video URL AND no pre-existing duration.
       const missingDurationIds =
         (durationResult?.scenesWithoutAnyDuration as number[]) ?? [];
       const failed = (durationResult?.failedCount as number) ?? 0;
 
       if (missingDurationIds.length > 0 || failed > 0) {
+        const failures = (durationResult?.failures as { sceneId: number }[]) ?? [];
+        const failedScenes = failures.slice(0, 20).map(({ sceneId }) => sceneId);
+
         return NextResponse.json(
           {
-            error: `Cannot create EN SRT for videoId ${videoId}: ${missingDurationIds.length} scene(s) have no video and no existing duration (sceneIds: ${missingDurationIds.slice(0, 20).join(', ')}${missingDurationIds.length > 20 ? '...' : ''}), ${failed} scene(s) failed to probe`,
+            error: `Cannot create EN SRT for videoId ${videoId}: ${missingDurationIds.length} scene(s) have no video and no usable duration in 7107 or 6884 (sceneIds: ${missingDurationIds.slice(0, 20).join(', ')}${missingDurationIds.length > 20 ? '...' : ''}), ${failed} scene(s) failed during duration calculation${failedScenes.length ? ` (sceneIds: ${failedScenes.join(', ')})` : ''}`,
             step: 'calculate-final-video-durations',
             durationResult,
           },
@@ -134,6 +136,7 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         videoId,
+        allowOriginalDurationFallback: !USE_ORIGINAL_VIDEO_DURATION,
         durationFieldKey: USE_ORIGINAL_VIDEO_DURATION
           ? ORIGINAL_DURATION_FIELD_KEY
           : undefined,

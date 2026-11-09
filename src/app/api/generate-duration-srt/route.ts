@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveFinalSceneDuration } from '@/lib/scene-srt-duration';
 import { ensureMinioRunning } from '@/lib/minio-runtime';
 import { getBaserowToken, buildAuthHeader } from '@/lib/baserow-auth';
 
@@ -167,7 +168,9 @@ function buildSrtFromScenes(
   durationFieldKey:
     | typeof SCENE_FINAL_VIDEO_DURATION_FIELD_KEY
     | typeof SCENE_ORIGINAL_DURATION_FIELD_KEY,
+  allowOriginalDurationFallback: boolean,
 ): {
+  missingDurationIds: number[];
   srt: string;
   totalScenes: number;
   includedScenes: number;
@@ -180,16 +183,18 @@ function buildSrtFromScenes(
 
   let cursor = 0;
   let cueIndex = 1;
-  let skippedNoDuration = 0;
+  const missingDurationIds: number[] = [];
   let skippedNoSentence = 0;
   const lines: string[] = [];
 
   for (const scene of sortedScenes) {
-    const duration = parseNumberish(scene[durationFieldKey]);
+    const duration = durationFieldKey === SCENE_FINAL_VIDEO_DURATION_FIELD_KEY
+      ? resolveFinalSceneDuration(scene, allowOriginalDurationFallback)
+      : parseNumberish(scene[durationFieldKey]);
     const sentence = String(scene[SCENE_SENTENCE_FIELD_KEY] ?? '').trim();
 
     if (!Number.isFinite(duration) || duration <= 0) {
-      skippedNoDuration += 1;
+      missingDurationIds.push(Number(scene.id));
       continue;
     }
 
@@ -213,7 +218,8 @@ function buildSrtFromScenes(
     srt: lines.join('\n').trim() + '\n',
     totalScenes: sortedScenes.length,
     includedScenes: cueIndex - 1,
-    skippedNoDuration,
+    skippedNoDuration: missingDurationIds.length,
+    missingDurationIds,
     skippedNoSentence,
   };
 }
@@ -223,6 +229,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as {
       videoId?: unknown;
       durationFieldKey?: unknown;
+      allowOriginalDurationFallback?: unknown;
     } | null;
     const durationFieldKey = resolveDurationFieldKey(body?.durationFieldKey);
 
@@ -252,7 +259,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const srtResult = buildSrtFromScenes(scenes, durationFieldKey);
+    const allowFallback = durationFieldKey === SCENE_FINAL_VIDEO_DURATION_FIELD_KEY
+      && body?.allowOriginalDurationFallback === true;
+    const { missingDurationIds, ...srtResult } = buildSrtFromScenes(
+      scenes, durationFieldKey, allowFallback,
+    );
+    if (allowFallback && missingDurationIds.length > 0) {
+      return NextResponse.json(
+        { error: `Missing usable scene duration for scene IDs ${missingDurationIds.join(', ')}` },
+        { status: 400 },
+      );
+    }
     if (!srtResult.srt.trim()) {
       return NextResponse.json(
         {

@@ -118,7 +118,7 @@ Existing completion names include:
 - `Keywords All`
 - `Titles All`
 - `Timestamps All`
-- `Create En Srt`
+- `Create En Srt` measures Videos (6886) and saves the result in Final Video Duration (7107). For scenes without a video, it uses a positive 7107 first, then Duration (6884) if positive. When it uses 6884, it copies that duration into 7107 before generating subtitles.
 - `Create Dubbed <LANG...>` (for example `Create Dubbed FA+ES`)
 - `Thumbs All`
 - `Script From Title`
