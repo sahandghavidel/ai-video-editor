@@ -184,7 +184,7 @@ fade_duration=0.0
 pad_duration=0.0
 ```
 
-The user approved these results. The application also sets `audio_chunk_threshold=1e9` to avoid automatic long-audio chunk cross-fades. Model RMS/volume normalization remains; “raw examples” does not mean unnormalized decoder samples. Downstream scene-duration fitting/mixing is a separate existing application stage and can still alter the final video audio.
+The user approved these results. English LoRA uses the standard 30-second estimated-duration threshold for automatic chunking. The English runtime requires `pysbd==0.3.4` (install with `uv pip install --python "$OMNIVOICE_LORA_ROOT/runtime-env/bin/python" pysbd==0.3.4` using the English runtime root). The editor detects sentences and attached dialogue tags in the original text, prepares each sentence for speech, and passes those boundaries to the worker. Generation metadata records the sentence count per chunk. The worker groups complete sentences toward the standard 15-second target. A single long sentence stays in one piece, including its commas, colons, and semicolons. Model RMS/volume normalization remains; “raw examples” does not mean unnormalized decoder samples. Downstream scene-duration fitting/mixing is a separate existing application stage and can still alter the final video audio.
 
 **Do not reuse early scripts unchanged:** `speak.py` and `generate_comparison.py` retain the old reference/default fade behavior. Use `test_nice_raw.py` or the current application worker as the approved-settings reference. No ASR/WER or speaker-similarity benchmark was run. User listening and technical file checks are the v1 evidence.
 

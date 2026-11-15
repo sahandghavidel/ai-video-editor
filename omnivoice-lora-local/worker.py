@@ -55,6 +55,8 @@ def main():
     import torch
     from omnivoice import OmniVoice
     from omnivoice.utils.lora import load_lora_adapter
+    if language == 'en':
+        from english_sentence_chunks import install_english_sentence_chunking
     peak = {'driver': 0, 'tensor': 0}
     stop = threading.Event()
 
@@ -107,16 +109,23 @@ def main():
                 if torch.backends.mps.is_available():
                     torch.mps.manual_seed(seed)
                 start = time.perf_counter()
+                def report_chunks(groups):
+                    respond({'event': 'english_chunks', 'id': job_id, 'groups': groups})
+
+                chunk_counts = install_english_sentence_chunking(req.get('sentences'), report_chunks) if language == 'en' else []
                 audio = np.asarray(model.generate(text=req['text'], language=language, voice_clone_prompt=prompt,
                     num_step=req['num_step'], speed=req['speed'], denoise=False, postprocess_output=False,
-                    fade_duration=0.0, pad_duration=0.0, audio_chunk_threshold=1e9)[0]).squeeze()
+                    fade_duration=0.0, pad_duration=0.0, audio_chunk_threshold=30.0 if language == 'en' else 1e9)[0]).squeeze()
                 generate_ms = (time.perf_counter() - start) * 1000
+                if language == 'en' and not chunk_counts:
+                    report_chunks([req.get('sentences') or [req['text']]])
                 if audio.size == 0 or not np.isfinite(audio).all() or np.max(np.abs(audio)) == 0:
                     raise RuntimeError('LoRA generated invalid or silent audio')
                 sf.write(req['output'], audio, model.sampling_rate, subtype='PCM_16')
                 count += 1
                 respond({'id': job_id, 'ok': True, 'pid': os.getpid(), 'generation_count': count,
                     'adapter_version': args.adapter_version, 'language': language,
+                    **({'chunk_sentence_counts': chunk_counts or [len(req.get('sentences') or [req['text']])]} if language == 'en' else {}),
                     'reload_needed': count >= limit, 'cache_hit': hit, 'prompt_cache_size': len(cache),
                     'prompt_ms': round(prompt_ms, 3), 'generate_ms': round(generate_ms, 3),
                     'duration_seconds': len(audio) / model.sampling_rate, 'sample_rate': model.sampling_rate,

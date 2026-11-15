@@ -29,6 +29,9 @@ if version not in versions:
 language, package_name = versions[version]
 if job.get('language', language) != language:
     raise ValueError('Job language does not match its adapter version')
+if language == 'en':
+    from english_sentence_chunks import install_english_sentence_chunking
+    install_english_sentence_chunking(job.get('sentences'))
 peak = {'driver': 0, 'tensor': 0}
 stop_monitor = threading.Event()
 def monitor_memory():
@@ -53,7 +56,7 @@ if torch.backends.mps.is_available():
     torch.mps.manual_seed(seed)
 audio = np.asarray(model.generate(text=job['text'], language=language, voice_clone_prompt=prompt,
     num_step=job['num_step'], speed=job['speed'], denoise=False, postprocess_output=False,
-    fade_duration=0.0, pad_duration=0.0, audio_chunk_threshold=1e9)[0]).squeeze()
+    fade_duration=0.0, pad_duration=0.0, audio_chunk_threshold=30.0 if language == 'en' else 1e9)[0]).squeeze()
 if audio.size == 0 or not np.isfinite(audio).all() or np.max(np.abs(audio)) == 0:
     raise RuntimeError('LoRA generated invalid or silent audio')
 sf.write(job['output'], audio, model.sampling_rate, subtype='PCM_16')

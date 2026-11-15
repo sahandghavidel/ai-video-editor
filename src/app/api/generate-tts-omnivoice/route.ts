@@ -1,5 +1,5 @@
 import { normalizePersianTtsNumbers } from '@/utils/persianTtsNumbers';
-import { generateOmniVoiceLora } from '@/lib/omniVoiceLora';
+import { generateOmniVoiceLora, splitEnglishNarration } from '@/lib/omniVoiceLora';
 import { resolveReferenceAudioPath } from '@/lib/ttsReferenceAudio';
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile, spawn } from 'child_process';
@@ -1762,6 +1762,96 @@ async function runOmniVoiceWorkerJob(input: {
   });
 }
 
+function prepareNarrationText(rawText: string, replacements: PreparedWordReplacement[], configuredLanguageForNorm: string) {
+  const {
+    text: textWithReplacements,
+    substitutions: replacementSubstitutions,
+  } = applyWordReplacements(rawText, replacements);
+
+  const noSplitProtection = protectIdentityReplacementsFromOmniSplitting(
+    textWithReplacements,
+    replacements,
+  );
+
+  // Arabic number-to-words: only activates for language 'arb'
+  const { normalizedText: textWithArabicNumbers, arabicNumbersConverted } =
+    configuredLanguageForNorm === 'arb'
+      ? convertArabicNumbersToWords(noSplitProtection.protectedText)
+      : {
+          normalizedText: noSplitProtection.protectedText,
+          arabicNumbersConverted: 0,
+        };
+
+  const { normalizedText: textWithHyphenWordsSplit, hyphenSplitCount } =
+    normalizeHyphenSeparatedWordsForOmniVoice(textWithArabicNumbers);
+
+  const {
+    normalizedText: textWithParenthesisWordsSplit,
+    parenthesisSplitCount,
+  } = normalizeParenthesisJoinedWordsForOmniVoice(textWithHyphenWordsSplit);
+
+  const {
+    normalizedText: textWithSquareBracketWordsSplit,
+    squareBracketSplitCount,
+  } = normalizeSquareBracketJoinedWordsForOmniVoice(
+    textWithParenthesisWordsSplit,
+  );
+
+  const { normalizedText: textWithPercentSignsSpaced, percentSignsSpaced } =
+    normalizePercentSignsForOmniVoice(textWithSquareBracketWordsSplit);
+
+  const { normalizedText: textWithCamelCaseSplit, splitWordCount } =
+    splitCamelCaseForOmniVoice(textWithPercentSignsSpaced);
+
+  const { normalizedText: textWithDotSeparatedWords, movedDotCount } =
+    normalizeDotSeparatedWordsForOmniVoice(textWithCamelCaseSplit);
+
+  const textWithProtectedWordsRestored = restoreIdentityReplacementTokens(
+    textWithDotSeparatedWords,
+    noSplitProtection.placeholderMap,
+  );
+
+  const {
+    normalizedText: textWithPeriods,
+    replacedExclamationCount,
+  } = replaceOmniVoiceExclamationChars(textWithProtectedWordsRestored);
+
+  const { sanitizedText: textWithoutQuotes, removedQuoteCount } =
+    stripOmniVoiceQuoteChars(textWithPeriods);
+
+  const {
+    sanitizedText: textWithoutStandaloneSingleQuotes,
+    removedStandaloneSingleQuoteCount,
+  } = stripOmniVoiceStandaloneSingleQuoteChars(textWithoutQuotes);
+
+  const { sanitizedText: textWithoutHashes, removedHashCount } =
+    stripOmniVoiceHashChars(textWithoutStandaloneSingleQuotes);
+
+  const {
+    sanitizedText: textWithoutAngleBrackets,
+    removedAngleBracketCount,
+  } = stripOmniVoiceAngleBracketChars(textWithoutHashes);
+
+  const { sanitizedText: textWithoutArrows, removedArrowCount } =
+    stripOmniVoiceArrowChars(textWithoutAngleBrackets);
+
+  const {
+    sanitizedText: textWithoutSquareBrackets,
+    removedSquareBracketCount,
+  } = stripOmniVoiceSquareBracketChars(textWithoutArrows);
+
+  const { sanitizedText: preparedText, removedParenthesisCount } =
+    stripOmniVoiceParenthesisChars(textWithoutSquareBrackets);
+  return {
+    preparedText, replacementSubstitutions, noSplitProtection,
+    arabicNumbersConverted, hyphenSplitCount, parenthesisSplitCount,
+    squareBracketSplitCount, percentSignsSpaced, splitWordCount,
+    movedDotCount, replacedExclamationCount, removedQuoteCount,
+    removedStandaloneSingleQuoteCount, removedHashCount, removedAngleBracketCount,
+    removedArrowCount, removedSquareBracketCount, removedParenthesisCount,
+  };
+}
+
 export async function POST(request: NextRequest) {
   let outputPath = '';
   const requestStartedAt = Date.now();
@@ -1782,101 +1872,11 @@ export async function POST(request: NextRequest) {
     }
 
     const replacements = await loadWordReplacementsFromApi(request);
-    const {
-      text: textWithReplacements,
-      substitutions: replacementSubstitutions,
-    } = applyWordReplacements(rawText, replacements);
-
-    const noSplitProtection = protectIdentityReplacementsFromOmniSplitting(
-      textWithReplacements,
-      replacements,
-    );
-
-    // Arabic number-to-words: only activates for language 'arb'
     const configuredLanguageForNorm =
       typeof body.ttsSettings?.omniVoice?.language === 'string'
         ? body.ttsSettings.omniVoice.language.trim()
         : '';
-    const { normalizedText: textWithArabicNumbers, arabicNumbersConverted } =
-      configuredLanguageForNorm === 'arb'
-        ? convertArabicNumbersToWords(noSplitProtection.protectedText)
-        : {
-            normalizedText: noSplitProtection.protectedText,
-            arabicNumbersConverted: 0,
-          };
-
-    const { normalizedText: textWithHyphenWordsSplit, hyphenSplitCount } =
-      normalizeHyphenSeparatedWordsForOmniVoice(textWithArabicNumbers);
-
-    const {
-      normalizedText: textWithParenthesisWordsSplit,
-      parenthesisSplitCount,
-    } = normalizeParenthesisJoinedWordsForOmniVoice(textWithHyphenWordsSplit);
-
-    const {
-      normalizedText: textWithSquareBracketWordsSplit,
-      squareBracketSplitCount,
-    } = normalizeSquareBracketJoinedWordsForOmniVoice(
-      textWithParenthesisWordsSplit,
-    );
-
-    const { normalizedText: textWithPercentSignsSpaced, percentSignsSpaced } =
-      normalizePercentSignsForOmniVoice(textWithSquareBracketWordsSplit);
-
-    const { normalizedText: textWithCamelCaseSplit, splitWordCount } =
-      splitCamelCaseForOmniVoice(textWithPercentSignsSpaced);
-
-    const { normalizedText: textWithDotSeparatedWords, movedDotCount } =
-      normalizeDotSeparatedWordsForOmniVoice(textWithCamelCaseSplit);
-
-    const textWithProtectedWordsRestored = restoreIdentityReplacementTokens(
-      textWithDotSeparatedWords,
-      noSplitProtection.placeholderMap,
-    );
-
-    const {
-      normalizedText: textWithPeriods,
-      replacedExclamationCount,
-    } = replaceOmniVoiceExclamationChars(textWithProtectedWordsRestored);
-
-    const { sanitizedText: textWithoutQuotes, removedQuoteCount } =
-      stripOmniVoiceQuoteChars(textWithPeriods);
-
-    const {
-      sanitizedText: textWithoutStandaloneSingleQuotes,
-      removedStandaloneSingleQuoteCount,
-    } = stripOmniVoiceStandaloneSingleQuoteChars(textWithoutQuotes);
-
-    const { sanitizedText: textWithoutHashes, removedHashCount } =
-      stripOmniVoiceHashChars(textWithoutStandaloneSingleQuotes);
-
-    const {
-      sanitizedText: textWithoutAngleBrackets,
-      removedAngleBracketCount,
-    } = stripOmniVoiceAngleBracketChars(textWithoutHashes);
-
-    const { sanitizedText: textWithoutArrows, removedArrowCount } =
-      stripOmniVoiceArrowChars(textWithoutAngleBrackets);
-
-    const {
-      sanitizedText: textWithoutSquareBrackets,
-      removedSquareBracketCount,
-    } = stripOmniVoiceSquareBracketChars(textWithoutArrows);
-
-    const { sanitizedText: preparedText, removedParenthesisCount } =
-      stripOmniVoiceParenthesisChars(textWithoutSquareBrackets);
-    let text = preparedText;
-
-    if (!text) {
-      return NextResponse.json(
-        {
-          error:
-            'Text is empty after removing quote/backtick/standalone-single-quote/hash/angle-bracket/arrow/square-bracket/parenthesis characters for OmniVoice TTS.',
-        },
-        { status: 400 },
-      );
-    }
-
+    const prepare = (sentence: string) => prepareNarrationText(sentence, replacements, configuredLanguageForNorm);
     const omniVoice = body.ttsSettings?.omniVoice || {};
 
     const modelId = (omniVoice.modelId || 'k2-fsa/OmniVoice').trim();
@@ -1929,6 +1929,38 @@ export async function POST(request: NextRequest) {
 
     const matchedReferencePreset =
       await resolveReferencePresetByAudioName(referenceAudioName);
+
+    if (matchedReferencePreset?.provider === 'omnivoice-lora' && matchedReferencePreset.language === 'en') {
+      const originals = await splitEnglishNarration(rawText, matchedReferencePreset);
+      const sentences = originals.map((sentence) => prepare(sentence).preparedText).filter(Boolean);
+      if (!sentences.length) return NextResponse.json({ error: 'No speakable English narration' }, { status: 400 });
+      const text = sentences.join(' ');
+      console.info(
+        `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} provider=omnivoice-lora language=en text=${JSON.stringify(text)}`,
+      );
+      return await generateOmniVoiceLora({ text, sentences, preset: matchedReferencePreset,
+        sceneId: body.sceneId, videoId: body.videoId, seed: body.ttsSettings?.seed, seedOverride: body.ttsSettings?.seedOverride });
+    }
+
+    const {
+      preparedText, replacementSubstitutions, noSplitProtection,
+      arabicNumbersConverted, hyphenSplitCount, parenthesisSplitCount,
+      squareBracketSplitCount, percentSignsSpaced, splitWordCount,
+      movedDotCount, replacedExclamationCount, removedQuoteCount,
+      removedStandaloneSingleQuoteCount, removedHashCount, removedAngleBracketCount,
+      removedArrowCount, removedSquareBracketCount, removedParenthesisCount,
+    } = prepare(rawText);
+    let text = preparedText;
+
+    if (!text) {
+      return NextResponse.json(
+        {
+          error:
+            'Text is empty after removing quote/backtick/standalone-single-quote/hash/angle-bracket/arrow/square-bracket/parenthesis characters for OmniVoice TTS.',
+        },
+        { status: 400 },
+      );
+    }
 
     // LoRA always uses its bound preset language. Ordinary OmniVoice follows
     // the same preset-vs-request precedence as its worker language below.

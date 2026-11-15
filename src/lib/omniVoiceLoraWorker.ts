@@ -5,8 +5,9 @@ import { statSync } from 'fs';
 import { resolveOmniVoiceLoraPython } from '@/lib/omniVoiceLoraRuntime';
 import { OMNIVOICE_LORA_VERSIONS, type OmniVoiceLoraVersion } from '@/utils/omniVoiceLoraVersions';
 
-type Metrics = Record<string, number | boolean | string>;
+type Metrics = Record<string, number | boolean | string | number[]>;
 type Job = {
+  sentences?: string[];
   text: string; output: string; reference_audio: string; reference_text: string;
   seed: number; num_step: number; speed: number;
   language?: 'en' | 'fa';
@@ -29,10 +30,13 @@ type State = { worker?: Worker; tail: Promise<void> };
 const shared = globalThis as typeof globalThis & { __omniVoiceLoraRuntime?: State };
 const state = shared.__omniVoiceLoraRuntime ??= { tail: Promise.resolve() };
 
-function scriptVersion(): string {
+function scriptVersion(language: string): string {
   try {
-    const stat = statSync(path.join(process.cwd(), 'omnivoice-lora-local', 'worker.py'));
-    return `${stat.size}:${stat.mtimeMs}`;
+    const files = language === 'en' ? ['worker.py', 'english_sentence_chunks.py'] : ['worker.py'];
+    return files.map((file) => {
+      const stat = statSync(path.join(process.cwd(), 'omnivoice-lora-local', file));
+      return `${stat.size}:${stat.mtimeMs}`;
+    }).join('|');
   } catch { return 'missing'; }
 }
 
@@ -115,6 +119,12 @@ function start(root: string, device: string, key: string, version: OmniVoiceLora
         }
         console.info(`[OmniVoice LoRA] worker=ready pid=${child.pid} adapterVersion=${version} language=${language} generationLimit=${limit}`);
         worker.resolveReady();
+      } else if (message.event === 'english_chunks') {
+        if (message.id !== worker.pending?.id) continue;
+        const groups: string[][] = message.groups;
+        groups.forEach((sentences, index) => {
+          console.info(`[OmniVoice LoRA] job=${message.id} chunk=${index + 1}/${groups.length} sentences=${JSON.stringify(sentences)}`);
+        });
       } else if (message.event === 'fatal') {
         fail(new Error(message.error || 'LoRA worker initialization failed'));
       } else if (message.id === worker.pending?.id) {
@@ -146,7 +156,7 @@ async function execute(root: string, device: string, job: Job, version: OmniVoic
   if (!binding || (job.language !== undefined && job.language !== binding.language)) {
     throw new Error('LoRA job language does not match its adapter version');
   }
-  const key = [root, resolveOmniVoiceLoraPython(root), device, 'float32', version, binding.language, 'protocol-2', scriptVersion(),
+  const key = [root, resolveOmniVoiceLoraPython(root), device, 'float32', version, binding.language, 'protocol-2', scriptVersion(binding.language),
     process.env.OMNIVOICE_LORA_MAX_GENERATIONS_BEFORE_RELOAD ?? process.env.OMNIVOICE_MAX_GENERATIONS_BEFORE_RELOAD ?? '100',
     process.env.OMNIVOICE_LORA_PROMPT_CACHE_SIZE ?? '16'].join('|');
   let worker = state.worker;

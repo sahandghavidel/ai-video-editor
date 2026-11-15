@@ -89,6 +89,10 @@ function fakeProcesses() {
     child.stderr = new EventEmitter(); child.stderr.setEncoding = () => {};
     child.stdin = new EventEmitter();
     child.stdin.write = (text, done) => { const job = JSON.parse(text); calls.push(job); done?.(); setImmediate(() => {
+      if (job.sentences) {
+        child.stdout.emit('data', JSON.stringify({ event: 'english_chunks', id: job.id,
+          groups: [job.sentences.slice(0, 2), job.sentences.slice(2)] }) + '\n');
+      }
       child.stdout.emit('data', JSON.stringify({ id: job.id, ok: true, generation_count: 1, reload_needed: false, pid: child.pid }) + '\n');
     }); };
     child.kill = () => { events.push(`stop-${child.pid}`); setTimeout(() => { child.signalCode = 'SIGTERM'; events.push(`closed-${child.pid}`); child.emit('close', null, 'SIGTERM'); }, 5); return true; };
@@ -97,6 +101,20 @@ function fakeProcesses() {
     return child;
   } };
 }
+
+test('English chunk events print each group and keep the generation pending until its result', async () => {
+  const procs = fakeProcesses(), lines = [];
+  const api = fixture({ 'child_process': procs, 'fs': { existsSync: () => false } },
+    { OMNIVOICE_LORA_IDLE_TIMEOUT_MS: '15' }, { console: { info: (line) => lines.push(line) } })
+    .load('src/lib/omniVoiceLoraWorker.ts');
+  const sentences = ['One.', 'Two.', 'Three.'];
+  const result = await api.runOmniVoiceLoraJob('/en', 'mps', { text: sentences.join(' '), sentences });
+  assert.equal(result.generation_count, 1);
+  const prefix = `[OmniVoice LoRA] job=${procs.calls[0].id} chunk=`;
+  assert.deepEqual(lines.filter(line => line.startsWith(prefix)), [
+    prefix + '1/2 sentences=["One.","Two."]', prefix + '2/2 sentences=["Three."]',
+  ]);
+});
 
 test('shared queue waits for old worker close when changing language/version, reuses workers and idles out', async () => {
   const procs = fakeProcesses();
@@ -135,7 +153,7 @@ test('outbound LoRA normalization follows the selected preset language rather th
     filename: `${language}.wav`, enabled: true, provider: 'omnivoice-lora', language }));
   const calls = [];
   const { POST } = fixture({
-    '@/lib/omniVoiceLora': { generateOmniVoiceLora: async (input) => { calls.push(input); return { status: 200 }; } },
+    '@/lib/omniVoiceLora': { splitEnglishNarration: async (text) => [text], generateOmniVoiceLora: async (input) => { calls.push(input); return { status: 200 }; } },
     '@/lib/ttsAudioReferencesStore': { loadTtsAudioReferencesStore: async () => ({ entries: presets }) },
     'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
   }, {}, { fetch: async () => ({ ok: true, json: async () => ({ entries: [] }) }) })
@@ -150,6 +168,26 @@ test('outbound LoRA normalization follows the selected preset language rather th
   }
 });
 
+
+test('English LoRA segments original dialogue before preparing each sentence for speech', async () => {
+  const originals = ['“Wait!” Maya asked.', 'Read the U.S. guide.'];
+  const raw = originals.join(' ');
+  const logs = [];
+  const preset = { language: 'en', id: 'en', name: 'en', tags: [], filename: 'en.wav', enabled: true, provider: 'omnivoice-lora' };
+  const { POST } = fixture({
+    '@/lib/omniVoiceLora': {
+      splitEnglishNarration: async (text) => { assert.equal(text, raw); return originals; },
+      generateOmniVoiceLora: async (job) => job,
+    },
+    '@/lib/ttsAudioReferencesStore': { loadTtsAudioReferencesStore: async () => ({ entries: [preset] }) },
+  }, {}, { URL, console: { ...console, info: (line) => logs.push(line) }, fetch: async () => ({ ok: true, json: async () => ({ entries: [] }) }) }).load('src/app/api/generate-tts-omnivoice/route.ts');
+  const job = await POST({ url: 'http://localhost:9540', json: async () => ({ text: raw, sceneId: 1, referenceAudioFilename: 'en.wav' }) });
+  assert.deepEqual(Array.from(job.sentences), ['Wait. Maya asked.', 'Read the U .S. guide.']);
+  assert.equal(job.text, job.sentences.join(' '));
+  assert.deepEqual(logs.filter((line) => line.includes('outbound_tts_text')), [
+    `[OmniVoice] outbound_tts_text sceneId=1 videoId=n/a provider=omnivoice-lora language=en text=${JSON.stringify(job.text)}`,
+  ]);
+});
 
 test('Farsi quantities become spoken words, including percentages, grouping, signs and precise decimals', () => {
   const { normalizePersianTtsNumbers: convert } = fixture().load('src/utils/persianTtsNumbers.ts');

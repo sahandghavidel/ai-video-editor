@@ -1,3 +1,5 @@
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { resolvePresetSeed, normalizeSeedMode } from '@/utils/ttsPresetSeed';
 import { runOmniVoiceLoraJob } from '@/lib/omniVoiceLoraWorker';
 import { access, mkdtemp, readFile, rm } from 'fs/promises';
@@ -10,8 +12,16 @@ import { ensureMinioRunning } from '@/lib/minio-runtime';
 import { resolveReferenceAudioPath } from '@/lib/ttsReferenceAudio';
 import type { TtsAudioReferenceEntry } from '@/lib/ttsAudioReferencesStore';
 
+export async function splitEnglishNarration(text: string, preset: TtsAudioReferenceEntry): Promise<string[]> {
+  const { python } = resolveOmniVoiceLoraRuntime(preset.language, preset.loraAdapterVersion);
+  const script = path.join(process.cwd(), 'omnivoice-lora-local', 'english_sentence_chunks.py');
+  const { stdout } = await promisify(execFile)(python, [script, text], { timeout: 15000 });
+  return JSON.parse(stdout);
+}
+
 export async function generateOmniVoiceLora(input: {
   text: string;
+  sentences?: string[];
   preset: TtsAudioReferenceEntry;
   sceneId?: unknown;
   videoId?: unknown;
@@ -37,7 +47,7 @@ export async function generateOmniVoiceLora(input: {
     const seed = resolvePresetSeed({ ...input.preset, provider: 'omnivoice-lora' }, input.seed, input.seedOverride);
     const device = input.preset.deviceMap === 'cpu' ? 'cpu' : 'mps';
     const metrics = await runOmniVoiceLoraJob(root, device, { output, text: input.text,
-      reference_audio: reference, reference_text: input.preset.referenceText,
+      sentences: input.sentences, reference_audio: reference, reference_text: input.preset.referenceText,
       seed, num_step: input.preset.numStep, speed: input.preset.speed, language }, runtime.id);
     const bytes = await readFile(output);
     if (bytes.length < 44 || bytes.toString('ascii', 0, 4) !== 'RIFF') throw new Error('Invalid LoRA WAV output');
