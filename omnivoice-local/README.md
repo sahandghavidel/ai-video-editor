@@ -8,6 +8,8 @@ This folder contains the isolated OmniVoice runner used by `src/app/api/generate
 - Targets Apple Silicon by default (`device_map=mps`)
 - Saves WAV output to a temporary file for upload by the API route
 
+English generation identifies complete sentences in the original narration before preparing it for speech. Above the model’s 30-second estimated-duration threshold, it groups complete sentences toward a 15-second target and logs each group in the editor terminal. A single long sentence stays together.
+
 ## Setup (Apple Silicon)
 
 1. Create/use a Python environment (your project `.venv` is recommended).

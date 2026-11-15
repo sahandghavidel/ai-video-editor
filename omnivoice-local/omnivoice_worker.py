@@ -218,6 +218,28 @@ def _get_or_create_voice_clone_prompt(
     return prompt, False, prompt_ms
 
 
+def _generate_english(model, kwargs, sentences, job_id):
+    from omnivoice.models import omnivoice
+    from english_sentence_chunks import make_english_sentence_splitter
+
+    def log_chunks(groups):
+        for index, group in enumerate(groups, start=1):
+            _log(f"job={job_id} chunk={index}/{len(groups)} sentences={json.dumps(group, ensure_ascii=False)}")
+
+    split, counts = make_english_sentence_splitter(sentences, log_chunks)
+    previous = omnivoice.chunk_text_punctuation
+    try:
+        # Standard OmniVoice serves multiple languages serially in one process.
+        omnivoice.chunk_text_punctuation = split
+        audio = model.generate(**kwargs)
+    finally:
+        omnivoice.chunk_text_punctuation = previous
+    if not counts:
+        counts.append(len(sentences))
+        log_chunks([sentences])
+    return audio, counts
+
+
 def main() -> int:
     try:
         args = parse_args()
@@ -344,7 +366,16 @@ def main() -> int:
                     generate_kwargs["language"] = language
 
                 generate_start = time.perf_counter()
-                audio = model.generate(**generate_kwargs)
+                sentences = req.get("sentences")
+                chunk_counts = None
+                if sentences is not None:
+                    if not isinstance(sentences, list) or not sentences or " ".join(sentences) != text:
+                        raise ValueError("English sentence plan does not match the generation text")
+                    sentences = [_normalize_non_verbal_tags(sentence)[0] for sentence in sentences]
+                    generate_kwargs["text"] = " ".join(sentences)
+                    audio, chunk_counts = _generate_english(model, generate_kwargs, sentences, job_id)
+                else:
+                    audio = model.generate(**generate_kwargs)
                 generate_ms = (time.perf_counter() - generate_start) * 1000.0
                 if not audio:
                     raise RuntimeError("OmniVoice returned empty audio output")
@@ -382,6 +413,9 @@ def main() -> int:
                     "prompt_ms": round(prompt_ms, 3),
                     "generate_ms": round(generate_ms, 3),
                 }
+
+                if chunk_counts is not None:
+                    response["chunk_sentence_counts"] = chunk_counts
 
                 if reload_needed:
                     response["reload_needed"] = True

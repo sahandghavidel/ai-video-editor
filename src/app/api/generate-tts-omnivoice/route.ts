@@ -109,6 +109,7 @@ const OMNIVOICE_RIGHT_CLICK_TRIM_KEEP_SILENCE_SEC = Math.max(
 );
 
 type WorkerJobResult = {
+  chunkSentenceCounts?: number[];
   sampleRate: number;
   cacheHit: boolean;
   promptCacheSize: number;
@@ -1425,10 +1426,13 @@ function convertArabicNumbersToWords(text: string): {
   return { normalizedText, arabicNumbersConverted };
 }
 
+const englishSplitterDir = path.join(process.cwd(), 'omnivoice-lora-local');
+const englishSplitterPath = path.join(englishSplitterDir, 'english_sentence_chunks.py');
+
 function getWorkerScriptVersion(scriptPath: string): string {
   try {
     const stat = fs.statSync(scriptPath);
-    return `${OMNIVOICE_WORKER_PROTOCOL_VERSION}:${stat.mtimeMs}`;
+    return `${OMNIVOICE_WORKER_PROTOCOL_VERSION}:${stat.mtimeMs}:${fs.statSync(englishSplitterPath).mtimeMs}`;
   } catch {
     return `${OMNIVOICE_WORKER_PROTOCOL_VERSION}:missing`;
   }
@@ -1534,6 +1538,7 @@ function startOmniVoiceWorker(input: {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        PYTHONPATH: [englishSplitterDir, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
         PYTORCH_ENABLE_MPS_FALLBACK: '0',
         // Prevent HF hub from contacting the network during from_pretrained.
         // The model weights are already cached locally; online fetch of
@@ -1569,6 +1574,7 @@ function startOmniVoiceWorker(input: {
       if (!line) continue;
 
       let parsed: {
+        chunk_sentence_counts?: number[];
         id?: string;
         ok?: boolean;
         error?: string;
@@ -1607,6 +1613,7 @@ function startOmniVoiceWorker(input: {
 
       if (parsed.ok) {
         pending.resolve({
+          chunkSentenceCounts: parsed.chunk_sentence_counts,
           sampleRate: parsed.sample_rate || 24000,
           cacheHit: Boolean(parsed.cache_hit),
           promptCacheSize: Math.max(0, Number(parsed.prompt_cache_size || 0)),
@@ -1699,6 +1706,7 @@ function ensureOmniVoiceWorker(input: {
 
 async function runOmniVoiceWorkerJob(input: {
   worker: OmniVoiceWorkerState;
+  sentences?: string[];
   text: string;
   outputPath: string;
   referenceAudioPath: string;
@@ -1713,6 +1721,7 @@ async function runOmniVoiceWorkerJob(input: {
     id: jobId,
     text: input.text,
     output_path: input.outputPath,
+    sentences: input.sentences,
     reference_audio: input.referenceAudioPath,
     reference_text: input.referenceText || '',
     language: input.language || '',
@@ -1971,11 +1980,12 @@ export async function POST(request: NextRequest) {
         : configuredLanguage;
     text = normalizePersianTtsNumbers(text, normalizationLanguage);
 
-    console.info(
+    const logOutboundText = () => console.info(
       `[OmniVoice] outbound_tts_text sceneId=${hasSceneId ? String(body.sceneId) : 'n/a'} videoId=${hasVideoId ? String(body.videoId) : 'n/a'} replacementsApplied=${replacementSubstitutions} replacementsConfigured=${replacements.length} noSplitEntries=${noSplitProtection.protectedEntryCount} noSplitMatches=${noSplitProtection.protectedMatchCount} arabicNumbersConverted=${arabicNumbersConverted} hyphenWordsSplit=${hyphenSplitCount} parenthesisWordsSplit=${parenthesisSplitCount} squareBracketWordsSplit=${squareBracketSplitCount} percentSignsSpaced=${percentSignsSpaced} camelCaseWordsSplit=${splitWordCount} dotPrefixesMoved=${movedDotCount} replacedExclamations=${replacedExclamationCount} removedQuotes=${removedQuoteCount} removedStandaloneSingleQuotes=${removedStandaloneSingleQuoteCount} removedHashes=${removedHashCount} removedAngleBrackets=${removedAngleBracketCount} removedArrows=${removedArrowCount} removedSquareBrackets=${removedSquareBracketCount} removedParentheses=${removedParenthesisCount} text=${JSON.stringify(text)}`,
     );
 
     if (matchedReferencePreset?.provider === 'omnivoice-lora') {
+      logOutboundText();
       return await generateOmniVoiceLora({ text, preset: matchedReferencePreset,
         sceneId: body.sceneId, videoId: body.videoId, seed: body.ttsSettings?.seed, seedOverride: body.ttsSettings?.seedOverride });
     }
@@ -2083,6 +2093,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let sentences: string[] | undefined;
+    if (/^en(?:glish|g|[-_].*)?$/i.test(language)) {
+      const { stdout } = await execFileAsync(pythonCommand, [englishSplitterPath, rawText], { timeout: 15000 });
+      const originalSentences: string[] = JSON.parse(stdout);
+      sentences = originalSentences.map((sentence) => prepare(sentence).preparedText).filter(Boolean);
+      if (!sentences.length) return NextResponse.json({ error: 'No speakable English narration' }, { status: 400 });
+      text = sentences.join(' ');
+    }
+    logOutboundText();
+
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'omnivoice-tts-'));
     outputPath = path.join(tmpDir, 'out.wav');
 
@@ -2099,6 +2119,7 @@ export async function POST(request: NextRequest) {
     const workerJobStartedAt = Date.now();
     const runResult = await runOmniVoiceWorkerJob({
       worker,
+      sentences,
       text,
       outputPath,
       referenceAudioPath: referenceAudioResolution.fullPath,
@@ -2273,6 +2294,7 @@ export async function POST(request: NextRequest) {
         referencePresetAppliedNumStep: usePresetNumStep,
         referencePresetAppliedSpeed: usePresetSpeed,
         pythonSource,
+        chunkSentenceCounts: runResult.chunkSentenceCounts,
         sampleRate: runResult.sampleRate,
         cacheHit: runResult.cacheHit,
         promptCacheSize: runResult.promptCacheSize,

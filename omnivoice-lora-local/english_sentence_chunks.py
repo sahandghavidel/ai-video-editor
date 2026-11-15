@@ -46,10 +46,7 @@ def group_sentences(sentences, chunk_len):
     return groups
 
 
-def install_english_sentence_chunking(sentences=None, on_chunks=None):
-    # Jobs run serially in a dedicated, single-language worker. Bind this job's
-    # prepared sentences to the splitter used by the model's long-input path.
-    from omnivoice.models import omnivoice
+def make_english_sentence_splitter(sentences=None, on_chunks=None):
     counts = []
 
     def split(text, chunk_len, min_chunk_len=None):
@@ -61,7 +58,13 @@ def install_english_sentence_chunking(sentences=None, on_chunks=None):
         counts.extend(len(group) for group in groups)
         return [' '.join(group) for group in groups]
 
-    omnivoice.chunk_text_punctuation = split
+    return split, counts
+
+
+def install_english_sentence_chunking(sentences=None, on_chunks=None):
+    # A LoRA worker serves one language for its lifetime.
+    from omnivoice.models import omnivoice
+    omnivoice.chunk_text_punctuation, counts = make_english_sentence_splitter(sentences, on_chunks)
     return counts
 
 
