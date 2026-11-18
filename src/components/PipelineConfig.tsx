@@ -11,11 +11,13 @@ import {
   VolumeX,
   Workflow,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 const pipelineSpeedOptions = [1, 1.125, 1.5, 2, 4, 8];
 
 interface PipelineConfigProps {
+  mergeUploadActive?: boolean;
+  mergeUploadNotice?: ReactNode;
   onRunFullPipeline?: () => void;
   isRunFullPipelineDisabled?: boolean;
   isRunningFullPipeline?: boolean;
@@ -66,6 +68,8 @@ function arePipelineConfigValuesEqual(left: unknown, right: unknown): boolean {
 }
 
 export default function PipelineConfig({
+  mergeUploadActive,
+  mergeUploadNotice,
   onRunFullPipeline,
   isRunFullPipelineDisabled = false,
   isRunningFullPipeline = false,
@@ -82,7 +86,11 @@ export default function PipelineConfig({
     deletePipelineTemplate,
     reorderPipelineTemplate,
   } = useAppStore();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const hasMergeUploadNotice = Boolean(mergeUploadNotice);
+  const [isExpanded, setIsExpanded] = useState(hasMergeUploadNotice);
+  useEffect(() => {
+    if (mergeUploadActive) setIsExpanded(true);
+  }, [mergeUploadActive]);
   const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateNameError, setTemplateNameError] = useState('');
@@ -1261,6 +1269,7 @@ export default function PipelineConfig({
             })}
 
             <CodexFixEnglishStatus />
+            {mergeUploadNotice}
 
             {/* Pipeline override: Dubbed language multi-select */}
             {pipelineConfig.createDubbedLanguage && (

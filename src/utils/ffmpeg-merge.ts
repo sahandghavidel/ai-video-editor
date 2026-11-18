@@ -45,6 +45,9 @@ export interface ConcatenateOptions {
   outputPath?: string;
   useHardwareAcceleration?: boolean;
   videoBitrate?: string;
+  onSegmentEnds?: (ends: number[]) => void;
+  forceSingleEncode?: boolean;
+  silentInputDurations?: Map<number, number>;
 }
 
 type ProbedVideo = {
@@ -54,6 +57,13 @@ type ProbedVideo = {
   hasAudio: boolean;
 };
 
+export function transitionWhoosh(duration: number, index: number): string {
+  return `anoisesrc=d=${duration.toFixed(6)}:c=pink:r=48000:a=0.085:seed=${index + 1},` +
+    'highpass=f=280,lowpass=f=4300,' +
+    `afade=t=in:st=0:d=${(duration * 0.42).toFixed(6)},` +
+    `afade=t=out:st=${(duration * 0.42).toFixed(6)}:d=${(duration * 0.58).toFixed(6)}`;
+}
+
 export interface BrandedTransitionOptions {
   videoUrls: string[];
   outputPath?: string;
@@ -61,6 +71,7 @@ export interface BrandedTransitionOptions {
   includeSoundEffect?: boolean;
   showTitles?: boolean;
   titles?: string[];
+  onTimeline?: (durations: number[], transitionDuration: number) => void;
 }
 
 async function probeVideoForTransition(videoUrl: string): Promise<ProbedVideo> {
@@ -125,8 +136,9 @@ export async function concatenateVideosWithBrandedTransitions(
     outputPath,
     duration = 0.95,
     includeSoundEffect = true,
-    showTitles = titles.length > 0,
     titles = [],
+    showTitles = titles.length > 0,
+    onTimeline,
   } = options;
 
   if (videoUrls.length < 2) {
@@ -135,7 +147,14 @@ export async function concatenateVideosWithBrandedTransitions(
 
   const probes = await Promise.all(videoUrls.map(probeVideoForTransition));
   const shortestDuration = Math.min(...probes.map((probe) => probe.duration));
-  const transitionDuration = Math.min(duration, shortestDuration / 2);
+  const requestedTransition = Math.min(duration, shortestDuration / 2);
+  const transitionFrames = Math.round(requestedTransition * 30);
+  const transitionDuration = onTimeline ? transitionFrames / 30 : requestedTransition;
+  const clipFrames = probes.map(probe => Math.round(probe.duration * 30));
+  if (onTimeline) {
+    probes.forEach((probe, index) => { probe.duration = clipFrames[index] / 30; });
+    onTimeline(probes.map(probe => probe.duration), transitionDuration);
+  }
   if (transitionDuration < 0.1) {
     throw new Error('The selected videos are too short for a transition');
   }
@@ -169,6 +188,7 @@ export async function concatenateVideosWithBrandedTransitions(
       `[${index}:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,` +
         `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black,` +
         'fps=30,format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS' +
+        (onTimeline ? `,tpad=stop_mode=clone:stop=${clipFrames[index]},trim=end_frame=${clipFrames[index]}` : '') +
         `[vbase${index}]`,
     );
 
@@ -247,10 +267,12 @@ export async function concatenateVideosWithBrandedTransitions(
     filters.push(
       `[holdlast${index}][holdfirst${index}]xfade=transition=custom:` +
         `duration=${transitionDuration.toFixed(3)}:offset=0:` +
-        `expr='${transitionExpression}'[bridge${index}]`,
+        `expr='${transitionExpression}'` +
+        (onTimeline ? `,tpad=stop_mode=clone:stop=${transitionFrames},trim=end_frame=${transitionFrames}` : '') +
+        `[bridge${index}]`,
     );
     filters.push(
-      `anullsrc=r=48000:cl=stereo,atrim=duration=${transitionDuration.toFixed(3)},` +
+      `anullsrc=r=48000:cl=stereo,atrim=duration=${transitionDuration.toFixed(6)},` +
         `asetpts=PTS-STARTPTS[asilence${index}]`,
     );
     videoConcatInputs.push(`[bridge${index}]`, `[vmain${index}]`);
@@ -362,15 +384,10 @@ export async function concatenateVideosWithBrandedTransitions(
 
   if (includeSoundEffect) {
     const whooshLabels = transitionStarts.map((start, index) => {
-      const delayMs = Math.max(0, Math.round(start * 1000));
+      const delay = Math.max(0, Math.round(start * 48000));
       const label = `whoosh${index}`;
       filters.push(
-        `anoisesrc=d=${transitionDuration.toFixed(3)}:c=pink:r=48000:a=0.085,` +
-          'highpass=f=280,lowpass=f=4300,' +
-          `afade=t=in:st=0:d=${(transitionDuration * 0.42).toFixed(3)},` +
-          `afade=t=out:st=${(transitionDuration * 0.42).toFixed(3)}:` +
-          `d=${(transitionDuration * 0.58).toFixed(3)},` +
-          `adelay=${delayMs}|${delayMs}[${label}]`,
+        `${transitionWhoosh(transitionDuration, index)},adelay=${delay}S:all=1[${label}]`,
       );
       return `[${label}]`;
     });
@@ -460,13 +477,16 @@ export async function concatenateVideosWithFFmpeg(
     outputPath,
     useHardwareAcceleration = true,
     videoBitrate = '6000k',
+    onSegmentEnds,
+    forceSingleEncode = false,
+    silentInputDurations,
   } = options;
 
   if (!videoUrls || videoUrls.length === 0) {
     throw new Error('At least one video URL is required for concatenation');
   }
 
-  if (videoUrls.length === 1) {
+  if (videoUrls.length === 1 && !forceSingleEncode) {
     // If only one video, just return the URL (no concatenation needed)
     return videoUrls[0];
   }
@@ -500,6 +520,7 @@ export async function concatenateVideosWithFFmpeg(
         '-filter_threads',
         '0',
       ];
+      if (onSegmentEnds) ffmpegCommand.push('-loglevel', 'verbose');
 
       // Add all video URLs as inputs
       videoUrls.forEach((url) => {
@@ -508,10 +529,14 @@ export async function concatenateVideosWithFFmpeg(
 
       // Build filter complex for concatenation
       // For n videos: [0:v][0:a][1:v][1:a]...[n-1:v][n-1:a]concat=n=n:v=1:a=1[outv][outa]
-      const videoInputs = videoUrls
-        .map((_, index) => `[${index}:v][${index}:a]`)
-        .join('');
-      const filterComplex = `"${videoInputs}concat=n=${videoUrls.length}:v=1:a=1[outv][outa]"`;
+      const silence: string[] = [];
+      const videoInputs = videoUrls.map((_, index) => {
+        const duration = silentInputDurations?.get(index);
+        if (duration === undefined) return `[${index}:v][${index}:a]`;
+        silence.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${duration.toFixed(6)}[silent${index}];`);
+        return `[${index}:v][silent${index}]`;
+      }).join('');
+      const filterComplex = `"${silence.join('')}${videoInputs}concat=n=${videoUrls.length}:v=1:a=1[outv][outa]"`;
 
       ffmpegCommand.push('-filter_complex', filterComplex);
       ffmpegCommand.push('-map', '[outv]', '-map', '[outa]');
@@ -572,7 +597,15 @@ export async function concatenateVideosWithFFmpeg(
         }ms (${attempt} encoding, ${videoUrls.length} videos)`
       );
 
-      // Check if output file exists
+      // FFmpeg's concat filter reports the actual cumulative segment boundaries in microseconds.
+      if (onSegmentEnds) {
+        const ends = [...stderr.matchAll(/Segment finished at pts=(\d+)/g)]
+          .map(match => Number(match[1]) / 1e6);
+        if (ends.length !== videoUrls.length || ends.some((end, index) => end <= (ends[index - 1] ?? 0))) {
+          throw new Error('Could not verify the clip boundaries in the merged video.');
+        }
+        onSegmentEnds(ends);
+      }
       await access(fullOutputPath);
 
       return fullOutputPath;
@@ -671,7 +704,8 @@ export async function concatenateVideosWithUpload(
  */
 export async function concatenateVideosFast(
   videoUrls: string[],
-  outputPath?: string
+  outputPath?: string,
+  segmentDurations?: number[],
 ): Promise<string> {
   if (!videoUrls || videoUrls.length === 0) {
     throw new Error('At least one video URL is required for concatenation');
@@ -685,7 +719,7 @@ export async function concatenateVideosFast(
     outputPath ||
     `merged_fast_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
   const fullOutputPath = path.resolve('/tmp', outputFileName);
-  const concatListPath = path.resolve('/tmp', `concat_fast_${Date.now()}.txt`);
+  const concatListPath = fullOutputPath + '.ffconcat';
 
   try {
     console.log(
@@ -694,7 +728,10 @@ export async function concatenateVideosFast(
 
     // Create concat list file content with HTTP URLs directly
     const concatListContent = videoUrls
-      .map((url) => `file '${url}'`)
+      .map((url, index) => {
+        const file = `file '${url.replace(/'/g, "'\\''")}'`;
+        return segmentDurations ? `${file}\nduration ${segmentDurations[index].toFixed(6)}` : file;
+      })
       .join('\n');
 
     await writeFile(concatListPath, concatListContent, 'utf8');

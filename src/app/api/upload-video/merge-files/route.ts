@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createWriteStream } from 'fs';
+import { randomUUID } from 'crypto';
 import { mkdtemp, rm, unlink } from 'fs/promises';
 import Busboy from 'busboy';
 import os from 'os';
@@ -8,6 +9,7 @@ import { Readable } from 'stream';
 import {
   createOriginalVideoRow,
   getOriginalVideosData,
+  getOriginalVideoRow,
   updateOriginalVideoRow,
   BaserowRow,
 } from '@/lib/baserow-actions';
@@ -17,15 +19,24 @@ import {
   concatenateVideosWithFFmpeg,
 } from '@/utils/ffmpeg-merge';
 import { uploadToMinio } from '@/utils/ffmpeg-direct';
+import {
+  buildMergedEffects,
+  checkMergeAttachments,
+  type EffectsTimeline,
+} from '@/utils/merged-upload-audio';
 
 export const runtime = 'nodejs';
 export const maxDuration = 3600;
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024; // 10 GB per source video
+const activeUploads = new Set<string>();
+const uploadIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const MAX_TOTAL_SIZE = 50 * 1024 * 1024 * 1024; // 50 GB per merge request
 
 type ParsedUpload = {
   tempPaths: string[];
+  attachments: Map<number, string>;
+  uploadId: string;
   files: Array<{ name: string; contentType: string; size: number }>;
   titleBase: string | null;
   renderNormally: boolean;
@@ -97,9 +108,21 @@ function generateUniqueTitle(baseName: string, videos: BaserowRow[]): string {
   return candidate;
 }
 
+function mergedObjectNames(rowId: number, uploadId: string) {
+  return {
+    video: `video_${rowId}_raw_merged_${uploadId}.mp4`,
+    effects: `video_${rowId}_music_and_effects_${uploadId}.wav`,
+  };
+}
+
+function matchesObject(url: unknown, filename: string) {
+  return typeof url === 'string' && url.endsWith('/' + filename);
+}
+
 export async function POST(request: NextRequest) {
   let tempDir: string | null = null;
   let mergedLocalPath: string | null = null;
+  let lockedUpload: string | null = null;
 
   try {
     const contentType = request.headers.get('content-type') || '';
@@ -109,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     const contentLength = Number(request.headers.get('content-length') || 0);
     if (Number.isFinite(contentLength) && contentLength > MAX_TOTAL_SIZE) {
-      return jsonFailure('Total selected video size must be less than 50 GB');
+      return jsonFailure('Total selected video and audio size must be less than 50 GB');
     }
 
     if (!request.body) {
@@ -122,7 +145,7 @@ export async function POST(request: NextRequest) {
       tempDir,
       contentType,
     );
-    const { files, tempPaths, titleBase: parsedTitleBase } = parsedUpload;
+    const { files, tempPaths, attachments, uploadId, titleBase: parsedTitleBase } = parsedUpload;
     const {
       renderNormally,
       addTransitions,
@@ -132,8 +155,8 @@ export async function POST(request: NextRequest) {
     } =
       parsedUpload;
 
-    if (files.length < 2) {
-      return jsonFailure('Select at least two video files to merge');
+    if (files.length === 0) {
+      return jsonFailure('Select at least one video file');
     }
 
     const invalidFile = files.find((file) => !file.contentType.startsWith('video/'));
@@ -141,81 +164,135 @@ export async function POST(request: NextRequest) {
       return jsonFailure(`${invalidFile.name} is not a video file`);
     }
 
-    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-    if (totalSize > MAX_TOTAL_SIZE) {
-      return jsonFailure('Total selected video size must be less than 50 GB');
+    if ([...attachments.keys()].some(index => index >= files.length)) {
+      return jsonFailure('A music and effects file points to a video outside the merge list.');
+    }
+    if (activeUploads.has(uploadId)) return jsonFailure('This merge upload is already running.');
+    activeUploads.add(uploadId);
+    lockedUpload = uploadId;
+
+    const inputs = await checkMergeAttachments(tempPaths, attachments, files.map(file => file.name));
+    const existingVideos = await getOriginalVideosData();
+    const committed = existingVideos.find(row => {
+      const names = mergedObjectNames(row.id, uploadId);
+      return (matchesObject(row.field_6881, names.video) && matchesObject(row.field_7433, names.effects))
+        || (matchesObject(row.field_6881, `merged_upload_${uploadId}.mp4`)
+          && matchesObject(row.field_7433, `merged_upload_${uploadId}_music_and_effects.wav`));
+    });
+    if (committed) {
+      return NextResponse.json({ success: true, rowId: committed.id, videoUrl: committed.field_6881,
+        musicEffectsUrl: committed.field_7433, title: committed.field_6852, mergedFiles: files.length });
     }
 
-    if (renderNormally) {
-      mergedLocalPath = addTransitions
-        ? await concatenateVideosWithBrandedTransitions({
-            videoUrls: tempPaths,
-            duration: 0.95,
-            includeSoundEffect: includeTransitionSound,
-            showTitles: showTransitionTitles,
-            titles: showTransitionTitles
-              ? files.map((file, index) =>
-                  sanitizeTransitionTitle(
-                    transitionTitles[index],
-                    file.name.replace(/\.[^/.]+$/, ''),
-                  ),
-                )
-              : [],
-          })
+    const effectsPath = path.join(tempDir, 'music-and-effects.wav');
+    async function renderPlainVideo(useHardwareAcceleration: boolean) {
+      let joins: number[] = [];
+      const video = await concatenateVideosWithFFmpeg({
+        videoUrls: tempPaths, useHardwareAcceleration, videoBitrate: '6000k',
+        onSegmentEnds: ends => { joins = ends.slice(0, -1); },
+        silentInputDurations: new Map(inputs.flatMap((clip, index) =>
+          clip.audioDuration > 0 ? [] : [[index, clip.videoDuration]])),
+      });
+      const durations = joins.map((end, index) => end - (joins[index - 1] ?? 0));
+      durations.push(inputs[inputs.length - 1].videoDuration);
+      return { video, durations };
+    }
+    let timeline: EffectsTimeline | undefined;
+    if (files.length === 1) {
+      const [source] = tempPaths;
+      mergedLocalPath = !renderNormally && getExtension(files[0].name) === 'mp4'
+        ? source
         : await concatenateVideosWithFFmpeg({
             videoUrls: tempPaths,
+            outputPath: path.join(tempDir, 'rendered.mp4'),
+            forceSingleEncode: true,
             useHardwareAcceleration: false,
-            videoBitrate: '6000k',
+            silentInputDurations: inputs[0].audioDuration ? undefined : new Map([[0, inputs[0].videoDuration]]),
           });
+      await buildMergedEffects(mergedLocalPath, effectsPath, { durations: [inputs[0].videoDuration] }, attachments);
+    } else if (renderNormally && addTransitions) {
+      mergedLocalPath = await concatenateVideosWithBrandedTransitions({
+        videoUrls: tempPaths,
+        duration: 0.95,
+        includeSoundEffect: includeTransitionSound,
+        showTitles: showTransitionTitles,
+        titles: showTransitionTitles
+          ? files.map((file, index) => sanitizeTransitionTitle(
+              transitionTitles[index], file.name.replace(/\.[^/.]+$/, ''),
+            ))
+          : [],
+        onTimeline: (durations, transitionDuration) => {
+          timeline = { durations, transitionDuration, whoosh: includeTransitionSound };
+        },
+      });
+      if (!timeline) throw new Error('Could not verify the transition boundaries.');
+      await buildMergedEffects(mergedLocalPath, effectsPath, timeline, attachments);
+    } else if (renderNormally) {
+      const normal = await renderPlainVideo(false);
+      mergedLocalPath = normal.video;
+      await buildMergedEffects(mergedLocalPath, effectsPath, { durations: normal.durations }, attachments);
     } else {
       try {
-        mergedLocalPath = await concatenateVideosFast(tempPaths);
+        const inputDurations = inputs.map(clip => clip.formatDuration);
+        if (inputDurations.some(duration => !Number.isFinite(duration) || duration <= 0)) {
+          throw new Error('Could not verify clip boundaries for a fast merge.');
+        }
+        mergedLocalPath = await concatenateVideosFast(tempPaths, path.join(tempDir, 'fast-merged.mp4'), inputDurations);
+        const fastTimeline = { durations: inputs.map((clip, index) => index < inputs.length - 1
+          ? clip.formatDuration : clip.videoDuration) };
+        await buildMergedEffects(mergedLocalPath, effectsPath, fastTimeline, attachments);
       } catch (fastError) {
-        console.log(
-          '[MERGED_UPLOAD] Fast local merge failed, falling back to re-encode:',
-          fastError,
-        );
-        mergedLocalPath = await concatenateVideosWithFFmpeg({
-          videoUrls: tempPaths,
-          useHardwareAcceleration: true,
-          videoBitrate: '6000k',
-        });
+        console.log('[MERGED_UPLOAD] Fast merge or timing check failed, falling back to re-encode:', fastError);
+        const normal = await renderPlainVideo(true);
+        mergedLocalPath = normal.video;
+        await buildMergedEffects(mergedLocalPath, effectsPath, { durations: normal.durations }, attachments);
       }
     }
 
-    const existingVideos = await getOriginalVideosData();
-    const maxOrder = existingVideos.reduce((max, video) => {
-      const order = Number(video.field_6902) || 0;
-      return Math.max(max, order);
-    }, 0);
-    const nextOrder = maxOrder + 1;
-    const titleBase = sanitizeName(parsedTitleBase || files[0].name);
-    const uniqueTitle = generateUniqueTitle(titleBase, existingVideos);
-
-    const newRow = await createOriginalVideoRow({
-      field_6864: 'Processing',
-      field_6902: nextOrder,
-      field_6852: uniqueTitle,
-    });
-
-    const timestamp = Date.now();
-    const finalFilename = `video_${newRow.id}_raw_merged_${timestamp}.mp4`;
-    const videoUrl = await uploadToMinio(
-      mergedLocalPath,
-      finalFilename,
-      'video/mp4',
+    async function upload(file: string, name: string, type: string, label: string) {
+      try { return await uploadToMinio(file, name, type); }
+      catch (error) {
+        throw new Error(`${label} upload failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    // The row ID is assigned by Baserow. Keep the upload ID in the pending title
+    // so a retry can recover the reservation even if the create response was lost.
+    const pendingSuffix = ` [merge upload ${uploadId}]`;
+    const currentVideos = await getOriginalVideosData();
+    const pending = currentVideos.find(row =>
+      typeof row.field_6852 === 'string' && row.field_6852.endsWith(pendingSuffix),
     );
-
-    await updateOriginalVideoRow(newRow.id, {
-      field_6881: videoUrl,
+    if (pending?.field_6881 || pending?.field_7433) {
+      throw new Error('The reserved video row already has media URLs. Review that row before retrying.');
+    }
+    const titleBase = sanitizeName(parsedTitleBase || files[0].name);
+    const uniqueTitle = pending && typeof pending.field_6852 === 'string'
+      ? pending.field_6852.slice(0, -pendingSuffix.length)
+      : generateUniqueTitle(titleBase, currentVideos);
+    const row = pending ?? await createOriginalVideoRow({
+      field_6864: 'Pending',
+      field_6902: currentVideos.reduce((max, video) => Math.max(max, Number(video.field_6902) || 0), 0) + 1,
+      field_6852: uniqueTitle + pendingSuffix,
     });
+    if (!Number.isSafeInteger(row.id) || row.id <= 0) {
+      throw new Error('Baserow did not return a video row ID for this merge.');
+    }
+
+    const names = mergedObjectNames(row.id, uploadId);
+    const videoUrl = await upload(mergedLocalPath, names.video, 'video/mp4', 'Merged video');
+    const musicEffectsUrl = await upload(effectsPath, names.effects, 'audio/wav', 'Music and effects');
+    await updateOriginalVideoRow(row.id, {
+      field_6864: 'Processing', field_6852: uniqueTitle,
+      field_6881: videoUrl, field_7433: musicEffectsUrl,
+    });
+    const saved = await getOriginalVideoRow(row.id);
+    if (saved.field_6881 !== videoUrl || saved.field_7433 !== musicEffectsUrl) {
+      throw new Error('Baserow did not return both saved URLs. Retry to check this upload again.');
+    }
 
     return NextResponse.json({
-      success: true,
-      rowId: newRow.id,
-      videoUrl,
-      title: uniqueTitle,
-      mergedFiles: files.length,
+      success: true, rowId: row.id, videoUrl, musicEffectsUrl,
+      title: uniqueTitle, mergedFiles: files.length,
     });
   } catch (error) {
     const message =
@@ -223,6 +300,7 @@ export async function POST(request: NextRequest) {
     console.warn('[MERGED_UPLOAD] Merge upload failed gracefully:', message);
     return jsonFailure(message);
   } finally {
+    if (lockedUpload) activeUploads.delete(lockedUpload);
     if (mergedLocalPath) {
       try {
         await unlink(mergedLocalPath);
@@ -249,6 +327,8 @@ function parseMultipartUpload(
   return new Promise((resolve, reject) => {
     const tempPaths: string[] = [];
     const files: ParsedUpload['files'] = [];
+    const attachments = new Map<number, string>();
+    let uploadId = randomUUID() as string;
     let titleBase: string | null = null;
     let renderNormally = false;
     let addTransitions = false;
@@ -272,13 +352,16 @@ function parseMultipartUpload(
       },
       limits: {
         fileSize: MAX_FILE_SIZE,
-        files: 100,
+        files: 200,
         fields: 20,
       },
     });
 
     busboy.on('field', (name, value) => {
-      if (name === 'titleBase') {
+      if (name === 'uploadId') {
+        if (!uploadIdPattern.test(value)) { fail(new Error('Invalid merge upload ID.')); return; }
+        uploadId = value.toLowerCase();
+      } else if (name === 'titleBase') {
         titleBase = value;
       } else if (name === 'renderNormally') {
         renderNormally = value === 'true';
@@ -294,8 +377,20 @@ function parseMultipartUpload(
     });
 
     busboy.on('file', (name, fileStream, info) => {
-      if (name !== 'files') {
+      const attachment = /^effects-(\d{1,2})$/.exec(name);
+      if (settled || (name !== 'files' && !attachment)) {
         fileStream.resume();
+        return;
+      }
+      const attachmentIndex = attachment ? Number(attachment[1]) : null;
+      if (attachmentIndex !== null && attachments.has(attachmentIndex)) {
+        fileStream.resume();
+        fail(new Error(`Clip ${attachmentIndex + 1} has more than one music and effects attachment.`));
+        return;
+      }
+      if (name === 'files' && fileIndex >= 100) {
+        fileStream.resume();
+        fail(new Error('Select at most 100 videos to merge.'));
         return;
       }
 
@@ -303,16 +398,17 @@ function parseMultipartUpload(
       const contentTypeForFile = info.mimeType || 'application/octet-stream';
       const extension = getExtension(filename);
       const safeName = sanitizePathSegment(filename);
-      const currentIndex = fileIndex++;
+      const currentIndex = attachmentIndex ?? fileIndex++;
       const filePath = path.join(
         tempDir,
-        `${String(currentIndex + 1).padStart(3, '0')}_${safeName}.${extension}`,
+        `${attachment ? 'effects-' : ''}${String(currentIndex + 1).padStart(3, '0')}_${safeName}.${extension}`,
       );
       let fileSize = 0;
       let hitFileSizeLimit = false;
 
       const writeStream = createWriteStream(filePath);
-      tempPaths.push(filePath);
+      if (attachmentIndex !== null) attachments.set(attachmentIndex, filePath);
+      else tempPaths[currentIndex] = filePath;
 
       fileStream.on('data', (chunk: Buffer) => {
         fileSize += chunk.length;
@@ -320,7 +416,7 @@ function parseMultipartUpload(
         if (totalSize > MAX_TOTAL_SIZE) {
           fileStream.unpipe(writeStream);
           writeStream.destroy();
-          fail(new Error('Total selected video size must be less than 50 GB'));
+          fail(new Error('Total selected video and audio size must be less than 50 GB'));
         }
       });
 
@@ -348,7 +444,7 @@ function parseMultipartUpload(
             return;
           }
 
-          files[currentIndex] = {
+          if (attachmentIndex === null) files[currentIndex] = {
             name: filename,
             contentType: contentTypeForFile,
             size: fileSize,
@@ -358,10 +454,12 @@ function parseMultipartUpload(
         writeStream.on('error', writeReject);
       });
 
+      void writeDone.catch(fail);
       pendingWrites.push(writeDone);
       fileStream.pipe(writeStream);
     });
 
+    busboy.on('filesLimit', () => fail(new Error('Too many files for this merge.')));
     busboy.on('error', (error) => {
       fail(error instanceof Error ? error : new Error('Failed to parse body'));
     });
@@ -382,6 +480,8 @@ function parseMultipartUpload(
         }
         resolve({
           tempPaths,
+          attachments,
+          uploadId,
           files: files.filter(Boolean),
           titleBase,
           renderNormally,

@@ -23,6 +23,7 @@ _Generate and compare thumbnail variants, select or export the final artwork, an
 
 - Browse video projects and their linked scenes from Baserow.
 - Upload a single source video or select, reorder, and merge multiple files before upload.
+- **Upload Merged** supports a single video or a merge, with optional music and effects audio beside each clip. Empty slots contribute silence, and the separate 48 kHz stereo WAV follows the merged video's clip order and transition timing. An attachment must match its clip within 150 ms. The exporter pads or trims small differences at the end of the WAV to match the rendered video to the nearest sample. Both uploaded filenames start with `video_<Baserow row ID>`. The merge saves the MP4 URL in Baserow `field_6881` and the WAV URL in `bg_music_sound_effects` (`field_7433`) on the same video row after both uploads succeed.
 - Edit scene text and production data directly from the dashboard.
 - Preview source, generated, synchronized, and merged media without leaving the application.
 

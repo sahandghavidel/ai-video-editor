@@ -637,10 +637,17 @@ export default function OriginalVideosList({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [mergedUploadFiles, setMergedUploadFiles] = useState<File[]>([]);
+  const [mergedUploadEffects, setMergedUploadEffects] = useState<(File | null)[]>([]);
+  const mergedUploadId = useRef<string | null>(null);
   const [mergedUploadTitles, setMergedUploadTitles] = useState<string[]>([]);
   const [isMergedUploadModalOpen, setIsMergedUploadModalOpen] = useState(false);
-  const [uploadingMergedFiles, setUploadingMergedFiles] = useState(false);
-  const [mergedUploadStatus, setMergedUploadStatus] = useState('');
+  const [mergedUpload, setMergedUpload] = useState<
+    | { state: 'running'; phase: string }
+    | { state: 'failed'; error: string }
+    | { state: 'completed'; rowId: number }
+    | null
+  >(null);
+  const uploadingMergedFiles = mergedUpload?.state === 'running';
   const [renderMergedUploadNormally, setRenderMergedUploadNormally] =
     useState(false);
   const [addMergedUploadTransitions, setAddMergedUploadTransitions] =
@@ -1895,12 +1902,12 @@ export default function OriginalVideosList({
     mergedFileInputRef.current?.click();
   };
 
-  const closeMergedUploadModal = () => {
-    if (uploadingMergedFiles) return;
+  const resetMergedUploadSelection = () => {
     setIsMergedUploadModalOpen(false);
     setMergedUploadFiles([]);
+    setMergedUploadEffects([]);
+    mergedUploadId.current = null;
     setMergedUploadTitles([]);
-    setMergedUploadStatus('');
     setRenderMergedUploadNormally(false);
     setAddMergedUploadTransitions(false);
     setIncludeMergedTransitionSound(true);
@@ -1908,6 +1915,10 @@ export default function OriginalVideosList({
     if (mergedFileInputRef.current) {
       mergedFileInputRef.current.value = '';
     }
+  };
+
+  const closeMergedUploadModal = () => {
+    if (!uploadingMergedFiles) resetMergedUploadSelection();
   };
 
   const handleMergedFileSelect = (
@@ -1923,12 +1934,6 @@ export default function OriginalVideosList({
       return;
     }
 
-    if (files.length < 2) {
-      setError('Please select at least two videos to merge.');
-      event.target.value = '';
-      return;
-    }
-
     const maxSize = 10 * 1024 * 1024 * 1024;
     const oversizedFile = files.find((file) => file.size > maxSize);
     if (oversizedFile) {
@@ -1939,10 +1944,11 @@ export default function OriginalVideosList({
 
     setError(null);
     setMergedUploadFiles(files);
+    setMergedUploadEffects(files.map(() => null));
+    mergedUploadId.current = null;
     setMergedUploadTitles(
       files.map((file) => file.name.replace(/\.[^/.]+$/, '')),
     );
-    setMergedUploadStatus('');
     setRenderMergedUploadNormally(false);
     setAddMergedUploadTransitions(false);
     setIncludeMergedTransitionSound(true);
@@ -1964,6 +1970,13 @@ export default function OriginalVideosList({
       ];
       return nextFiles;
     });
+    setMergedUploadEffects((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
     setMergedUploadTitles((currentTitles) => {
       const targetIndex = index + direction;
       if (targetIndex < 0 || targetIndex >= currentTitles.length) {
@@ -1982,22 +1995,30 @@ export default function OriginalVideosList({
     setMergedUploadFiles((currentFiles) =>
       currentFiles.filter((_, fileIndex) => fileIndex !== index),
     );
+    setMergedUploadEffects((current) => current.filter((_, fileIndex) => fileIndex !== index));
     setMergedUploadTitles((currentTitles) =>
       currentTitles.filter((_, titleIndex) => titleIndex !== index),
     );
   };
 
+  useEffect(() => {
+    mergedUploadId.current = null;
+  }, [mergedUploadFiles, mergedUploadEffects, mergedUploadTitles, renderMergedUploadNormally,
+    addMergedUploadTransitions, includeMergedTransitionSound, showMergedUploadTitles]);
+
   const handleMergedFilesUpload = async () => {
     if (uploadingMergedFiles) return;
 
-    if (mergedUploadFiles.length < 2) {
-      setError('Please keep at least two videos in the merge list.');
+    if (mergedUploadFiles.length === 0) {
+      setError('Please select a video to upload.');
       return;
     }
 
-    setUploadingMergedFiles(true);
-    setMergedUploadStatus('Uploading files to local merge route...');
+    setIsMergedUploadModalOpen(false);
     setError(null);
+    setMergedUpload({ state: 'running', phase: renderMergedUploadNormally
+      ? 'Rendering and uploading the video and music & effects…'
+      : 'Merging and uploading the video and music & effects…' });
 
     try {
       const shouldNotifyTelegram = renderMergedUploadNormally;
@@ -2007,6 +2028,12 @@ export default function OriginalVideosList({
         formData.append('files', file, file.name);
       });
 
+      mergedUploadEffects.forEach((file, index) => {
+        if (file) formData.append(`effects-${index}`, file, file.name);
+      });
+      mergedUploadId.current ??= crypto.randomUUID();
+      formData.append('uploadId', mergedUploadId.current);
+
       formData.append('titleBase', firstFileName.replace(/\.[^/.]+$/, ''));
       formData.append(
         'renderNormally',
@@ -2014,7 +2041,7 @@ export default function OriginalVideosList({
       );
       formData.append(
         'addTransitions',
-        renderMergedUploadNormally && addMergedUploadTransitions
+        mergedUploadFiles.length > 1 && renderMergedUploadNormally && addMergedUploadTransitions
           ? 'true'
           : 'false',
       );
@@ -2028,22 +2055,6 @@ export default function OriginalVideosList({
       );
       formData.append('transitionTitles', JSON.stringify(mergedUploadTitles));
 
-      setIsMergedUploadModalOpen(false);
-      setMergedUploadFiles([]);
-      setMergedUploadTitles([]);
-      setRenderMergedUploadNormally(false);
-      setAddMergedUploadTransitions(false);
-      setIncludeMergedTransitionSound(true);
-      setShowMergedUploadTitles(true);
-      if (mergedFileInputRef.current) {
-        mergedFileInputRef.current.value = '';
-      }
-
-      setMergedUploadStatus(
-        shouldNotifyTelegram
-          ? 'Rendering merged video...'
-          : 'Merging videos...',
-      );
       const response = await fetch('/api/upload-video/merge-files', {
         method: 'POST',
         body: formData,
@@ -2051,35 +2062,24 @@ export default function OriginalVideosList({
 
       const result = await response.json().catch(() => ({}));
 
-      if (!response.ok || result?.success === false) {
-        const errorMessage =
-          result?.error || `Merged upload failed (${response.status})`;
-        setError(errorMessage);
-        setMergedUploadStatus('Failed');
-        playErrorSound();
-        setUploadingMergedFiles(false);
-        return;
+      if (!response.ok || result?.success !== true || !Number.isSafeInteger(result.rowId)) {
+        throw new Error(result?.error || `Merged upload failed (${response.status})`);
       }
 
-      setMergedUploadStatus('Refreshing videos...');
-      await fetchOriginalVideos(true);
+      resetMergedUploadSelection();
+      setMergedUpload({ state: 'completed', rowId: result.rowId });
+      void fetchOriginalVideos(true);
 
       if (shouldNotifyTelegram) {
-        await playSuccessAndNotifyBatchCompletion('Upload Merged Render');
+        void playSuccessAndNotifyBatchCompletion('Upload Merged Render').catch(error => {
+          console.warn('Merged upload was saved, but the completion notification failed:', error);
+        });
       } else {
         playSuccessSound();
       }
-
-      setMergedUploadStatus('Done');
-      setTimeout(() => {
-        setUploadingMergedFiles(false);
-        setMergedUploadStatus('');
-      }, 800);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Merged upload failed');
+      setMergedUpload({ state: 'failed', error: err instanceof Error ? err.message : 'Merged upload failed' });
       playErrorSound();
-      setUploadingMergedFiles(false);
-      setMergedUploadStatus('');
     }
   };
 
@@ -12951,6 +12951,38 @@ export default function OriginalVideosList({
           {/* Pipeline Configuration */}
           <div className='mb-6'>
             <LazyPipelineConfig
+              mergeUploadActive={uploadingMergedFiles}
+              mergeUploadNotice={mergedUpload && (
+                <div className='col-span-full mt-3 rounded border border-purple-200 bg-white p-3 text-sm' role='status'>
+                  <p className='font-medium'>
+                    Upload Merged Videos
+                    {mergedUpload.state === 'completed' && ` · Video #${mergedUpload.rowId} · Saved and verified`}
+                    {mergedUpload.state === 'failed' && ' · Failed'}
+                  </p>
+                  {mergedUpload.state === 'running' && (
+                    <p className='mt-1 flex items-center gap-2'>
+                      <Loader2 aria-hidden='true' className='h-4 w-4 animate-spin text-purple-600' />
+                      {mergedUpload.phase}
+                    </p>
+                  )}
+                  {mergedUpload.state === 'completed' && <p>Uploaded the MP4 and the separate Music & Effects WAV.</p>}
+                  {mergedUpload.state === 'failed' && <p className='text-red-700'>{mergedUpload.error}</p>}
+                  {mergedUpload.state !== 'running' && (
+                    <div className='mt-2 flex gap-2'>
+                      {mergedUpload.state === 'failed' && mergedUploadFiles.length > 0 && (
+                        <button type='button' className='rounded border px-2 py-1'
+                          onClick={() => setIsMergedUploadModalOpen(true)}>
+                          Edit selection
+                        </button>
+                      )}
+                      <button type='button' className='rounded border px-2 py-1'
+                        onClick={() => setMergedUpload(null)}>
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               onRunFullPipeline={handleRunFullPipeline}
               isRunFullPipelineDisabled={
                 runningFullPipeline ||
@@ -13079,15 +13111,15 @@ export default function OriginalVideosList({
                       } text-white text-sm font-medium rounded-md transition-all shadow-sm hover:shadow disabled:cursor-not-allowed min-h-[40px] cursor-pointer`}
                       title={
                         uploadingMergedFiles
-                          ? mergedUploadStatus || 'Merging and uploading...'
-                          : 'Select multiple videos, reorder them, merge, and upload'
+                          ? 'Merging and uploading…'
+                          : 'Upload one video or merge multiple videos with optional music and effects'
                       }
                     >
                       {uploadingMergedFiles ? (
                         <>
                           <Loader2 className='w-4 h-4 animate-spin' />
                           <span className='truncate'>
-                            {mergedUploadStatus || 'Merging...'}
+                            Merging…
                           </span>
                         </>
                       ) : (
@@ -13214,7 +13246,7 @@ export default function OriginalVideosList({
                         <div className='w-full max-w-3xl rounded-lg bg-white shadow-lg border border-gray-200'>
                           <div className='px-4 py-3 border-b border-gray-200 flex items-center justify-between'>
                             <h3 className='text-sm font-semibold text-gray-900'>
-                              Upload Merged Videos
+                              {mergedUploadFiles.length === 1 ? 'Upload Video' : 'Upload Merged Videos'}
                             </h3>
                             <button
                               onClick={closeMergedUploadModal}
@@ -13243,7 +13275,7 @@ export default function OriginalVideosList({
                                     <div className='text-xs text-gray-500'>
                                       {formatUploadFileSize(file.size)}
                                     </div>
-                                    {renderMergedUploadNormally &&
+                                    {mergedUploadFiles.length > 1 && renderMergedUploadNormally &&
                                       addMergedUploadTransitions &&
                                       showMergedUploadTitles && (
                                         <div>
@@ -13290,6 +13322,38 @@ export default function OriginalVideosList({
                                           </div>
                                         </div>
                                       )}
+                                    <div className='flex flex-wrap items-center gap-2 text-xs text-gray-600'>
+                                      <label className='cursor-pointer rounded border border-gray-300 px-2 py-1 hover:bg-gray-50'>
+                                        {mergedUploadEffects[index] ? 'Replace music & effects' : 'Add music & effects'}
+                                        <input
+                                          type='file'
+                                          className='sr-only'
+                                          aria-label={`Music and effects for clip ${index + 1}`}
+                                          accept='audio/*,.wav,.mp3,.m4a,.aac,.flac,.aiff,.ogg'
+                                          disabled={uploadingMergedFiles}
+                                          onChange={(event) => {
+                                            const audio = event.currentTarget.files?.[0];
+                                            event.currentTarget.value = '';
+                                            if (audio) setMergedUploadEffects((current) =>
+                                              current.map((file, item) => item === index ? audio : file));
+                                          }}
+                                        />
+                                      </label>
+                                      <span className='max-w-56 truncate' title={mergedUploadEffects[index]?.name}>
+                                        {mergedUploadEffects[index]?.name || 'Silence'}
+                                      </span>
+                                      {mergedUploadEffects[index] && (
+                                        <button
+                                          type='button'
+                                          disabled={uploadingMergedFiles}
+                                          onClick={() => setMergedUploadEffects((current) =>
+                                            current.map((file, item) => item === index ? null : file))}
+                                          className='text-red-700 hover:underline disabled:opacity-50'
+                                        >
+                                          Remove audio
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className='flex items-center gap-1'>
                                     <button
@@ -13335,13 +13399,9 @@ export default function OriginalVideosList({
                               ))}
                             </div>
 
-                            {mergedUploadStatus && (
-                              <div className='flex items-center gap-2 text-sm text-gray-700'>
-                                <Loader2 className='w-4 h-4 animate-spin text-green-600' />
-                                <span>{mergedUploadStatus}</span>
-                              </div>
-                            )}
-
+                            <p className='text-xs text-gray-600'>
+                              Music and effects export as a separate WAV. Empty clips contribute silence.
+                            </p>
                             <label className='flex items-start gap-3 rounded-md border border-gray-200 p-3 text-sm text-gray-800'>
                               <input
                                 type='checkbox'
@@ -13365,7 +13425,7 @@ export default function OriginalVideosList({
                               </span>
                             </label>
 
-                            {renderMergedUploadNormally && (
+                            {mergedUploadFiles.length > 1 && renderMergedUploadNormally && (
                               <div className='ml-7 space-y-2 rounded-md border border-[#FFD21C]/40 bg-[#071B3D]/[0.04] p-3 text-sm text-gray-800'>
                                 <label className='flex items-start gap-3'>
                                   <input
@@ -13449,14 +13509,14 @@ export default function OriginalVideosList({
                               onClick={handleMergedFilesUpload}
                               disabled={
                                 uploadingMergedFiles ||
-                                mergedUploadFiles.length < 2
+                                mergedUploadFiles.length === 0
                               }
                               className='inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400'
                             >
                               {uploadingMergedFiles && (
                                 <Loader2 className='w-4 h-4 animate-spin' />
                               )}
-                              <span>Merge and Upload</span>
+                              <span>{mergedUploadFiles.length === 1 ? 'Upload Video' : 'Merge and Upload'}</span>
                             </button>
                           </div>
                         </div>
