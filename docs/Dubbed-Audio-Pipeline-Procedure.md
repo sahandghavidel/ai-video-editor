@@ -301,3 +301,9 @@ gain and tempo unchanged, limits only the effects track, and verifies that the
 mixed WAV retains the narration's sample rate, channel count, codec, and sample
 count before the `Dubbed_<language>` field is patched. Final per-video M4A
 assembly is unchanged.
+
+## Shared Music & Effects
+
+**Add Music & Effects** is checked by default on the **Create Dubbed Lang** pipeline card. This overlays the video’s Baserow `bg_music_sound_effects` URL (`field_7433`) on its final language audio. The file should follow the same edit as the dub. The merge starts the effects at zero and uses the dubbed track’s sample count for the output. An early-ending effects track contributes silence through the end of the dub. The output stays in the selected WAV or M4A format.
+
+During a new dub, when the field is populated, the full-video WAV takes precedence over adding HyperFrames effects per scene. Existing Baserow dubs follow the usual skip and local recovery behavior. The app exports to the standard language audio filename and keeps any file already present at that path.

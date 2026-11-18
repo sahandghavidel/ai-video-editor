@@ -27,6 +27,7 @@ const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
 const SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT = 'field_7107';
 const SCENE_REFERENCE_SENTENCE_FALLBACK_FIELD_KEY = 'field_6890';
 const VIDEO_FINAL_DUBBED_FA_FIELD_KEY = 'field_7113';
+const VIDEO_MUSIC_AND_EFFECTS_FIELD = 'field_7433';
 
 const DEFAULT_DUBBED_LANGUAGE = 'fa';
 const FALLBACK_LANGUAGE_BASEROW_FIELDS: LanguageBaserowFields = {
@@ -427,6 +428,7 @@ export async function POST(request: NextRequest) {
       language?: unknown;
       saveFinalAudioAsWav?: unknown;
       includeHyperFramesSoundEffects?: unknown;
+      includeMusicAndEffects?: unknown;
     } | null;
 
     const videoId = parsePositiveInt(body?.videoId);
@@ -439,8 +441,7 @@ export async function POST(request: NextRequest) {
 
     const requestedLanguage = normalizeLanguageCode(body?.language);
     const saveFinalAudioAsWav = body?.saveFinalAudioAsWav === true;
-    const includeHyperFramesSoundEffects =
-      body?.includeHyperFramesSoundEffects === true;
+    const includeMusicAndEffects = body?.includeMusicAndEffects === true;
     const selectedLanguageReference =
       await resolveLanguageAudioReference(requestedLanguage);
 
@@ -481,6 +482,29 @@ export async function POST(request: NextRequest) {
       baserowUrl,
       token,
       `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
+    );
+
+    const hasMusicAndEffects = includeMusicAndEffects && Boolean(extractUrl(videoRow[VIDEO_MUSIC_AND_EFFECTS_FIELD]));
+    const includeHyperFramesSoundEffects = body?.includeHyperFramesSoundEffects === true && !hasMusicAndEffects;
+    const mergeOptions = {
+      videoId,
+      sourceSceneAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
+      destinationVideoAudioFieldKey: baserowFields.videoFinalDubbedAudioFieldKey?.trim()
+        || (selectedLanguageReference.language === DEFAULT_DUBBED_LANGUAGE ? VIDEO_FINAL_DUBBED_FA_FIELD_KEY : ''),
+      sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
+      requireAudioForDurationScenes: true,
+      language: selectedLanguageReference.language,
+      saveFinalAudioAsWav,
+      includeMusicAndEffects: hasMusicAndEffects,
+    };
+    const mergeDub = () => fetch(
+      `${request.nextUrl.origin}${MERGE_DUBBED_AUDIO_BY_FIELD_ROUTE}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mergeOptions),
+        dispatcher: STEP2_FETCH_DISPATCHER,
+      } as RequestInit & { dispatcher: Agent },
     );
 
     const recoveryOnly = body?.recoveryMode === 'only';
@@ -939,9 +963,7 @@ export async function POST(request: NextRequest) {
         videoId, language: selectedLanguageReference.language, presetId: selectedLanguageReference.id,
         presetSnapshot: presetBatchSnapshot(selectedLanguageReference), origin: request.nextUrl.origin,
         step2: JSON.parse(step2RequestInit.body as string),
-        merge: { videoId, sourceSceneAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
-          destinationVideoAudioFieldKey: finalField, sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
-          requireAudioForDurationScenes: true, language: selectedLanguageReference.language, saveFinalAudioAsWav },
+        merge: mergeOptions,
         scenes: batchScenes,
       });
       return NextResponse.json({ pending: true, jobId: job.id, job: publicBatchJob(job), localSubtitle }, { status: 202 });
@@ -1112,23 +1134,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const step3Response = await fetch(
-      `${request.nextUrl.origin}${MERGE_DUBBED_AUDIO_BY_FIELD_ROUTE}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoId,
-          sourceSceneAudioFieldKey: baserowFields.sceneDubbedAudioFieldKey,
-          destinationVideoAudioFieldKey: finalDubbedAudioFieldKey,
-          sceneDurationFieldKey: SCENE_DURATION_FIELD_KEY_FOR_AUDIO_FIT,
-          requireAudioForDurationScenes: true,
-          language: selectedLanguageReference.language,
-          saveFinalAudioAsWav,
-        }),
-        dispatcher: STEP2_FETCH_DISPATCHER,
-      } as RequestInit & { dispatcher: Agent },
-    );
+    const step3Response = await mergeDub();
 
     const step3Payload = (await step3Response.json().catch(() => null)) as {
       ok?: unknown;

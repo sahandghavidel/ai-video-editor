@@ -4843,6 +4843,7 @@ export default function BatchOperations({
       setDubbedResult(null);
       const result = await runDubbedBatchItem(selectedVideoId, activeDubbedLanguage, false, {
         includeHyperFramesSoundEffects: pipelineConfig.includeHyperFramesSoundEffectsInDubbedAudio,
+        includeMusicAndEffects: pipelineConfig.includeMusicAndEffectsInDubbedAudio,
       });
       setDubbedResult(result);
       onRefresh?.();

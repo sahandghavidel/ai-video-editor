@@ -1248,6 +1248,28 @@ export default function PipelineConfig({
                         />
                         Add HF sound effects
                       </label>
+                      <label
+                        className={`flex items-center justify-center gap-1 text-[10px] font-medium ${
+                          isEnabled ? 'text-teal-700' : 'text-gray-400'
+                        }`}
+                        title='Use the Music & Effects WAV saved on the video in Baserow field 7433'
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type='checkbox'
+                          aria-label='Add Music & Effects'
+                          checked={pipelineConfig.includeMusicAndEffectsInDubbedAudio}
+                          disabled={!isEnabled || isRunningFullPipeline}
+                          onChange={(event) =>
+                            updatePipelineConfig({
+                              includeMusicAndEffectsInDubbedAudio: event.target.checked,
+                            })
+                          }
+                          className='h-3 w-3 accent-teal-600 disabled:cursor-not-allowed'
+                        />
+                        Add Music &amp; Effects
+                      </label>
                     </div>
                   )}
 

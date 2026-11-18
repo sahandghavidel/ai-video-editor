@@ -311,6 +311,7 @@ export interface PipelineConfig {
   createDubbedLanguage: boolean;
   saveDubbedAudioAsWav: boolean;
   includeHyperFramesSoundEffectsInDubbedAudio: boolean;
+  includeMusicAndEffectsInDubbedAudio: boolean;
   selectedDubbedLanguagesForPipeline: string[];
   generateYouTubeDescriptions: boolean;
   generateYouTubeKeywords: boolean;
@@ -777,6 +778,7 @@ const defaultPipelineConfig: PipelineConfig = {
   createDubbedLanguage: false,
   saveDubbedAudioAsWav: false,
   includeHyperFramesSoundEffectsInDubbedAudio: false,
+  includeMusicAndEffectsInDubbedAudio: true,
   selectedDubbedLanguagesForPipeline: [],
   generateYouTubeDescriptions: false,
   generateYouTubeKeywords: false,
@@ -835,6 +837,10 @@ function normalizePipelineConfig(
     ...defaultPipelineConfig,
     ...config,
     codexFixEnglish: config?.codexFixEnglish === true,
+    includeMusicAndEffectsInDubbedAudio:
+      typeof config?.includeMusicAndEffectsInDubbedAudio === 'boolean'
+        ? config.includeMusicAndEffectsInDubbedAudio
+        : defaultPipelineConfig.includeMusicAndEffectsInDubbedAudio,
     speedUpSpeed: pipelineSpeedUpSpeed,
     speedUpMuteAudio: pipelineSpeedUpMuteAudio,
     selectedDubbedLanguagesForPipeline,

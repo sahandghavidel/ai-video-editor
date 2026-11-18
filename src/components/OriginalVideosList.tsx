@@ -3961,6 +3961,7 @@ export default function OriginalVideosList({
       pipelineStepNumber?: number;
       saveDubbedAudioAsWav?: boolean;
       includeHyperFramesSoundEffects?: boolean;
+      includeMusicAndEffects?: boolean;
     },
   ) => {
     if (creatingDubbedLanguageAllVideos) {
@@ -4053,7 +4054,8 @@ export default function OriginalVideosList({
           const result = await runDubbedBatchItem(
             video.id, languageCode, hasStoredDubbedFinalAudioForLanguage(video, destinationFieldKey),
             { saveFinalAudioAsWav: options?.saveDubbedAudioAsWav,
-              includeHyperFramesSoundEffects: options?.includeHyperFramesSoundEffects },
+              includeHyperFramesSoundEffects: options?.includeHyperFramesSoundEffects,
+              includeMusicAndEffects: options?.includeMusicAndEffects },
           );
           results.push(result);
           setDubbedReport([...results]);
@@ -12352,6 +12354,7 @@ export default function OriginalVideosList({
             saveDubbedAudioAsWav: pipelineConfig.saveDubbedAudioAsWav,
             includeHyperFramesSoundEffects:
               pipelineConfig.includeHyperFramesSoundEffectsInDubbedAudio,
+            includeMusicAndEffects: pipelineConfig.includeMusicAndEffectsInDubbedAudio,
           });
           console.log(
             `✓ Step ${stepNumber} Complete: Create Dubbed ${pipelineDubbedLabel} finished`,

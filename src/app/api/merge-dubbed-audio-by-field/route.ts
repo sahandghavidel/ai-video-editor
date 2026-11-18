@@ -20,6 +20,7 @@ export const maxDuration = 3600;
 const VIDEOS_TABLE_ID = '713';
 const SCENES_TABLE_ID = '714';
 const SCENE_VIDEO_LINK_FIELD_KEY = 'field_6889';
+const VIDEO_MUSIC_AND_EFFECTS_FIELD = 'field_7433';
 const FIELD_KEY_REGEX = /^field_\d+$/;
 
 const AUDIO_SAMPLE_RATE = 48000;
@@ -418,6 +419,33 @@ async function probeAudioMetrics(input: string): Promise<AudioProbeMetrics> {
   };
 }
 
+async function mixVideoMusicAndEffects(
+  basePath: string,
+  effectsUrl: string,
+  outputPath: string,
+  dubSamples: number,
+  saveAsWav: boolean,
+) {
+  if (!/^https?:\/\//i.test(effectsUrl)) {
+    throw new Error('Baserow field 7433 must contain an HTTP or HTTPS audio URL.');
+  }
+  const format = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
+  const end = `apad,atrim=end_sample=${dubSamples},asetpts=N/SR/TB`;
+  const filters = [
+    `[0:a:0]${format},${end}[voice]`,
+    `[1:a:0]${format},asetpts=N/SR/TB[effects]`,
+    '[voice][effects]amix=inputs=2:duration=first:normalize=0:dropout_transition=0,' +
+      `alimiter=limit=0.98:level=false:latency=true,${end}[out]`,
+  ];
+  const output = saveAsWav ? ['-c:a', 'pcm_s16le', '-rf64', 'auto']
+    : ['-c:a', 'aac', '-b:a', '192k', '-movie_timescale', '48000', '-movflags', '+faststart'];
+
+  await runCommand('ffmpeg', [
+    '-nostdin', '-v', 'error', '-y', '-i', basePath, '-i', effectsUrl,
+    '-filter_complex', filters.join(';'), '-map', '[out]', ...output, outputPath,
+  ], DEFAULT_FFMPEG_TIMEOUT_MS);
+}
+
 async function normalizeAudioToWavLocal(options: {
   sceneId: number;
   videoId: number;
@@ -622,6 +650,7 @@ export async function POST(request: NextRequest) {
       skipIfDestinationExists?: unknown;
       language?: unknown;
       saveFinalAudioAsWav?: unknown;
+      includeMusicAndEffects?: unknown;
     } | null;
 
     const videoId = parsePositiveInt(body?.videoId);
@@ -654,6 +683,10 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       );
+    }
+
+    if (destinationVideoAudioFieldKey === VIDEO_MUSIC_AND_EFFECTS_FIELD) {
+      return NextResponse.json({ error: 'Field 7433 is reserved for the shared Music & Effects WAV.' }, { status: 400 });
     }
 
     const sceneDurationFieldKeyRaw = body?.sceneDurationFieldKey;
@@ -721,6 +754,10 @@ export async function POST(request: NextRequest) {
         `/database/rows/table/${VIDEOS_TABLE_ID}/${videoId}/`,
       );
     }
+
+    const musicEffectsUrl = body?.includeMusicAndEffects === true
+      ? extractUrl(videoRow[VIDEO_MUSIC_AND_EFFECTS_FIELD])
+      : '';
 
     const existingDestinationAudioUrl = extractUrl(
       videoRow[destinationVideoAudioFieldKey],
@@ -883,7 +920,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const finalAudioPath = saveFinalAudioAsWav
+    let finalAudioPath = saveFinalAudioAsWav
       ? await concatenateDubbedAudioWavBatches({
           batchPaths: outputBatchPaths,
           videoId,
@@ -896,7 +933,29 @@ export async function POST(request: NextRequest) {
       tempFiles.push(finalAudioPath);
     }
 
-    const mergedMetrics = await probeAudioMetrics(finalAudioPath);
+    const dubMetrics = await probeAudioMetrics(finalAudioPath);
+    let mergedMetrics = dubMetrics;
+    if (musicEffectsUrl) {
+      const mixedPath = makeTempPath(
+        `video_${videoId}_dubbed_music_and_effects`,
+        saveFinalAudioAsWav ? 'wav' : 'm4a',
+      );
+      tempFiles.push(mixedPath);
+      try {
+        if (dubMetrics.sampleRate !== AUDIO_SAMPLE_RATE) {
+          throw new Error('Expected the merged dub to use 48 kHz audio.');
+        }
+        // Bound the mix to the dub during the encode. A failed readback leaves the saved dub alone.
+        await mixVideoMusicAndEffects(finalAudioPath, musicEffectsUrl, mixedPath, dubMetrics.sampleCount, saveFinalAudioAsWav);
+        mergedMetrics = await probeAudioMetrics(mixedPath);
+        if (mergedMetrics.sampleRate !== dubMetrics.sampleRate || mergedMetrics.sampleCount !== dubMetrics.sampleCount) {
+          throw new Error(`Expected ${dubMetrics.sampleCount} samples, got ${mergedMetrics.sampleCount}.`);
+        }
+        finalAudioPath = mixedPath;
+      } catch (error) {
+        throw new Error(`Music & Effects mix (field 7433) failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
 
     const languageSuffix =
       typeof body?.language === 'string' && body.language.trim()
@@ -947,6 +1006,7 @@ export async function POST(request: NextRequest) {
       mergedOutputDeltaSamples:
         mergedMetrics.sampleCount - expectedMergedSamples,
       mergeCorrectionPasses: 0,
+      musicAndEffectsApplied: Boolean(musicEffectsUrl),
       finalAudioFormat: saveFinalAudioAsWav ? 'wav' : 'm4a',
       wavBatchCount: saveFinalAudioAsWav ? outputBatchPaths.length : 0,
       m4aBatchCount: saveFinalAudioAsWav ? 0 : outputBatchPaths.length,

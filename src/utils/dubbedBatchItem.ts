@@ -22,7 +22,7 @@ type ItemPayload = {
 
 export async function runDubbedBatchItem(
   videoId: number, language: string, existing: boolean,
-  options: { saveFinalAudioAsWav?: boolean; includeHyperFramesSoundEffects?: boolean },
+  options: { saveFinalAudioAsWav?: boolean; includeHyperFramesSoundEffects?: boolean; includeMusicAndEffects?: boolean },
 ): Promise<DubbedBatchItem> {
   const result: DubbedBatchItem = {
     videoId, language, outcome: 'Failed', files: [], recovered: 0, warnings: [], stop: false,
