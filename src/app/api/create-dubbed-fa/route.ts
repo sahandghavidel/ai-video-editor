@@ -1,4 +1,4 @@
-import { recoverTranslatedFile, saveTranslatedAsset } from '@/lib/local-video-export';
+import { readLocalVideoSubtitle, recoverTranslatedFile, saveTranslatedAsset } from '@/lib/local-video-export';
 import { createOrResumeBatchJob, scheduleBatchJob } from '@/lib/geminiBatchRunner';
 import { fetchBatchScenes, isTerminal, listBatchJobs, presetBatchSnapshot, publicBatchJob, sceneBatchInputs } from '@/lib/geminiBatchStore';
 import { runWithGeminiSceneRecovery } from '@/lib/geminiSceneRecovery';
@@ -506,11 +506,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const localTargetSrt = await readLocalVideoSubtitle(videoId, requestedLanguage);
+    // A custom reference field must resolve to its own language, never to English.
+    let referenceLanguage: string | undefined;
+    if (baserowFields.videoReferenceSrtFieldKey === 'field_6872') {
+      referenceLanguage = 'en';
+    } else {
+      const { entries } = await loadTtsAudioReferencesStore();
+      referenceLanguage = entries.find(entry =>
+        entry.baserowFields.videoSrtFieldKey === baserowFields.videoReferenceSrtFieldKey,
+      )?.language;
+    }
+    const localReferenceSrt = referenceLanguage
+      ? await readLocalVideoSubtitle(videoId, referenceLanguage)
+      : undefined;
+
     /* ── Step 0: Auto-fetch missing target SRT from YouTube ── */
 
     let srtTargetUrl = extractUrl(videoRow[baserowFields.videoSrtFieldKey]);
 
-    if (!srtTargetUrl && selectedLanguageReference.youtubeLangCode) {
+    if (localTargetSrt === undefined && !srtTargetUrl && selectedLanguageReference.youtubeLangCode) {
       const youtubeUrl = extractUrl(videoRow['field_6879']);
 
       if (youtubeUrl) {
@@ -667,7 +682,7 @@ export async function POST(request: NextRequest) {
       srtTargetUrl = extractUrl(videoRow[baserowFields.videoSrtFieldKey]);
     }
 
-    if (!srtReferenceUrl) {
+    if (localReferenceSrt === undefined && !srtReferenceUrl) {
       return NextResponse.json(
         {
           error: `Selected video is missing reference SRT URL (${baserowFields.videoReferenceSrtFieldKey}) for language '${selectedLanguageReference.language}'.`,
@@ -676,7 +691,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!srtTargetUrl) {
+    if (localTargetSrt === undefined && !srtTargetUrl) {
       return NextResponse.json(
         {
           error: `Selected video is missing target-language SRT URL (${baserowFields.videoSrtFieldKey}) for language '${selectedLanguageReference.language}'.`,
@@ -686,8 +701,8 @@ export async function POST(request: NextRequest) {
     }
 
     const [referenceSrt, targetSrt] = await Promise.all([
-      fetchSrtBytes(srtReferenceUrl),
-      fetchSrtBytes(srtTargetUrl),
+      localReferenceSrt ?? fetchSrtBytes(srtReferenceUrl),
+      localTargetSrt ?? fetchSrtBytes(srtTargetUrl),
     ]);
 
     const enCues = parseSrtSegments(new TextDecoder().decode(referenceSrt));

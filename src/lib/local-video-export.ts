@@ -1,4 +1,4 @@
-import { copyFile, link, lstat, mkdir, readdir, rename, rm, writeFile } from 'fs/promises';
+import { copyFile, link, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { getLanguageDisplayName } from '@/utils/languageNames';
@@ -338,5 +338,38 @@ export async function recoverTranslatedFile(
     return { path: result.path, status: result.status === 'saved' ? 'recovered' : 'present' };
   } catch (error) {
     return { warning: `${fileName}: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+/** Read the selected video's subtitle before requesting a remote copy. */
+export async function readLocalVideoSubtitle(
+  videoId: number,
+  language: string,
+): Promise<ArrayBuffer | undefined> {
+  let entries;
+  try {
+    entries = await readdir(LOCAL_VIDEO_EXPORT_BASE_DIR, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  const id = parseVideoExportId(videoId);
+  const folders = entries.filter(entry =>
+    entry.isDirectory() && (entry.name === String(id) || entry.name.startsWith(`${id}--`)),
+  );
+  if (folders.length > 1) {
+    throw new Error(`Multiple export folders found for video ${id}; resolve them before dubbing`);
+  }
+  if (!folders.length) return undefined;
+  const fileName = language === 'en'
+    ? 'English - United Kingdom.srt'
+    : `${getLanguageExportName(language)}.srt`;
+  const destination = mediaDestination(path.join(LOCAL_VIDEO_EXPORT_BASE_DIR, folders[0].name), fileName);
+  try {
+    const bytes = await readFile(destination);
+    return Uint8Array.from(bytes).buffer;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
   }
 }
