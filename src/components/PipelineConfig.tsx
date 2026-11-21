@@ -1299,19 +1299,20 @@ export default function PipelineConfig({
 
             {/* Pipeline override: Dubbed language multi-select */}
             {pipelineConfig.createDubbedLanguage && (
-              <div className='col-span-full rounded-md border border-teal-200 bg-teal-50 p-3'>
-                <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
-                  <div>
-                    <p className='text-xs font-semibold text-teal-900'>
-                      Create Dubbed Lang — Pipeline Language Override
-                    </p>
-                    <p className='text-[11px] text-teal-700'>
-                      Select one or more languages for pipeline execution. Order
-                      follows your selection clicks; drag selected languages to
-                      reorder them. When empty, pipeline falls back to the
-                      batch-panel language selection.
-                    </p>
-                  </div>
+              <details className='col-span-full rounded-md border border-teal-200 bg-teal-50 p-3'>
+                <summary className='cursor-pointer text-xs font-semibold text-teal-900'>
+                  Create Dubbed Lang — Pipeline Language Override{' '}
+                  <span className='ml-1 font-normal text-teal-700'>
+                    ({selectedDubbedLanguagesForPipeline.length} selected)
+                  </span>
+                </summary>
+                <div className='mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                  <p className='text-[11px] text-teal-700'>
+                    Select one or more languages for pipeline execution. Order
+                    follows your selection clicks; drag selected languages to
+                    reorder them. When empty, pipeline falls back to the
+                    batch-panel language selection.
+                  </p>
                   <button
                     type='button'
                     onClick={() => {
@@ -1428,7 +1429,7 @@ export default function PipelineConfig({
                     })}
                   </div>
                 </details>
-              </div>
+              </details>
             )}
           </div>
 
