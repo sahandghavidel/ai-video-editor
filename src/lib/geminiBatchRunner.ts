@@ -14,6 +14,15 @@ import {
 const dispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 });
 const globals = globalThis as typeof globalThis & { geminiBatchTimers?: Map<string, ReturnType<typeof setTimeout>> };
 const timers = globals.geminiBatchTimers ??= new Map();
+class BatchSceneRetriesExhausted extends Error {
+  readonly sceneIds: number[];
+
+  constructor(message: string, scenes: BatchScene[]) {
+    super(`${message}: ${scenes.map(scene => `${scene.id}: ${scene.error}`).join('; ')}`);
+    this.sceneIds = scenes.map(scene => scene.id);
+  }
+}
+
 function safeError(error: unknown) {
   let message = error instanceof Error ? error.message : String(error);
   for (const key of [process.env.GEMINI_API_KEY, process.env.GOOGLE_API_KEY]) if (key?.trim()) message = message.replaceAll(key.trim(), '[REDACTED]');
@@ -195,11 +204,11 @@ export async function advanceBatchJob(job: GeminiBatchJob) {
     } finally { await pipeline.drain(); }
     job.operation = undefined;
     const exhausted = job.scenes.filter(scene => !scene.done && !scene.existing && (scene.attempts || 0) >= 3);
-    if (exhausted.length) throw new Error(`Batch scene processing failed after two retries: ${exhausted.map(scene => `${scene.id}: ${scene.error}`).join('; ')}`);
+    if (exhausted.length) throw new BatchSceneRetriesExhausted('Batch scene processing failed after two retries', exhausted);
     const missing = job.scenes.filter(scene => expected.has(scene.key) && !scene.rawFile && !scene.rawUrl);
     if (missing.length) {
       log(job, 'Generation failed; retrying only missing scenes after 60 seconds', { sceneIds: missing.map(scene => scene.id), failures: missing.map(scene => scene.error) });
-      if (job.round >= 2) throw new Error(`Batch generation failed after two recovery rounds: ${missing.map(scene => `${scene.id}: ${scene.error}`).join('; ')}`);
+      if (job.round >= 2) throw new BatchSceneRetriesExhausted('Batch generation failed after two recovery rounds', missing);
       job.round++; job.state = 'queued'; job.nextAttemptAt = Date.now() + 60_000;
       await checkpoint(); return;
     }
@@ -215,7 +224,7 @@ export async function advanceBatchJob(job: GeminiBatchJob) {
   if (job.state === 'processing') {
     const failed = job.scenes.filter(scene => !scene.existing && !scene.done);
     if (failed.length) {
-      if (failed.some(scene => (scene.attempts || 0) >= 3)) throw new Error(`Batch scene processing failed after two retries: ${failed.map(scene => `${scene.id}: ${scene.error}`).join('; ')}`);
+      if (failed.some(scene => (scene.attempts || 0) >= 3)) throw new BatchSceneRetriesExhausted('Batch scene processing failed after two retries', failed);
       job.nextAttemptAt = Date.now() + 60_000; await saveBatchJob(job); return;
     }
     job.state = 'merging'; await saveBatchJob(job);
@@ -276,6 +285,7 @@ export async function handleBatchJobError(job: GeminiBatchJob, error: unknown) {
     job.nextAttemptAt = Date.now() + 60_000;
   } else { job.state = 'failed'; job.nextAttemptAt = undefined; }
   job.error = message;
+  job.exhaustedSceneIds = error instanceof BatchSceneRetriesExhausted ? error.sceneIds : undefined;
   await saveBatchJob(job);
   log(job, 'Job error', { error: message, lookupRetryCount: job.lookupRetryCount,
     ...(job.nextAttemptAt ? { waitSeconds: 60 } : {}) });
@@ -310,6 +320,7 @@ async function resetFailedJob(job: GeminiBatchJob, input?: BatchJobInput) {
     : job.scenes.some(scene => !scene.existing && !scene.done && scene.text && !scene.rawFile && !scene.rawUrl) ? 'queued' : 'processing';
   job.round = 0; job.mergeAttempts = 0; job.lookupRetryCount = 0;
   job.nextAttemptAt = undefined; job.error = undefined;
+  job.exhaustedSceneIds = undefined;
   for (const scene of job.scenes) { scene.attempts = 0; scene.error = undefined; }
   await saveBatchJob(job);
   log(job, 'Resuming failed job with existing audio and operation checkpoints');

@@ -4063,6 +4063,7 @@ export default function OriginalVideosList({
             stoppedForGeminiFailure = true;
             break;
           }
+          if (result.outcome === 'Skipped') break;
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
 
@@ -4071,12 +4072,13 @@ export default function OriginalVideosList({
 
       await handleRefresh();
       const failed = results.filter(item => item.outcome === 'Failed').length;
-      const warnings = results.filter(item => item.outcome !== 'Failed' && item.warnings.length).length;
+      const skipped = results.filter(item => item.outcome === 'Skipped').length;
+      const warnings = results.filter(item => (item.outcome === 'Dubbed' || item.outcome === 'Previously dubbed') && item.warnings.length).length;
       const remaining = processingVideos.length * runnableLanguages.length - results.length;
-      if (failed || warnings || remaining) {
-        const message = `Create Dubbed: ${failed} failed, ${warnings} with local file warnings, ${remaining} not started.`;
+      if (failed || skipped || warnings || remaining) {
+        const message = `Create Dubbed: ${failed} failed, ${skipped} skipped after Gemini retries, ${warnings} with local file warnings, ${remaining} not started.`;
         setDubbedBatchNotice(message);
-        if (options?.updatePipelineProgress) throw new Error(message);
+        if (options?.updatePipelineProgress && (failed || warnings || stoppedForGeminiFailure)) throw new Error(message);
         if (playSound) playErrorSound();
       } else if (playSound) {
         await playSuccessAndNotifyBatchCompletion(

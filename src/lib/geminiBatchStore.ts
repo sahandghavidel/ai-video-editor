@@ -17,6 +17,7 @@ export type GeminiBatchJob = {
   state: 'queued' | 'submitting' | 'waiting' | 'processing' | 'merging' | 'completed' | 'failed' | 'cancelled';
   step2: Record<string, unknown>; merge: Record<string, unknown>;
   scenes: BatchScene[]; round: number; operation?: string; displayName?: string;
+  exhaustedSceneIds?: number[];
   roundKeys?: string[]; mergeAttempts?: number; nextAttemptAt?: number; error?: string;
   result?: Record<string, unknown>; submissionUnknown?: boolean; lookupRetryCount?: number;
 };
@@ -166,6 +167,7 @@ export function publicBatchJob(job: GeminiBatchJob) {
   return { id: job.id, videoId: job.videoId, language: job.language, state: job.state,
     completedScenes: job.scenes.filter(scene => scene.done || scene.existing).length,
     totalScenes: job.scenes.length, round: job.round, error: job.error,
+    exhaustedSceneIds: job.exhaustedSceneIds,
     nextAttemptAt: job.nextAttemptAt, result: job.result, updatedAt: job.updatedAt };
 }
 

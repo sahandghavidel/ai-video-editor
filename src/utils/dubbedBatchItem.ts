@@ -3,7 +3,7 @@ import { fetchDubbedWithBatch } from './geminiBatchClient';
 export type DubbedBatchItem = {
   videoId: number;
   language: string;
-  outcome: 'Dubbed' | 'Previously dubbed' | 'Failed';
+  outcome: 'Dubbed' | 'Previously dubbed' | 'Failed' | 'Skipped';
   files: string[];
   recovered: number;
   warnings: string[];
@@ -15,6 +15,7 @@ type ItemPayload = {
   error?: string;
   details?: string[];
   stopLanguageBatch?: boolean;
+  skipLanguage?: boolean;
   recoveryOnly?: boolean;
   localSubtitle?: LocalFile;
   localAudio?: LocalFile;
@@ -37,6 +38,7 @@ export async function runDubbedBatchItem(
     const payload: ItemPayload = await response.json();
     result.stop = payload.stopLanguageBatch === true;
     if (!response.ok) {
+      if (payload.skipLanguage === true) result.outcome = 'Skipped';
       if (payload.localSubtitle?.path) result.files.push(`${payload.localSubtitle.path.split('/').pop()} (${payload.localSubtitle.status || 'saved'})`);
       if (payload.localSubtitle?.warning) result.warnings.push(payload.localSubtitle.warning);
       throw new Error([payload.error || `HTTP ${response.status}`, ...(payload.details ?? []).slice(0, 5)].join(' · '));

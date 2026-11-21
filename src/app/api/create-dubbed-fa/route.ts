@@ -1069,7 +1069,8 @@ export async function POST(request: NextRequest) {
           step: 'step-2-generate-dubbed-audio',
           localSubtitle,
           remediation: 'retry-failed-scenes',
-          stopLanguageBatch: selectedLanguageReference.provider === 'gemini',
+          skipLanguage: selectedLanguageReference.provider === 'gemini' && step2FailedSceneIds.length > 0,
+          stopLanguageBatch: selectedLanguageReference.provider === 'gemini' && step2FailedSceneIds.length === 0,
           failures: selectedLanguageReference.provider === 'gemini' ? step2Payload?.failures : undefined,
           details: [
             `Retry failed scene IDs: ${step2FailedSceneIds.slice(0, 20).join(', ') || 'n/a'}`,

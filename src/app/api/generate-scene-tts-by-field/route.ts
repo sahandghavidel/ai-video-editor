@@ -99,7 +99,7 @@ type SceneTtsFailure = {
 
 const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_TRANSIENT_RETRY_ATTEMPTS = 3;
-const INTRO_QUALITY_DURATION_SECONDS = 5 * 60;
+const INTRO_QUALITY_DURATION_SECONDS = 3 * 60;
 const INTRO_STEP_MULTIPLIER = 1.5;
 const MIN_OMNIVOICE_STEPS = 8;
 const MAX_OMNIVOICE_STEPS = 64;
@@ -213,7 +213,7 @@ function getBaseOmniVoiceNumStep(baseNumStep: unknown): number {
   );
 }
 
-function getFirstFiveMinutesQualityNumStep(
+function getOpeningQualityNumStep(
   baseNumStep: unknown,
   sceneStartTimeSeconds: number,
 ): number {
@@ -2618,7 +2618,8 @@ export async function POST(request: NextRequest) {
         ? (body.ttsSettings as Record<string, unknown>)
         : undefined;
 
-    const boostFirstFiveMinutesSteps = parseBoolean(
+    // Keep the existing request field for callers of this route.
+    const boostOpeningSteps = parseBoolean(
       body?.boostFirstFiveMinutesSteps,
       false,
     );
@@ -3000,7 +3001,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const sceneStartTimeSeconds = parseNumberish(scene.field_6896);
-        const isInsideFirstFiveMinutes =
+        const isInsideOpeningBoostWindow =
           Number.isFinite(sceneStartTimeSeconds) &&
           sceneStartTimeSeconds >= 0 &&
           sceneStartTimeSeconds < INTRO_QUALITY_DURATION_SECONDS;
@@ -3011,7 +3012,7 @@ export async function POST(request: NextRequest) {
             : undefined;
         const baseNumStep = getBaseOmniVoiceNumStep(configuredNumStep);
         const sceneTtsSettings =
-          boostFirstFiveMinutesSteps &&
+          boostOpeningSteps &&
           ttsSettings &&
           typeof ttsSettings === 'object' &&
           provider === 'omnivoice' &&
@@ -3021,7 +3022,7 @@ export async function POST(request: NextRequest) {
                 ...ttsSettings,
                 omniVoice: {
                   ...(ttsSettings.omniVoice as Record<string, unknown>),
-                  numStep: getFirstFiveMinutesQualityNumStep(
+                  numStep: getOpeningQualityNumStep(
                     configuredNumStep,
                     sceneStartTimeSeconds,
                   ),
@@ -3040,7 +3041,7 @@ export async function POST(request: NextRequest) {
           videoId,
           referenceAudioFilename: referenceAudioFilename || undefined,
           numStepOverride:
-            boostFirstFiveMinutesSteps &&
+            boostOpeningSteps &&
             provider === 'omnivoice' &&
             sceneTtsSettings &&
             typeof sceneTtsSettings.omniVoice === 'object'
@@ -3058,8 +3059,8 @@ export async function POST(request: NextRequest) {
           sceneStartTimeSeconds: Number.isFinite(sceneStartTimeSeconds)
             ? sceneStartTimeSeconds
             : null,
-          boostFirstFiveMinutesSteps,
-          isInsideFirstFiveMinutes,
+          boostOpeningSteps,
+          isInsideOpeningBoostWindow,
           baseNumStep,
           effectiveNumStep:
             sceneTtsSettings && typeof sceneTtsSettings === 'object'
