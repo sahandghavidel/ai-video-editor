@@ -321,6 +321,11 @@ export interface PipelineConfig {
   downloadAssetsZipAll: boolean;
 }
 
+export interface PipelineLanguagePreset {
+  name: string;
+  languages: string[];
+}
+
 export interface PipelineTemplate {
   id: string;
   name: string;
@@ -405,6 +410,7 @@ interface AppState {
   // Pipeline Configuration
   pipelineConfig: PipelineConfig;
   pipelineTemplates: PipelineTemplate[];
+  pipelineLanguagePresets: PipelineLanguagePreset[];
 
   // Silence Speed Rate
   silenceSpeedRate: number;
@@ -546,6 +552,7 @@ interface AppState {
   updatePipelineConfig: (updates: Partial<PipelineConfig>) => void;
   togglePipelineStep: (step: BooleanPipelineStepKey) => void;
   resetPipelineConfig: () => void;
+  savePipelineLanguagePreset: (name: string, languages: string[]) => void;
   savePipelineTemplate: (name: string) => void;
   applyPipelineTemplate: (templateId: string) => void;
   deletePipelineTemplate: (templateId: string) => void;
@@ -791,6 +798,7 @@ const defaultPipelineConfig: PipelineConfig = {
 const defaultPipelineTemplates: PipelineTemplate[] = [];
 const PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY =
   'pipelineDubbedLanguagesOverride';
+const PIPELINE_LANGUAGE_PRESETS_STORAGE_KEY = 'pipelineLanguagePresets';
 
 function normalizeLanguageCode(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -938,6 +946,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Pipeline Configuration
   pipelineConfig: defaultPipelineConfig,
   pipelineTemplates: defaultPipelineTemplates,
+  pipelineLanguagePresets: [],
 
   // Silence Speed Rate
   silenceSpeedRate: 4, // Default to 4x speed
@@ -1822,6 +1831,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { pipelineConfig: nextConfig };
     }),
 
+  savePipelineLanguagePreset: (name, languages) =>
+    set((state) => {
+      const preset = { name: name.trim(), languages: toUniqueNormalizedLanguageList(languages) };
+      if (!preset.name || preset.languages.length === 0) return {};
+      const index = state.pipelineLanguagePresets.findIndex(
+        (entry) => entry.name.toLowerCase() === preset.name.toLowerCase(),
+      );
+      const pipelineLanguagePresets = [...state.pipelineLanguagePresets];
+      if (index < 0) pipelineLanguagePresets.push(preset);
+      else pipelineLanguagePresets[index] = preset;
+      localStorage.setItem(PIPELINE_LANGUAGE_PRESETS_STORAGE_KEY, JSON.stringify(pipelineLanguagePresets));
+      return { pipelineLanguagePresets };
+    }),
+
   savePipelineTemplate: (name) =>
     set((state) => {
       const trimmedName = String(name || '').trim();
@@ -2141,6 +2164,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         );
         savePipelineConfigToLocalStorage(normalizedConfig);
         set({ pipelineConfig: normalizedConfig });
+      }
+
+      const savedLanguagePresets = localStorage.getItem(PIPELINE_LANGUAGE_PRESETS_STORAGE_KEY);
+      if (savedLanguagePresets) {
+        try {
+          const parsed: unknown = JSON.parse(savedLanguagePresets);
+          if (Array.isArray(parsed)) {
+            const byName = new Map<string, PipelineLanguagePreset>();
+            for (const entry of parsed) {
+              if (!entry || typeof entry.name !== 'string') continue;
+              const name = entry.name.trim();
+              const languages = toUniqueNormalizedLanguageList(entry.languages);
+              if (name && languages.length > 0) byName.set(name.toLowerCase(), { name, languages });
+            }
+            set({ pipelineLanguagePresets: [...byName.values()] });
+          }
+        } catch (error) {
+          console.error('Failed to load pipeline language presets:', error);
+        }
       }
 
       const savedPipelineTemplates = localStorage.getItem('pipelineTemplates');
@@ -2489,6 +2531,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.removeItem('pipelineConfig');
       localStorage.removeItem(PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY);
       localStorage.removeItem('pipelineTemplates');
+      localStorage.removeItem(PIPELINE_LANGUAGE_PRESETS_STORAGE_KEY);
       localStorage.removeItem('videoSettings');
       localStorage.removeItem('subtitleGenerationSettings');
       localStorage.removeItem('combineScenesSettings');
@@ -2516,6 +2559,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedOriginalVideo: defaultSelectedOriginalVideo,
         pipelineConfig: defaultPipelineConfig,
         pipelineTemplates: defaultPipelineTemplates,
+        pipelineLanguagePresets: [],
       });
       syncAIProviderCookies(defaultModelSelection);
       console.log('Settings cleared from localStorage');

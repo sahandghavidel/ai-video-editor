@@ -1,6 +1,7 @@
 'use client';
 
 import CodexFixEnglishStatus from './CodexFixEnglishStatus';
+import PipelineLanguagePresets from './PipelineLanguagePresets';
 import { useAppStore } from '@/store/useAppStore';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 import {
@@ -109,6 +110,7 @@ export default function PipelineConfig({
     loadingDubbedLanguagesForPipeline,
     setLoadingDubbedLanguagesForPipeline,
   ] = useState(false);
+  const [dubbedLanguagesLoaded, setDubbedLanguagesLoaded] = useState(false);
   const [draggingDubbedLanguage, setDraggingDubbedLanguage] = useState<
     string | null
   >(null);
@@ -162,9 +164,11 @@ export default function PipelineConfig({
       setAvailableDubbedLanguagesForPipeline(
         enabledLanguages.length > 0 ? enabledLanguages : ['fa'],
       );
+      setDubbedLanguagesLoaded(enabledLanguages.length > 0);
     } catch (error) {
       console.error('Failed to load pipeline dubbed languages:', error);
       setAvailableDubbedLanguagesForPipeline(['fa']);
+      setDubbedLanguagesLoaded(false);
     } finally {
       setLoadingDubbedLanguagesForPipeline(false);
     }
@@ -1322,6 +1326,12 @@ export default function PipelineConfig({
                     {loadingDubbedLanguagesForPipeline ? 'Loading…' : 'Reload'}
                   </button>
                 </div>
+
+                <PipelineLanguagePresets
+                  languages={selectedDubbedLanguagesForPipeline}
+                  availableLanguages={dubbedLanguagesLoaded ? availableDubbedLanguagesForPipeline : null}
+                  disabled={isRunningFullPipeline || loadingDubbedLanguagesForPipeline}
+                />
 
                 <div className='mt-2 flex flex-wrap gap-1'>
                   {selectedDubbedLanguagesForPipeline.length > 0 ? (
