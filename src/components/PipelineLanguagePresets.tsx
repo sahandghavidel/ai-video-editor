@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { PipelineLanguagePreset } from '@/lib/pipelineLanguagePresetsStore';
 import { useAppStore } from '@/store/useAppStore';
 import { getLanguageDisplayName } from '@/utils/languageNames';
 
@@ -10,11 +11,17 @@ interface Props {
   disabled: boolean;
 }
 
+const endpoint = '/api/pipeline-language-presets';
+const legacyStorageKey = 'pipelineLanguagePresets';
+
+type PresetResponse = { presets?: PipelineLanguagePreset[]; conflicts?: string[]; error?: string };
+
 const controlClass = 'rounded border border-teal-300 bg-white px-2 py-1 text-teal-900 disabled:opacity-50';
 
 export default function PipelineLanguagePresets({ languages, availableLanguages, disabled }: Props) {
-  const presets = useAppStore((state) => state.pipelineLanguagePresets);
-  const savePreset = useAppStore((state) => state.savePipelineLanguagePreset);
+  const [presets, setPresets] = useState<PipelineLanguagePreset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const updateConfig = useAppStore((state) => state.updatePipelineConfig);
   const [selectedName, setSelectedName] = useState('');
   const [draft, setDraft] = useState<{ name: string; count: string } | null>(null);
@@ -22,6 +29,47 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
   const preset = presets.find((entry) => entry.name === selectedName);
   const matchesPreset = preset && languages.length === preset.languages.length
     && languages.every((code, index) => code === preset.languages[index]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const response = await fetch(endpoint, { cache: 'no-store' });
+        const shared = (await response.json()) as PresetResponse;
+        if (!response.ok || !shared.presets) throw new Error(shared.error);
+        if (!mounted) return;
+        setPresets(shared.presets);
+        const legacy = localStorage.getItem(legacyStorageKey);
+        if (!legacy) return;
+        const oldPresets: unknown = JSON.parse(legacy);
+        if (!Array.isArray(oldPresets) || !oldPresets.length) return;
+        const migration = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'import', presets: oldPresets }),
+        });
+        const imported = (await migration.json()) as PresetResponse;
+        if (!migration.ok || !imported.presets) throw new Error(imported.error);
+        if (!imported.conflicts?.length && localStorage.getItem(legacyStorageKey) === legacy) {
+          localStorage.removeItem(legacyStorageKey);
+        }
+        if (!mounted) return;
+        setPresets(imported.presets);
+        if (imported.conflicts?.length) {
+          setNotice(`Kept the shared versions of: ${imported.conflicts.join(', ')}. Local copies are still stored in this browser.`);
+        }
+      } catch (error) {
+        if (mounted) setNotice(error instanceof Error && error.message
+          ? error.message : 'Could not load shared language presets.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => { mounted = false; };
+  }, []);
+
+  const busy = disabled || loading || saving;
 
   const applyPreset = (name: string) => {
     const next = presets.find((entry) => entry.name === name);
@@ -40,14 +88,26 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
       : `Applied “${name}”.`);
   };
 
-  const save = (name: string, selection: string[]) => {
+  const save = async (name: string, selection: string[], action: 'create' | 'update') => {
+    if (busy) return;
+    setSaving(true);
     try {
-      savePreset(name, selection);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, presets: [{ name, languages: selection }] }),
+      });
+      const result = (await response.json()) as PresetResponse;
+      if (result.presets) setPresets(result.presets);
+      if (!response.ok) throw new Error(result.error);
       if (selection.length === languages.length) setSelectedName(name);
       setDraft(null);
       setNotice(`Saved “${name}” with ${selection.length} languages.`);
-    } catch {
-      setNotice('Could not save the preset in this browser.');
+    } catch (error) {
+      setNotice(error instanceof Error && error.message
+        ? error.message : 'Could not save the shared preset.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -59,7 +119,7 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
           id='pipeline-language-preset'
           className={controlClass}
           value={preset?.name ?? ''}
-          disabled={disabled || !availableLanguages || !presets.length}
+          disabled={busy || !availableLanguages || !presets.length}
           onChange={(event) => applyPreset(event.target.value)}
         >
           <option value='' disabled>Choose a preset</option>
@@ -70,7 +130,7 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
         <button
           type='button'
           className={controlClass}
-          disabled={disabled || !languages.length}
+          disabled={busy || !languages.length}
           onClick={() => {
             setDraft({ name: '', count: String(languages.length) });
             setNotice('');
@@ -82,7 +142,7 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
           <button
             type='button'
             className={controlClass}
-            disabled={disabled || !availableLanguages}
+            disabled={busy || !availableLanguages}
             onClick={() => applyPreset(preset.name)}
           >
             Reapply preset
@@ -92,8 +152,8 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
           <button
             type='button'
             className={controlClass}
-            disabled={disabled || !languages.length || matchesPreset}
-            onClick={() => save(preset.name, languages)}
+            disabled={busy || !languages.length || matchesPreset}
+            onClick={() => void save(preset.name, languages, 'update')}
           >
             Update preset
           </button>
@@ -104,7 +164,7 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
           className='flex flex-wrap items-end gap-2'
           onSubmit={(event) => {
             event.preventDefault();
-            if (disabled) return;
+            if (busy) return;
             const name = draft.name.trim();
             const count = Number(draft.count);
             if (!name || !Number.isInteger(count) || count < 1 || count > languages.length) return;
@@ -112,7 +172,7 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
               setNotice('That name is already in use. Choose a different name or update the existing preset.');
               return;
             }
-            save(name, languages.slice(0, count));
+            void save(name, languages.slice(0, count), 'create');
           }}
         >
           <label className='grid gap-1 text-teal-900'>
@@ -136,7 +196,7 @@ export default function PipelineLanguagePresets({ languages, availableLanguages,
               onChange={(event) => setDraft({ ...draft, count: event.target.value })}
             />
           </label>
-          <button type='submit' disabled={disabled} className={controlClass}>Save language preset</button>
+          <button type='submit' disabled={busy} className={controlClass}>Save language preset</button>
           <button type='button' className={controlClass} onClick={() => setDraft(null)}>Cancel</button>
         </form>
       )}
