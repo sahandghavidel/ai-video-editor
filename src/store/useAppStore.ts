@@ -1,6 +1,16 @@
+import {
+  defaultPipelineConfig,
+  normalizePipelineConfig,
+  toUniqueNormalizedLanguageList,
+  type BooleanPipelineStepKey,
+  type PipelineConfig,
+  type PipelineTemplate,
+} from '@/lib/pipelineConfig';
 import { normalizeTtsSettings } from '@/utils/ttsProviderSettings';
 import { create } from 'zustand';
 import { BaserowRow } from '@/lib/baserow-actions';
+
+export type { BooleanPipelineStepKey, PipelineConfig, PipelineTemplate } from '@/lib/pipelineConfig';
 
 // TTS Settings interface
 export type TTSProvider = 'omnivoice' | 'omnivoice-lora';
@@ -254,86 +264,6 @@ export interface ClipGenerationState {
   generatingSingleClip: number | null; // For single scene generation (scene ID)
 }
 
-// Pipeline configuration state interface
-export interface PipelineConfig {
-  scriptFromTitle: boolean;
-  ttsScript: boolean;
-  ttsVideo: boolean;
-  normalizeAudio: boolean;
-  convertToCFR: boolean;
-  optimizeSilence: boolean;
-  transcribe: boolean;
-  generateScenes: boolean;
-  combinePairsEnabledA: boolean;
-  combinePairsEnabledB: boolean;
-  combinePairsEnabledC: boolean;
-  combinePairsEnabledD: boolean;
-  combinePairsSkipA: number;
-  combinePairsSkipB: number;
-  combinePairsSkipC: number;
-  combinePairsSkipD: number;
-  deleteEmpty: boolean;
-  generateClips: boolean;
-  transcribeApplyGenClips: boolean;
-  transcribeApplyGenClipsMinChars: number;
-  transcribeApplyGenClipsEnabledB: boolean;
-  transcribeApplyGenClipsEnabledC: boolean;
-  transcribeApplyGenClipsEnabledD: boolean;
-  transcribeApplyGenClipsMinCharsB: number;
-  transcribeApplyGenClipsMinCharsC: number;
-  transcribeApplyGenClipsMinCharsD: number;
-  speedUp: boolean;
-  speedUpSpeed: number;
-  speedUpMuteAudio: boolean;
-  fixLanguageAll: boolean;
-  codexFixEnglish: boolean;
-  improve: boolean;
-  generateTTS: boolean;
-  sync: boolean;
-  transcribeScenesAfterSync: boolean;
-  fixFlaggedAfterFixTTS: boolean;
-  fixIntroQaAfterFixFlagged: boolean;
-  fixIntroQaAllScenes: boolean;
-  promptScenesAfterTranscribe: boolean;
-
-  // Scene-level post-processing (batch ops)
-  generateSubtitles: boolean;
-  generateSceneImages: boolean;
-  upscaleSceneImages: boolean;
-  applyUpscaledImages: boolean;
-  generateSceneVideos: boolean;
-  enhanceSceneVideos: boolean;
-  applyEnhancedVideos: boolean;
-  mergeScenes: boolean;
-  convertFinalToCFR: boolean;
-  transcribeFinalAll: boolean;
-  createEnSrt: boolean;
-  createDubbedLanguage: boolean;
-  saveDubbedAudioAsWav: boolean;
-  includeHyperFramesSoundEffectsInDubbedAudio: boolean;
-  includeMusicAndEffectsInDubbedAudio: boolean;
-  selectedDubbedLanguagesForPipeline: string[];
-  generateYouTubeDescriptions: boolean;
-  generateYouTubeKeywords: boolean;
-  generateYouTubeTitles: boolean;
-  generateYouTubeTimestamps: boolean;
-  generateThumbnails: boolean;
-  downloadAssetsZipAll: boolean;
-}
-
-export interface PipelineTemplate {
-  id: string;
-  name: string;
-  config: PipelineConfig;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Helper type: only the boolean-valued keys of PipelineConfig (for togglePipelineStep)
-export type BooleanPipelineStepKey = {
-  [K in keyof PipelineConfig]: PipelineConfig[K] extends boolean ? K : never;
-}[keyof PipelineConfig];
-
 // Audio enhancement mode type
 export type AudioEnhancementMode =
   | 'normalize'
@@ -405,6 +335,9 @@ interface AppState {
   // Pipeline Configuration
   pipelineConfig: PipelineConfig;
   pipelineTemplates: PipelineTemplate[];
+  pipelineTemplatesRevision: string | null;
+  pipelineTemplatesBusy: boolean;
+  pipelineTemplatesError: string | null;
 
   // Silence Speed Rate
   silenceSpeedRate: number;
@@ -546,13 +479,14 @@ interface AppState {
   updatePipelineConfig: (updates: Partial<PipelineConfig>) => void;
   togglePipelineStep: (step: BooleanPipelineStepKey) => void;
   resetPipelineConfig: () => void;
-  savePipelineTemplate: (name: string) => void;
+  loadPipelineTemplates: () => Promise<void>;
+  savePipelineTemplate: (name: string) => Promise<boolean>;
   applyPipelineTemplate: (templateId: string) => void;
-  deletePipelineTemplate: (templateId: string) => void;
+  deletePipelineTemplate: (templateId: string) => Promise<boolean>;
   reorderPipelineTemplate: (
     draggedTemplateId: string,
     targetTemplateId: string,
-  ) => void;
+  ) => Promise<boolean>;
 
   // Silence Speed Rate Actions
   setSilenceSpeedRate: (rate: number) => void;
@@ -721,132 +655,10 @@ const defaultClipGeneration: ClipGenerationState = {
 };
 
 // Default pipeline configuration.
-// Keep existing pipeline behavior by enabling the original steps by default.
-// New, heavier scene-level steps are opt-in.
-const defaultPipelineConfig: PipelineConfig = {
-  scriptFromTitle: true,
-  ttsScript: true,
-  ttsVideo: true,
-  normalizeAudio: true,
-  convertToCFR: true,
-  optimizeSilence: true,
-  transcribe: true,
-  generateScenes: true,
-  combinePairsEnabledA: true,
-  combinePairsEnabledB: true,
-  combinePairsEnabledC: true,
-  combinePairsEnabledD: true,
-  combinePairsSkipA: 30,
-  combinePairsSkipB: 60,
-  combinePairsSkipC: 90,
-  combinePairsSkipD: 120,
-  deleteEmpty: true,
-  generateClips: true,
-  transcribeApplyGenClips: false,
-  transcribeApplyGenClipsMinChars: 150,
-  transcribeApplyGenClipsEnabledB: false,
-  transcribeApplyGenClipsEnabledC: false,
-  transcribeApplyGenClipsEnabledD: false,
-  transcribeApplyGenClipsMinCharsB: 150,
-  transcribeApplyGenClipsMinCharsC: 150,
-  transcribeApplyGenClipsMinCharsD: 150,
-  speedUp: true,
-  speedUpSpeed: 4,
-  speedUpMuteAudio: true,
-  fixLanguageAll: true,
-  codexFixEnglish: false,
-  improve: true,
-  generateTTS: true,
-  sync: true,
-  transcribeScenesAfterSync: true,
-  fixFlaggedAfterFixTTS: true,
-  fixIntroQaAfterFixFlagged: true,
-  fixIntroQaAllScenes: false,
-  promptScenesAfterTranscribe: true,
-
-  generateSubtitles: false,
-  generateSceneImages: false,
-  upscaleSceneImages: false,
-  applyUpscaledImages: false,
-  generateSceneVideos: false,
-  enhanceSceneVideos: false,
-  applyEnhancedVideos: false,
-  mergeScenes: false,
-  convertFinalToCFR: false,
-  transcribeFinalAll: false,
-  createEnSrt: false,
-  createDubbedLanguage: false,
-  saveDubbedAudioAsWav: false,
-  includeHyperFramesSoundEffectsInDubbedAudio: false,
-  includeMusicAndEffectsInDubbedAudio: true,
-  selectedDubbedLanguagesForPipeline: [],
-  generateYouTubeDescriptions: false,
-  generateYouTubeKeywords: false,
-  generateYouTubeTitles: false,
-  generateYouTubeTimestamps: false,
-  generateThumbnails: false,
-  downloadAssetsZipAll: false,
-};
-
-const defaultPipelineTemplates: PipelineTemplate[] = [];
+const LEGACY_PIPELINE_TEMPLATES_KEY = 'pipelineTemplates';
 const PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY =
   'pipelineDubbedLanguagesOverride';
 const PIPELINE_LANGUAGE_PRESETS_STORAGE_KEY = 'pipelineLanguagePresets';
-
-function normalizeLanguageCode(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  return value.trim().toLowerCase();
-}
-
-function toUniqueNormalizedLanguageList(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-
-  const unique = new Set<string>();
-  const ordered: string[] = [];
-
-  for (const value of values) {
-    const normalized = normalizeLanguageCode(value);
-    if (!normalized || unique.has(normalized)) continue;
-    unique.add(normalized);
-    ordered.push(normalized);
-  }
-
-  return ordered;
-}
-
-function normalizePipelineConfig(
-  config: Partial<PipelineConfig> | undefined,
-  selectedDubbedLanguagesOverride?: string[],
-): PipelineConfig {
-  const pipelineSpeedUpSpeed =
-    typeof config?.speedUpSpeed === 'number' &&
-    [1, 1.125, 1.5, 2, 4, 8].includes(config.speedUpSpeed)
-      ? config.speedUpSpeed
-      : defaultPipelineConfig.speedUpSpeed;
-  const pipelineSpeedUpMuteAudio =
-    typeof config?.speedUpMuteAudio === 'boolean'
-      ? config.speedUpMuteAudio
-      : defaultPipelineConfig.speedUpMuteAudio;
-  const selectedDubbedLanguagesForPipeline =
-    selectedDubbedLanguagesOverride !== undefined
-      ? toUniqueNormalizedLanguageList(selectedDubbedLanguagesOverride)
-      : toUniqueNormalizedLanguageList(
-          config?.selectedDubbedLanguagesForPipeline,
-        );
-
-  return {
-    ...defaultPipelineConfig,
-    ...config,
-    codexFixEnglish: config?.codexFixEnglish === true,
-    includeMusicAndEffectsInDubbedAudio:
-      typeof config?.includeMusicAndEffectsInDubbedAudio === 'boolean'
-        ? config.includeMusicAndEffectsInDubbedAudio
-        : defaultPipelineConfig.includeMusicAndEffectsInDubbedAudio,
-    speedUpSpeed: pipelineSpeedUpSpeed,
-    speedUpMuteAudio: pipelineSpeedUpMuteAudio,
-    selectedDubbedLanguagesForPipeline,
-  };
-}
 
 function getPipelineConfigForStorage(config: PipelineConfig) {
   const storedConfig = { ...config } as Partial<PipelineConfig>;
@@ -879,10 +691,54 @@ function readStoredPipelineDubbedLanguagesOverride(): string[] | null {
   }
 }
 
-function normalizePipelineTemplateConfig(
-  config: Partial<PipelineConfig> | undefined,
-): PipelineConfig {
-  return normalizePipelineConfig(config, []);
+type ChangePipelineTemplates = (current: PipelineTemplate[]) => PipelineTemplate[];
+
+async function syncPipelineTemplates(change?: ChangePipelineTemplates) {
+  const { getState: get, setState: set } = useAppStore;
+  const { pipelineTemplates, pipelineTemplatesRevision, pipelineTemplatesBusy } = get();
+  if (pipelineTemplatesBusy || (change && pipelineTemplatesRevision === null)) return false;
+
+  set({ pipelineTemplatesBusy: true, pipelineTemplatesError: null });
+  let legacyTemplates: string | null = null;
+
+  try {
+    let response: Response;
+    if (change) {
+      response = await fetch('/api/pipeline-templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          revision: pipelineTemplatesRevision,
+          templates: change(pipelineTemplates),
+        }),
+      });
+    } else {
+      legacyTemplates = localStorage.getItem(LEGACY_PIPELINE_TEMPLATES_KEY);
+      response = legacyTemplates === null
+        ? await fetch('/api/pipeline-templates', { cache: 'no-store' })
+        : await fetch('/api/pipeline-templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ templates: JSON.parse(legacyTemplates) }),
+          });
+    }
+
+    const result = await response.json();
+    if (response.ok || response.status === 409) {
+      set({ pipelineTemplates: result.templates, pipelineTemplatesRevision: result.revision });
+    }
+    if (!response.ok) throw new Error(result.error || 'Could not sync pipeline templates.');
+
+    if (legacyTemplates !== null && localStorage.getItem(LEGACY_PIPELINE_TEMPLATES_KEY) === legacyTemplates) {
+      localStorage.removeItem(LEGACY_PIPELINE_TEMPLATES_KEY);
+    }
+    return true;
+  } catch (error) {
+    set({ pipelineTemplatesError: error instanceof Error ? error.message : 'Could not sync pipeline templates.' });
+    return false;
+  } finally {
+    set({ pipelineTemplatesBusy: false });
+  }
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -938,7 +794,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Pipeline Configuration
   pipelineConfig: defaultPipelineConfig,
-  pipelineTemplates: defaultPipelineTemplates,
+  pipelineTemplates: [],
+  pipelineTemplatesRevision: null,
+  pipelineTemplatesBusy: false,
+  pipelineTemplatesError: null,
 
   // Silence Speed Rate
   silenceSpeedRate: 4, // Default to 4x speed
@@ -1823,46 +1682,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { pipelineConfig: nextConfig };
     }),
 
+  loadPipelineTemplates: async () => {
+    await syncPipelineTemplates();
+  },
+
   savePipelineTemplate: (name) =>
-    set((state) => {
-      const trimmedName = String(name || '').trim();
-      if (!trimmedName) return {};
+    syncPipelineTemplates((templates) => {
+      const trimmedName = name.trim();
+      if (!trimmedName) return templates;
 
-      const normalizedName = trimmedName.toLowerCase();
-      const nowIso = new Date().toISOString();
-
-      const existingTemplate = state.pipelineTemplates.find(
-        (template) => template.name.trim().toLowerCase() === normalizedName,
+      const existing = templates.find(
+        (template) => template.name.toLowerCase() === trimmedName.toLowerCase(),
       );
+      const now = new Date().toISOString();
+      const nextTemplate: PipelineTemplate = {
+        id: existing?.id ?? globalThis.crypto?.randomUUID?.() ?? `pipeline-template-${Date.now()}`,
+        name: trimmedName,
+        config: normalizePipelineConfig(get().pipelineConfig, []),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
 
-      const nextTemplate: PipelineTemplate = existingTemplate
-        ? {
-            ...existingTemplate,
-            name: trimmedName,
-            config: normalizePipelineTemplateConfig(state.pipelineConfig),
-            updatedAt: nowIso,
-          }
-        : {
-            id:
-              typeof crypto !== 'undefined' &&
-              typeof crypto.randomUUID === 'function'
-                ? crypto.randomUUID()
-                : `pipeline-template-${Date.now()}`,
-            name: trimmedName,
-            config: normalizePipelineTemplateConfig(state.pipelineConfig),
-            createdAt: nowIso,
-            updatedAt: nowIso,
-          };
-
-      const nextTemplates = existingTemplate
-        ? state.pipelineTemplates.map((template) =>
-            template.id === existingTemplate.id ? nextTemplate : template,
-          )
-        : [...state.pipelineTemplates, nextTemplate];
-
-      localStorage.setItem('pipelineTemplates', JSON.stringify(nextTemplates));
-
-      return { pipelineTemplates: nextTemplates };
+      return existing
+        ? templates.map((template) => template.id === existing.id ? nextTemplate : template)
+        : [...templates, nextTemplate];
     }),
 
   applyPipelineTemplate: (templateId) =>
@@ -1884,52 +1727,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   deletePipelineTemplate: (templateId) =>
-    set((state) => {
-      if (!templateId) return {};
-
-      const nextTemplates = state.pipelineTemplates.filter(
-        (template) => template.id !== templateId,
-      );
-
-      localStorage.setItem('pipelineTemplates', JSON.stringify(nextTemplates));
-
-      return { pipelineTemplates: nextTemplates };
-    }),
+    syncPipelineTemplates((templates) => templates.filter((template) => template.id !== templateId)),
 
   reorderPipelineTemplate: (draggedTemplateId, targetTemplateId) =>
-    set((state) => {
-      if (
-        !draggedTemplateId ||
-        !targetTemplateId ||
-        draggedTemplateId === targetTemplateId
-      ) {
-        return {};
-      }
+    syncPipelineTemplates((templates) => {
+      const fromIndex = templates.findIndex((template) => template.id === draggedTemplateId);
+      const toIndex = templates.findIndex((template) => template.id === targetTemplateId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return templates;
 
-      const currentTemplates = state.pipelineTemplates;
-      const fromIndex = currentTemplates.findIndex(
-        (template) => template.id === draggedTemplateId,
-      );
-      const toIndex = currentTemplates.findIndex(
-        (template) => template.id === targetTemplateId,
-      );
-
-      if (fromIndex < 0 || toIndex < 0) {
-        return {};
-      }
-
-      const nextTemplates = [...currentTemplates];
+      const nextTemplates = [...templates];
       const [movedTemplate] = nextTemplates.splice(fromIndex, 1);
-      if (!movedTemplate) {
-        return {};
-      }
-
       const destinationIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
       nextTemplates.splice(destinationIndex, 0, movedTemplate);
-
-      localStorage.setItem('pipelineTemplates', JSON.stringify(nextTemplates));
-
-      return { pipelineTemplates: nextTemplates };
+      return nextTemplates;
     }),
 
   // Silence Speed Rate Actions
@@ -2142,73 +1952,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         );
         savePipelineConfigToLocalStorage(normalizedConfig);
         set({ pipelineConfig: normalizedConfig });
-      }
-
-      const savedPipelineTemplates = localStorage.getItem('pipelineTemplates');
-      if (savedPipelineTemplates) {
-        try {
-          const parsed = JSON.parse(savedPipelineTemplates) as unknown;
-          const nowIso = new Date().toISOString();
-
-          if (Array.isArray(parsed)) {
-            const normalizedTemplates = parsed
-              .map((item, index) => {
-                if (!item || typeof item !== 'object') return null;
-
-                const template = item as {
-                  id?: unknown;
-                  name?: unknown;
-                  config?: unknown;
-                  createdAt?: unknown;
-                  updatedAt?: unknown;
-                };
-
-                const name =
-                  typeof template.name === 'string' ? template.name.trim() : '';
-
-                if (!name) return null;
-
-                const id =
-                  typeof template.id === 'string' && template.id.trim()
-                    ? template.id
-                    : `pipeline-template-${index + 1}`;
-
-                const createdAt =
-                  typeof template.createdAt === 'string' &&
-                  template.createdAt.trim()
-                    ? template.createdAt
-                    : nowIso;
-
-                const updatedAt =
-                  typeof template.updatedAt === 'string' &&
-                  template.updatedAt.trim()
-                    ? template.updatedAt
-                    : createdAt;
-
-                const config =
-                  template.config && typeof template.config === 'object'
-                    ? normalizePipelineTemplateConfig(
-                        template.config as Partial<PipelineConfig>,
-                      )
-                    : normalizePipelineTemplateConfig(undefined);
-
-                return {
-                  id,
-                  name,
-                  config,
-                  createdAt,
-                  updatedAt,
-                } satisfies PipelineTemplate;
-              })
-              .filter(
-                (template): template is PipelineTemplate => template !== null,
-              );
-
-            set({ pipelineTemplates: normalizedTemplates });
-          }
-        } catch (e) {
-          console.error('Failed to parse pipelineTemplates:', e);
-        }
       }
 
       // Load silenceSpeedRate from localStorage
@@ -2489,7 +2232,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.removeItem('video-editor-settings');
       localStorage.removeItem('pipelineConfig');
       localStorage.removeItem(PIPELINE_DUBBED_LANGUAGES_OVERRIDE_STORAGE_KEY);
-      localStorage.removeItem('pipelineTemplates');
       localStorage.removeItem(PIPELINE_LANGUAGE_PRESETS_STORAGE_KEY);
       localStorage.removeItem('videoSettings');
       localStorage.removeItem('subtitleGenerationSettings');
@@ -2517,7 +2259,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         selectedOriginalVideo: defaultSelectedOriginalVideo,
         pipelineConfig: defaultPipelineConfig,
-        pipelineTemplates: defaultPipelineTemplates,
       });
       syncAIProviderCookies(defaultModelSelection);
       console.log('Settings cleared from localStorage');

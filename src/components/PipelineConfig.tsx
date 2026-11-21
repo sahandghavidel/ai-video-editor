@@ -80,6 +80,10 @@ export default function PipelineConfig({
   const {
     pipelineConfig,
     pipelineTemplates,
+    pipelineTemplatesRevision,
+    pipelineTemplatesBusy,
+    pipelineTemplatesError,
+    loadPipelineTemplates,
     togglePipelineStep,
     updatePipelineConfig,
     savePipelineTemplate,
@@ -87,6 +91,13 @@ export default function PipelineConfig({
     deletePipelineTemplate,
     reorderPipelineTemplate,
   } = useAppStore();
+  useEffect(() => {
+    const refresh = () => void loadPipelineTemplates();
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [loadPipelineTemplates]);
+
   const hasMergeUploadNotice = Boolean(mergeUploadNotice);
   const [isExpanded, setIsExpanded] = useState(hasMergeUploadNotice);
   useEffect(() => {
@@ -117,7 +128,7 @@ export default function PipelineConfig({
   const [dragOverDubbedLanguage, setDragOverDubbedLanguage] = useState<
     string | null
   >(null);
-  const templateReorderEnabled = isExpanded && isTemplateReorderMode;
+  const templateReorderEnabled = isExpanded && isTemplateReorderMode && !pipelineTemplatesBusy;
   const dubbedLanguageReorderEnabled = !isRunningFullPipeline;
 
   const selectedDubbedLanguagesForPipeline = useMemo(
@@ -186,7 +197,7 @@ export default function PipelineConfig({
     setIsSaveTemplateModalOpen(false);
   };
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
     const trimmedName = templateName.trim();
 
     if (!trimmedName) {
@@ -194,8 +205,9 @@ export default function PipelineConfig({
       return;
     }
 
-    savePipelineTemplate(trimmedName);
-    closeSaveTemplateModal();
+    if (await savePipelineTemplate(trimmedName)) {
+      closeSaveTemplateModal();
+    }
   };
 
   const clearTemplateDragState = () => {
@@ -314,6 +326,7 @@ export default function PipelineConfig({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    if (pipelineTemplatesBusy) return;
 
     const shouldDelete =
       typeof window === 'undefined'
@@ -322,7 +335,7 @@ export default function PipelineConfig({
 
     if (!shouldDelete) return;
 
-    deletePipelineTemplate(templateId);
+    void deletePipelineTemplate(templateId);
     clearTemplateDragState();
   };
 
@@ -347,7 +360,7 @@ export default function PipelineConfig({
     event.preventDefault();
 
     if (draggingTemplateId && draggingTemplateId !== templateId) {
-      reorderPipelineTemplate(draggingTemplateId, templateId);
+      void reorderPipelineTemplate(draggingTemplateId, templateId);
     }
 
     clearTemplateDragState();
@@ -657,6 +670,19 @@ export default function PipelineConfig({
         </div>
       </button>
 
+      {pipelineTemplatesError && !isSaveTemplateModalOpen && (
+        <div role='status' className='flex items-center gap-2 px-6 pb-2 text-xs text-red-700'>
+          {pipelineTemplatesError}
+          <button
+            type='button'
+            onClick={() => void loadPipelineTemplates()}
+            className='font-medium underline'
+          >
+            Reload templates
+          </button>
+        </div>
+      )}
+
       {!isExpanded && (
         <div className='px-6 pb-3'>
           <div className='flex items-center justify-end gap-2 overflow-x-auto'>
@@ -749,7 +775,8 @@ export default function PipelineConfig({
 
               <button
                 onClick={openSaveTemplateModal}
-                className='text-sm px-3 py-1.5 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 font-medium transition-colors'
+                disabled={pipelineTemplatesBusy || pipelineTemplatesRevision === null}
+                className='disabled:opacity-60 text-sm px-3 py-1.5 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 font-medium transition-colors'
               >
                 Save Template
               </button>
@@ -1460,7 +1487,7 @@ export default function PipelineConfig({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      handleSaveTemplate();
+                      void handleSaveTemplate();
                     }
                     if (e.key === 'Escape') {
                       e.preventDefault();
@@ -1472,9 +1499,9 @@ export default function PipelineConfig({
                   className='mt-4 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500'
                 />
 
-                {templateNameError && (
-                  <p className='mt-2 text-xs text-red-600'>
-                    {templateNameError}
+                {(templateNameError || pipelineTemplatesError) && (
+                  <p role='alert' className='mt-2 text-xs text-red-600'>
+                    {templateNameError || pipelineTemplatesError}
                   </p>
                 )}
 
@@ -1490,11 +1517,11 @@ export default function PipelineConfig({
                     Cancel
                   </button>
                   <button
-                    onClick={handleSaveTemplate}
+                    onClick={() => void handleSaveTemplate()}
                     className='px-3 py-1.5 text-sm rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed'
-                    disabled={!templateName.trim()}
+                    disabled={pipelineTemplatesBusy || !templateName.trim()}
                   >
-                    Save
+                    {pipelineTemplatesBusy ? 'Saving…' : 'Save'}
                   </button>
                 </div>
               </div>
