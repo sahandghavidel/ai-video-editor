@@ -4,7 +4,7 @@ import { POST as synthesize } from '../generate-tts-omnivoice-lora/route';
 import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
 import { undoScript, replaceInScript, changeScriptRow, listVoiceScripts, saveVoiceScript } from '@/lib/voice-scripts';
 import { splitEnglishNarration } from '@/lib/omniVoiceLora';
-import { existingSentence, approveVoice, saveVoiceTake, spokenSentence, listVoices, trashTakes, voiceAudio } from '@/lib/voice-manager';
+import { existingSentence, approveVoice, saveVoiceTake, spokenSentence, listVoices, trashUnapprovedFolder, trashTakes, voiceAudio } from '@/lib/voice-manager';
 
 export const maxDuration = 900;
 export const dynamic = 'force-dynamic';
@@ -61,6 +61,9 @@ export async function POST(request: Request) {
       const group = await saveVoiceTake(text, { id: voiceID, name, language, provider, enabled }, takeID,
         Buffer.from(await download.arrayBuffer()), generation);
       return Response.json({ group, id: takeID });
+    }
+    if (action === 'trashUnapprovedFolder' && typeof folder === 'string' && Array.isArray(ids) && ids.every(id => typeof id === 'string')) {
+      return Response.json({ moved: Number(await trashUnapprovedFolder(folder, ids)) });
     }
     if (action) return Response.json({ error: 'Unknown voice action.' }, { status: 400 });
     if (typeof folder !== 'string' || !Array.isArray(ids) || !ids.length || !ids.every(id => typeof id === 'string')) {

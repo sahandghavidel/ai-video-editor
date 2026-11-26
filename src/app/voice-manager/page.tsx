@@ -13,6 +13,9 @@ const pageSize = 25;
 function candidates(group: VoiceGroup) {
   return group.issue || !group.takes.some(t => t.status === 'Current approval') ? [] : group.takes.filter(t => t.status === 'Unapproved');
 }
+function neverApproved(group: VoiceGroup) {
+  return !group.issue && group.takes.length > 0 && group.takes.every(t => t.status === 'Unapproved');
+}
 function bytes(takes: VoiceTake[]) { return takes.reduce((n, t) => n + t.size, 0); }
 export default function VoiceManager() {
   const [groups, setGroups] = useState<VoiceGroup[]>([]);
@@ -24,6 +27,10 @@ export default function VoiceManager() {
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState('');
   const [preview, setPreview] = useState<VoiceGroup[]>([]);
+  const [wholeFolders, setWholeFolders] = useState(false);
+  function showPreview(items: VoiceGroup[], folders = false) {
+    setWholeFolders(folders); setPreview(items); setMessage('');
+  }
   const [busy, setBusy] = useState(true);
   const [draft, setDraft] = useState('');
   const [presets, setPresets] = useState<{ id: string; name: string }[]>([]);
@@ -49,6 +56,7 @@ export default function VoiceManager() {
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { if (preview.length) document.getElementById('cleanup-preview')?.scrollIntoView({ block: 'nearest' }); }, [preview]);
   const libraryRows = groups.map(g => ({ g, eligible: candidates(g) }));
+  const unapprovedFolders = groups.filter(neverApproved);
   const eligibleFolders = libraryRows.filter(row => row.eligible.length > 0);
   const eligibleCount = eligibleFolders.reduce((total, row) => total + row.eligible.length, 0);
   const libraryVoices = new Map(groups.filter(g => g.voiceID).map(g => [g.voiceID, g.voice || g.voiceID]));
@@ -70,7 +78,7 @@ export default function VoiceManager() {
     return sort === 'Narration A–Z' ? byName() : bytes(b.eligible) - bytes(a.eligible) || byName();
   });
   const index = Math.min(page, Math.max(0, Math.ceil(rows.length / pageSize) - 1));
-  const planned = preview.flatMap(candidates);
+  const planned = preview.flatMap(g => wholeFolders ? g.takes : candidates(g));
   function compose(group?: VoiceGroup) {
     setEditing(true);
     setDraft(group?.narration || '');
@@ -103,11 +111,12 @@ export default function VoiceManager() {
       for (const [index, group] of preview.entries()) {
         setMessage(`Cleaning folder ${index + 1} of ${preview.length} · ${moved} takes moved to Trash`);
         const res = await fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: group.folder, ids: candidates(group).map(t => t.id) }) });
-        if (!res.ok) throw Error('Cleanup stopped. Check the refreshed folders for remaining takes.');
-        moved += (await res.json()).moved;
+          body: JSON.stringify({ action: wholeFolders ? 'trashUnapprovedFolder' : undefined, folder: group.folder, ids: (wholeFolders ? group.takes : candidates(group)).map(t => t.id) }) });
+        const result = await res.json();
+        if (!res.ok) throw Error(result.error || 'Cleanup stopped. Check the refreshed folders.');
+        moved += result.moved;
       }
-      setMessage(`Moved ${moved} takes to Trash. Skipped ${planned.length - moved}.`);
+      setMessage(`Moved ${moved} ${wholeFolders ? 'folders' : 'takes'} to Trash. Skipped ${(wholeFolders ? preview.length : planned.length) - moved}.`);
     } catch (e) { setMessage(String(e)); }
     finally {
       setPreview([]);
@@ -145,7 +154,12 @@ export default function VoiceManager() {
           {!busy && <p className="mt-1 text-sm font-medium">{eligibleCount} eligible takes across {eligibleFolders.length} folders</p>}
         </div>
         <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-40"
-          disabled={busy || !eligibleCount} onClick={() => setPreview(eligibleFolders.map(row => row.g))}>Preview cleanup for entire library</button>
+          disabled={busy || !eligibleCount} onClick={() => showPreview(eligibleFolders.map(row => row.g))}>Preview cleanup for entire library</button>
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 border-t border-blue-200 pt-4">
+          <div><h3 className="font-semibold">Folders awaiting approval</h3>
+            <p className="text-sm text-slate-600">{unapprovedFolders.length} folders contain only unapproved takes.</p></div>
+          <button className={button} disabled={busy || !unapprovedFolders.length} onClick={() => showPreview(unapprovedFolders, true)}>Preview all unapproved folders</button>
+        </div>
       </section>
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-white p-4">
         <input aria-label="Search narration or voice" placeholder="Search narration or voice" className="rounded-lg border bg-white px-3 py-2" value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} />
@@ -159,14 +173,15 @@ export default function VoiceManager() {
           {['Cleanup size', 'Newest take', 'Most takes', 'Narration A–Z'].map(s => <option key={s}>{s}</option>)}</select></label>
         {filtered && <button className={button} onClick={() => { setQuery(''); setFilter('All folders'); setVoiceFilter(''); setPage(0); }}>Clear filters</button>}
         <button className={button} disabled={busy} onClick={refresh}>Refresh</button>
-        {filtered && <button className={button} disabled={busy || !rows.some(r => r.eligible.length)} onClick={() => setPreview(rows.filter(r => r.eligible.length).map(r => r.g))}>Preview cleanup of matching folders</button>}
+        {filtered && rows.some(({ g }) => neverApproved(g)) && <button className={button} disabled={busy} onClick={() => showPreview(rows.map(r => r.g).filter(neverApproved), true)}>Preview matching unapproved folders</button>}
+        {filtered && <button className={button} disabled={busy || !rows.some(r => r.eligible.length)} onClick={() => showPreview(rows.filter(r => r.eligible.length).map(r => r.g))}>Preview cleanup of matching folders</button>}
       </div>
       {message && <p role="status" className="rounded-lg border bg-white p-3">{message}</p>}
       {preview.length > 0 && <section id="cleanup-preview" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-        <h2 className="font-semibold">Cleanup preview · {preview.length} folders · {planned.length} unapproved takes · {formatStorageSize(bytes(planned))}</h2>
-        <div className="max-h-52 overflow-auto">{preview.map(g => <details key={g.folder}><summary className="cursor-pointer">{g.narration} · move {candidates(g).length}, keep {g.takes.length - candidates(g).length}</summary>
+        <h2 className="font-semibold">{wholeFolders ? 'Move whole folders to Trash' : 'Cleanup preview'} · {preview.length} folders · {planned.length} unapproved takes · {formatStorageSize(bytes(planned))}</h2>
+        <div className="max-h-52 overflow-auto">{preview.map(g => <details key={g.folder}><summary className="cursor-pointer">{g.narration} · {wholeFolders ? `move folder and all ${g.takes.length} takes` : `move ${candidates(g).length}, keep ${g.takes.length - candidates(g).length}`}</summary>
           {g.takes.map(t => <div key={t.id} className="pl-4 text-sm">{t.status === 'Unapproved' ? 'Move' : 'Keep'} · {t.status} · {new Date(t.date).toLocaleString()} · {t.id.slice(0, 8)}</div>)}</details>)}</div>
-        <button className={button} disabled={busy} onClick={clean}>Move {planned.length} to Trash</button>{' '}
+        <button className={button} disabled={busy} onClick={clean}>Move {wholeFolders ? preview.length + ' folders' : planned.length + ' takes'} to Trash</button>{' '}
         <button className={button} disabled={busy} onClick={() => setPreview([])}>Cancel</button>
       </section>}
       {busy && <p role="status">Reading or updating the local library…</p>}
@@ -179,7 +194,8 @@ export default function VoiceManager() {
             <td className="p-3">{g.issue && <strong className="block text-amber-700">Needs review</strong>}{active ? <TakePreview key={active.id} group={g} take={active} /> : !g.issue && 'Awaiting approval'}</td>
             <td className="p-3">{g.takes.length}</td><td className="p-3">{formatStorageSize(bytes(eligible))}</td>
             <td className="p-3"><div className="flex flex-wrap gap-2"><button className={button} aria-expanded={expanded === g.folder} onClick={() => setExpanded(expanded === g.folder ? '' : g.folder)}>{expanded === g.folder ? 'Hide takes' : 'View takes'}</button>
-              {!!eligible.length && <button className={button} disabled={busy} onClick={() => setPreview([g])}>Preview cleanup</button>}</div></td>
+              {neverApproved(g) && <button className={button} disabled={busy} onClick={() => showPreview([g], true)}>Trash folder…</button>}
+              {!!eligible.length && <button className={button} disabled={busy} onClick={() => showPreview([g])}>Preview cleanup</button>}</div></td>
           </tr>{expanded === g.folder && <tr><td colSpan={5} className="bg-gray-50 p-3">
             <button className={button} disabled={busy || g.issue} onClick={() => compose(g)}>Generate from this sentence</button>
             {g.takes.map(t => <div key={t.id} className="flex flex-wrap items-center gap-4 border-b py-2">

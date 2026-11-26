@@ -24,23 +24,23 @@ async function json(path: string) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
-async function versionsPath(folder: string) {
+async function versionsPath(folder: string, root = library) {
   if (!folderName.test(folder)) throw Error('Invalid narration folder.');
-  return directory(join(library, folder, 'versions'));
+  return directory(join(root, folder, 'versions'));
 }
 
-export async function voiceAudio(folder: string, id: string) {
+export async function voiceAudio(folder: string, id: string, root = library) {
   if (!uuid.test(id)) throw Error('Invalid take.');
-  const dir = await directory(join(await versionsPath(folder), id));
+  const dir = await directory(join(await versionsPath(folder, root), id));
   const path = join(dir, 'audio.wav');
   if (!(await lstat(path)).isFile()) throw Error('Audio unavailable.');
   return readFile(path);
 }
 
-async function scan(folder: string): Promise<VoiceGroup | null> {
+async function scan(folder: string, root = library): Promise<VoiceGroup | null> {
   const group: VoiceGroup = { folder, narration: folder.split('--')[0], voice: '', voiceID: '', takes: [], issue: false };
   try {
-    const versions = await versionsPath(folder);
+    const versions = await versionsPath(folder, root);
     const state = await json(join(versions, '../group.json'));
     const key = sha(Buffer.byteLength(state.voiceID) + ':' + state.voiceID + state.narration);
     if (typeof state.narration !== 'string' || !folder.endsWith('--' + key)) throw Error();
@@ -73,7 +73,7 @@ async function scan(folder: string): Promise<VoiceGroup | null> {
         const marked = files.includes('approved.json');
         const active = current === id.toLowerCase();
         if (active || marked) {
-          const audio = await voiceAudio(folder, id);
+          const audio = await voiceAudio(folder, id, root);
           if (audio.length <= 44 || audio.toString('ascii', 0, 4) !== 'RIFF' ||
               audio.toString('ascii', 8, 12) !== 'WAVE' || audio.readUInt32LE(4) + 8 > audio.length) throw Error();
           if (marked) {
@@ -97,9 +97,50 @@ export async function listVoices() {
   const names = dirs.filter(d => d.isDirectory() && !d.name.startsWith('.')).map(d => d.name);
   const groups: VoiceGroup[] = [];
   for (let i = 0; i < names.length; i += 12) {
-    for (const group of await Promise.all(names.slice(i, i + 12).map(scan))) if (group) groups.push(group);
+    for (const group of await Promise.all(names.slice(i, i + 12).map(folder => scan(folder)))) if (group) groups.push(group);
   }
   return groups;
+}
+
+async function matchesUnapprovedPreview(root: string, folder: string, ids: Set<string>) {
+  const group = await scan(folder, root);
+  if (!group || group.issue || group.takes.length !== ids.size ||
+      !group.takes.every(t => t.status === 'Unapproved' && ids.has(t.id))) return false;
+  const dir = join(root, folder);
+  const entries = await readdir(dir);
+  if (entries.some(name => !['group.json', 'versions', '.DS_Store'].includes(name))) return false;
+  // A hidden staging directory may contain an in-progress generation or cleanup.
+  return (await readdir(join(dir, 'versions'))).every(name => ids.has(name) || name === '.DS_Store');
+}
+
+export async function trashUnapprovedFolder(folder: string, previewIDs: string[]) {
+  const ids = new Set(previewIDs);
+  if (!folderName.test(folder) || !ids.size || !previewIDs.every(id => uuid.test(id))) throw Error('Invalid folder preview.');
+  if (!await matchesUnapprovedPreview(library, folder, ids)) return false;
+
+  // Claim the folder, then check again. Concurrent Pilot and Voice Manager writes use
+  // the original path and cannot add an approval to the claimed folder after this check.
+  const stage = await mkdtemp(join(library, '.folder-cleanup-'));
+  const claimed = join(stage, folder);
+  const original = join(library, folder);
+  try {
+    try { await rename(original, claimed); }
+    catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false; throw e; }
+    let trashed = false;
+    try {
+      if (!await matchesUnapprovedPreview(stage, folder, ids)) return false;
+      await promisify(execFile)('/usr/bin/trash', [claimed]);
+      trashed = true;
+      return true;
+    } finally {
+      if (!trashed) {
+        try { await rename(claimed, original); }
+        catch { throw Error('Folder preserved at ' + claimed + '. Could not restore its original location.'); }
+      }
+    }
+  } finally {
+    if (!(await readdir(stage)).length) await rmdir(stage);
+  }
 }
 
 export async function trashTakes(folder: string, ids: string[]) {
