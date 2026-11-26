@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { getMinioConfig, ensureMinioRunning } from '@/lib/minio-runtime';
 import { getMinioCredentials } from '@/lib/minio-s3';
-import { parseStorageKeywords, type StorageGroup } from '@/lib/storage-manager';
+import { parseStorageKeywords, type StorageDeleteResult, type StorageGroup } from '@/lib/storage-manager';
 
 function encode(value: string): string {
   return encodeURIComponent(value).replace(/[!'()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -13,7 +13,7 @@ function hmac(key: string | Buffer, value: string): Buffer {
 }
 
 // Authenticated S3 requests, always scoped to the configured MinIO bucket.
-export async function storageRequest(method: 'GET' | 'HEAD' | 'DELETE', key?: string, query: Record<string, string> = {}) {
+export async function storageRequest(method: 'GET' | 'HEAD' | 'DELETE' | 'POST', key?: string, query: Record<string, string> = {}, body?: string) {
   if (key?.split('/').some(segment => segment === '.' || segment === '..')) {
     throw new Error('This file path contains dot segments and cannot be safely deleted here.');
   }
@@ -25,18 +25,20 @@ export async function storageRequest(method: 'GET' | 'HEAD' | 'DELETE', key?: st
   const timestamp = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
   const date = timestamp.slice(0, 8);
   const scope = `${date}/us-east-1/s3/aws4_request`;
-  const payloadHash = createHash('sha256').update('').digest('hex');
-  const headers = `host:${endpoint.host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${timestamp}\n`;
-  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+  const payloadHash = createHash('sha256').update(body ?? '').digest('hex');
+  const md5 = body === undefined ? undefined : createHash('md5').update(body).digest('base64');
+  const headers = (md5 ? `content-md5:${md5}\n` : '') + `host:${endpoint.host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${timestamp}\n`;
+  const signedHeaders = (md5 ? 'content-md5;' : '') + 'host;x-amz-content-sha256;x-amz-date';
   const canonicalRequest = [method, path, canonicalQuery, headers, signedHeaders, payloadHash].join('\n');
   const stringToSign = ['AWS4-HMAC-SHA256', timestamp, scope, createHash('sha256').update(canonicalRequest).digest('hex')].join('\n');
   const signingKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, date), 'us-east-1'), 's3'), 'aws4_request');
   const signature = hmac(signingKey, stringToSign).toString('hex');
   return fetch(`${endpoint.origin}${path}${canonicalQuery ? `?${canonicalQuery}` : ''}`, {
-    method,
+    method, body,
     cache: 'no-store',
     signal: AbortSignal.timeout(30_000),
     headers: {
+      ...(md5 ? { 'Content-MD5': md5, 'Content-Type': 'application/xml' } : {}),
       'x-amz-content-sha256': payloadHash,
       'x-amz-date': timestamp,
       Authorization: `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
@@ -118,11 +120,66 @@ export async function deletePreviewedFile(token: string): Promise<'deleted' | 'm
   const file = readApproval(token);
   if (file.expires <= Date.now()) throw new StorageApprovalExpiredError();
   await ensureMinioRunning();
-  const head = await storageRequest('HEAD', file.key);
-  if (head.status === 404) return 'missing';
-  if (!head.ok) throw new Error(`Unable to check file (${head.status}).`);
-  if (head.headers.get('etag') !== file.etag || Number(head.headers.get('content-length')) !== file.size) throw new Error('File changed since preview. Preview again before deleting it.');
+  if (await checkPreviewedFile(file) === 'missing') return 'missing';
   const response = await storageRequest('DELETE', file.key);
   if (!response.ok) throw new Error(`Unable to delete file (${response.status}).`);
   return 'deleted';
+}
+
+async function checkPreviewedFile(file: DeleteApproval) {
+  const head = await storageRequest('HEAD', file.key);
+  if (head.status === 404) return 'missing';
+  if (!head.ok) throw new Error(`Unable to check file (${head.status}).`);
+  if (head.headers.get('etag') !== file.etag || head.headers.get('content-length') !== String(file.size)) throw new Error('File changed since preview. Preview again before deleting it.');
+  return 'verified';
+}
+
+function xmlKey(key: string) {
+  return key.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\r', '&#13;');
+}
+
+export async function deletePreviewedBatch(tokens: string[]): Promise<StorageDeleteResult[]> {
+  await ensureMinioRunning();
+  const results: StorageDeleteResult[] = [];
+  const verified = new Map<string, number>();
+  for (let offset = 0; offset < tokens.length; offset += 8) {
+    await Promise.all(tokens.slice(offset, offset + 8).map(async (token, position) => {
+      const index = offset + position;
+      try {
+        let file = readApproval(token);
+        if (file.expires <= Date.now()) file = readApproval(renewStorageApproval(token).token);
+        if (await checkPreviewedFile(file) === 'missing') {
+          results[index] = { status: 'missing' };
+        } else if (verified.has(file.key)) {
+          throw new Error('Duplicate file in deletion batch.');
+        } else {
+          verified.set(file.key, index);
+        }
+      } catch (error) {
+        results[index] = { status: 'failed', error: error instanceof Error ? error.message : 'Unable to check file.' };
+      }
+    }));
+  }
+  if (!verified.size) return results;
+
+  const objects = Array.from(verified.keys(), key => `<Object><Key>${xmlKey(key)}</Key></Object>`).join('');
+  try {
+    const response = await storageRequest('POST', undefined, { delete: '' }, `<Delete>${objects}</Delete>`);
+    if (!response.ok) throw new Error(`MinIO batch deletion returned HTTP ${response.status}.`);
+    const document = new DOMParser({ onError: (_level, message) => { throw new Error(message); } }).parseFromString(await response.text(), 'application/xml');
+    const root = document.documentElement;
+    if (root?.localName !== 'DeleteResult') throw new Error('Unexpected MinIO deletion response.');
+    for (const entry of Array.from(root.childNodes)) {
+      if (entry.nodeType !== 1) continue;
+      const element = entry as typeof root;
+      const index = verified.get(element.getElementsByTagName('Key').item(0)?.textContent ?? '');
+      if (index === undefined) continue;
+      if (element.localName === 'Deleted') results[index] = { status: 'deleted' };
+      if (element.localName === 'Error') results[index] = { status: 'failed', error: element.getElementsByTagName('Message').item(0)?.textContent || 'MinIO rejected deletion.' };
+    }
+  } catch (error) {
+    for (const index of verified.values()) results[index] = { status: 'failed', error: error instanceof Error ? error.message : 'Batch deletion failed.' };
+  }
+  for (const index of verified.values()) results[index] ??= { status: 'failed', error: 'MinIO did not confirm deletion. Preview again.' };
+  return results;
 }

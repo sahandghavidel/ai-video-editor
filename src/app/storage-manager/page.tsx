@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { formatStorageSize, type StorageGroup } from '@/lib/storage-manager';
+import { formatStorageSize, STORAGE_DELETE_BATCH_SIZE, type StorageGroup } from '@/lib/storage-manager';
 import { sendTelegramNotification } from '@/utils/notifications/telegram';
-import { deleteStorageMatch, requestStorage } from '@/utils/storage-manager-client';
+import { deleteStorageBatch, requestStorage } from '@/utils/storage-manager-client';
 
 type Progress = {
   status: 'Waiting' | 'Deleting' | 'Completed' | 'Completed with errors' | 'Stopped';
@@ -89,18 +89,23 @@ export default function StorageManagerPage() {
         const result = results[index];
         if (stop.current) { result.status = 'Stopped'; update(); continue; }
         result.status = 'Deleting'; update();
-        for (const file of groups[index].files) {
-          if (stop.current) break;
+        const files = groups[index].files;
+        let offset = 0;
+        for (; offset < files.length && !stop.current; offset += STORAGE_DELETE_BATCH_SIZE) {
+          const batch = files.slice(offset, offset + STORAGE_DELETE_BATCH_SIZE);
           try {
-            const deletion = await deleteStorageMatch(file);
-            if (deletion === 'missing') result.missing++;
-            else result.deleted++;
+            const outcomes = await deleteStorageBatch(batch);
+            outcomes.forEach((outcome, position) => {
+              if (outcome.status === 'failed') result.failures.push({ key: batch[position].key, error: outcome.error });
+              else result[outcome.status]++;
+            });
           } catch (error) {
-            result.failures.push({ key: file.key, error: error instanceof Error ? error.message : 'Deletion failed.' });
+            const message = error instanceof Error ? error.message : 'Batch deletion failed.';
+            result.failures.push(...batch.map(file => ({ key: file.key, error: message })));
           }
           update();
         }
-        result.status = stop.current ? 'Stopped' : result.failures.length ? 'Completed with errors' : 'Completed';
+        result.status = offset < files.length ? 'Stopped' : result.failures.length ? 'Completed with errors' : 'Completed';
         update();
       }
       if (results.every(result => result.status === 'Completed' || result.status === 'Completed with errors')) {
@@ -131,7 +136,7 @@ export default function StorageManagerPage() {
           <div className='flex flex-wrap gap-3'>
             <button onClick={preview} disabled={!!busy || !keywords.trim()} className={`${buttonClass} bg-blue-600 text-white hover:bg-blue-700`}>{busy === 'preview' ? 'Scanning storage…' : 'Preview matches'}</button>
             <button onClick={deleteMatches} disabled={!!busy || !totalFiles || finished} className={`${buttonClass} bg-red-600 text-white hover:bg-red-700`}>Delete matched files</button>
-            {busy === 'delete' && <button onClick={() => { stop.current = true; }} className={`${buttonClass} border border-slate-300 bg-white`}>Stop after current file</button>}
+            {busy === 'delete' && <button onClick={() => { stop.current = true; }} className={`${buttonClass} border border-slate-300 bg-white`}>Stop after current batch</button>}
           </div>
           {error && <p role='alert' className='text-sm text-red-700'>{error}</p>}
           {notificationError && <p role='status' className='text-sm text-amber-800'>{notificationError}</p>}

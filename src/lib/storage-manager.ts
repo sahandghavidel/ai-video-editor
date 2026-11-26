@@ -1,3 +1,9 @@
+export const STORAGE_DELETE_BATCH_SIZE = 100;
+
+export type StorageDeleteResult =
+  | { status: 'deleted' | 'missing' }
+  | { status: 'failed'; error: string };
+
 export type StorageMatch = {
   key: string;
   size: number;

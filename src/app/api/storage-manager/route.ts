@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deletePreviewedFile, previewStorage, renewStorageApproval, StorageApprovalExpiredError } from '@/lib/storage-manager-server';
+import { STORAGE_DELETE_BATCH_SIZE } from '@/lib/storage-manager';
+import { deletePreviewedBatch, deletePreviewedFile, previewStorage, renewStorageApproval, StorageApprovalExpiredError } from '@/lib/storage-manager-server';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     if (body.action === 'preview' && typeof body.keywords === 'string') {
       return NextResponse.json({ groups: await previewStorage(body.keywords) });
+    }
+    if (body.action === 'deleteBatch' && Array.isArray(body.tokens) && body.tokens.length > 0 &&
+        body.tokens.length <= STORAGE_DELETE_BATCH_SIZE && body.tokens.every((token: unknown) => typeof token === 'string' && token.length <= 20_000)) {
+      return NextResponse.json({ results: await deletePreviewedBatch(body.tokens) });
     }
     if (body.action === 'delete' && typeof body.token === 'string' && body.token.length <= 20_000) {
       return NextResponse.json({ result: await deletePreviewedFile(body.token) });
