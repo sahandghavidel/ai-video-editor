@@ -15,7 +15,7 @@ function timestamp(seconds: number) {
   return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
 }
 
-export default function TakePreview({ group, take }: { group: VoiceGroup; take: VoiceTake }) {
+export default function TakePreview({ group, take, showLabel = false }: { group: VoiceGroup; take: VoiceTake; showLabel?: boolean }) {
   const ref = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -43,7 +43,8 @@ export default function TakePreview({ group, take }: { group: VoiceGroup; take: 
       className={'inline-flex h-8 items-center gap-2 rounded-full border px-2.5 text-xs font-semibold tabular-nums transition-colors focus-visible:outline-blue-600 ' +
         (playing ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700')}>
       {playing ? <Pause aria-hidden size={13} fill="currentColor" /> : <Play aria-hidden size={13} fill="currentColor" />}
-      {timestamp(playing ? elapsed : take.duration)}
+      {showLabel && <span>{playing ? 'Pause' : 'Play sentence'}</span>}
+      <span>{timestamp(playing ? elapsed : take.duration)}</span>
     </button>
     {failed && <span role="status" className="text-xs text-rose-700">Playback failed. Try again.</span>}
     <audio hidden ref={ref} preload="none" src={'/api/voice-manager?' + new URLSearchParams({ folder: group.folder, take: take.id })}

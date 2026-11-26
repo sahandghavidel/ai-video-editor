@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { POST as synthesize } from '../generate-tts-omnivoice-lora/route';
 import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
-import { listVoiceScripts, saveVoiceScript } from '@/lib/voice-scripts';
+import { changeScriptRow, listVoiceScripts, saveVoiceScript } from '@/lib/voice-scripts';
 import { splitEnglishNarration } from '@/lib/omniVoiceLora';
 import { existingSentence, approveVoice, saveVoiceTake, spokenSentence, listVoices, trashTakes, voiceAudio } from '@/lib/voice-manager';
 
@@ -28,17 +28,19 @@ export async function POST(request: Request) {
   if ((origin && new URL(origin).host !== request.headers.get('host')) ||
       !request.headers.get('content-type')?.startsWith('application/json')) return new Response(null, { status: 403 });
   try {
-    const { action, folder, ids, id, text, voiceID, title } = await request.json();
+    const { action, folder, ids, id, text, voiceID, title, revision, operation, index, value } = await request.json();
+    if (action === 'changeRow') return Response.json(await changeScriptRow(id, revision, operation, index, value));
     if (action === 'approve') return Response.json({ group: await approveVoice(folder, id) });
-    if (action === 'generate' || action === 'prepareSentence' || action === 'addScript') {
+    if (action === 'generate' || action === 'prepareSentence' || action === 'addScript' || action === 'editScript') {
       if (typeof text !== 'string' || !spokenSentence(text)) return Response.json({ error: 'Enter a spoken sentence.' }, { status: 400 });
       const { entries } = await loadTtsAudioReferencesStore();
       const preset = entries.find(v => v.id === voiceID && v.enabled && v.provider === 'omnivoice-lora' && v.language === 'en');
       if (!preset) return Response.json({ error: 'Choose an enabled English LoRA voice.' }, { status: 400 });
-      if (action === 'addScript') {
+      if (action === 'addScript' || action === 'editScript') {
         const sentences = await splitEnglishNarration(spokenSentence(text), preset);
         if (!sentences.length) return Response.json({ error: 'Enter a script with spoken narration.' }, { status: 400 });
-        return Response.json(await saveVoiceScript(typeof title === 'string' ? title : '', text, voiceID, sentences));
+        return Response.json(await saveVoiceScript(typeof title === 'string' ? title : '', text, voiceID, sentences,
+          action === 'editScript' ? { id, revision } : undefined));
       }
       if (action === 'prepareSentence') {
         const group = await existingSentence(text, voiceID);
