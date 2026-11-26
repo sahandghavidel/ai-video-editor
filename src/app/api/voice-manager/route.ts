@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { POST as synthesize } from '../generate-tts-omnivoice-lora/route';
 import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
-import { undoScript, replaceInScript, changeScriptRow, listVoiceScripts, saveVoiceScript } from '@/lib/voice-scripts';
+import { exportApprovedWav } from '@/lib/voice-script-export';
+import { readRevision, setDirection, namedVersion, undoScript, replaceInScript, changeScriptRow, listVoiceScripts, saveVoiceScript } from '@/lib/voice-scripts';
 import { splitEnglishNarration } from '@/lib/omniVoiceLora';
-import { existingSentence, approveVoice, saveVoiceTake, spokenSentence, listVoices, trashUnapprovedFolder, trashTakes, voiceAudio } from '@/lib/voice-manager';
+import { transcriptFlags, existingSentence, approveVoice, saveVoiceTake, spokenSentence, listVoices, trashUnapprovedFolder, trashTakes, voiceAudio } from '@/lib/voice-manager';
 
 export const maxDuration = 900;
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   try {
     if (params.has('scripts')) return Response.json(await listVoiceScripts());
+    if (params.has('transcript')) return Response.json(await transcriptFlags(params.get('folder') || '', params.get('transcript') || ''));
     if (params.has('take')) {
       const audio = await voiceAudio(params.get('folder') || '', params.get('take') || '');
       return new Response(new Uint8Array(audio), { headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'private, no-store' } });
@@ -28,25 +30,30 @@ export async function POST(request: Request) {
   if ((origin && new URL(origin).host !== request.headers.get('host')) ||
       !request.headers.get('content-type')?.startsWith('application/json')) return new Response(null, { status: 403 });
   try {
-    const { action, folder, ids, id, text, voiceID, title, revision, operation, index, value, cursor, find, replacement } = await request.json();
+    const { action, folder, ids, id, text, voiceID, title, revision, operation, index, value, cursor, find, replacement, note, pause, name, restoreID } = await request.json();
+    if (action === 'exportWav') return await exportApprovedWav(id, revision);
+    if (action === 'direction') return Response.json(await setDirection(id, revision, index, note, pause));
+    if (action === 'namedVersion') return Response.json(await namedVersion(id, revision, name, restoreID));
     if (action === 'undoScript') return Response.json(await undoScript(id, revision));
     if (action === 'replaceText') return Response.json(await replaceInScript(id, revision, find, replacement));
     if (action === 'changeRow') return Response.json(await changeScriptRow(id, revision, operation, index, value, cursor));
     if (action === 'approve') return Response.json({ group: await approveVoice(folder, id) });
-    if (action === 'generate' || action === 'prepareSentence' || action === 'addScript' || action === 'editScript') {
+    if (action === 'generate' || action === 'prepareSentence' || action === 'hearSentence' || action === 'addScript' || action === 'editScript') {
       if (typeof text !== 'string' || !spokenSentence(text)) return Response.json({ error: 'Enter a spoken sentence.' }, { status: 400 });
+      if (action === 'prepareSentence' || action === 'hearSentence') {
+        const group = await existingSentence(text, voiceID);
+        const approved = group?.takes.find(t => t.status === 'Current approval');
+        if (group && (action === 'prepareSentence' || approved)) return Response.json({ group, id: action === 'hearSentence' ? approved?.id : undefined, reused: true });
+      }
       const { entries } = await loadTtsAudioReferencesStore();
       const preset = entries.find(v => v.id === voiceID && v.enabled && v.provider === 'omnivoice-lora' && v.language === 'en');
       if (!preset) return Response.json({ error: 'Choose an enabled English LoRA voice.' }, { status: 400 });
       if (action === 'addScript' || action === 'editScript') {
-        const sentences = await splitEnglishNarration(spokenSentence(text), preset);
+        const current = action === 'editScript' ? await readRevision(id, revision) : undefined;
+        const sentences = current && current.text === text ? current.sentences : await splitEnglishNarration(spokenSentence(text), preset);
         if (!sentences.length) return Response.json({ error: 'Enter a script with spoken narration.' }, { status: 400 });
         return Response.json(await saveVoiceScript(typeof title === 'string' ? title : '', text, voiceID, sentences,
           action === 'editScript' ? { id, revision } : undefined));
-      }
-      if (action === 'prepareSentence') {
-        const group = await existingSentence(text, voiceID);
-        if (group) return Response.json({ group, reused: true });
       }
       const takeID = randomUUID().toUpperCase();
       const result = await synthesize(new NextRequest(request.url, {

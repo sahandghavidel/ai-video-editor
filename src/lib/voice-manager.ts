@@ -1,3 +1,4 @@
+import { compareWords, type TimedWord } from './voice-transcript';
 import { spokenSentence } from './voice-script-ranges';
 export { spokenSentence } from './voice-script-ranges';
 import { createHash, randomUUID } from 'node:crypto';
@@ -11,7 +12,7 @@ const library = join(homedir(), 'Library/Application Support/local.clipboardread
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const folderName = /^[\p{L}\p{N}\p{M}-]+--[a-f0-9]{64}$/u;
 const sha = (data: Buffer | string) => createHash('sha256').update(data).digest('hex');
-export type VoiceTake = { id: string; status: 'Current approval' | 'Previously approved' | 'Unapproved'; duration: number; date: number; size: number };
+export type VoiceTake = { hasTranscript?: boolean; id: string; status: 'Current approval' | 'Previously approved' | 'Unapproved'; duration: number; date: number; size: number };
 export type VoiceGroup = { folder: string; narration: string; voice: string; voiceID: string; takes: VoiceTake[]; issue: boolean };
 
 async function directory(path: string) {
@@ -81,7 +82,7 @@ async function scan(folder: string, root = library): Promise<VoiceGroup | null> 
             if (marker.takeID.toLowerCase() !== id.toLowerCase() || marker.audioSHA256 !== sha(audio)) throw Error();
           }
         }
-        group.takes.push({ id, status: active ? 'Current approval' : marked ? 'Previously approved' : 'Unapproved',
+        group.takes.push({ id, hasTranscript: files.includes('transcription.json'), status: active ? 'Current approval' : marked ? 'Previously approved' : 'Unapproved',
           duration: meta.duration, date: (meta.createdAt + 978307200) * 1000, size });
       } catch { group.issue = true; }
     }
@@ -263,4 +264,16 @@ export async function saveVoiceTake(input: string, voice: VoicePreset, id: strin
     await rename(stage, join(versions, id));
   } finally { await rm(stage, { recursive: true, force: true }); }
   return scan(folder);
+}
+
+export async function transcriptFlags(folder: string, id: string) {
+  const audio = await voiceAudio(folder, id);
+  const dir = join(await versionsPath(folder), id);
+  const transcript = await json(join(dir, 'transcription.json'));
+  const meta = await json(join(dir, 'metadata.json'));
+  if (transcript.audioSHA256 !== sha(audio) || !Array.isArray(transcript.words) ||
+      !transcript.words.every((w: TimedWord) => w && typeof w.word === 'string' && Number.isFinite(w.start) && Number.isFinite(w.end))) {
+    throw Error('Saved transcript does not match this recording.');
+  }
+  return compareWords(meta.spokenText, transcript.words);
 }

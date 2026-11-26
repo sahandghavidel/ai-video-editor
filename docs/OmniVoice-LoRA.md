@@ -385,3 +385,13 @@ Select sentence checkboxes and use **Regenerate selected**, or queue a single se
 In a sentence editor, place the caret between words and choose **Split at cursor**. **Merge with next sentence** joins adjacent rows. **Find and replace** previews case-sensitive literal changes before applying them. **Undo last change** restores the preceding saved script revision, including manual sentence boundaries, title, voice preset and original formatting. Undo applies to script edits, independently of audio generation and approvals.
 
 In **Voice library**, **Preview all unapproved folders** previews whole narration folders containing only never-approved takes. Search and filter to preview matching folders, or use **Trash folder…** on one row. Confirmation moves the whole folder to macOS Trash. Folders with a current or previous approval, changed take lists, or incomplete operations are skipped.
+
+### Sentence workspace, delivery and approved WAV export
+
+Select a sentence in the Script review list to open its workspace. It shows the selected (or playing) take and the current approval separately. **Save & hear** saves edited wording, then plays the existing current approval for that wording and preset or generates a fresh candidate. **Play from here** follows the full script in order, highlighting each sentence and stopping at the first missing recording.
+
+Each occurrence has a delivery note and a pause in seconds. Save them with **Save delivery**. Notes stay in the script metadata and never enter synthesis. Playback and export apply pauses between sentences. The runtime includes the available selected takes and those pauses. The workspace also reports the duration difference between a selected alternate and the current approval.
+
+**Versions** saves named snapshots of the script title, wording, order, preset and delivery settings. Compare a saved version with the current sentence list or restore it. Audio files and approvals continue to live in the shared library. For a take with a matching, fingerprint-verified Narration Pilot transcript, word comparison flags possible omissions and additions. Click a flagged word to audition the surrounding recording.
+
+**Export approved WAV** checks every sentence against its current approval, reports any outstanding sentence numbers, and uses FFmpeg to concatenate the approved takes and pauses into one downloadable 24 kHz mono PCM WAV. Previewing an alternate does not select it for export.
