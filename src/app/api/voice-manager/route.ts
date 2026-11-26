@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { POST as synthesize } from '../generate-tts-omnivoice-lora/route';
 import { loadTtsAudioReferencesStore } from '@/lib/ttsAudioReferencesStore';
-import { changeScriptRow, listVoiceScripts, saveVoiceScript } from '@/lib/voice-scripts';
+import { undoScript, replaceInScript, changeScriptRow, listVoiceScripts, saveVoiceScript } from '@/lib/voice-scripts';
 import { splitEnglishNarration } from '@/lib/omniVoiceLora';
 import { existingSentence, approveVoice, saveVoiceTake, spokenSentence, listVoices, trashTakes, voiceAudio } from '@/lib/voice-manager';
 
@@ -28,8 +28,10 @@ export async function POST(request: Request) {
   if ((origin && new URL(origin).host !== request.headers.get('host')) ||
       !request.headers.get('content-type')?.startsWith('application/json')) return new Response(null, { status: 403 });
   try {
-    const { action, folder, ids, id, text, voiceID, title, revision, operation, index, value } = await request.json();
-    if (action === 'changeRow') return Response.json(await changeScriptRow(id, revision, operation, index, value));
+    const { action, folder, ids, id, text, voiceID, title, revision, operation, index, value, cursor, find, replacement } = await request.json();
+    if (action === 'undoScript') return Response.json(await undoScript(id, revision));
+    if (action === 'replaceText') return Response.json(await replaceInScript(id, revision, find, replacement));
+    if (action === 'changeRow') return Response.json(await changeScriptRow(id, revision, operation, index, value, cursor));
     if (action === 'approve') return Response.json({ group: await approveVoice(folder, id) });
     if (action === 'generate' || action === 'prepareSentence' || action === 'addScript' || action === 'editScript') {
       if (typeof text !== 'string' || !spokenSentence(text)) return Response.json({ error: 'Enter a spoken sentence.' }, { status: 400 });

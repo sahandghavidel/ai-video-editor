@@ -10,7 +10,12 @@ export function pauseTakePreview() {
   active?.pause();
 }
 
-function timestamp(seconds: number) {
+export function claimTakePreview(audio: HTMLAudioElement) {
+  if (active !== audio) pauseTakePreview();
+  active = audio;
+}
+
+export function takeDuration(seconds: number) {
   const whole = Math.max(0, Math.floor(seconds));
   return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
 }
@@ -31,8 +36,7 @@ export default function TakePreview({ group, take, showLabel = false }: { group:
     const audio = ref.current;
     if (!audio) return;
     if (active === audio && !audio.paused) { audio.pause(); return; }
-    pauseTakePreview();
-    active = audio;
+    claimTakePreview(audio);
     if (failed) audio.load();
     setFailed(false);
     try { await audio.play(); }
@@ -44,7 +48,7 @@ export default function TakePreview({ group, take, showLabel = false }: { group:
         (playing ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700')}>
       {playing ? <Pause aria-hidden size={13} fill="currentColor" /> : <Play aria-hidden size={13} fill="currentColor" />}
       {showLabel && <span>{playing ? 'Pause' : 'Play sentence'}</span>}
-      <span>{timestamp(playing ? elapsed : take.duration)}</span>
+      <span>{takeDuration(playing ? elapsed : take.duration)}</span>
     </button>
     {failed && <span role="status" className="text-xs text-rose-700">Playback failed. Try again.</span>}
     <audio hidden ref={ref} preload="none" src={'/api/voice-manager?' + new URLSearchParams({ folder: group.folder, take: take.id })}

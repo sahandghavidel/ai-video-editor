@@ -127,7 +127,7 @@ export default function VoiceManager() {
           {item === 'scripts' ? 'Scripts' : 'Voice library'}</button>)}
       </nav>
       {view === 'scripts' && message && <p role="status" className="text-sm">{message}</p>}
-      <div hidden={view !== 'scripts'}><ScriptReview groups={groups} presets={presets} busy={busy} setBusy={setBusy}
+      <div hidden={view !== 'scripts'}><ScriptReview shown={view === 'scripts'} groups={groups} presets={presets} busy={busy} setBusy={setBusy}
         onGroup={group => { setPreview([]); setGroups(all => [group, ...all.filter(g => g.folder !== group.folder)]); }} /></div>
       <div hidden={view !== 'library'} className="space-y-4">
       {editing && <form className="space-y-3 rounded-xl border bg-white p-4" onSubmit={e => { e.preventDefault(); void changeTake('generate'); }}>

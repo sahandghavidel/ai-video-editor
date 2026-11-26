@@ -1,3 +1,5 @@
+import { spokenSentence } from './voice-script-ranges';
+export { spokenSentence } from './voice-script-ranges';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { link, mkdir, rm, writeFile, lstat, mkdtemp, readFile, readdir, realpath, rename, rmdir } from 'node:fs/promises';
@@ -131,20 +133,6 @@ export async function trashTakes(folder: string, ids: string[]) {
     } finally { await rmdir(stage); }
   }
   return moved;
-}
-
-export function spokenSentence(input: string) {
-  let text = '', start = 0, depth = 0;
-  for (let i = 0; i < input.length; i++) {
-    if (input[i] === '[') {
-      if (!depth) start = i;
-      depth++;
-    } else if (depth) {
-      if (input[i] === ']' && --depth === 0) text += ' ';
-    } else text += input[i];
-  }
-  if (depth) text += input.slice(start);
-  return text.replace(/\p{White_Space}+/gu, ' ').trim();
 }
 
 async function publishJson(path: string, value: unknown, createOnly = false) {

@@ -30,3 +30,28 @@ export function sourceRanges(script?: VoiceScript) {
     return { from: offsets[from], to: offsets[cursor - 1] + 1 };
   });
 }
+
+export function spokenSentence(input: string) {
+  let text = '', start = 0, depth = 0;
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] === '[') {
+      if (!depth) start = i;
+      depth++;
+    } else if (depth) {
+      if (input[i] === ']' && --depth === 0) text += ' ';
+    } else text += input[i];
+  }
+  if (depth) text += input.slice(start);
+  return text.replace(/\p{White_Space}+/gu, ' ').trim();
+}
+
+export function replacementPlan(script: VoiceScript, find: string, replacement: string) {
+  if (!find || find === replacement) return [];
+  const ranges = sourceRanges(script);
+  return ranges.flatMap((range, index) => {
+    if (!range) throw Error('Could not locate a sentence in the script.');
+    const before = script.text.slice(range.from, range.to);
+    const after = before.split(find).join(replacement);
+    return before === after ? [] : [{ ...range, index, before, after }];
+  });
+}
